@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# the extension download, packed from extension/ on every build
+/public/downloads/js-post-finder.zip

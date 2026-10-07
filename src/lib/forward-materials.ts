@@ -1,0 +1,280 @@
+/**
+ * The materials a forward price uses, matched to the inventory, so the
+ * account manager sees what is going in, how much to buy and where.
+ *
+ * Each service that uses a material can be linked to inventory items on
+ * Production rates. Until it is, its material's name is looked for in the
+ * inventory ("Seed and straw" finds the seed and the straw), preferring an
+ * item with a link to buy it. A material with no match says so, so the gap
+ * can be filled in the inventory.
+ *
+ * Pure, so the matching is tested without a database.
+ */
+
+import { bestProduct, orderAmount, pickSupplier, supplierKindFor, unitPrice, type Supplier, type SupplierKind, type SupplierPick, type SupplierProduct } from "@/lib/material-suppliers";
+import { productionService, type PriceLine, type ProductionService, type ProductionUnit } from "@/lib/forward-pricing";
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  /** What it is sold by: "bag", "cubic yards", "1 Plant". */
+  unit: string | null;
+  imageUrl: string | null;
+  /** Where to buy it. */
+  url: string | null;
+  /** Square feet one unit covers, when it is spread. */
+  coverageSqFt: number | null;
+  /** Extra to allow for waste, as a percentage. */
+  wastePct: number;
+}
+
+/** The words of a material's name worth looking for: "Seed and straw" → seed, straw. */
+function words(materialName: string): string[] {
+  return materialName
+    .toLowerCase()
+    .split(/\s+and\s+|[,/&+]/)
+    .map((w) => w.trim())
+    .filter((w) => w.length >= 3)
+    .map((w) => (w.length > 4 && w.endsWith("s") ? w.slice(0, -1) : w));
+}
+
+/**
+ * The inventory items a service uses: the ones linked on Production rates,
+ * or else one per word of its material's name, the first with a link to buy
+ * it and the shortest name winning.
+ */
+export function itemsFor(service: ProductionService, inventory: InventoryItem[]): InventoryItem[] {
+  if (service.materialIds) return service.materialIds.flatMap((id) => inventory.filter((i) => i.id === id));
+  if (!service.materialName || service.unit === "job") return [];
+  const found: InventoryItem[] = [];
+  for (const word of words(service.materialName)) {
+    const match = inventory
+      .filter((i) => i.name.toLowerCase().includes(word) && !found.includes(i))
+      .sort((a, b) => Number(Boolean(b.url)) - Number(Boolean(a.url)) || a.name.length - b.name.length)[0];
+    if (match) found.push(match);
+  }
+  return found;
+}
+
+const MEASURE = /^(lb|lbs|pound|pounds|oz|ounces?|ft|feet|sq|cubic|cu|yard|yards|yd|gal|gallons?)\b/i;
+
+/** What one purchase of an item is called: its unit when that is a thing you carry ("bag", "bale", "roll"), else a bag. */
+export function purchaseNoun(item: InventoryItem): string {
+  const unit = (item.unit ?? "").trim().toLowerCase().replace(/^1\s+/, "");
+  if (!unit || MEASURE.test(unit) || /^(per|each|unit)/.test(unit)) return "bag";
+  return unit.replace(/s$/, "");
+}
+
+const plural = (n: number, noun: string) => `${n.toLocaleString("en-US")} ${noun}${n === 1 ? "" : /(sh|ch|s|x)$/.test(noun) ? "es" : "s"}`;
+
+/**
+ * How much of the service one purchase of an item covers, in the service's
+ * unit: as set on Production rates, or else from the inventory (a bag that
+ * covers 5,000 sq ft, an item sold by the yard). Null when it can't be said.
+ */
+export function holdsFor(item: InventoryItem, service: ProductionService): number | null {
+  const set = service.materialHolds?.[item.id];
+  if (set != null && set > 0) return set;
+  const unit = (item.unit ?? "").trim();
+  if (service.unit === "SF" && item.coverageSqFt && item.coverageSqFt > 0) return item.coverageSqFt;
+  if (service.unit === "CY" && /yard|\byd/i.test(unit)) return 1;
+  if ((service.unit === "plant" || service.unit === "bush") && /plant|bush|each/i.test(unit)) return 1;
+  return null;
+}
+
+export interface Purchase {
+  /** How many to buy, waste in. */
+  count: number;
+  /** What one is: "bag", "bale", "cu yd". */
+  noun: string;
+  /** In words: "37 bags". */
+  text: string;
+}
+
+/** How many of an item to buy for a quantity of the service, waste in. Null when how much one holds isn't known. */
+export function purchaseFor(item: InventoryItem, service: ProductionService, quantity: number): Purchase | null {
+  const holds = holdsFor(item, service);
+  if (!(quantity > 0) || holds == null) return null;
+  const withWaste = quantity * (1 + Math.max(0, item.wastePct) / 100);
+  // Sold by the yard: to the next half yard.
+  if (service.unit === "CY" && holds === 1 && /yard|\byd/i.test(item.unit ?? "") && !service.materialHolds?.[item.id]) {
+    const yards = Math.ceil(withWaste * 2 - 1e-9) / 2;
+    return { count: yards, noun: "cu yd", text: `${yards} cu yd` };
+  }
+  const count = Math.ceil(withWaste / holds - 1e-9);
+  const noun = purchaseNoun(item);
+  return { count, noun, text: plural(count, noun) };
+}
+
+/** The starting bulk threshold, in the service's unit, when nothing is set. */
+export function bulkThreshold(service: ProductionService): number | null {
+  return service.bulkOver ?? null;
+}
+
+export interface MaterialRow {
+  /** The area's position and name, and the line's position in it. */
+  area: number;
+  line: number;
+  /** The bulk material it is, for finding suppliers: mulch, topsoil, stone. */
+  kind: SupplierKind | null;
+  areaName: string;
+  service: string;
+  quantity: number;
+  unit: ProductionUnit;
+  /** The material, as named on Production rates: "Seed and straw". */
+  material: string;
+  /** M for the line, in cents. */
+  materialCents: number;
+  /** The service's bulk threshold, in its unit; null when it is never ordered in bulk. */
+  bulkOver: number | null;
+  /** Bought at the store: each item and how many of it. */
+  items: { item: InventoryItem; buy: Purchase | null }[];
+  /**
+   * Over the bulk threshold: ordered from a bulk supplier instead. The item
+   * is the supplier's product, or null when none is set yet.
+   */
+  bulk: { over: number; item: InventoryItem | null; amount: string } | null;
+}
+
+/** How much to order in bulk: yards to the next half yard, anything else to the next whole unit, waste in. */
+function bulkAmount(quantity: number, unit: ProductionUnit, wastePct: number): string {
+  const withWaste = quantity * (1 + Math.max(0, wastePct) / 100);
+  if (unit === "CY") return `${Math.ceil(withWaste * 2 - 1e-9) / 2} cu yd`;
+  const n = Math.ceil(withWaste - 1e-9);
+  return `${n.toLocaleString("en-US")} ${unit === "SF" ? "sq ft" : unit === "LF" ? "linear ft" : unit}`;
+}
+
+/** Every line that uses a material, with what to buy and how many, or the bulk order when it is over the threshold. Disposal and other per-job costs are left out. */
+export function jobMaterials(areaNames: string[], lines: PriceLine[][], services: ProductionService[], inventory: InventoryItem[]): MaterialRow[] {
+  return lines.flatMap((areaLines, area) =>
+    areaLines.flatMap((line, lineIndex) => {
+      const service = productionService(line.key, services);
+      if (!service || service.unit === "job") return [];
+      if (!service.materialName && !service.materialIds?.length) return [];
+      const items = itemsFor(service, inventory);
+      const over = bulkThreshold(service);
+      const bulkItem = service.bulkMaterialId ? (inventory.find((i) => i.id === service.bulkMaterialId) ?? null) : null;
+      return [
+        {
+          area,
+          line: lineIndex,
+          kind: supplierKindFor(service),
+          areaName: areaNames[area] ?? `Area ${area + 1}`,
+          service: service.label,
+          quantity: line.quantity,
+          unit: service.unit,
+          material: service.materialName ?? "Material",
+          materialCents: Math.max(0, Math.round(line.materialCents)),
+          bulkOver: over,
+          items: items.map((item) => ({ item, buy: purchaseFor(item, service, line.quantity) })),
+          bulk:
+            over != null && line.quantity > over
+              ? { over, item: bulkItem, amount: bulkAmount(line.quantity, service.unit, (bulkItem ?? items[0])?.wastePct ?? 0) }
+              : null,
+        },
+      ];
+    })
+  );
+}
+
+/** One bulk order for the whole job: every line of a material added up, so it is ordered, and delivered, once. */
+export interface BulkOrder {
+  kind: SupplierKind;
+  /** The material, as named on Production rates. */
+  material: string;
+  /** The threshold it is over. */
+  over: number;
+  unit: ProductionUnit;
+  /** All the lines' quantities together. */
+  quantity: number;
+  rows: MaterialRow[];
+}
+
+/**
+ * The job's bulk materials as one order each: every line of a material that
+ * a supplier sells (mulch, topsoil, stone) is added up, and when the total is
+ * over the threshold it is one order, delivered once. The rest are bought by
+ * the bag, line by line.
+ */
+export function bulkOrders(rows: MaterialRow[]): { orders: BulkOrder[]; rest: MaterialRow[] } {
+  const byKind = new Map<SupplierKind, MaterialRow[]>();
+  for (const r of rows) if (r.kind && r.bulkOver != null) byKind.set(r.kind, [...(byKind.get(r.kind) ?? []), r]);
+  const orders: BulkOrder[] = [];
+  for (const [kind, group] of byKind) {
+    const quantity = group.reduce((s, r) => s + r.quantity, 0);
+    const over = Math.min(...group.map((r) => r.bulkOver!));
+    if (quantity > over) orders.push({ kind, material: group[0].material, over, unit: group[0].unit, quantity, rows: group });
+  }
+  const ordered = new Set(orders.flatMap((o) => o.rows));
+  return { orders, rest: rows.filter((r) => !ordered.has(r)).map((r) => (r.kind && r.bulk ? { ...r, bulk: null } : r)) };
+}
+
+/** An order's cost shared across its lines by quantity, in whole cents that add up to it. */
+export function splitCost(order: BulkOrder, cents: number): { area: number; line: number; cents: number }[] {
+  let left = Math.round(cents);
+  return order.rows.map((r, i) => {
+    const share = i === order.rows.length - 1 ? left : order.quantity > 0 ? Math.round((cents * r.quantity) / order.quantity) : 0;
+    left -= share;
+    return { area: r.area, line: r.line, cents: share };
+  });
+}
+
+/** One bulk order as it was priced: the supplier, and the product each of its lines uses. */
+export interface SuppliedOrder {
+  order: BulkOrder;
+  pick: SupplierPick;
+  /** The product each of the order's lines is priced at, in the order's line order; null where M was typed by hand. */
+  products: (SupplierProduct | null)[];
+}
+
+/**
+ * Prices every bulk material from the closest supplier with a price, with
+ * no clicks: each material is one order for the whole job, each line at the
+ * product the client asked for (or the best fit), and the delivery fee
+ * shared by quantity. A line whose M was typed by hand is left as it is.
+ * Run again on every change, so the material follows the quantities.
+ */
+export function priceFromSuppliers(
+  lines: PriceLine[][],
+  services: ProductionService[],
+  suppliers: Supplier[],
+  site: { lat: number; lng: number; zip: string | null } | null
+): { lines: PriceLine[][]; orders: SuppliedOrder[] } {
+  if (suppliers.length === 0) return { lines, orders: [] };
+  const { orders } = bulkOrders(jobMaterials(lines.map((_, i) => `Area ${i + 1}`), lines, services, []));
+  const next = lines.map((ls) => [...ls]);
+  const supplied: SuppliedOrder[] = [];
+  for (const order of orders) {
+    const pick = pickSupplier(suppliers, order.kind, order.quantity, site);
+    const rec = pick.recommended;
+    if (!rec) continue;
+    const lineOf = (r: MaterialRow) => lines[r.area][r.line];
+    // The order's own choice: what the largest line asked for, else the best fit.
+    const largest = [...order.rows].sort((a, b) => b.quantity - a.quantity)[0];
+    const fallback = bestProduct(rec.products, order.kind, lineOf(largest).prefer);
+    // A line that asked for something gets it; the rest follow the order, so one material goes on the whole job.
+    const products = order.rows.map((r) => {
+      const line = lineOf(r);
+      if (line.supplied === false) return null;
+      return (line.prefer ? bestProduct(rec.products, order.kind, line.prefer) : null) ?? fallback;
+    });
+    // Each product ordered once for its lines, to the next half yard or ton; delivery once for the order.
+    const byProduct = new Map<string, number>();
+    order.rows.forEach((r, i) => {
+      const p = products[i];
+      if (p) byProduct.set(p.id, (byProduct.get(p.id) ?? 0) + r.quantity);
+    });
+    order.rows.forEach((r, i) => {
+      const p = products[i];
+      if (!p) return;
+      const groupYards = byProduct.get(p.id)!;
+      const unit = unitPrice(p, rec.delivery) ?? 0;
+      const share = groupYards > 0 ? r.quantity / groupYards : 0;
+      const material = unit * orderAmount(p, groupYards) * share;
+      const delivery = (rec.delivery?.feeCents ?? 0) * (order.quantity > 0 ? r.quantity / order.quantity : 0);
+      next[r.area][r.line] = { ...next[r.area][r.line], materialCents: Math.round(material + delivery), supplied: true };
+    });
+    supplied.push({ order, pick, products });
+  }
+  return { lines: next, orders: supplied };
+}

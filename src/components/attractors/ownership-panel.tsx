@@ -1,0 +1,246 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Home, Loader2, Pause, Play } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { pauseSdatImport, resumeSdatImport, sdatStatus, startSdatImport, type SdatStatus } from "@/lib/actions/sdat-actions";
+import type { OwnershipSummary } from "@/lib/data/ownership";
+import { DEFAULT_SOCRATA_SDAT_URL } from "@/lib/socrata";
+import type { PointColorMode } from "@/lib/house-geojson";
+import { countHighlight, HIGHLIGHT_PRESETS, matrixCanCount, stageOwnershipTable, type MatrixRow, type PointHighlight } from "@/lib/house-highlight";
+import { KIND_LABEL, type HouseKind } from "@/lib/house-geojson";
+
+/**
+ * Who owns the houses, from the State's assessment roll.
+ *
+ * One button reads Maryland's parcel data for Harford and writes, beside
+ * every house we hold, whether the owner lives there or the tax bill goes
+ * elsewhere, and when it last sold for what. The map can then colour by
+ * that instead of by stage, and a door list says whose door it is.
+ */
+/** "Clients, owner-occupied", from a table cell's key. */
+function describeCell(key: string): string {
+  const m = /^cell-(\d+)-(\d)$/.exec(key);
+  if (!m) return "this selection";
+  const stage = stageOwnershipTable([[Number(m[1]), Number(m[2]), 0, 1]])[0]?.label ?? "these houses";
+  const own = m[2] === "1" ? "owner lives there" : m[2] === "2" ? "rented" : "ownership unknown";
+  return `${stage}, ${own}`;
+}
+
+export function OwnershipPanel({
+  job,
+  summary,
+  colorMode,
+  onColorMode,
+  matrix,
+  kinds,
+  highlight,
+  onHighlight,
+}: {
+  job: SdatStatus | null;
+  summary: OwnershipSummary;
+  colorMode: PointColorMode;
+  onColorMode: (mode: PointColorMode) => void;
+  /** Where we stand against who owns it, counted. */
+  matrix: MatrixRow[];
+  /** How many of each kind of door the county has, once classified. */
+  kinds: Partial<Record<HouseKind, number>>;
+  /** The question the map is currently showing the answer to. */
+  highlight: { key: string; value: PointHighlight } | null;
+  onHighlight: (next: { key: string; value: PointHighlight } | null) => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [status, setStatus] = useState<SdatStatus | null>(job);
+  const [url, setUrl] = useState(DEFAULT_SOCRATA_SDAT_URL);
+  const [showUrl, setShowUrl] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const running = status?.status === "running";
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(async () => {
+      const result = await sdatStatus();
+      if (!result.ok || !result.value) return;
+      setStatus(result.value);
+      if (result.value.status !== "running") router.refresh();
+    }, 8_000);
+    return () => clearInterval(timer);
+  }, [running, router]);
+
+  function run(work: () => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await work();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      const fresh = await sdatStatus();
+      if (fresh.ok && fresh.value) setStatus(fresh.value);
+      router.refresh();
+    });
+  }
+
+  const known = summary.known > 0;
+  const pct = (n: number) => (summary.known > 0 ? `${Math.round((100 * n) / summary.known)}%` : "");
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+          <Home className="h-4 w-4" /> Who owns the houses
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {known
+            ? `${summary.known.toLocaleString()} of ${summary.houses.toLocaleString()} houses on the State's roll: ${summary.ownerOccupied.toLocaleString()} owner-occupied (${pct(summary.ownerOccupied)}), ${summary.absentee.toLocaleString()} absentee or rented (${pct(summary.absentee)}). ${summary.soldLastYear.toLocaleString()} changed hands in the last year, ${summary.soldLast90.toLocaleString()} in the last ninety days.`
+            : "Maryland's assessment roll says who owns every parcel, where the tax bill goes, and when it last sold. Read once for the county, it tells the map which houses are rented and which just changed hands."}
+        </p>
+      </div>
+
+      {Object.keys(kinds).length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {(["home", "townhome", "condo", "apartment", "business", "home_business", "institution", "land"] as HouseKind[])
+            .filter((k) => (kinds[k] ?? 0) > 0)
+            .map((k) => `${(kinds[k] ?? 0).toLocaleString()} ${KIND_LABEL[k].toLowerCase()}`)
+            .join(" · ")}
+          .
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {!running && (
+          <Button type="button" size="sm" disabled={isPending} onClick={() => run(() => startSdatImport(url))}>
+            {isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Play className="mr-1 h-3.5 w-3.5" />}
+            {known ? "Refresh from the State" : "Read the State's roll"}
+          </Button>
+        )}
+        {running && status && (
+          <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => run(() => pauseSdatImport(status.jobId))}>
+            <Pause className="mr-1 h-3.5 w-3.5" /> Pause
+          </Button>
+        )}
+        {status && (status.status === "paused" || status.status === "failed") && (
+          <Button type="button" size="sm" variant="outline" disabled={isPending} onClick={() => run(() => resumeSdatImport(status.jobId))}>
+            <Play className="mr-1 h-3.5 w-3.5" /> Resume
+          </Button>
+        )}
+        <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setShowUrl((v) => !v)}>
+          {showUrl ? "Hide source" : "Source"}
+        </button>
+      </div>
+      {showUrl && (
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="h-8 w-full rounded-md border border-border bg-background px-2 font-mono text-[11px]"
+          spellCheck={false}
+          title="The State's assessment roll on Maryland's open-data portal. Change only if the State moves it."
+        />
+      )}
+
+      {status && (
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          {running && <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" />}
+          <span>{status.summary}</span>
+        </p>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {known && matrix.length > 0 && (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs font-medium">Where we stand, against who owns it</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="py-0.5 text-left font-normal"></th>
+                <th className="py-0.5 text-right font-normal">Owner</th>
+                <th className="py-0.5 text-right font-normal">Rented</th>
+                <th className="py-0.5 text-right font-normal">Unknown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageOwnershipTable(matrix).map((row) => (
+                <tr key={row.rank} className="border-t border-border/60">
+                  <td className="py-0.5">{row.label}</td>
+                  {([1, 2, 0] as const).map((own) => {
+                    const n = own === 1 ? row.owner : own === 2 ? row.absentee : row.unknown;
+                    const key = `cell-${row.rank}-${own}`;
+                    const active = highlight?.key === key;
+                    return (
+                      <td key={own} className="py-0.5 text-right">
+                        <button
+                          type="button"
+                          disabled={n === 0}
+                          onClick={() => onHighlight(active ? null : { key, value: { stages: [row.rank], ownership: [own] } })}
+                          className={active ? "rounded bg-primary px-1.5 text-primary-foreground" : n === 0 ? "text-muted-foreground/50" : "rounded px-1.5 hover:bg-muted"}
+                          title="Show these on the map"
+                        >
+                          {n.toLocaleString()}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="flex flex-wrap gap-1.5">
+            {HIGHLIGHT_PRESETS.map((preset) => {
+              const active = highlight?.key === preset.key;
+              const n = countHighlight(matrix, preset.highlight);
+              return (
+                <button
+                  key={preset.key}
+                  type="button"
+                  title={preset.why}
+                  onClick={() => onHighlight(active ? null : { key: preset.key, value: preset.highlight })}
+                  className={
+                    active
+                      ? "rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+                      : "rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted"
+                  }
+                >
+                  {preset.label}
+                  {matrixCanCount(preset.highlight) && <span className="ml-1 opacity-70">{n.toLocaleString()}</span>}
+                </button>
+              );
+            })}
+            {highlight && (
+              <button type="button" onClick={() => onHighlight(null)} className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:underline">
+                Show everything
+              </button>
+            )}
+          </div>
+          {highlight && (
+            <p className="rounded-md bg-primary/10 px-2 py-1.5 text-xs">
+              The map is showing only <b>{HIGHLIGHT_PRESETS.find((p) => p.key === highlight.key)?.label ?? describeCell(highlight.key)}</b>. Everything else is hidden until you choose Show everything.
+            </p>
+          )}
+        </div>
+      )}
+
+      {known && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3 text-xs">
+          <span className="text-muted-foreground">Colour every address by</span>
+          {(["stage", "ownership", "sold", "kind"] as PointColorMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => onColorMode(mode)}
+              className={
+                colorMode === mode
+                  ? "rounded-md bg-primary px-2 py-1 font-medium text-primary-foreground"
+                  : "rounded-md border border-border px-2 py-1 font-medium"
+              }
+            >
+              {mode === "stage" ? "Where we stand" : mode === "ownership" ? "Owner or rented" : mode === "sold" ? "Sold this year" : "Kind of door"}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+
+import { creditFor, isSold, rankClosers, stageOf, type SoldJobInput } from "./affiliate-closes";
+
+function job(over: Partial<SoldJobInput>): SoldJobInput {
+  return {
+    id: "j",
+    status: "approved",
+    declined: false,
+    soldFor: 1000,
+    proposalAccepted: true,
+    referralCode: null,
+    referredBy: null,
+    assignedTo: null,
+    accountManager: null,
+    closedAt: "2026-09-20T00:00:00Z",
+    ...over,
+  };
+}
+
+const posters = new Map([["abc1234", "affiliate"]]);
+
+describe("who closed a job", () => {
+  it("credits the affiliate whose tracked link brought it in", () => {
+    expect(creditFor(job({ referralCode: "abc1234", assignedTo: "jace", accountManager: "jace" }), posters)).toBe("affiliate");
+  });
+  it("or whose own booking link the client used", () => {
+    expect(creditFor(job({ referredBy: "cheyenne" }), posters)).toBe("cheyenne");
+  });
+  it("credits nobody for work that did not come from a link, however it was sold", () => {
+    expect(creditFor(job({ assignedTo: "jordan", accountManager: "jace" }), posters)).toBeNull();
+  });
+  it("counts only sold work as closed", () => {
+    expect(isSold(job({ status: "estimating", proposalAccepted: false }))).toBe(false);
+    expect(isSold(job({ declined: true }))).toBe(false);
+    expect(isSold(job({ status: "estimating", proposalAccepted: true }))).toBe(true);
+  });
+});
+
+describe("rankClosers", () => {
+  it("lists only people who put links out, with what their links booked and closed", () => {
+    const people = [
+      { id: "affiliate", name: "Ava" },
+      { id: "jace", name: "Jace" },
+      { id: "max", name: "Max" },
+    ];
+    const standings = rankClosers(
+      people,
+      [
+        job({ id: "1", referralCode: "abc1234", soldFor: 2000 }),
+        job({ id: "2", referralCode: "abc1234", status: "estimating", proposalAccepted: false }),
+        job({ id: "3", assignedTo: "jace", soldFor: 9000 }),
+      ],
+      posters,
+      new Map([["affiliate", 5], ["max", 1]]),
+      new Map(),
+      new Date("2026-09-26T00:00:00Z")
+    );
+    expect(standings.map((s) => [s.name, s.links, s.booked, s.closed, s.closedValue])).toEqual([
+      ["Ava", 5, 2, 1, 2000],
+      ["Max", 1, 0, 0, 0],
+    ]);
+  });
+});
+
+describe("where an answered post has got to", () => {
+  const booked = (over: Partial<SoldJobInput> & { proposalStatus?: string | null }) =>
+    ({ ...job({ status: "estimating", proposalAccepted: false, soldFor: null }), proposalStatus: null, ...over });
+  it("before anybody books", () => {
+    expect(stageOf(null, 0)).toBe("waiting");
+    expect(stageOf(null, 3)).toBe("clicked");
+  });
+  it("through the evaluation and the proposal", () => {
+    expect(stageOf(booked({}), 2)).toBe("evaluation");
+    expect(stageOf(booked({ proposalStatus: "needs_approval" }), 2)).toBe("evaluation");
+    expect(stageOf(booked({ status: "quoted", proposalStatus: "sent" }), 2)).toBe("proposal");
+  });
+  it("to closed or said no", () => {
+    expect(stageOf(booked({ status: "approved", proposalAccepted: true, proposalStatus: "accepted" }), 1)).toBe("closed");
+    expect(stageOf(booked({ proposalStatus: "declined" }), 1)).toBe("said_no");
+    expect(stageOf(booked({ status: "cancelled" }), 1)).toBe("said_no");
+    expect(stageOf(booked({ declined: true, proposalStatus: "sent" }), 1)).toBe("said_no");
+  });
+});

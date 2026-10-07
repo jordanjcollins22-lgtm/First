@@ -1,0 +1,407 @@
+import Link from "next/link";
+import { ArrowLeft, MapPin, Navigation, Phone } from "lucide-react";
+
+import type { CanvasMark } from "@/lib/canvas-marks";
+import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
+import { ZonePhotos } from "@/components/job/marked-photo";
+import { AreaTodo } from "@/components/job/area-todo";
+import { GuidedZones } from "@/components/job/guided-zones";
+import { CompletionPanel } from "@/components/job/completion-panel";
+import { PhotoReviewPanel } from "@/components/job/photo-review-panel";
+import type { PhotoMark } from "@/lib/photo-review";
+import type { JobPhotoWithUrl } from "@/lib/data/job-photos";
+import type { PhotoWaiver, ZoneRef } from "@/lib/job-lifecycle";
+import type { JobStatus } from "@/types/domain";
+import type { ScopeChange } from "@/lib/data/exceptions";
+import { formatJobNumber } from "@/lib/job-number";
+import { zonesBounds, type WorkOrder } from "@/lib/work-order";
+import { groupByService, groupHeading, worthGrouping } from "@/lib/service-grouping";
+import type { ProposalSiteImageTransform } from "@/types/domain";
+import { CrewChecklistCard } from "@/components/job/crew-checklist-card";
+import type { CrewChecklist } from "@/lib/crew-checklist";
+import { AreaBoard, type AreaActions } from "@/components/job/area-board";
+import { ServiceTimers } from "@/components/job/service-timers";
+import type { JobServiceTimers } from "@/lib/data/service-timing";
+import { JobReceiptsCard } from "@/components/receipts/job-receipts-card";
+import type { JobReceipt } from "@/lib/data/job-receipts";
+import type { AreaBoardData } from "@/lib/data/area-board";
+import type { ReactNode } from "react";
+
+/**
+ * The crew's sheet for one job.
+ *
+ * Deliberately not the job page. That screen is the office's — proposal
+ * totals, discounts, invoices — and none of it is a crew member's business to
+ * be reading on a customer's driveway. This is the same job seen as work:
+ * where each zone is and what to do in it.
+ *
+ * Server component apart from the photos, which open full screen — a
+ * thumbnail is enough to know a photo exists and not enough to see which
+ * corner of a bed the evaluator pinned, which is the whole reason the pin was
+ * dropped. Nothing here changes any record; the crew do that on Today.
+ */
+export function WorkOrderView({
+  jobId,
+  jobNumber,
+  order,
+  address,
+  customerName,
+  jobName,
+  siteImagePath,
+  imageTransform,
+  marks,
+  photos,
+  photoZones,
+  photoMarks,
+  photosApprovedAt,
+  waivers,
+  jobStatus,
+  allowDuring,
+  allowAfter,
+  allowSignOff,
+  signOffLockReason,
+  lockedStageReason,
+  completedAt,
+  completedByName,
+  completionNotes,
+  accountManager,
+  approvedAdditions,
+  back,
+  bare = false,
+  crew = false,
+  arrived = false,
+  practice = false,
+  checklist,
+  areaBoard,
+  receipts = [],
+  serviceTimers,
+  demo,
+}: {
+  jobId: string;
+  /** The number the office will say on the phone when they ring about it. */
+  jobNumber: number | null;
+  order: WorkOrder;
+  address: string;
+  customerName: string;
+  jobName: string;
+  siteImagePath: string | null;
+  /** How the satellite photo sits under the zones, from the saved design. */
+  imageTransform: ProposalSiteImageTransform | null;
+  /** Notes the evaluator pinned to the picture. Written for this sheet. */
+  marks: CanvasMark[];
+  photos: JobPhotoWithUrl[];
+  photoZones: ZoneRef[];
+  photoMarks: PhotoMark[];
+  photosApprovedAt: string | null;
+  waivers: PhotoWaiver[];
+  jobStatus: JobStatus;
+  allowDuring: boolean;
+  allowAfter: boolean;
+  allowSignOff: boolean;
+  signOffLockReason: string | null;
+  lockedStageReason: string | null;
+  completedAt: string | null;
+  completedByName: string | null;
+  completionNotes: string | null;
+  /** Who to ring when something on site does not match the sheet. */
+  accountManager: { name: string; phone: string | null } | null;
+  /** Extra work the client agreed to after the job was sold. */
+  approvedAdditions: ScopeChange[];
+  /** Where the back link goes. Defaults to the crew's day, which is where a
+   * crew member came from; the office opens this from the job and wants to go
+   * back there instead. */
+  back?: { href: string; label: string };
+  /** The work and nothing else: for somebody trying out with us. No contact line, no punch list, no completion or photos. */
+  bare?: boolean;
+  /**
+   * Seen by the crew. Their photos are taken area by area on the board above,
+   * so the zone-by-zone completion and photos panel below is left off: the
+   * same photos twice, and a sign-off that isn't theirs.
+   */
+  crew?: boolean;
+  /** They have tapped Arrived on My Day: the sheet walks them through one area at a time. */
+  arrived?: boolean;
+  /** A sample sheet with no job behind it: the links that need a job say so instead. */
+  practice?: boolean;
+  /** What to load and what to do, at the top of the sheet. */
+  checklist?: CrewChecklist;
+  /** Who is in which area, and each area's steps: the job on site. */
+  areaBoard?: AreaBoardData;
+  /** What the crew had to buy for this job, with the receipts. */
+  receipts?: JobReceipt[];
+  /** Each service to time on this job, and its timers. */
+  serviceTimers?: JobServiceTimers | null;
+  /**
+   * A demo of this job's sheet: the same screen, every button run on the
+   * screen only. The areas and receipts are the demo's; the photo and
+   * sign-off panels show as they are and can't be tapped.
+   */
+  demo?: {
+    board: AreaBoardData;
+    areaActions: AreaActions;
+    receipts: JobReceipt[];
+    onReceipt: (receipt: JobReceipt) => void;
+    /** Anything the demo shows after the areas, like asking for the walkthrough. */
+    after?: ReactNode;
+  };
+}) {
+  if (demo) {
+    areaBoard = demo.board;
+    receipts = demo.receipts;
+  }
+  // On a job being worked, the areas are worked from the board: pick one,
+  // tick it off, photograph it. Before and after that, the sheet is a list.
+  const onSite = Boolean(areaBoard) && !bare && !practice && (jobStatus === "approved" || jobStatus === "in_progress");
+  // Worked out here rather than stored: zones get edited and a zone's service
+  // can change, and a stored grouping goes wrong the first time somebody
+  // moves an area from mowing to mulching.
+  const zoneGroups = groupByService(
+    order.zones.map((zone) => ({ ...zone, serviceLabel: zone.service }))
+  );
+  const grouped = worthGrouping(zoneGroups);
+
+  return (
+    <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
+      <Link
+        href={back?.href ?? (bare ? "/my-day" : "/today")}
+        className="flex min-h-9 items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        {back?.label ?? "Back to today"}
+      </Link>
+
+      <header>
+        <h1 className="text-xl font-bold leading-snug">{address}</h1>
+        <p className="text-sm text-muted-foreground">
+          {customerName}
+          {jobName && ` · ${jobName}`}
+          {formatJobNumber(jobNumber) && ` · ${formatJobNumber(jobNumber)}`}
+        </p>
+        {practice || demo ? (
+          <p className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary/60 text-base font-semibold text-primary-foreground" title="On a real job this opens the route in maps.">
+            <Navigation className="h-5 w-5" />
+            Directions
+          </p>
+        ) : (
+          <Link
+            href={`/jobs/${jobId}/directions`}
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground"
+          >
+            <Navigation className="h-5 w-5" />
+            Directions
+          </Link>
+        )}
+      </header>
+
+      {accountManager && !bare && (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span className="text-muted-foreground">Questions:</span>
+          <span className="font-medium">{accountManager.name}</span>
+          {accountManager.phone && (
+            <a
+              href={`tel:${accountManager.phone}`}
+              className="flex min-h-9 items-center gap-1 rounded-lg border border-border px-2 text-sm font-medium"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Call
+            </a>
+          )}
+        </p>
+      )}
+
+      {checklist && <CrewChecklistCard checklist={onSite ? { ...checklist, areas: [] } : checklist} />}
+
+      {/* ------------------------------------------------------- the site map */}
+      {order.zones.length > 0 && siteImagePath && imageTransform && (
+        <FocusableSiteMap
+          imagePath={siteImagePath}
+          transform={imageTransform}
+          numbered
+          dimSurroundings
+          defaultFrame={zonesBounds(order.zones, imageTransform.canvasWidth, imageTransform.canvasHeight)}
+          className="w-full rounded-xl border border-white/60 bg-muted"
+          zones={order.zones.map((zone, i) => ({
+            zoneName: zone.name,
+            color: zone.color,
+            points: zone.points,
+            // Its number on the full map, kept so showing one zone on its own
+            // still calls it what the list beside it calls it.
+            number: i + 1,
+          }))}
+        />
+      )}
+
+      {onSite && areaBoard && (
+        <AreaBoard jobId={jobId} zones={order.zones} board={areaBoard} accountManager={accountManager} actions={demo?.areaActions} />
+      )}
+
+      {/* Each service timed, so production rates come from real jobs. */}
+      {onSite && !demo && serviceTimers && serviceTimers.services.length > 0 && <ServiceTimers jobId={jobId} timers={serviceTimers} />}
+
+      {demo?.after}
+
+      {/* Materials are ordered ahead; anything bought on the day comes with its receipt. */}
+      {onSite && <JobReceiptsCard jobId={jobId} receipts={receipts} onDemoAdd={demo?.onReceipt} />}
+
+      {/* Agreed after the job was sold, and kept apart from it. The crew has
+          to be able to tell the difference between what was bought and what
+          was added, and the record of what was sold never changes. */}
+      {approvedAdditions.length > 0 && (
+        <section className="rounded-xl border border-emerald-500/50 bg-emerald-50/60 p-4 dark:bg-emerald-500/5">
+          <h2 className="mb-2 text-sm font-semibold">Added since, approved</h2>
+          <ol className="flex flex-col gap-2">
+            {approvedAdditions.map((change) => (
+              <li key={change.id} className="text-sm">
+                {change.requestedNote}
+                {change.terms && <span className="block text-xs text-muted-foreground">{change.terms}</span>}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* Whatever is neither a zone nor a measurement — the gate that stays
+          shut, the bank too steep to mow. Above the work rather than below
+          it: these are the things to know before starting, not after. */}
+      {marks.length > 0 && (
+        <section className="rounded-xl border border-violet-400/60 bg-violet-50/60 p-4">
+          <h2 className="mb-2 text-sm font-semibold">Notes from the walkthrough</h2>
+          <ol className="flex flex-col gap-2">
+            {marks.map((mark, index) => (
+              <li key={mark.id} className="flex items-start gap-2 text-sm">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11px] font-bold text-white">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {mark.note}
+                  {mark.authorName && (
+                    <span className="text-muted-foreground"> · {mark.authorName}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* ----------------------------------------------------------- the work */}
+      {bare && arrived ? (
+        /* On site: one area at a time, each closed with an after photo from
+           the evaluation's angle before the next one shows. */
+        <GuidedZones jobId={jobId} zones={order.zones} photos={photos} />
+      ) : bare && order.zones.length > 0 ? (
+        <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm">
+          When you get there, tap <span className="font-semibold">Arrived</span> on My Day. This sheet will then show you one area at a time.
+        </p>
+      ) : null}
+      {(bare && arrived) || onSite ? null : order.zones.length === 0 ? (
+        <p className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm">
+          No zones have been marked up on this job yet. Check with the office before you start.
+        </p>
+      ) : (
+        /* Gathered by service. Six lawn areas as six separate blocks reads as
+           six jobs, and a crew loads the truck for six. Under one heading it
+           reads as one job in six places, which is what it is. */
+        <div className="flex flex-col gap-5">
+          {zoneGroups.map((group) => (
+          <section key={group.service} className="flex flex-col gap-2">
+            {grouped && (
+              <h3 className="text-sm font-bold uppercase tracking-wide text-primary">
+                {groupHeading(group)}
+              </h3>
+            )}
+            <ol className="flex flex-col gap-3">
+              {group.zones.map((zone, i) => (
+            <li key={zone.id} className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
+              <div className="mb-2 flex items-start gap-2">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
+                  style={{ backgroundColor: zone.color }}
+                >
+                  {/* The number it has on the map, not its place in this
+                      group. A number on a sheet is what somebody points at
+                      across a garden. */}
+                  {group.positions[i]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold leading-snug">{zone.name}</p>
+                  {!grouped && <p className="text-sm text-primary">{zone.service}</p>}
+                </div>
+              </div>
+
+              {(zone.location || zone.sizeLabel) && (
+                <p className="mb-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                  {zone.location && (
+                    <span className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {zone.location}
+                    </span>
+                  )}
+                  {zone.sizeLabel && <span>{zone.sizeLabel}</span>}
+                </p>
+              )}
+
+              <AreaTodo todo={zone.todo} className="mb-2" />
+
+              {zone.notes && (
+                <p className="mb-2 rounded-lg border border-amber-400/50 bg-amber-50/60 p-2.5 text-sm">
+                  {zone.notes}
+                </p>
+              )}
+
+              {/* Below the words, because the words say what to do and the
+                  photos say where. Somebody reads the instruction first and
+                  then looks for the thing it is talking about. */}
+              <ZonePhotos photos={zone.photos} zoneName={zone.name} />
+
+            </li>
+              ))}
+            </ol>
+          </section>
+          ))}
+        </div>
+      )}
+
+      {/* Where the work gets recorded. This is the screen open on the
+          driveway, so it is where the during and after photos have to be
+          taken — the sheet could show the evaluation's pictures and take
+          none of its own, which left the people doing the work with no way
+          to record it. */}
+      {/* The manager's punch list, where the crew are standing. They cannot
+          mark or approve — that is the point of the step — but they can see
+          what came back and tick it off. */}
+      {/* In a demo these show as they are, and taps on them do nothing. */}
+      <div inert={demo ? true : undefined} className="flex flex-col gap-4">
+      {!bare && (
+        <PhotoReviewPanel
+          jobId={jobId}
+          photos={photos.filter((photo) => photo.kind === "after")}
+          marks={photoMarks}
+          crewSignedOff={jobStatus === "completed"}
+          approvedAt={photosApprovedAt}
+          approvedByName={null}
+          canReview={false}
+        />
+      )}
+
+      {!bare && !crew && (
+      <CompletionPanel
+        jobId={jobId}
+        status={jobStatus}
+        photos={photos}
+        zones={photoZones}
+        allowDuring={allowDuring}
+        allowAfter={allowAfter}
+        allowSignOff={allowSignOff}
+        signOffLockReason={signOffLockReason}
+        lockedStageReason={lockedStageReason}
+        waivers={waivers}
+        completedAt={completedAt}
+        completedByName={completedByName}
+        completionNotes={completionNotes}
+      />
+      )}
+      </div>
+    </div>
+  );
+}

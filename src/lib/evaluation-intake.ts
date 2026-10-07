@@ -1,0 +1,1015 @@
+/**
+ * The pre-evaluation form: what we ask before we drive out.
+ *
+ * Two jobs. The first is to price: what they want done, where, and the
+ * handful of facts about each kind of work that move its price (what is in
+ * the beds now, how many shrubs are coming out, whether a machine fits through the
+ * gate), plus photos. The second is to settle the questions that stop
+ * people saying yes. They tell us what they are worried about, and the form
+ * answers it on the spot, saying only what is known to be true; the
+ * questions people usually ask before a visit are answered at the end.
+ *
+ * Five minutes on a phone. If they never open it, the evaluator goes through
+ * the same questions with them at the door, on the same page, so the answers
+ * land in the same place either way.
+ *
+ * The questions are data so the form, the evaluator's summary and the
+ * talking points all read from one list. Nothing here touches the database.
+ */
+
+export type IntakeKind = "multi" | "single" | "text";
+
+export interface IntakeOption {
+  value: string;
+  label: string;
+  /** A photo of it, as a path in the public material-images bucket. */
+  image?: string;
+  /** A line under the label, e.g. the size. */
+  note?: string;
+  /** The colours it means, as swatches beside the words. */
+  swatches?: string[];
+  /** Kept so old answers still read, but no longer offered. */
+  hidden?: boolean;
+  /** Offered only for a home, or only for an HOA or business's grounds. Both when not set. */
+  for?: "home" | "grounds";
+}
+
+/** Where a question sits on the form. */
+export type IntakeSection = "work" | "style" | "decide" | "ask";
+
+export interface IntakeQuestion {
+  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
+  section: IntakeSection;
+  title: string;
+  help?: string;
+  kind: IntakeKind;
+  options?: IntakeOption[];
+  /** For a chip question, the free-text field that goes with it. */
+  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
+  /**
+   * When the notes box shows: once any chip is picked, or once one of these
+   * is. Always, when not given. A box nobody needs is one more thing to skip.
+   */
+  notesWhen?: "any" | string[];
+  notesPlaceholder?: string;
+}
+
+export interface IntakeAnswers {
+  /** A home, an HOA or community, or a business: "home", "hoa" or "commercial". */
+  property: string;
+  services: string[];
+  services_other: string;
+  areas: string[];
+  looks: string[];
+  looks_notes: string;
+  tried: string;
+  concerns: string[];
+  concerns_notes: string;
+  budget: string;
+  timing: string;
+  decision: string;
+  questions: string;
+  /** The answers to the pricing questions, by question id. */
+  details: Record<string, string | string[]>;
+  /** Storage paths of the photos they sent, in the job-photos bucket. */
+  photos: string[];
+  /** Which part of the yard each photo is of, by its path: front, back, sides, foundation or whole. */
+  photo_areas: Record<string, string>;
+  /** Everybody else in the decision, with how to reach them. */
+  people: IntakePerson[];
+}
+
+/** Somebody else in the decision: a spouse, a parent, the HOA. */
+export interface IntakePerson {
+  name: string;
+  /** Who they are to the client, e.g. "Wife", "HOA". */
+  role: string;
+  /** A phone number or an email, as they wrote it. */
+  contact: string;
+  /** What they should be sent: the plan only, the plan and the price, or everything as it happens. */
+  sees: PersonSees;
+}
+
+export type PersonSees = "scope" | "price" | "all";
+
+export const PERSON_SEES: { value: PersonSees; label: string }[] = [
+  { value: "scope", label: "The plan only" },
+  { value: "price", label: "The plan and the price" },
+  { value: "all", label: "Everything, with updates" },
+];
+
+/** Most people one form keeps. */
+export const MAX_INTAKE_PEOPLE = 6;
+
+/**
+ * Whether to ask what colours and looks they like: only when they want new
+ * plants in their beds. Mulch, stone, lawns and the rest have nothing to
+ * pick a palette for.
+ */
+export function asksLooks(answers: Pick<IntakeAnswers, "services" | "details">): boolean {
+  const add = answers.details.beds_add;
+  return answers.services.includes("beds") && Array.isArray(add) && add.includes("plants");
+}
+
+/**
+ * Whether to ask who else is in it: they said somebody else decides, or
+ * they said earlier that they have an HOA, which will want to see the plan.
+ */
+export function asksForPeople(decision: string, details?: IntakeAnswers["details"]): boolean {
+  return decision === "others" || decision === "hoa" || hasHoa(decision, details);
+}
+
+/** An HOA is involved, from the decision or from "Anything we should know?". */
+export function hasHoa(decision: string, details?: IntakeAnswers["details"]): boolean {
+  const yard = details?.yard;
+  return decision === "hoa" || (Array.isArray(yard) ? yard.includes("hoa") : yard === "hoa");
+}
+
+/* ------------------------------------------------------------- seasons */
+
+export type Season = "spring" | "summer" | "fall" | "winter";
+
+export const SEASON_LABEL: Record<Season, string> = { spring: "spring", summer: "summer", fall: "fall", winter: "winter" };
+
+/** When each service is done here. Something else is always offered. */
+export const SERVICE_SEASONS: Record<string, Season[]> = {
+  beds: ["spring", "summer", "fall"],
+  lawn: ["spring", "summer", "fall"],
+  cleanup: ["spring", "summer", "fall"],
+  removal: ["spring", "summer", "fall", "winter"],
+  drainage: ["spring", "summer", "fall"],
+  hardscape: ["spring", "summer", "fall"],
+  washing: ["spring", "summer", "fall"],
+  holiday: ["fall", "winter"],
+  snow: ["winter"],
+};
+
+/** Maryland seasons by month: spring March to May, and so on. */
+export function seasonOf(date: Date): Season {
+  const month = date.getMonth();
+  if (month >= 2 && month <= 4) return "spring";
+  if (month >= 5 && month <= 7) return "summer";
+  if (month >= 8 && month <= 10) return "fall";
+  return "winter";
+}
+
+const NEXT_SEASON: Record<Season, Season> = { spring: "summer", summer: "fall", fall: "winter", winter: "spring" };
+
+/**
+ * The first page's services, in two groups: this season's, then next
+ * season's, each service once, in the order the form lists them. Anything
+ * already picked stays on the page even out of season.
+ */
+export function servicesBySeason(now: Date, picked: string[] = []): { season: Season; values: string[] }[] {
+  const current = seasonOf(now);
+  const next = NEXT_SEASON[current];
+  const all = (INTAKE_QUESTIONS[0].options ?? []).filter((o) => !o.hidden && o.value !== "other").map((o) => o.value);
+  const thisSeason = all.filter((v) => SERVICE_SEASONS[v]?.includes(current));
+  const nextSeason = all.filter((v) => !thisSeason.includes(v) && (SERVICE_SEASONS[v]?.includes(next) || picked.includes(v)));
+  return [
+    { season: current, values: thisSeason },
+    { season: next, values: nextSeason },
+  ].filter((group) => group.values.length > 0);
+}
+
+export const INTAKE_QUESTIONS: IntakeQuestion[] = [
+  {
+    key: "services",
+    section: "work",
+    title: "What are you hoping to have done?",
+    help: "Tick all that apply. Each part is priced on its own, so more is fine.",
+    kind: "multi",
+    options: [
+      { value: "beds", label: "Beds: mulch, stone or plants" },
+      { value: "lawn", label: "Lawn: repair, sod, seed or mowing" },
+      { value: "cleanup", label: "Cleanup and trimming" },
+      { value: "removal", label: "Shrub or plant removal" },
+      { value: "drainage", label: "Drainage or standing water" },
+      { value: "hardscape", label: "Patio, walkway or wall" },
+      { value: "washing", label: "Soft washing" },
+      { value: "holiday", label: "Holiday decorations" },
+      { value: "snow", label: "Snow removal" },
+      { value: "other", label: "Something else" },
+    ],
+    notesKey: "services_other",
+    notesPlaceholder: "What else would you like done?",
+    notesWhen: ["other"],
+  },
+  {
+    key: "areas",
+    section: "work",
+    title: "Which parts of the property?",
+    kind: "multi",
+    options: [
+      { value: "front", label: "Front yard", for: "home" },
+      { value: "back", label: "Back yard", for: "home" },
+      { value: "sides", label: "Side yards", for: "home" },
+      { value: "foundation", label: "Around the house", for: "home" },
+      { value: "entrance", label: "Entrance and signs", for: "grounds" },
+      { value: "medians", label: "Medians and islands", for: "grounds" },
+      { value: "common", label: "Common lawns and open space", for: "grounds" },
+      { value: "ponds", label: "Ponds and stormwater areas", for: "grounds" },
+      { value: "amenities", label: "Clubhouse, pool or playground grounds", for: "grounds" },
+      { value: "streetside", label: "Along the streets and sidewalks", for: "grounds" },
+      { value: "whole", label: "The whole property" },
+    ],
+  },
+  {
+    key: "looks",
+    section: "style",
+    title: "What colours and looks do you like?",
+    help: "There is no wrong answer. Not sure is a real answer and we will bring options.",
+    kind: "multi",
+    options: [
+      { value: "classic", label: "Greens and whites, classic", swatches: ["#2f6d3c", "#7fae6a", "#e9efe4", "#ffffff"] },
+      { value: "cool", label: "Purples and blues", swatches: ["#4b2e83", "#8b6fc9", "#3a6fb5", "#a9cbea"] },
+      { value: "warm", label: "Reds, oranges and yellows", swatches: ["#b3261e", "#e0662a", "#f2a33a", "#f6d65a"] },
+      { value: "native", label: "Natural, native plants", swatches: ["#6f7f3f", "#b99a4a", "#8a5a3b", "#d8c9a0"] },
+      { value: "modern", label: "Modern, clean lines", swatches: ["#262626", "#7d8388", "#d9d9d4", "#4f6b3a"] },
+      { value: "cottage", label: "Full and flowery", swatches: ["#e79bbd", "#f5cfdc", "#b19cd9", "#fff1a8"] },
+      { value: "low", label: "Low maintenance above all" },
+      { value: "unsure", label: "Not sure, show me options" },
+    ],
+    notesKey: "looks_notes",
+    notesWhen: "any",
+    notesPlaceholder: "A neighbour's yard you like, a colour you hate, anything that helps",
+  },
+  {
+    key: "concerns",
+    section: "decide",
+    title: "Is there anything you're concerned about?",
+    kind: "multi",
+    options: [
+      { value: "price", label: "The price" },
+      { value: "timing", label: "The timing" },
+      { value: "unsure_want", label: "Not sure what I want yet" },
+      { value: "bad_experience", label: "A bad experience with a contractor", hidden: true },
+      { value: "hoa", label: "HOA or permit rules", hidden: true },
+      { value: "maintenance", label: "Worried about upkeep" },
+      { value: "other_quotes", label: "Getting other quotes" },
+      { value: "nothing", label: "Nothing, I'm ready" },
+    ],
+    // One box for what they have tried before and anything else on their
+    // mind: asked on its own page it read as the same question again.
+    notesKey: "tried",
+    notesPlaceholder: "Tried something before that did not work, like plants that died or a company that let you down? Tell us here.",
+  },
+  {
+    key: "budget",
+    section: "decide",
+    title: "Is there a budget range in mind?",
+    help: "Even a wide one lets us design to what you will actually do.",
+    kind: "single",
+    options: [
+      { value: "under_2500", label: "Under $2,500" },
+      { value: "2500_5000", label: "$2,500 to $5,000" },
+      { value: "5000_10000", label: "$5,000 to $10,000" },
+      { value: "10000_25000", label: "$10,000 to $25,000" },
+      { value: "over_25000", label: "Over $25,000" },
+      { value: "unsure", label: "Not sure yet" },
+    ],
+  },
+  {
+    key: "timing",
+    section: "decide",
+    title: "When would you like it done?",
+    kind: "single",
+    options: [
+      { value: "asap", label: "As soon as possible" },
+      { value: "season", label: "This season" },
+      { value: "next_season", label: "Next season" },
+      { value: "planning", label: "Just planning for now" },
+    ],
+  },
+  {
+    key: "decision",
+    section: "decide",
+    title: "Who is part of the decision?",
+    kind: "single",
+    options: [
+      { value: "me", label: "Just me" },
+      { value: "others", label: "Me and others" },
+      { value: "hoa", label: "An HOA" },
+    ],
+  },
+  {
+    key: "questions",
+    section: "ask",
+    title: "Anything you want to ask us before we come out?",
+    kind: "text",
+  },
+  {
+    // Asked first (see stepsFor); kept last here so the services stay first.
+    key: "property",
+    section: "work",
+    title: "What is this for?",
+    kind: "single",
+    options: [
+      { value: "home", label: "My home" },
+      { value: "hoa", label: "An HOA or community" },
+      { value: "commercial", label: "A business or commercial property" },
+    ],
+  },
+];
+
+/** Grounds rather than a home: an HOA, a community or a business. */
+export function isGrounds(answers: Pick<IntakeAnswers, "property">): boolean {
+  return answers.property === "hoa" || answers.property === "commercial";
+}
+
+/** The parts to choose from, for a home or for grounds. */
+export function areaOptionsFor(grounds: boolean): IntakeOption[] {
+  const areas = INTAKE_QUESTIONS.find((q) => q.key === "areas")?.options ?? [];
+  return areas.filter((o) => !o.for || o.for === (grounds ? "grounds" : "home"));
+}
+
+// ---------------------------------------------------------------------------
+// The details that set the price
+// ---------------------------------------------------------------------------
+
+/**
+ * One pricing question. Shown only when they ticked a service it is about,
+ * or always when it is about the property itself (services null).
+ */
+export interface DetailQuestion {
+  id: string;
+  /** The services it is asked for. Null: asked of every property. */
+  services: string[] | null;
+  /** Asked only once another answer says it matters. */
+  showIf?: { id: string; values: string[] };
+  title: string;
+  /** How the evaluator's summary names it. */
+  short: string;
+  /** The heading it sits under on the form: the work it is about. */
+  group: string;
+  kind: IntakeKind;
+  options?: IntakeOption[];
+  placeholder?: string;
+}
+
+const opts = (...labels: [string, string][]): IntakeOption[] => labels.map(([value, label]) => ({ value, label }));
+
+/**
+ * What moves the price of each kind of work, asked in words a homeowner can
+ * answer from the kitchen window, and no more of it than changes a number.
+ * The evaluator still measures and counts; these are the things a tape
+ * measure and a satellite picture do not show. Two questions at most for any
+ * one kind of work, and the property is one question of exceptions rather
+ * than one question per fact, because most yards have none of them.
+ */
+export const DETAIL_QUESTIONS: DetailQuestion[] = [
+  {
+    id: "beds_now",
+    services: ["beds"],
+    group: "Beds",
+    title: "What is in the beds now?",
+    short: "Beds now",
+    kind: "multi",
+    options: opts(["old_mulch", "Old mulch"], ["stone", "Stone or rock"], ["weeds", "Weeds and grass"], ["bare", "Bare soil"], ["lawn", "Lawn (a new bed)"]),
+  },
+  {
+    id: "beds_add",
+    services: ["beds"],
+    group: "Beds",
+    title: "What should go in?",
+    short: "Beds get",
+    kind: "multi",
+    options: opts(["mulch", "Mulch"], ["stone", "River rock"], ["plants", "New plants"], ["edging", "Edging"], ["unsure", "Not sure"]),
+  },
+  // The mulch and stone themselves, with the supplier's photos (Lehnhoff's
+  // Supply, Fallston, copied into material-images/lehnhoffs). Stone is river
+  // rock only: the gravels and crushed stone they sell are for bases,
+  // drainage, paths and driveways, not for covering a bed.
+  {
+    id: "mulch_color",
+    services: ["beds"],
+    showIf: { id: "beds_add", values: ["mulch"] },
+    group: "Beds",
+    title: "Which mulch?",
+    short: "Mulch",
+    kind: "single",
+    options: [
+      { value: "brown", label: "Brown", image: "lehnhoffs/mulch-brown.jpg" },
+      { value: "black", label: "Black", image: "lehnhoffs/mulch-black.jpg" },
+      { value: "natural", label: "Natural", image: "lehnhoffs/mulch-natural.jpg" },
+      { value: "unsure", label: "Not sure" },
+    ],
+  },
+  {
+    id: "bed_stone",
+    services: ["beds"],
+    showIf: { id: "beds_add", values: ["stone"] },
+    group: "Beds",
+    title: "Which river rock?",
+    short: "River rock",
+    kind: "single",
+    options: [
+      { value: "small", label: "Small", note: "About 3/4 inch", image: "lehnhoffs/river-rock-small.jpg" },
+      { value: "medium", label: "Medium", note: "1 to 3 inch", image: "lehnhoffs/river-rock-medium.jpg" },
+      { value: "large", label: "Large", note: "3 to 5 inch", image: "lehnhoffs/river-rock-large.jpg" },
+      { value: "local", label: "Local", note: "1 to 3 inch, warmer tones", image: "lehnhoffs/river-rock-local.jpg" },
+      { value: "unsure", label: "Not sure" },
+    ],
+  },
+  {
+    id: "lawn_need",
+    services: ["lawn"],
+    group: "Lawn",
+    title: "What does the lawn need?",
+    short: "Lawn needs",
+    kind: "multi",
+    options: opts(["patch", "Fix bare or thin spots"], ["redo", "Redo the whole lawn"], ["weeds", "Get rid of weeds"], ["level", "Level bumps and dips"], ["mowing", "Regular mowing"]),
+  },
+  {
+    id: "lawn_method",
+    services: ["lawn"],
+    showIf: { id: "lawn_need", values: ["patch", "redo"] },
+    group: "Lawn",
+    title: "Sod or seed?",
+    short: "Sod or seed",
+    kind: "single",
+    options: opts(["sod", "Sod, green right away"], ["seed", "Seed, costs less and fills in over a season"], ["unsure", "Not sure, advise me"]),
+  },
+  {
+    id: "cleanup_what",
+    services: ["cleanup"],
+    group: "Cleanup and trimming",
+    title: "What needs doing?",
+    short: "Cleanup",
+    kind: "multi",
+    options: opts(
+      ["leaves", "Leaves"],
+      ["weeds", "Weeds"],
+      ["trim", "Shrubs or hedges to trim"],
+      ["tall", "Some over 6 ft tall"],
+      ["vines", "Vines or ivy"],
+      ["saplings", "Saplings and seedlings"],
+      ["debris", "Junk to haul away"]
+    ),
+  },
+  {
+    id: "remove_what",
+    services: ["removal"],
+    group: "Removal",
+    title: "What is coming out?",
+    short: "Removing",
+    kind: "multi",
+    // Shrubs and plants only. Trees and stumps are a licensed trade the
+    // business does not do itself, so the form does not offer them.
+    options: opts(["small", "Shrubs shorter than me"], ["large", "Shrubs taller than me"], ["bed", "A whole bed of plants"], ["roots", "Old roots to dig out"]),
+  },
+  {
+    id: "water",
+    services: ["drainage"],
+    group: "Drainage",
+    title: "What is the water doing?",
+    short: "Water",
+    kind: "multi",
+    options: opts(
+      ["house", "Sitting against the house"],
+      ["pools", "Pooling in the yard"],
+      ["basement", "Getting into the basement"],
+      ["washout", "Washing out beds or mulch"],
+      ["every_rain", "After every rain"],
+      ["heavy_rain", "Only after heavy rain"]
+    ),
+  },
+  {
+    id: "hard_what",
+    services: ["hardscape"],
+    group: "Patio, walkway or wall",
+    title: "What would you like built?",
+    short: "Build",
+    kind: "multi",
+    options: opts(["patio", "Patio"], ["walkway", "Walkway"], ["wall", "Retaining wall"], ["steps", "Steps"], ["fire_pit", "Fire pit"]),
+  },
+  {
+    id: "hard_material",
+    services: ["hardscape"],
+    group: "Patio, walkway or wall",
+    title: "In what?",
+    short: "Material",
+    kind: "single",
+    options: opts(["pavers", "Pavers"], ["stone", "Natural stone"], ["concrete", "Concrete"], ["gravel", "Gravel"], ["unsure", "Not sure"]),
+  },
+  {
+    id: "wash_what",
+    services: ["washing"],
+    group: "Soft washing",
+    title: "What needs washing?",
+    short: "Washing",
+    kind: "multi",
+    options: opts(["siding", "House siding"], ["roof", "Roof"], ["deck", "Deck"], ["fence", "Fence"], ["paving", "Patio or walkway"]),
+  },
+  {
+    id: "stories",
+    services: ["washing"],
+    showIf: { id: "wash_what", values: ["siding", "roof"] },
+    group: "Soft washing",
+    title: "How many stories is the house?",
+    short: "Stories",
+    kind: "single",
+    options: opts(["1", "1"], ["2", "2"], ["3", "3 or more"]),
+  },
+  {
+    id: "holiday_what",
+    services: ["holiday"],
+    group: "Holiday decorations",
+    title: "What would you like decorated?",
+    short: "Decorate",
+    kind: "multi",
+    options: opts(["roofline", "Roofline lights"], ["trees", "Trees and bushes"], ["path", "Walkway or driveway"], ["wreaths", "Wreaths and garland"], ["display", "A yard display"]),
+  },
+  {
+    id: "holiday_lights",
+    services: ["holiday"],
+    group: "Holiday decorations",
+    title: "Whose decorations?",
+    short: "Decorations",
+    kind: "single",
+    options: opts(["ours", "You bring them"], ["mine", "Use mine"], ["both", "Some of each"]),
+  },
+  // The property, whatever the work: only what is out of the ordinary.
+  {
+    id: "yard",
+    services: null,
+    group: "The property",
+    title: "Anything we should know?",
+    short: "Yard",
+    kind: "multi",
+    options: [
+      ...opts(
+        ["narrow_gate", "Gate under 3 ft wide"],
+        ["sprinklers", "Sprinklers"],
+        ["dog", "We have a dog, or dogs"],
+        ["hoa", "We have an HOA"],
+        ["prior_contractor", "Another company has worked on it before"],
+        ["street", "No driveway parking"]
+      ),
+      // No longer asked; kept so forms already sent still read.
+      { value: "steep", label: "Steep slope", hidden: true },
+      { value: "dog_fence", label: "Invisible dog fence", hidden: true },
+    ],
+    placeholder: "Gate code, where to park, anything else",
+  },
+];
+
+/** Old answers from before services were merged, read as today's. */
+const SERVICE_MERGED: Record<string, string> = { mulch: "beds", trimming: "cleanup", lawn_care: "lawn", lighting: "other" };
+
+/** Whether a question's condition on another answer is met. */
+export function detailShown(question: DetailQuestion, details: IntakeAnswers["details"]): boolean {
+  if (!question.showIf) return true;
+  const value = details[question.showIf.id];
+  const picked = Array.isArray(value) ? value : value ? [value] : [];
+  return picked.some((v) => question.showIf!.values.includes(v));
+}
+
+/**
+ * The pricing questions for what they ticked, in order, then the property's.
+ * With their answers so far, a question that depends on another is left
+ * out until that answer says it matters.
+ */
+export function detailQuestionsFor(services: string[], details?: IntakeAnswers["details"]): DetailQuestion[] {
+  const picked = new Set(services);
+  return DETAIL_QUESTIONS.filter(
+    (q) => (q.services === null || q.services.some((s) => picked.has(s))) && (!details || detailShown(q, details))
+  );
+}
+
+/** Photos for each part of the yard. Enough to see it from a couple of angles. */
+export const PHOTOS_PER_AREA = 3;
+
+/** The parts of the yard a photo can be of, as the photo pages ask for them. */
+export const PHOTO_AREAS: { value: string; label: string; ask: string }[] = [
+  { value: "front", label: "Front yard", ask: "the front yard" },
+  { value: "back", label: "Back yard", ask: "the back yard" },
+  { value: "sides", label: "Side yards", ask: "the side yards" },
+  { value: "foundation", label: "Around the house", ask: "the beds and ground around the house" },
+  { value: "entrance", label: "Entrance and signs", ask: "the entrance and signs" },
+  { value: "medians", label: "Medians and islands", ask: "the medians and islands" },
+  { value: "common", label: "Common lawns", ask: "the common lawns and open space" },
+  { value: "ponds", label: "Ponds and stormwater", ask: "the ponds and stormwater areas" },
+  { value: "amenities", label: "Clubhouse and amenities", ask: "the clubhouse, pool or playground grounds" },
+  { value: "streetside", label: "Along the streets", ask: "the areas along the streets and sidewalks" },
+  { value: "whole", label: "The property", ask: "the property" },
+];
+
+/** The common areas of an HOA or business, none of which is part of a home. */
+export const GROUNDS_AREAS = new Set(["entrance", "medians", "common", "ponds", "amenities", "streetside"]);
+
+/**
+ * The parts of the yard to ask photos of, one page each, from what they
+ * picked on "Which parts of the property?". The whole property means the
+ * front, the back and the sides. Nothing picked asks for the property as a
+ * whole.
+ */
+export function photoAreasFor(areas: string[], grounds = false): string[] {
+  // A home's whole property is its front, back and sides. Grounds have no
+  // such parts, so all of it is one page.
+  const wanted = new Set(areas.includes("whole") && !grounds ? [...areas.filter((a) => a !== "whole"), "front", "back", "sides"] : areas);
+  const ordered = PHOTO_AREAS.map((a) => a.value).filter((v) => v !== "whole" && wanted.has(v));
+  return ordered.length > 0 ? ordered : ["whole"];
+}
+
+/** Most photos one form keeps: every part of the yard, full. */
+export const MAX_INTAKE_PHOTOS = PHOTOS_PER_AREA * Math.max(4, GROUNDS_AREAS.size);
+
+// ---------------------------------------------------------------------------
+// Answering what they are worried about
+// ---------------------------------------------------------------------------
+
+export interface IntakeAnswer {
+  heading: string;
+  body: string;
+}
+
+/*
+ * Every answer below says only what the business is known to do: the visit
+ * is free, the proposal is a fixed price area by area, payment is by card,
+ * Apple Pay or Google Pay when they accept, a payment plan is offered, and
+ * the terms on the proposal (weather moves a day, new work is its own
+ * visit, the crew cannot add work). Nothing about licences, insurance,
+ * uniforms, guarantees or what a competitor leaves out: if it is not known
+ * to be true, a client does not read it here.
+ */
+
+const PAYMENT_PLAN: IntakeAnswer = {
+  heading: "Can I split it into payments?",
+  body:
+    "Yes. You can pay a deposit and split the rest into payments. You see the exact amounts and dates before you agree to anything.",
+};
+
+/** What the form says back when they tick something they are worried about. */
+export const CONCERN_ANSWERS: Record<string, IntakeAnswer[]> = {
+  price: [
+    {
+      heading: "How the price works",
+      body:
+        "After the visit you get one fixed price, written out area by area, so nothing is added at the end. If it is more than you had in mind, you can keep the parts that matter most now and leave the rest for later. The budget question coming up helps us design to your number from the start.",
+    },
+    PAYMENT_PLAN,
+  ],
+  timing: [
+    {
+      heading: "When we could start",
+      body:
+        "Tell us the date you are aiming at and we will tell you honestly whether we can make it. We work outdoors, so any weather can push the schedule back. If yours has to move, we let you know as soon as we do and you keep your place at the front of the schedule.",
+    },
+  ],
+  unsure_want: [
+    {
+      heading: "Not knowing yet is normal",
+      body:
+        "That is what the visit is for. You do not have to design anything. We will talk through options that suit your yard and you tell us what you like. The style question coming up helps, and Not sure is a fine answer.",
+    },
+  ],
+  bad_experience: [
+    {
+      heading: "No surprises",
+      body:
+        "Tell us what happened, in the box below or on the visit, so we know what to do differently. You get a fixed price in writing before any work starts. Nothing is added on the day: anything new is written up and priced as its own visit, and you decide.",
+    },
+  ],
+  hoa: [
+    {
+      heading: "HOA and permit rules",
+      body:
+        "If you have an HOA, request their approval in advance, since most need to approve changes before work starts. Send us their rules or have them handy on the visit, and we will plan the work around them.",
+    },
+  ],
+  maintenance: [
+    {
+      heading: "Keeping it looking good",
+      body:
+        "Tell us how much time you want to spend on it. We can plan around low-maintenance choices and tell you what the yard will need once it is done.",
+    },
+  ],
+  other_quotes: [
+    {
+      heading: "Comparing quotes",
+      body:
+        "You should get other quotes. When you compare, check what each price includes, so you are comparing the same work. If somebody comes in lower, tell us what is on their sheet and we will tell you straight whether we can match it or why not.",
+    },
+  ],
+};
+
+/** Every answer for what they ticked, each once, in the order they ticked. */
+export function answersForConcerns(concerns: string[]): IntakeAnswer[] {
+  const seen = new Set<string>();
+  const out: IntakeAnswer[] = [];
+  for (const concern of concerns) {
+    for (const answer of CONCERN_ANSWERS[concern] ?? []) {
+      if (!answer.body || seen.has(answer.heading)) continue;
+      seen.add(answer.heading);
+      out.push(answer);
+    }
+  }
+  return out;
+}
+
+/** The questions people ask before a visit, answered before they have to ask. */
+export const BEFORE_VISIT_QUESTIONS: IntakeAnswer[] = [
+  {
+    heading: "Is the visit really free?",
+    body:
+      "Yes. We look at the property with you, measure and take photos, and send you a fixed-price proposal afterwards. There is nothing to pay unless you accept it.",
+  },
+  PAYMENT_PLAN,
+  {
+    heading: "How do I pay?",
+    body: "By card, Apple Pay or Google Pay, right from the proposal when you accept it. Nothing is due before then.",
+  },
+  {
+    heading: "What happens if the weather is bad?",
+    body:
+      "Any weather can push the schedule back. If yours has to move, we let you know as soon as we do, and you keep your place at the front of the schedule rather than going to the end of it.",
+  },
+  {
+    heading: "Can I do just part of it?",
+    body:
+      "Yes. The proposal is priced area by area, so you can keep the parts that are bothering you now and leave the rest for later.",
+  },
+  {
+    heading: "Can I add something later?",
+    body:
+      "As long as it is added before we start the work. Tell us and we update your proposal with the new price. Once the work has started, anything new is written up and priced as its own visit, so you always know what you are paying for.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Cleaning and reading the answers
+// ---------------------------------------------------------------------------
+
+export function emptyAnswers(): IntakeAnswers {
+  return {
+    property: "",
+    services: [],
+    services_other: "",
+    areas: [],
+    looks: [],
+    looks_notes: "",
+    tried: "",
+    concerns: [],
+    concerns_notes: "",
+    budget: "",
+    timing: "",
+    decision: "",
+    questions: "",
+    details: {},
+    photos: [],
+    photo_areas: {},
+    people: [],
+  };
+}
+
+const TEXT_LIMIT = 2000;
+
+function pick(kind: IntakeKind, options: IntakeOption[] | undefined, value: unknown): string | string[] {
+  if (kind === "text") return text(value);
+  const allowed = new Set((options ?? []).map((o) => o.value));
+  if (kind === "multi") {
+    const picked = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string" && allowed.has(v)) : [];
+    return [...new Set(picked)];
+  }
+  return typeof value === "string" && allowed.has(value) ? value : "";
+}
+
+function filled(value: string | string[] | undefined): boolean {
+  return Array.isArray(value) ? value.length > 0 : Boolean(value);
+}
+
+/**
+ * Whatever came in, made safe.
+ *
+ * Only the options we offered survive in a chip question; free text is
+ * trimmed and capped. Anything else in the object is dropped, so the row
+ * only ever holds the shape the form was built for. Photos are paths and
+ * are only kept here; which paths are really this form's is the caller's
+ * check, since that needs the job.
+ */
+export function cleanAnswers(input: unknown): IntakeAnswers {
+  const raw = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const out = emptyAnswers();
+  for (const question of INTAKE_QUESTIONS) {
+    out[question.key] = pick(question.kind, question.options, raw[question.key]) as never;
+    if (question.notesKey) out[question.notesKey] = text(raw[question.notesKey]) as never;
+  }
+  // Forms sent before the decision question had three answers.
+  if (raw.decision === "partner" || raw.decision === "family") out.decision = "others";
+  out.people = Array.isArray(raw.people)
+    ? raw.people
+        .map((p) => {
+          const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+          const sees: PersonSees = o.sees === "price" || o.sees === "all" ? o.sees : "scope";
+          return { name: text(o.name).slice(0, 120), role: text(o.role).slice(0, 60), contact: text(o.contact).slice(0, 160), sees };
+        })
+        .filter((p) => p.name || p.contact)
+        .slice(0, MAX_INTAKE_PEOPLE)
+    : [];
+  // Written in its own box on forms sent before it shared one with "tried".
+  out.concerns_notes = text(raw.concerns_notes);
+  // Services from before some were merged count as the one they became.
+  if (Array.isArray(raw.services)) {
+    const merged = raw.services.map((v) => (typeof v === "string" ? SERVICE_MERGED[v] ?? v : v));
+    out.services = pick("multi", INTAKE_QUESTIONS[0].options, merged) as string[];
+  }
+  const details = (raw.details && typeof raw.details === "object" ? raw.details : {}) as Record<string, unknown>;
+  for (const question of DETAIL_QUESTIONS) {
+    const value = pick(question.kind, question.options, details[question.id]);
+    if (filled(value)) out.details[question.id] = value;
+    if (question.placeholder && question.kind !== "text") {
+      const notes = text(details[`${question.id}_notes`]);
+      if (notes) out.details[`${question.id}_notes`] = notes;
+    }
+  }
+  out.photos = Array.isArray(raw.photos)
+    ? [...new Set(raw.photos.filter((p): p is string => typeof p === "string" && /^[\w-]+\/intake-[\w-]+\.(jpg|png|webp)$/.test(p)))].slice(0, MAX_INTAKE_PHOTOS)
+    : [];
+  const areaOf = (raw.photo_areas && typeof raw.photo_areas === "object" ? raw.photo_areas : {}) as Record<string, unknown>;
+  const known = new Set(PHOTO_AREAS.map((a) => a.value));
+  for (const path of out.photos) {
+    const area = areaOf[path];
+    if (typeof area === "string" && known.has(area)) out.photo_areas[path] = area;
+  }
+  return out;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim().slice(0, TEXT_LIMIT) : "";
+}
+
+/** Their words in quotes, cut short if long, ending a sentence once. */
+function quoted(text: string): string {
+  const cut = text.length > 140 ? `${text.slice(0, 140).trimEnd()}...` : text.trim();
+  return /[.!?]$/.test(cut) ? `"${cut}"` : `"${cut}."`;
+}
+
+function joinWords(items: string[]): string {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** How many of the questions have anything in them, photos counting as one. */
+export function answeredCount(answers: IntakeAnswers): number {
+  const main = INTAKE_QUESTIONS.filter((q) => {
+    const notes = q.notesKey ? String(answers[q.notesKey] ?? "") : "";
+    return filled(answers[q.key]) || Boolean(notes);
+  }).length;
+  const details = DETAIL_QUESTIONS.filter((q) => filled(answers.details[q.id])).length;
+  return main + details + (answers.photos.length > 0 ? 1 : 0);
+}
+
+/** Whether a question's notes box is showing, given what is picked. */
+export function notesShown(question: IntakeQuestion, answers: IntakeAnswers): boolean {
+  if (!question.notesKey) return false;
+  // Something already written stays in view, whatever is picked.
+  if (answers[question.notesKey]) return true;
+  if (!question.notesWhen) return true;
+  const value = answers[question.key];
+  const picked = Array.isArray(value) ? value : value ? [value] : [];
+  return question.notesWhen === "any" ? picked.length > 0 : picked.some((v) => question.notesWhen!.includes(v));
+}
+
+export function labelOf(question: { options?: IntakeOption[] }, value: string): string {
+  return question.options?.find((o) => o.value === value)?.label ?? value;
+}
+
+function shownValue(question: { kind: IntakeKind; options?: IntakeOption[] }, value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value.map((v) => labelOf(question, v)).join(", ");
+  if (!value) return "";
+  return question.kind === "text" ? value : labelOf(question, value);
+}
+
+/** The answers as the evaluator reads them: one line per question answered. */
+export function summarizeIntake(answers: IntakeAnswers): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  // What the property is comes first: it changes how everything after reads.
+  const ordered = [...INTAKE_QUESTIONS.filter((q) => q.key === "property"), ...INTAKE_QUESTIONS.filter((q) => q.key !== "property")];
+  for (const q of ordered) {
+    const notes = q.notesKey ? String(answers[q.notesKey] ?? "") : "";
+    let shown = shownValue(q, answers[q.key]);
+    const older = q.key === "concerns" ? answers.concerns_notes : "";
+    for (const extra of [notes, older]) if (extra) shown = shown ? `${shown}. ${extra}` : extra;
+    if (shown) lines.push({ label: SHORT_LABEL[q.key] ?? q.title, value: shown });
+    if (q.key === "decision") for (const person of answers.people) lines.push({ label: person.role || "Also decides", value: describePerson(person) });
+  }
+  return lines;
+}
+
+/** "Sarah Smith, 410 555 0100", or whichever of the two they gave. */
+export function describePerson(person: IntakePerson): string {
+  const sees = PERSON_SEES.find((o) => o.value === person.sees)?.label.toLowerCase();
+  return [person.name, person.contact, sees ? `send ${sees}` : null].filter(Boolean).join(", ");
+}
+
+/** The pricing answers, for the evaluator, one line each. */
+export function summarizeDetails(answers: IntakeAnswers): { label: string; value: string }[] {
+  const lines: { label: string; value: string }[] = [];
+  for (const q of DETAIL_QUESTIONS) {
+    const notes = answers.details[`${q.id}_notes`];
+    let shown = shownValue(q, answers.details[q.id]);
+    if (typeof notes === "string" && notes) shown = shown ? `${shown}. ${notes}` : notes;
+    if (shown) lines.push({ label: q.short, value: shown });
+  }
+  return lines;
+}
+
+const SHORT_LABEL: Partial<Record<keyof IntakeAnswers, string>> = {
+  property: "For",
+  services: "Wants",
+  areas: "Where",
+  looks: "Looks",
+  tried: "Tried before",
+  concerns: "Worried about",
+  budget: "Budget",
+  timing: "When",
+  decision: "Decides",
+  questions: "Asked us",
+};
+
+/** The one line under the section title. */
+export function intakeHeadline(answers: IntakeAnswers | null, submittedAt: string | null): string {
+  if (!answers || (!submittedAt && answeredCount(answers) === 0)) return "Not filled in yet. Go through it together in the first 5 to 10 minutes.";
+  if (!submittedAt) return `Started, not sent: ${answeredCount(answers)} answered. Finish it together at the door.`;
+  const q = INTAKE_QUESTIONS[0];
+  const wants = answers.services.map((v) => labelOf(q, v));
+  const budget = answers.budget ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "budget")!, answers.budget) : "";
+  const grounds = isGrounds(answers) ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "property")!, answers.property) : "";
+  return [grounds, wants.slice(0, 3).join(", "), budget].filter(Boolean).join(" · ") || "Filled in.";
+}
+
+/**
+ * What to do with the answers on the walk.
+ *
+ * Each concern they ticked becomes a thing to say or do, in order of how
+ * often it loses the job, then what the property answers change about the
+ * price. Written for the evaluator, not the client.
+ */
+export function talkingPoints(answers: IntakeAnswers): string[] {
+  const points: string[] = [];
+  const has = (c: string) => answers.concerns.includes(c);
+  const detail = (id: string) => answers.details[id];
+  const budgetLabel = answers.budget ? labelOf(INTAKE_QUESTIONS.find((x) => x.key === "budget")!, answers.budget) : null;
+
+  if (has("price")) {
+    points.push(
+      budgetLabel && answers.budget !== "unsure"
+        ? `Price is the worry and they gave ${budgetLabel}. Price the must-do first and show what fits inside that number, then the rest as a second phase.`
+        : "Price is the worry and they gave no range. Ask for one on the walk before you measure anything, and price the must-do first."
+    );
+  }
+  if (has("other_quotes")) {
+    points.push("They are getting other quotes. Go through what the price includes line by line, so they compare the same work.");
+  }
+  if (has("bad_experience")) {
+    points.push("A contractor let them down before. Ask what happened and say plainly how we do that part differently. Do not skip it.");
+  }
+  if (has("unsure_want")) {
+    points.push("They do not know what they want yet. Bring two or three looks on the phone and let them react. Do not ask them to design it.");
+  }
+  if (has("maintenance")) {
+    points.push("Upkeep worries them. Steer to low-maintenance plants and say what the yard needs per year in hours, not in plant names.");
+  }
+  if (has("hoa")) {
+    points.push("HOA or permits. Ask for the rules before you draw anything, and put the approval step in the proposal.");
+  }
+  if (has("timing")) {
+    points.push("Timing is a concern. Tell them the real start window and what happens if the weather slips it.");
+  }
+  if (answers.decision && answers.decision !== "me") {
+    const who = answers.people.map((p) => (p.role ? `${p.name || "someone"} (${p.role})` : p.name)).filter(Boolean);
+    points.push(
+      who.length
+        ? `${joinWords(who)} also ${who.length === 1 ? "has" : "have"} a say. Contact details are above. If they are not there, ask what they will want to know and answer it in the proposal.`
+        : "Somebody else has a say. If they are not there, ask who, how to reach them, and what they will want to know."
+    );
+  }
+  if (answers.decision === "hoa" && !answers.concerns.includes("hoa")) points.push("An HOA has a say. Ask whether they have requested approval yet, and get the rules before you draw anything.");
+  if (answers.tried) {
+    points.push(`They wrote: ${quoted(answers.tried)} Answer it, and say why this time is different, before they ask.`);
+  }
+  if (answers.looks.includes("unsure")) {
+    points.push("No colour preference yet. Show three planting palettes and note which one they warm to.");
+  }
+  if (answers.questions) {
+    points.push(`They asked: ${quoted(answers.questions)} Answer it in the first minute.`);
+  }
+
+  // What the property and the work change about the price.
+  const has2 = (id: string, value: string) => {
+    const v = detail(id);
+    return Array.isArray(v) ? v.includes(value) : v === value;
+  };
+  if (has2("yard", "narrow_gate")) points.push("The way in is under 3 ft. No machine gets through: price it as hand work and wheelbarrow runs.");
+  if (has2("yard", "steep")) points.push("Steep ground. Allow for slower work and for holding mulch or soil on the slope.");
+  if (has2("yard", "sprinklers") || has2("yard", "dog_fence")) {
+    points.push("Something is buried in the yard. Find the sprinkler heads or dog fence wire before anyone digs, and note them on the map.");
+  }
+  if (has2("yard", "street")) points.push("Materials get dropped at the street. Price the extra carrying.");
+  if (has2("yard", "dog")) points.push("A dog uses the yard. Agree when it is kept in, and keep the gate shut.");
+  if (has2("remove_what", "roots")) points.push("Old roots to dig out. Check how big they are and whether anything is buried near them.");
+  if (has2("water", "basement")) points.push("Water reaches the basement. Look at the downspouts and the grade against the house first.");
+  if (has2("beds_now", "stone")) points.push("There is stone in the beds now. Price taking it out if they want mulch instead.");
+  if (answers.photos.length > 0) points.push(`They sent ${answers.photos.length} photo${answers.photos.length === 1 ? "" : "s"}. Look before you go, and draft the price from them if you can.`);
+  return points;
+}
