@@ -5,7 +5,7 @@ import { runPipeline, type Stage } from "@/lib/govcon/pipeline";
 // Streaming SAM's ~200 MB daily CSV + document analysis needs headroom.
 export const maxDuration = 300;
 
-const STAGES: Stage[] = ["discover", "process", "digest", "all"];
+const STAGES: Stage[] = ["discover", "process", "digest", "entities", "all"];
 
 /**
  * Unattended pipeline entrypoint, called by Vercel Cron (see vercel.json).

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 
-import { findSubCandidates, normalizeBusinessName } from "../subfinder";
+import { findSubCandidates, normalizeBusinessName, type RegistryEntity } from "../subfinder";
 import { TRADE_BY_KEY } from "../trades";
 import type { TradeKey } from "../types";
 import { logEvent, rowToOpp, timeLeft, type PipelineContext } from "./context";
@@ -39,11 +39,16 @@ export async function source(ctx: PipelineContext, limit = 5) {
     if (!trade) continue;
     const opp = rowToOpp(row);
 
+    const registry = await registryNear(ctx, opp.placeOfPerformance.state, opp.placeOfPerformance.zip, [
+      ...(opp.naicsCode ? [opp.naicsCode] : []),
+      ...trade.naicsCodes,
+    ]);
     const candidates = await findSubCandidates({
       opp,
       trade,
       placesApiKey: ctx.keys.places,
       maxCandidates: RFQS_PER_OPPORTUNITY + 4,
+      registry,
     }).catch(async (e) => {
       await logEvent(ctx, row.id, "error", `Sub search failed: ${(e as Error).message}`);
       return [];
@@ -100,6 +105,7 @@ export async function source(ctx: PipelineContext, limit = 5) {
             place_id: c.placeId,
             uei: c.uei,
             past_federal_amount: c.pastFederalAmount,
+            is_small_business: c.samSmall,
             trades: [trade.key],
             source: c.source,
           })
@@ -136,4 +142,30 @@ export async function source(ctx: PipelineContext, limit = 5) {
     );
   }
   return stats;
+}
+
+/**
+ * SAM-registered firms in these NAICS near the job: same 3-digit zip first,
+ * then statewide. Empty until the monthly entity import has run.
+ */
+async function registryNear(
+  ctx: PipelineContext,
+  state: string | null | undefined,
+  zip: string | null | undefined,
+  naics: string[]
+): Promise<RegistryEntity[]> {
+  if (!state || !naics.length) return [];
+  const cols = "uei, legal_name, dba_name, address, city, state, zip5, website, small_naics";
+  const base = () =>
+    ctx.db.from("govcon_sam_entities").select(cols).eq("state", state).overlaps("naics", naics).not("website", "is", null);
+  const out: RegistryEntity[] = [];
+  if (zip) {
+    const { data } = await base().like("zip5", `${zip.slice(0, 3)}%`).limit(15);
+    out.push(...((data ?? []) as RegistryEntity[]));
+  }
+  if (out.length < 8) {
+    const { data } = await base().limit(15 - out.length);
+    for (const e of (data ?? []) as RegistryEntity[]) if (!out.some((o) => o.uei === e.uei)) out.push(e);
+  }
+  return out;
 }

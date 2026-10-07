@@ -4,7 +4,9 @@ import { checkQuote, draftProposal, isAiConfigured, type QuoteCheck, type Solici
 import { checkSubcontractPlan } from "../compliance";
 import { isEmailConfigured, sendEmail } from "../email";
 import { priceBid, type PriceAnchor } from "../pricing";
-import { selectBestQuote } from "../quote-selection";
+import { selectBestQuote, verifySmallStatus } from "../quote-selection";
+import { TRADE_BY_KEY } from "../trades";
+import type { TradeKey } from "../types";
 import type { SubcontractingAssessment } from "../types";
 import { logEvent, timeLeft, type PipelineContext } from "./context";
 
@@ -65,11 +67,24 @@ export async function evaluate(ctx: PipelineContext, limit = 5) {
       }
     }
 
+    // Verify small-business claims against SAM where we can.
+    const naics = [...new Set([...(opp.naics_code ? [opp.naics_code] : []), ...(opp.trade ? TRADE_BY_KEY[opp.trade as TradeKey]?.naicsCodes ?? [] : [])])];
+    const { data: quoteSubs } = await ctx.db.from("govcon_subcontractors").select("id, uei").in("id", quotes.map((q) => q.subcontractor_id));
+    const ueis = [...new Set([...quotes.map((q) => q.uei), ...(quoteSubs ?? []).map((s) => s.uei)].filter((u): u is string => Boolean(u)))];
+    const { data: registryRows } = ueis.length
+      ? await ctx.db.from("govcon_sam_entities").select("uei, small_naics").in("uei", ueis)
+      : { data: [] as Array<{ uei: string; small_naics: string[] }> };
+    const registryByUei = new Map((registryRows ?? []).map((r) => [r.uei, r]));
+    const verificationWarnings: string[] = [];
+    const verifiedQuotes = quotes.map((q) => {
+      const uei = q.uei ?? quoteSubs?.find((s) => s.id === q.subcontractor_id)?.uei ?? null;
+      const v = verifySmallStatus({ selfCertified: q.is_small_business, registry: uei ? registryByUei.get(uei) ?? null : null, naics });
+      if (v.warning) verificationWarnings.push(v.warning);
+      return { ...q, is_small_business: v.isSmall, compliance: (q.compliance as QuoteCheck | null) ?? null };
+    });
+
     const subcontracting = opp.subcontracting as SubcontractingAssessment;
-    const selection = selectBestQuote(
-      quotes.map((q) => ({ ...q, compliance: (q.compliance as QuoteCheck | null) ?? null })),
-      subcontracting
-    );
+    const selection = selectBestQuote(verifiedQuotes, subcontracting);
     if (!selection.chosen) {
       if (windowClosed) {
         const reasons = selection.rejected.map((r) => r.reason).join(" | ");
@@ -125,7 +140,7 @@ export async function evaluate(ctx: PipelineContext, limit = 5) {
         sub_cost: chosen.amount,
         price: pricing.price,
         markup: pricing.markup,
-        pricing: { ...pricing, warnings: [...pricing.warnings, ...selection.warnings], rejected: selection.rejected.map((r) => ({ quoteId: r.quote.id, amount: r.quote.amount, reason: r.reason })) },
+        pricing: { ...pricing, warnings: [...pricing.warnings, ...selection.warnings, ...(subcontracting.status === "similarly_situated_required" ? verificationWarnings : [])], rejected: selection.rejected.map((r) => ({ quoteId: r.quote.id, amount: r.quote.amount, reason: r.reason })) },
         proposal,
         compliance_check: los,
         status: "draft",

@@ -3,6 +3,7 @@
   "crons": [
     { "path": "/api/cron/govcon?stage=discover", "schedule": "15 5 * * *" },
     { "path": "/api/cron/govcon?stage=process", "schedule": "0 * * * *" },
-    { "path": "/api/cron/govcon?stage=digest", "schedule": "45 12 * * *" }
+    { "path": "/api/cron/govcon?stage=digest", "schedule": "45 12 * * *" },
+    { "path": "/api/cron/govcon?stage=entities", "schedule": "30 6 8 * *" }
   ]
 }

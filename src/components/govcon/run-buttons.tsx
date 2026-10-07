@@ -8,7 +8,7 @@ import { runStageNow } from "@/lib/actions/govcon-actions";
 export function RunButtons() {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
-  const run = (stage: "discover" | "process") =>
+  const run = (stage: "discover" | "process" | "entities") =>
     start(async () => {
       setResult(null);
       try {
@@ -25,6 +25,9 @@ export function RunButtons() {
       </Button>
       <Button size="sm" variant="outline" disabled={pending} onClick={() => run("process")}>
         Process pipeline now
+      </Button>
+      <Button size="sm" variant="ghost" disabled={pending} onClick={() => run("entities")} title="Monthly SAM.gov registered-business import used to find and verify small subs">
+        Refresh sub registry
       </Button>
       {pending && <span className="text-xs text-muted-foreground">Running (can take a few minutes)…</span>}
       {result && <span className="text-xs text-muted-foreground">{result}</span>}

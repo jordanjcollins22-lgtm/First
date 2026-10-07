@@ -66,3 +66,29 @@ export function selectBestQuote<Q extends QuoteForSelection>(
   }
   return { chosen, rejected, warnings };
 }
+
+/**
+ * Check a sub's "I'm a small business" answer against SAM. Registered firms
+ * declare small/not-small per NAICS; that declaration is what counts for
+ * similarly-situated status, so it overrides the self-certification.
+ */
+export function verifySmallStatus(input: {
+  selfCertified: boolean | null;
+  registry: { small_naics: string[] } | null;
+  naics: string[];
+}): { isSmall: boolean | null; verified: boolean; warning: string | null } {
+  const { selfCertified, registry, naics } = input;
+  if (!registry || !naics.length) {
+    return {
+      isSmall: selfCertified,
+      verified: false,
+      warning: selfCertified ? "Small-business status is self-certified only (no SAM registration found) — get their UEI before subcontracting." : null,
+    };
+  }
+  const isSmall = naics.some((n) => registry.small_naics.includes(n));
+  return {
+    isSmall,
+    verified: true,
+    warning: selfCertified && !isSmall ? `Sub says it's small, but its SAM registration isn't small under NAICS ${naics.join("/")}.` : null,
+  };
+}

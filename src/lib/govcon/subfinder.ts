@@ -8,7 +8,9 @@ import type { Opportunity, TradeDefinition } from "./types";
  *  - Google Places text search for the trade near the job site (phone,
  *    website, rating) — the main source, like the manual "google it" step;
  *  - USAspending firms that already did this work in the state (federally
- *    experienced, SAM-registered — the best past-performance references).
+ *    experienced, SAM-registered — the best past-performance references);
+ *  - SAM-registered small firms in the trade's NAICS near the job (from the
+ *    monthly entity extract) — they count as similarly situated subs.
  * Then scrapes each website for an email so the RFQ can go out unattended.
  * Subs with only a phone number land on the dashboard's call list.
  */
@@ -26,7 +28,9 @@ export interface SubCandidate {
   placeId: string | null;
   uei: string | null;
   pastFederalAmount: number | null;
-  source: "google_places" | "usaspending";
+  source: "google_places" | "usaspending" | "sam_registry";
+  /** Small under the job's NAICS per SAM (null = unknown). */
+  samSmall: boolean | null;
   rank: number;
 }
 
@@ -54,6 +58,41 @@ function fromPlace(p: PlaceResult, source: SubCandidate["source"]): SubCandidate
     uei: null,
     pastFederalAmount: null,
     source,
+    samSmall: null,
+    rank: 0,
+  };
+}
+
+/** A registry row as the caller (with DB access) passes it in. */
+export interface RegistryEntity {
+  uei: string;
+  legal_name: string;
+  dba_name: string | null;
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  zip5: string | null;
+  website: string | null;
+  small_naics: string[];
+}
+
+export function fromRegistry(e: RegistryEntity, naics: string[]): SubCandidate {
+  return {
+    name: e.dba_name ?? e.legal_name,
+    phone: null,
+    email: null,
+    website: e.website,
+    address: e.address,
+    city: e.city,
+    state: e.state,
+    zip: e.zip5,
+    rating: null,
+    reviewCount: null,
+    placeId: null,
+    uei: e.uei,
+    pastFederalAmount: null,
+    source: "sam_registry",
+    samSmall: naics.length ? naics.some((n) => e.small_naics.includes(n)) : null,
     rank: 0,
   };
 }
@@ -68,6 +107,8 @@ export function rankCandidate(c: SubCandidate): number {
   else if (c.rating !== null && c.rating >= 4) r += 1;
   if ((c.reviewCount ?? 0) >= 50) r += 1;
   if (c.pastFederalAmount) r += 3;
+  if (c.uei) r += 1; // SAM-registered: can be verified and reported as a subaward
+  if (c.samSmall) r += 2; // similarly situated on small business set-asides
   return r;
 }
 
@@ -85,6 +126,8 @@ export async function findSubCandidates(input: {
   placesApiKey?: string | null;
   location?: { city?: string | null; state?: string | null; zip?: string | null };
   maxCandidates?: number;
+  /** SAM-registered firms near the job, pre-queried by the caller. */
+  registry?: RegistryEntity[];
 }): Promise<SubCandidate[]> {
   const { opp, trade, placesApiKey } = input;
   const max = input.maxCandidates ?? 12;
@@ -102,6 +145,7 @@ export async function findSubCandidates(input: {
         website: existing.website ?? c.website,
         uei: existing.uei ?? c.uei,
         pastFederalAmount: existing.pastFederalAmount ?? c.pastFederalAmount,
+        samSmall: existing.samSmall ?? c.samSmall,
       });
     }
   };
@@ -124,6 +168,9 @@ export async function findSubCandidates(input: {
       : { ...fromPlace({ placeId: "", name: pf.name, address: null, phone: null, website: null, rating: null, reviewCount: null, lat: null, lng: null, city: null, state: opp.placeOfPerformance.state ?? null, zip: null }, "usaspending"), placeId: null };
     add({ ...base, name: place?.name ?? pf.name, uei: pf.uei, pastFederalAmount: pf.amount });
   }
+
+  const naics = [...new Set([...(opp.naicsCode ? [opp.naicsCode] : []), ...trade.naicsCodes])];
+  for (const e of input.registry ?? []) add(fromRegistry(e, naics));
 
   const candidates = [...byName.values()].filter((c) => c.phone || c.website);
   candidates.sort((a, b) => rankCandidate(b) - rankCandidate(a));

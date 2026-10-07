@@ -2,18 +2,20 @@ import { analyze } from "./analyze";
 import { createContext, type PipelineContext } from "./context";
 import { digest } from "./digest";
 import { discover } from "./discover";
+import { importEntities } from "./entities";
 import { estimate } from "./estimate";
 import { evaluate } from "./evaluate";
 import { outreach } from "./outreach";
 import { source } from "./source";
 
-export type Stage = "discover" | "process" | "digest" | "all";
+export type Stage = "discover" | "process" | "digest" | "entities" | "all";
 
 /**
  * Run pipeline stages within a time budget and record the run.
  *  - discover: ingest + score new notices (daily, after SAM's ~03:30 UTC rebuild)
  *  - process:  analyze → source subs → send RFQs → evaluate quotes (hourly)
  *  - digest:   owner summary email (daily)
+ *  - entities: SAM registered-business import for local sub search (monthly)
  */
 export async function runPipeline(stage: Stage, budgetMs: number) {
   const ctx = await createContext(budgetMs);
@@ -24,6 +26,7 @@ export async function runPipeline(stage: Stage, budgetMs: number) {
     if (stage === "discover" || stage === "all") results.discover = await discover(ctx);
     if (stage === "process" || stage === "all") Object.assign(results, await processStages(ctx));
     if (stage === "digest" || stage === "all") results.digest = await digest(ctx);
+    if (stage === "entities") results.entities = await importEntities(ctx);
   } catch (e) {
     error = (e as Error).message;
   }
