@@ -126,51 +126,6 @@ export function outsideServiceArea(input: { town?: string | null; text?: string 
   return outside ? `This post is in ${titleCase(outside)}, outside the area we work in.` : null;
 }
 
-export interface RecentAnswer {
-  createdAt: string;
-  groupName: string | null;
-}
-
-/** Fewest minutes between one person's comments. */
-export const MINUTES_BETWEEN_COMMENTS = 5;
-
-/** Most comments one person makes in one group in a day. */
-export const PER_GROUP_PER_DAY = 2;
-
-/** Group names that are really the reader not finding one. */
-function isRealGroup(name: string | null | undefined): name is string {
-  const value = (name ?? "").trim().toLowerCase();
-  return Boolean(value) && value !== "see post" && value !== "facebook";
-}
-
-/**
- * Why this person should wait before taking another post, or null.
- *
- * One account dropping a comment a minute, five of them in one group, is
- * what Facebook flags as spam, and then the account answers nobody. So
- * comments are spaced out, and a group hears from each of us at most
- * twice a day.
- */
-export function pacingRefusal(input: { recent: readonly RecentAnswer[]; groupName: string | null; now: Date }): string | null {
-  const now = input.now.getTime();
-  const latest = input.recent.reduce((max, a) => Math.max(max, new Date(a.createdAt).getTime()), 0);
-  const since = (now - latest) / 60_000;
-  if (latest > 0 && since < MINUTES_BETWEEN_COMMENTS) {
-    const wait = Math.max(1, Math.ceil(MINUTES_BETWEEN_COMMENTS - since));
-    return `Give it ${wait} more minute${wait === 1 ? "" : "s"} before the next one. Comments posted back to back get an account flagged as spam.`;
-  }
-  if (isRealGroup(input.groupName)) {
-    const group = input.groupName.trim().toLowerCase();
-    const today = input.recent.filter(
-      (a) => (a.groupName ?? "").trim().toLowerCase() === group && now - new Date(a.createdAt).getTime() < 86_400_000
-    ).length;
-    if (today >= PER_GROUP_PER_DAY) {
-      return `You've already commented in ${input.groupName.trim()} ${today} times today. Leave this one until tomorrow so the group doesn't see us everywhere.`;
-    }
-  }
-  return null;
-}
-
 function titleCase(value: string): string {
   return value.replace(/\b\w/g, (c) => c.toUpperCase());
 }

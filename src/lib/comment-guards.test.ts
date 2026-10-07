@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { checkComment } from "./comment-prompt";
-import { isForwarded, outsideServiceArea, pacingRefusal, posterToTag, withoutTeamMention } from "./comment-guards";
+import { isForwarded, outsideServiceArea, posterToTag, withoutTeamMention } from "./comment-guards";
 
 const team = ["Jace", "jordan collins", "Max", "Shalon Smith"];
 
@@ -73,34 +73,6 @@ describe("outsideServiceArea", () => {
   });
 });
 
-describe("pacingRefusal", () => {
-  const now = new Date("2026-10-05T19:30:00Z");
-  it("asks for a gap after a comment a minute ago", () => {
-    const recent = [{ createdAt: "2026-10-05T19:29:00Z", groupName: "Edgewood Family" }];
-    expect(pacingRefusal({ recent, groupName: "Harford Happenings", now })).toMatch(/Give it 4 more minutes/);
-  });
-
-  it("caps a group at two a day from one person", () => {
-    const recent = [
-      { createdAt: "2026-10-05T18:00:00Z", groupName: "Edgewood Family" },
-      { createdAt: "2026-10-05T18:30:00Z", groupName: "Edgewood Family" },
-    ];
-    expect(pacingRefusal({ recent, groupName: "Edgewood Family", now })).toMatch(/already commented in Edgewood Family 2 times/);
-    expect(pacingRefusal({ recent, groupName: "Harford Happenings", now })).toBeNull();
-  });
-
-  it("does not count a group name the reader made up", () => {
-    const recent = [
-      { createdAt: "2026-10-05T18:00:00Z", groupName: "See Post" },
-      { createdAt: "2026-10-05T18:30:00Z", groupName: "See Post" },
-    ];
-    expect(pacingRefusal({ recent, groupName: "See Post", now })).toBeNull();
-  });
-
-  it("lets the first comment of the day through", () => {
-    expect(pacingRefusal({ recent: [], groupName: "Edgewood Family", now })).toBeNull();
-  });
-});
 
 describe("checkComment and timing", () => {
   it("stops a promise of a day nobody checked", () => {
