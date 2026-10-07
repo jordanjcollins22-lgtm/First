@@ -144,3 +144,61 @@ export interface GeneratedScope {
   quality_control_requirements: string[];
   generated_at: string;
 }
+
+// ============================================================
+// Team check-ins (SMS via GoHighLevel)
+// ============================================================
+
+export interface TeamMember {
+  id: string;
+  name: string;
+  /** E.164, e.g. +15551234567 */
+  phone: string;
+  role: string | null;
+  timezone: string;
+  is_manager: boolean;
+  active: boolean;
+  ghl_contact_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CheckInSchedule {
+  id: string;
+  team_member_id: string;
+  job_id: string | null;
+  label: string;
+  /** 0 = Sunday ... 6 = Saturday, in the team member's timezone. */
+  days_of_week: number[];
+  /** "HH:MM" 24h local time. */
+  time_of_day: string;
+  message: string;
+  response_window_minutes: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CheckInStatus = "pending" | "sent" | "responded" | "late" | "missed" | "failed";
+
+export type ReplyAssessment = "on_track" | "delayed" | "blocked" | "unclear";
+
+export interface CheckIn {
+  id: string;
+  team_member_id: string;
+  schedule_id: string | null;
+  job_id: string | null;
+  scheduled_for: string;
+  due_by: string;
+  message: string;
+  status: CheckInStatus;
+  sent_at: string | null;
+  responded_at: string | null;
+  response_text: string | null;
+  reply_assessment: ReplyAssessment | null;
+  reply_summary: string | null;
+  escalated_at: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}

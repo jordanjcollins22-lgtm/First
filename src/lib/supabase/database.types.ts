@@ -232,6 +232,129 @@ export interface Database {
           },
         ];
       };
+      team_members: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string;
+          role: string | null;
+          timezone: string;
+          is_manager: boolean;
+          active: boolean;
+          ghl_contact_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["team_members"]["Row"]> & {
+          name: string;
+          phone: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_members"]["Row"]>;
+        Relationships: [];
+      };
+      check_in_schedules: {
+        Row: {
+          id: string;
+          team_member_id: string;
+          job_id: string | null;
+          label: string;
+          days_of_week: number[];
+          time_of_day: string;
+          message: string;
+          response_window_minutes: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["check_in_schedules"]["Row"]> & {
+          team_member_id: string;
+          time_of_day: string;
+          message: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["check_in_schedules"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "check_in_schedules_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "check_in_schedules_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      check_ins: {
+        Row: {
+          id: string;
+          team_member_id: string;
+          schedule_id: string | null;
+          job_id: string | null;
+          scheduled_for: string;
+          due_by: string;
+          message: string;
+          status: string;
+          sent_at: string | null;
+          responded_at: string | null;
+          response_text: string | null;
+          reply_assessment: string | null;
+          reply_summary: string | null;
+          escalated_at: string | null;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["check_ins"]["Row"]> & {
+          team_member_id: string;
+          scheduled_for: string;
+          due_by: string;
+          message: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["check_ins"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "check_ins_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "check_ins_schedule_id_fkey";
+            columns: ["schedule_id"];
+            referencedRelation: "check_in_schedules";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "check_ins_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sms_messages: {
+        Row: {
+          id: string;
+          team_member_id: string | null;
+          check_in_id: string | null;
+          direction: string;
+          phone: string | null;
+          body: string;
+          ghl_contact_id: string | null;
+          ghl_message_id: string | null;
+          raw: Json | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sms_messages"]["Row"]> & {
+          direction: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sms_messages"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

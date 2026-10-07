@@ -13,6 +13,20 @@ export const env = {
   mapboxToken: process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? "",
 };
 
+/** Server-only secrets. Never import these into client components. */
+export const serverEnv = {
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  ghlApiKey: process.env.GHL_API_KEY ?? "",
+  ghlLocationId: process.env.GHL_LOCATION_ID ?? "",
+  ghlWebhookSecret: process.env.GHL_WEBHOOK_SECRET ?? "",
+  cronSecret: process.env.CRON_SECRET ?? "",
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+};
+
+export function isGhlConfigured() {
+  return Boolean(serverEnv.ghlApiKey && serverEnv.ghlLocationId);
+}
+
 export function assertSupabaseConfigured() {
   required("NEXT_PUBLIC_SUPABASE_URL", env.supabaseUrl);
   required("NEXT_PUBLIC_SUPABASE_ANON_KEY", env.supabaseAnonKey);

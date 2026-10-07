@@ -20,6 +20,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/properties" className="hover:text-primary">
                 Properties
               </Link>
+              <Link href="/team" className="hover:text-primary">
+                Team
+              </Link>
+              <Link href="/check-ins" className="hover:text-primary">
+                Check-ins
+              </Link>
               <Link href="/admin/service-templates" className="hover:text-primary">
                 Service Templates
               </Link>
