@@ -58,7 +58,7 @@ export async function suggestReplies(jobId: string): Promise<SuggestResponse> {
 
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 2000,
       thinking: { type: "adaptive" },
       // Short drafts from a small brief. The thinking is in choosing the

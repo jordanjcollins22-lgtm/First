@@ -67,7 +67,7 @@ export async function readAndDraftFor(
 
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 1600,
       thinking: { type: "adaptive" },
       output_config: { effort: "medium" },

@@ -54,7 +54,7 @@ export async function readPostFromScreenshot(input: {
 
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 900,
       thinking: { type: "adaptive" },
       // Reading a name off a screenshot is not the same job as writing the

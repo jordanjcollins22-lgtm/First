@@ -222,7 +222,7 @@ async function askModel(posts: PostToSort[], context: SortContext, note?: string
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.beta.messages.parse({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 16000,
       thinking: { type: "adaptive" },
       // Sorting a handful of short posts is simple; low effort keeps it quick.

@@ -328,7 +328,7 @@ export async function writeSocialCaption(input: {
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.beta.messages.parse({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 4000,
       thinking: { type: "adaptive" },
       output_config: { effort: "low", format: betaZodOutputFormat(CaptionSchema) },

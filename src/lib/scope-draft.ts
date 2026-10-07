@@ -16,7 +16,7 @@ export async function draftScopeLine(zone: ZoneBrief, revision?: { previous: str
   if (!isAnthropicConfigured) return null;
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const response = await client.messages.create({
-    model: "claude-opus-5",
+    model: "claude-opus-5-5",
     max_tokens: 1000,
     thinking: { type: "adaptive" },
     output_config: { effort: "low" },

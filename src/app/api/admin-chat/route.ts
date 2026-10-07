@@ -93,9 +93,11 @@ export async function POST(req: NextRequest) {
   try {
     let rounds = 0;
     let response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 8000,
       thinking: { type: "adaptive" },
+      // Opus 5.5 defaults to medium effort; high keeps this agent as thorough as it was.
+      output_config: { effort: "high" },
       system: systemPrompt(today),
       tools: ASSISTANT_TOOLS,
       messages,
@@ -126,9 +128,10 @@ export async function POST(req: NextRequest) {
       messages.push({ role: "user", content: results });
 
       response = await client.messages.create({
-        model: "claude-opus-5",
+        model: "claude-opus-5-5",
         max_tokens: 8000,
         thinking: { type: "adaptive" },
+        output_config: { effort: "high" },
         system: systemPrompt(today),
         tools: ASSISTANT_TOOLS,
         messages,

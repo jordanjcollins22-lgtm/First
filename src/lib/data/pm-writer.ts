@@ -82,7 +82,7 @@ async function writeOne(company: Parameters<typeof companyBrief>[0], brief: Para
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const response = await client.beta.messages.parse({
-        model: "claude-opus-5",
+        model: "claude-opus-5-5",
         max_tokens: 6000,
         thinking: { type: "adaptive" },
         output_config: { effort: "medium", format: betaZodOutputFormat(SequenceSchema) },

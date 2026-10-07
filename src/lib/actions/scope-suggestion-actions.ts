@@ -45,7 +45,7 @@ export async function suggestZoneScope(zone: ZoneBrief): Promise<ScopeSuggestion
 
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 1000,
       thinking: { type: "adaptive" },
       // A short line from a short brief. The judgement is in what to leave
@@ -106,7 +106,7 @@ export async function tidyZoneScope(input: {
 
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 4000,
       thinking: { type: "adaptive" },
       // Grouping and ordering somebody else's sentences. The judgement is in

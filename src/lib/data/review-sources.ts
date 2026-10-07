@@ -147,7 +147,7 @@ async function readReviews(platform: ReviewPlatform, pageText: string): Promise<
   try {
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.beta.messages.parse({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 16000,
       thinking: { type: "adaptive" },
       // Copying reviews off a page is careful reading, not reasoning.

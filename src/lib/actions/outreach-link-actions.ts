@@ -452,7 +452,7 @@ export async function draftCommentFromScreenshot(input: {
     const isMessage = input.kind === "dm";
     const client = new Anthropic({ apiKey: env.anthropicApiKey });
     const response = await client.messages.create({
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       max_tokens: 1200,
       thinking: { type: "adaptive" },
       // Reading a screenshot and matching the service asked for is judgement,
