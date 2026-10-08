@@ -41,6 +41,13 @@ describe("expectationsFor", () => {
     expect(forwards.map((e) => e.heading)).toEqual(backwards.map((e) => e.heading));
   });
 
+  it("does not tell a client buying stump grinding that grinding is quoted separately", () => {
+    const headings = expectationsFor([{ serviceLabel: "Stump grinding", scopeText: "We'll grind down the stump and haul away the grindings." }]).map((e) => e.heading);
+    expect(headings).toContain("A ground stump leaves its roots to rot");
+    expect(headings).not.toContain("Removals leave roots behind");
+    expect(expectationsFor([{ serviceLabel: "Bush removal", scopeText: "We'll remove the bush." }]).map((e) => e.heading)).toContain("Removals leave roots behind");
+  });
+
   it("has nothing to say about an empty proposal", () => {
     expect(expectationsFor([])).toEqual([]);
     expect(expectationsFor([area("", "")])).toEqual([]);
