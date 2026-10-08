@@ -103,7 +103,7 @@ const OUR_WORK: { words: string[]; say: string }[] = [
   { words: ["landscaping"], say: "landscaping" },
 ];
 const PARTNER_WORK: { words: string[]; say: string }[] = [
-  { words: ["tree", "stump"], say: "the tree work" },
+  { words: ["tree", "stump"], say: "tree" },
   { words: ["gutters"], say: "the gutters" },
 ];
 
@@ -145,7 +145,12 @@ export function wordsComment(input: { postText: string; seed: string; roles: rea
         `We've been featured in the news and have amazing reviews around ${where}.`,
         `Neighbors around ${where} leave us amazing reviews.`,
       ]);
-  const coordinate = partner.length ? ` For ${joinAnd(partner)}, we can help coordinate it through our trusted contractor network.` : "";
+  const tree = partner.includes("tree");
+  const others = partner.filter((p) => p !== "tree");
+  const coordinate =
+    (tree
+      ? " We'd love to help with the tree work too: we don't do it in-house, but our licensed tree partners handle it and we'll organize and manage the whole project so you can sit back and relax."
+      : "") + (others.length ? ` For ${joinAnd(others)}, we can help coordinate it through our trusted contractor network.` : "");
   const close = pick(input.seed, ["Happy to help!", "Happy to take a look!", "Happy to help if you still need someone!"], 7);
   return [
     `${commenterIntro(input.roles, input.businessName)}. ${middle}${coordinate}`,
@@ -197,7 +202,7 @@ export function commentSystemPrompt(
       ? `- These we arrange through a partner rather than doing ourselves: ${partner.join(", ")}. Say we can help coordinate it through our trusted contractor network. Never say we do it.`
       : "- Anything not on the list above, say we can help coordinate through our trusted contractor network. Never say we do it.",
     `- Never say ${name} does a service that is not on the list above, however close it sounds to one that is, and however plainly the post asks for it. Agreeing with the post is not worth a claim we cannot stand behind.`,
-    "- Tree work in particular: felling, tree removal, large limb work and stump grinding are a licensed trade. Never say we do any of it. We coordinate it.",
+    "- Tree work in particular (tree removal, felling, trimming, large limbs, stump grinding): we'd love to help with it. We don't do it in-house; our licensed tree partners do the work, and we organize and manage the whole project so they can sit back and relax. Say that warmly, and keep the tree work and the partners in the same sentence. Never say our own crew does the tree work.",
     `- Never call ${name} licensed, certified, bonded, accredited or insured. You may say a partner we hire is licensed and insured, because that is about them.`,
     "- Never invent prices, availability, guarantees, or any detail that is not in the post.",
     '- Never promise when we can come: no "today", "tomorrow", "before Saturday", "same day", "right away", "quickly" or "no problem" about timing. Nobody writing the comment can see the schedule. The booking link shows the real open times, so point to that instead.',
@@ -260,7 +265,7 @@ export function replySystemPrompt(
       ? `- These we arrange through a partner rather than doing ourselves: ${partner.join(", ")}. Say we can help coordinate it through our trusted contractor network. Never say we do it.`
       : "- Anything not on the list above, say we can help coordinate through our trusted contractor network. Never say we do it.",
     `- Never say ${name} does a service that is not on the list above, however plainly the message asks for it.`,
-    "- Tree work in particular: felling, tree removal, large limb work and stump grinding are a licensed trade. Never say we do any of it. We coordinate it.",
+    "- Tree work in particular (tree removal, felling, trimming, large limbs, stump grinding): we'd love to help with it. We don't do it in-house; our licensed tree partners do the work, and we organize and manage the whole project so they can sit back and relax. Say that warmly, and keep the tree work and the partners in the same sentence. Never say our own crew does the tree work.",
     `- Never call ${name} licensed, certified, bonded, accredited or insured. You may say a partner we hire is licensed and insured, because that is about them.`,
     "- Never invent prices, availability, guarantees, or any detail that is not in the conversation.",
     '- Never promise when we can come: no "today", "tomorrow", "before Saturday", "same day", "right away" or "no problem" about timing. The booking link shows the real open times.',

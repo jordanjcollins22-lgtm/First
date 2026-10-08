@@ -15,7 +15,8 @@ describe("wordsComment", () => {
 
   it("only ever coordinates tree work, and passes every comment rule", () => {
     const c = wordsComment({ ...base, postText: "Need someone for tree removal and leaf cleanup", seed: "b2" })!;
-    expect(c).toMatch(/coordinate it through our trusted contractor network/);
+    expect(c).toMatch(/licensed tree partners/);
+    expect(c).toMatch(/sit back and relax/);
     expect(checkComment(c.split(LINK_MARKER).join("")).ok).toBe(true);
   });
 
