@@ -212,7 +212,9 @@ async function PipelineTab() {
                                 {card.upcomingVisit && (
                                   <div className="mt-1 flex flex-col gap-1">
                                     {card.upcomingVisit.preEvalDone ? (
-                                      <p className="text-[11px] font-medium text-primary">Pre-eval filled out</p>
+                                      <Link href={`/jobs/${card.jobId}`} className="text-[11px] font-medium text-primary hover:underline">
+                                        Pre-eval filled out · read it →
+                                      </Link>
                                     ) : (
                                       canAskPreEval && <PreEvalAsk jobId={card.jobId} askedAt={card.upcomingVisit.preEvalAskedAt} />
                                     )}

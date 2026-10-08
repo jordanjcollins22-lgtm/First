@@ -769,6 +769,22 @@ export default async function JobPage({
         />
       )}
 
+      {/* The client's own answers, in the open once they have sent them. They
+          sat folded under Manage the project, Job, What the client asked
+          for, and nobody found them there. */}
+      {intake?.submittedAt && (
+        <section className="rounded-xl border border-primary/30 bg-card/60 p-4 backdrop-blur-md">
+          <h2 className="mb-2 text-base font-semibold">Pre-evaluation form</h2>
+          <IntakeSummary
+            answers={intake.answers}
+            submittedAt={intake.submittedAt}
+            submittedBy={intake.submittedBy}
+            token={intake.token}
+            photos={intake.photoUrls}
+          />
+        </section>
+      )}
+
       {/* Everything for changing the project: the drawing tool, the
           proposal editor, the schedule, the crew, messages and billing.
           Folded away, because the questions above are what somebody opens

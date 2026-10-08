@@ -129,6 +129,11 @@ function EvaluationCard({ evaluation: e }: { evaluation: EvaluationToday }) {
       )}
       {/* No pre-eval and nobody there yet: the form, by email, after a look at the email. */}
       {!e.preEval && stage.step < 3 && <PreEvalAsk jobId={e.jobId} askedAt={e.preEvalAskedAt} />}
+      {e.preEval && (
+        <Link href={`/jobs/${e.jobId}`} className="mt-2 block text-sm font-medium text-primary hover:underline">
+          Read their pre-eval →
+        </Link>
+      )}
       {/* Only before the visit has happened: after it, there is nothing to move. */}
       {stage.step < 3 && <ClientChange target={{ kind: "evaluation", jobId: e.jobId }} />}
     </li>
