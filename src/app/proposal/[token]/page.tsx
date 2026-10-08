@@ -48,7 +48,10 @@ export default async function ProposalPage({
   const hasSiteMap = Boolean(data.proposal.site_image_path && data.proposal.site_image_transform);
   const [messages, lot] = await Promise.all([
     listExternalMessagesForJob(data.proposal.job_id),
-    hasSiteMap ? Promise.resolve(null) : lotForJob(data.proposal.job_id),
+    // The county lot stands in for a site map that was never drawn. A
+    // proposal with no area drawn at all (an add-on written up from photos)
+    // has nothing to show on a map, so it shows none.
+    hasSiteMap || !data.proposal.scope_snapshot.some((zone) => zone.points?.length > 0) ? Promise.resolve(null) : lotForJob(data.proposal.job_id),
   ]);
 
   const previewing = isPreview(preview);
