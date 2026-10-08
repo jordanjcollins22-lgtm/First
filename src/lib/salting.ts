@@ -183,29 +183,25 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
 
 /**
  * A salting area's words brought to a new price, when the account manager
- * sets the job's price by hand: "3 treatments at $40 each, $120 in all"
- * becomes the new total, split over the same treatments. Words that are not
- * salting's are returned as they were.
+ * sets the job's price by hand: "3 applications included in this quote,
+ * $120 in all" becomes the new total. The client is told the total, never a
+ * price a visit. Words that are not salting's are returned as they were.
  */
 export function repriceSaltingScope(text: string, totalCents: number): string {
   return text.replace(
-    /^Pre-paid salting: (\d+) (?:treatments at|applications included in this quote, at) \$[\d,.]+ each, \$[\d,.]+ in all/,
-    (_, n: string) => {
-      const applications = Math.max(1, Number(n));
-      const each = Math.round(totalCents / applications);
-      return `Pre-paid salting: ${applications} applications included in this quote, at ${money(each)} each, ${money(totalCents)} in all`;
-    }
+    /^Pre-paid salting: (\d+) (?:treatments at \$[\d,.]+ each|applications included in this quote(?:, at \$[\d,.]+ each)?), \$[\d,.]+ in all/,
+    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote, ${money(totalCents)} in all`
   );
 }
 
-/** What the proposal says about it, in the client's words: at the salt page's price, or at the one given. */
+/** What the proposal says about it, in the client's words: the total at the salt page's price, or at the one given a treatment. */
 export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS, perTreatmentCents?: number): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
   const where = order.surfaceLabel.toLowerCase();
   const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} applications included in this quote, at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on the ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
       ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`

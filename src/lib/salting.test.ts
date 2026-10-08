@@ -28,7 +28,7 @@ describe("salting off the site map", () => {
 
   it("tells the client the minimum and that it is paid up front", () => {
     const text = saltingScope({ surface: "Sidewalks and walkways", treatments: "3" });
-    expect(text).toMatch(/3 applications included in this quote, at \$25 each, \$75 in all, on the sidewalks and walkways/);
+    expect(text).toMatch(/3 applications included in this quote, \$75 in all, on the sidewalks and walkways/);
     expect(text).toMatch(/Three applications is the minimum to book/);
     expect(text).toMatch(/paid up front/);
   });
@@ -72,11 +72,11 @@ describe("salting a visit at a time", () => {
 
   it("puts the new price in its words", () => {
     const text = saltingScope({ surface: "Driveway", treatments: "3" }, settings);
-    expect(repriceSaltingScope(text, 26_400)).toMatch(/^Pre-paid salting: 3 applications included in this quote, at \$88 each, \$264 in all, on the driveway\./);
-    expect(saltingScope({ surface: "Driveway", treatments: "3" }, settings, 8800)).toMatch(/at \$88 each, \$264 in all/);
+    expect(repriceSaltingScope(text, 26_400)).toMatch(/^Pre-paid salting: 3 applications included in this quote, \$264 in all, on the driveway\./);
+    expect(saltingScope({ surface: "Driveway", treatments: "3" }, settings, 8800)).toMatch(/quote, \$264 in all/);
     expect(saltingScope({ surface: "Driveway", treatments: "3" }, settings)).toMatch(/store again until the next one, for up to 2 years\. Storage is included in the price\./);
     // Words written before still reprice.
-    expect(repriceSaltingScope("Pre-paid salting: 3 treatments at $40 each, $120 in all, on the driveway.", 27_000)).toMatch(/^Pre-paid salting: 3 applications included in this quote, at \$90 each, \$270 in all/);
+    expect(repriceSaltingScope("Pre-paid salting: 3 treatments at $40 each, $120 in all, on the driveway.", 27_000)).toMatch(/^Pre-paid salting: 3 applications included in this quote, \$270 in all/);
   });
 
   it("calls the pet blend a pet friendly snow melt on the proposal", () => {
