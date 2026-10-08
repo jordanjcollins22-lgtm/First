@@ -170,6 +170,13 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",
   "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
+  "/v2":
+    "Sends the new four-page layout on to its first page, Marketing. Nothing on it; the page it opens is " +
+    "guarded itself.",
+  "/v2/[section]":
+    "The new four-page layout (Marketing, Sales, Operations, Admin) being built beside the current app, " +
+    "on the same data. Read-only, and gated in the page on the account actually signed in being owner-level, " +
+    "not on a tab, until it replaces the current navigation and its tabs are put on the matrix.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +
     "no pricing on the page, the token is the whole of their access.",
