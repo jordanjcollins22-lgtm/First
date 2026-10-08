@@ -40,8 +40,8 @@ describe("salting a visit at a time", () => {
 
   it("charges the visit in whole hours, the drive from the shop and back included", () => {
     const v = priceSaltingVisits({ surface: "Driveway", treatments: "3" }, settings, trip);
-    // 15 minutes on site and 42 in the truck: an hour.
-    expect(v.onSiteMinutes).toBe(15);
+    // 10 minutes on the ground and 42 in the truck: an hour.
+    expect(v.onSiteMinutes).toBe(10);
     expect(v.travelMinutes).toBe(42);
     expect(v.billedHours).toBe(1);
     expect(v.labourCents).toBe(2667);

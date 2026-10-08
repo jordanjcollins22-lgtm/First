@@ -3,6 +3,7 @@ import {
   DEFAULT_SALT_SETTINGS,
   MINIMUM_TREATMENTS,
   money,
+  ON_SITE_MINUTES,
   poundsFor,
   priceTreatment,
   quoteOrder,
@@ -151,7 +152,9 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
   const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
   const each = areas.map((values) => {
     const order = saltingOrder(values);
-    return { quote: quoteOrder(order, settings), one: priceTreatment(order.surface, order.petFriendly, settings) };
+    const treatment = priceTreatment(order.surface, order.petFriendly, settings);
+    // On the ground only: the drive is added once below, for the whole house.
+    return { quote: quoteOrder(order, settings), one: { ...treatment, minutes: ON_SITE_MINUTES[order.surface] } };
   });
   const onSite = each.reduce((sum, a) => sum + a.one.minutes, 0);
   const hours = billedHours((onSite + to + back) / 60);
