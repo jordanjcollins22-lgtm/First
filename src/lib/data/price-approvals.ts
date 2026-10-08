@@ -251,7 +251,9 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
     const salting = zones.some((z) => isSalting(z.service!.typeId));
     // Made ready to send at the old rate card's price: it opens to be priced the
     // forward way first, so what is approved and sent is that price.
-    const oldPrice = !salting && r.status === "sent" && !r.sent_at && !pricedForward(r.scope_snapshot, zones.length);
+    // A proposal written without a site map (an add-on, say) has nothing to
+    // price from: the price it was given is the price.
+    const oldPrice = !salting && zones.length > 0 && r.status === "sent" && !r.sent_at && !pricedForward(r.scope_snapshot, zones.length);
     return {
       jobId: r.job_id,
       client: r.job.property?.customer?.name || "Client",
