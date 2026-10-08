@@ -3,7 +3,7 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { buildEstimate, withTravelShare, type EstimateTravelInput, type JobEstimate } from "@/lib/job-estimate";
 import { computeProposalTotal, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
-import { isSalting, priceSaltingVisits, type SaltingVisits } from "@/lib/salting";
+import { isSalting, priceSaltingTogether, type SaltingVisits } from "@/lib/salting";
 
 /**
  * A whole site map priced the one way, for the proposal the client gets and
@@ -48,16 +48,22 @@ export function priceSiteMap(input: {
   const ownCents = own.map((o) => Math.round(o.total * 100));
   const salt = catalog.salt ?? DEFAULT_SALT_SETTINGS;
 
-  const salting = zones.map((zone) =>
-    isSalting(zone.service?.typeId)
-      ? priceSaltingVisits(zone.service!.values, salt, {
-          toSiteMinutes: input.travel.toSiteMinutes,
-          fromSiteMinutes: input.travel.fromSiteMinutes,
-          crewCostPerHourCents: catalog.crewCostPerHourCents,
-          feePct: input.feePct,
-        })
-      : null
+  // Every salting area at the house is done on the one visit.
+  const saltIndexes = zones.map((_, index) => index).filter((index) => isSalting(zones[index].service?.typeId));
+  const together = priceSaltingTogether(
+    saltIndexes.map((index) => zones[index].service!.values),
+    salt,
+    {
+      toSiteMinutes: input.travel.toSiteMinutes,
+      fromSiteMinutes: input.travel.fromSiteMinutes,
+      crewCostPerHourCents: catalog.crewCostPerHourCents,
+      feePct: input.feePct,
+    }
   );
+  const salting = zones.map((_, index) => {
+    const at = saltIndexes.indexOf(index);
+    return at < 0 ? null : together[at];
+  });
   const workIndexes = zones.map((_, index) => index).filter((index) => !salting[index]);
 
   const estimate = buildEstimate({
@@ -155,11 +161,15 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     }
   }
   const salting = priced.salting.filter((s): s is SaltingVisits => s != null);
-  for (const s of salting) {
+  if (salting.length > 0) {
+    const s = salting[0];
+    const treatments = Math.max(...salting.map((v) => v.treatments));
+    const onSite = salting.reduce((sum, v) => sum + v.onSiteMinutes, 0);
+    const hours = s.visitBilledHours ?? s.billedHours;
     labour.push({
       label: "Salting visits",
-      detail: `${s.treatments} × ${s.billedHours} hr${s.billedHours === 1 ? "" : "s"}: ${s.onSiteMinutes} min on site, ${s.travelMinutes} min from the shop and back`,
-      cents: s.labourCents * s.treatments,
+      detail: `${treatments} × ${hrs(hours)} hr${hours === 1 ? "" : "s"}: ${onSite} min on site${salting.length > 1 ? ` (${salting.length} areas)` : ""}, ${s.travelMinutes} min from the shop and back`,
+      cents: salting.reduce((sum, v) => sum + v.labourCents * v.treatments, 0),
     });
   }
   const saltMaterials = salting.reduce((sum, s) => sum + s.materialCents * s.treatments, 0);
