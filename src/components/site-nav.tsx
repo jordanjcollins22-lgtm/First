@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, Plus, X } from "lucide-react";
 
 import { logout } from "@/lib/actions/auth-actions";
@@ -21,6 +22,11 @@ import { ThemeToggle } from "@/components/theme-toggle";
  * the Permissions page actually removes the link. The exceptions below are the
  * ones it deliberately doesn't cover.
  */
+/** Pages kept on the phone for no signal are this person's; the next one to sign in shouldn't see them. */
+function clearFieldCaches() {
+  if ("caches" in window) void caches.keys().then((names) => Promise.all(names.filter((n) => n.startsWith("field-")).map((n) => caches.delete(n))));
+}
+
 export function SiteNav({
   userEmail,
   roles,
@@ -33,6 +39,7 @@ export function SiteNav({
   const fieldOnly = isFieldOnly(roles);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inV2 = usePathname().startsWith("/v2");
 
   const can = (tab: string) => allowedTabs.includes(tab);
 
@@ -67,6 +74,24 @@ export function SiteNav({
   }, [open]);
 
   if (links.length === 0 && !userEmail) return null;
+
+  // The new layout carries its own four pages, and nothing in it leads back
+  // into the old screens: no Inbox, no New, no menu of old destinations. Only
+  // the theme switch and signing out are kept.
+  if (inV2) {
+    return (
+      <div className="flex items-center gap-3 text-sm font-medium">
+        <ThemeToggle />
+        {userEmail && (
+          <form action={logout} onSubmit={clearFieldCaches}>
+            <button type="submit" className="flex min-h-11 items-center text-muted-foreground hover:text-primary sm:min-h-9">
+              Sign out
+            </button>
+          </form>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative flex items-center gap-3 text-sm font-medium">
@@ -135,10 +160,7 @@ export function SiteNav({
             {userEmail && (
               <form
                 action={logout}
-                // Pages kept on the phone for no signal are this person's; the next one to sign in shouldn't see them.
-                onSubmit={() => {
-                  if ("caches" in window) void caches.keys().then((names) => Promise.all(names.filter((n) => n.startsWith("field-")).map((n) => caches.delete(n))));
-                }}
+                onSubmit={clearFieldCaches}
                 className="mt-1 flex flex-col gap-1 border-t border-border px-4 pb-2 pt-2 sm:px-3"
               >
                 <span className="truncate text-xs text-muted-foreground">{userEmail}</span>

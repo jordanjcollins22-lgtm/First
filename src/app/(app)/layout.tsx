@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
+import { HomeLink } from "@/components/home-link";
 import { AdminChatWidget } from "@/components/admin/admin-chat-widget";
 import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { DemoBanner } from "@/components/demo-banner";
@@ -134,12 +134,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {demo ? <DemoBanner viewing={demo.viewing} team={demo.team} /> : impersonatingName && <ImpersonationBanner name={impersonatingName} />}
         <header className="sticky top-0 z-40 border-b border-white/50 bg-card/70 shadow-sm backdrop-blur-xl backdrop-saturate-150 dark:border-white/10">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:py-3">
-            <Link
-              href="/"
-              className="truncate text-base font-bold text-primary sm:text-lg"
-            >
-              {orgName ?? "JS Landscaping"}
-            </Link>
+            <HomeLink>{orgName ?? "JS Landscaping"}</HomeLink>
             <SiteNav userEmail={userEmail} roles={roles} allowedTabs={allowedTabs} />
           </div>
         </header>

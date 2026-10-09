@@ -8,9 +8,8 @@ import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 /**
  * The new four-page layout: one page per department, a bar of pillars across
  * the top, and a "Preview as" switch so the owner can see what each role
- * would be shown. Every pillar ends in links to the screen in the current app
- * that already does that job, so nothing here has to be rebuilt before it is
- * useful.
+ * would be shown. Nothing here links back into the current app: this layout
+ * replaces it, so every screen it needs gets built into one of the four pages.
  */
 
 const PAGES = [
@@ -127,12 +126,6 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
       {current && current.id === "tasks" && <TaskList unplaced={unplaced ?? []} />}
       {current && current.id !== "overview" && current.id !== "tasks" && <Detail pillar={current} />}
 
-      <p className="mt-8 text-xs text-muted-foreground">
-        This layout only reads. Anything you change, you change in the current app through the links on each tab.{" "}
-        <Link href="/" className="underline">
-          Back to the current app
-        </Link>
-      </p>
     </div>
   );
 }
@@ -163,29 +156,10 @@ function Blocks({ pillar }: { pillar: V2Pillar }) {
   );
 }
 
-function OpenLinks({ pillar }: { pillar: V2Pillar }) {
-  if (!pillar.links.length) return null;
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
-      <span className="text-sm text-muted-foreground">Open in the current app:</span>
-      {pillar.links.map((l) => (
-        <Link
-          key={l.href + l.label}
-          href={l.href}
-          className="inline-flex min-h-11 items-center rounded-lg border bg-card px-4 text-sm font-semibold text-primary hover:bg-muted"
-        >
-          {l.label} →
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 function Detail({ pillar }: { pillar: V2Pillar }) {
   return (
     <section className="rounded-2xl border bg-card/60 p-5">
       <Blocks pillar={pillar} />
-      <OpenLinks pillar={pillar} />
     </section>
   );
 }
@@ -223,7 +197,6 @@ function Overview({ section, pillar, role, open }: { section: V2Section; pillar:
           ) : null
         )}
       </div>
-      <OpenLinks pillar={pillar} />
     </div>
   );
 }
@@ -362,10 +335,8 @@ function TaskList({ unplaced }: { unplaced: { label: string; href: string }[] })
             <p className="mb-2 text-sm text-muted-foreground">Each one needs a home on one of the four pages.</p>
             <ul className="flex flex-wrap gap-2">
               {unplaced.map((u) => (
-                <li key={u.href}>
-                  <Link href={u.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm hover:bg-muted">
-                    {u.label}
-                  </Link>
+                <li key={u.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm">
+                  {u.label}
                 </li>
               ))}
             </ul>
