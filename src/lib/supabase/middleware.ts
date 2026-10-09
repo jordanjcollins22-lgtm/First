@@ -36,7 +36,7 @@ import type { Database } from "./database.types";
 // work here yet.
 // /stop is the way out of a cold email to a property manager. Same reason as
 // /u: they have no account and must never meet a sign-in wall.
-export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop", "/privacy"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
-import { env, isFacebookConfigured, isSupabaseConfigured } from "@/lib/env";
+import { env, isSupabaseConfigured } from "@/lib/env";
+import { canPublishToFacebook } from "@/lib/social/facebook";
 import { checkTabAccess } from "@/lib/data/access";
 import {
   listJobsMissingBeforeAfter,
@@ -21,7 +22,7 @@ export default async function SocialPage() {
   if (!allowed) redirect("/dashboard");
 
   const organizationId = await getCurrentOrganizationId();
-  const [candidates, posts, missing, plan] = await Promise.all([
+  const [candidates, posts, missing, plan, facebook] = await Promise.all([
     listPostCandidates().catch(() => []),
     listSocialPosts().catch(() => []),
     listJobsMissingBeforeAfter().catch(() => []),
@@ -29,10 +30,11 @@ export default async function SocialPage() {
       console.error("Planned posts failed to load:", err);
       return [];
     }),
+    canPublishToFacebook(organizationId).catch(() => false),
   ]);
 
   const publishesTo = [
-    ...(isFacebookConfigured ? ["Facebook"] : []),
+    ...(facebook ? ["Facebook"] : []),
     ...(env.socialWebhookUrl ? ["the posting hand-off"] : []),
   ];
   return (

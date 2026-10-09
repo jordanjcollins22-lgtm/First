@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env, isFacebookConfigured, isSupabaseAdminConfigured } from "@/lib/env";
-import { publishPhotoToPage } from "@/lib/social/facebook";
+import { anyPostingPage } from "@/lib/data/meta";
+import { canPublishToFacebook, publishPhotoToPage } from "@/lib/social/facebook";
 import { log } from "@/lib/log";
 import { authorizeCron } from "@/lib/cron-auth";
 import { outboundBaseUrl } from "@/lib/base-url";
@@ -38,7 +39,7 @@ export async function GET(request: NextRequest) {
 
   const { data: due, error } = await admin
     .from("social_posts")
-    .select("id, caption, image_path, job_id, plan_day")
+    .select("id, organization_id, caption, image_path, job_id, plan_day")
     .eq("status", "scheduled")
     // Group posts are posted by hand; only the page is published to.
     .neq("placement", "group")
@@ -49,13 +50,13 @@ export async function GET(request: NextRequest) {
   if (!due || due.length === 0) return NextResponse.json({ due: 0, sent: 0 });
 
   const webhook = env.socialWebhookUrl;
-  if (!webhook && !isFacebookConfigured) {
+  if (!webhook && !isFacebookConfigured && !(await anyPostingPage())) {
     // Nothing to send to. Say so plainly rather than marking them posted.
     log.warn("cron.social_posts.nowhere", { due: due.length });
     return NextResponse.json({
       due: due.length,
       sent: 0,
-      waiting: "Set FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN, or SOCIAL_WEBHOOK_URL, to publish automatically.",
+      waiting: "Connect a page in Admin → Facebook & Instagram and tick Posting, or set SOCIAL_WEBHOOK_URL, to publish automatically.",
     });
   }
 
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
 
   // A planned post's picture is drawn by the app at its own address.
   const appBase = await outboundBaseUrl();
-  for (const post of due as { id: string; caption: string | null; image_path: string | null; job_id: string | null; plan_day: string | null }[]) {
+  for (const post of due as { id: string; organization_id: string; caption: string | null; image_path: string | null; job_id: string | null; plan_day: string | null }[]) {
     const imageUrl = post.image_path
       ? `${base}/storage/v1/object/public/social-posts/${post.image_path}`
       : post.plan_day
@@ -89,8 +90,8 @@ export async function GET(request: NextRequest) {
 
     // Facebook first, straight to the Page. Nextdoor has no way in from
     // here, so those stay copy-and-paste from the studio.
-    if (isFacebookConfigured) {
-      const result = await publishPhotoToPage({ imageUrl, caption: post.caption ?? "" });
+    if (await canPublishToFacebook(post.organization_id)) {
+      const result = await publishPhotoToPage({ organizationId: post.organization_id, imageUrl, caption: post.caption ?? "" });
       if (result.ok) channels.push("facebook");
     }
 

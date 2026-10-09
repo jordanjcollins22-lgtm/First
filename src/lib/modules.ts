@@ -163,6 +163,9 @@ export const MODULES: readonly AppModule[] = [
       { key: "field-guide", label: "Field guide", tabs: ["weeds", "expectations"] },
       { key: "messaging", label: "Client messaging", tabs: ["reminders"] },
       { key: "data", label: "Data & integrations", tabs: ["house-review", "gis-import"] },
+      // Connecting pages and answering their messages: owner setup and a
+      // shared inbox, both behind the one tab.
+      { key: "meta", label: "Facebook & Instagram", tabs: ["meta"] },
       { key: "knowledge", label: "Knowledge graph", tabs: ["knowledge-graph"] },
     ],
   },

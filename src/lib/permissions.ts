@@ -94,6 +94,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "posts-to-answer", label: "Posts to Answer", href: "/admin/outreach/posts", parent: "recommendations" },
   { key: "booking-page", label: "Booking Page", href: "/admin/booking-page", parent: "recommendations" },
   { key: "groups", label: "Local Groups", href: "/admin/groups" },
+  // The business's own Meta app, the pages it connects, and their DMs in one inbox.
+  { key: "meta", label: "Facebook & Instagram", href: "/admin/meta" },
   { key: "fleet", label: "Fleet", href: "/admin/fleet" },
   { key: "salt", label: "Salt Route", href: "/admin/salt" },
   { key: "subscriptions", label: "Subscriptions", href: "/admin/subscriptions", parent: "payments" },
