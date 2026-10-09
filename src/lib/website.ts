@@ -100,3 +100,13 @@ export function websiteLinks(orgSlug: string | null) {
   const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
   return { book: `/book${q}`, mow: `/mow${q}`, salt: `/salt${q}`, site: `/site${q}` };
 }
+
+/** The business's own domain. Opened there, the app is the website rather than the sign-in page. */
+export const WEBSITE_HOSTS = ["jslandscapingmd.com", "www.jslandscapingmd.com"] as const;
+
+/** Where a request on the website's domain is served from, or null to carry on as the app. */
+export function websiteRewrite(host: string | null, pathname: string): string | null {
+  const name = (host ?? "").toLowerCase().split(":")[0];
+  if (!(WEBSITE_HOSTS as readonly string[]).includes(name)) return null;
+  return pathname === "/" ? "/site" : null;
+}

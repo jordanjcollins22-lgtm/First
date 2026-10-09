@@ -46,6 +46,8 @@ export interface Expectation {
   theirPart?: string;
   /** Words in the service name or its scope text that mean this applies. */
   matches: RegExp;
+  /** Words that mean it does not, because the job already covers it. */
+  unless?: RegExp;
 }
 
 /**
@@ -175,6 +177,17 @@ export const EXPECTATIONS: Expectation[] = [
       "stump out is separate work and we will quote it if you want it.",
     timeframe: "Suckers for a season or two on some species",
     matches: /removal|remove|stump|dig ?out|clear/i,
+    // Saying stump grinding is quoted separately, on a quote for stump grinding.
+    unless: /grind/i,
+  },
+  {
+    heading: "A ground stump leaves its roots to rot",
+    body:
+      "Grinding takes the stump down below the ground and we haul the grindings away. The roots " +
+      "under it stay in the soil and break down over a few years, and the spot can settle a " +
+      "little as they do. A few species will send up suckers from those roots for a season.",
+    timeframe: "Roots break down over a few years",
+    matches: /grind/i,
   },
   {
     heading: "More leaves will fall after we go",
@@ -206,7 +219,7 @@ export function expectationsFor(
     .map((area) => `${area.serviceLabel} ${area.scopeText ?? ""}`)
     .join(" \n ");
   if (!text.trim()) return [];
-  return EXPECTATIONS.filter((expectation) => expectation.matches.test(text));
+  return EXPECTATIONS.filter((expectation) => expectation.matches.test(text) && !expectation.unless?.test(text));
 }
 
 /**

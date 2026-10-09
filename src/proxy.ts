@@ -1,8 +1,14 @@
-import { type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { updateSession } from "@/lib/supabase/middleware";
+import { websiteRewrite } from "@/lib/website";
 
 export async function proxy(request: NextRequest) {
+  // jslandscapingmd.com is the website, not the app: its home page is the
+  // site the owner publishes from Marketing › Website. Its buttons go to
+  // /book, /mow and /salt, which are public and served as they are.
+  const site = websiteRewrite(request.headers.get("host"), request.nextUrl.pathname);
+  if (site) return NextResponse.rewrite(new URL(site, request.url));
   return updateSession(request);
 }
 

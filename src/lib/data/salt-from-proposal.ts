@@ -1,4 +1,5 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
+import { readOptions } from "@/lib/proposal-options";
 import { quoteOrder, saltSettingsFrom } from "@/lib/salt";
 import { isSalting, saltingOrder } from "@/lib/salting";
 
@@ -19,7 +20,7 @@ type Admin = ReturnType<typeof createAdminClient>;
  */
 export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string): Promise<void> {
   try {
-    const { data: proposal } = await admin.from("job_proposals").select("job_id, organization_id, scope_snapshot").eq("id", proposalId).maybeSingle();
+    const { data: proposal } = await admin.from("job_proposals").select("job_id, organization_id, scope_snapshot, options").eq("id", proposalId).maybeSingle();
     if (!proposal?.job_id) return;
 
     const [{ data: design }, { data: existing }] = await Promise.all([
@@ -32,6 +33,9 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
     );
     if (zones.length === 0) return;
     const snapshot = ((proposal as { scope_snapshot?: unknown }).scope_snapshot ?? []) as { zoneName?: string; priceCents?: number | null }[];
+    // A package the client picked on the proposal: that many applications, not the site map's.
+    const offered = readOptions((proposal as { options?: unknown }).options, snapshot.length);
+    const picked = offered?.options.find((o) => o.key === offered.chosen)?.treatments ?? null;
 
     const [{ data: org }, { data: job }] = await Promise.all([
       admin.from("organizations").select("*").eq("id", proposal.organization_id).maybeSingle(),
@@ -61,9 +65,9 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
           lng: property?.lng ?? null,
           surface: quote.surface,
           pet_friendly: quote.petFriendly,
-          treatments: quote.treatments,
+          treatments: picked ?? quote.treatments,
           treatments_used: 0,
-          per_treatment_cents: Math.round(amount / Math.max(1, quote.treatments)),
+          per_treatment_cents: Math.round(amount / Math.max(1, picked ?? quote.treatments)),
           amount_cents: amount,
           status: "paid",
           paid_at: now,

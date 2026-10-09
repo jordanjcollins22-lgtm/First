@@ -1340,6 +1340,74 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["marketing_play_reviews"]["Row"]>;
         Relationships: [];
       };
+      meta_settings: {
+        Row: {
+          organization_id: string;
+          app_id: string | null;
+          app_secret: string | null;
+          login_config_id: string | null;
+          verify_token: string;
+          user_token: string | null;
+          connected_by: string | null;
+          connected_at: string | null;
+          webhooks_at: string | null;
+          last_error: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["meta_settings"]["Row"]> & { organization_id: string };
+        Update: Partial<Database["public"]["Tables"]["meta_settings"]["Row"]>;
+        Relationships: [];
+      };
+      meta_pages: {
+        Row: {
+          id: string;
+          organization_id: string;
+          page_id: string;
+          name: string;
+          access_token: string;
+          instagram_id: string | null;
+          instagram_username: string | null;
+          roles: string[];
+          subscribed_at: string | null;
+          last_error: string | null;
+          connected_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["meta_pages"]["Row"]> & {
+          organization_id: string;
+          page_id: string;
+          name: string;
+          access_token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_pages"]["Row"]>;
+        Relationships: [];
+      };
+      meta_messages: {
+        Row: {
+          id: string;
+          organization_id: string;
+          page_row_id: string;
+          platform: string;
+          contact_id: string;
+          contact_name: string | null;
+          direction: string;
+          body: string | null;
+          attachments: Json;
+          mid: string | null;
+          sent_by: string | null;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["meta_messages"]["Row"]> & {
+          organization_id: string;
+          page_row_id: string;
+          platform: string;
+          contact_id: string;
+          direction: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meta_messages"]["Row"]>;
+        Relationships: [];
+      };
       marketing_defaults: {
         Row: {
           organization_id: string;

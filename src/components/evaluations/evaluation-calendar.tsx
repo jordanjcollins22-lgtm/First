@@ -466,7 +466,13 @@ export function EvaluationCalendar({
                     </p>
                   </div>
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
+                <span
+                  className={cn(
+                    "shrink-0 text-right text-xs text-muted-foreground",
+                    // Got there before it was booked for: worth seeing at a glance.
+                    event.scheduledFor && event.detail.includes("early") && "font-medium text-emerald-700 dark:text-emerald-400"
+                  )}
+                >
                   {event.at ? `${formatTime(event.at)} · ` : ""}
                   {event.detail}
                 </span>

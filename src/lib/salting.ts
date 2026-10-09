@@ -3,6 +3,7 @@ import {
   DEFAULT_SALT_SETTINGS,
   MINIMUM_TREATMENTS,
   money,
+  ON_SITE_MINUTES,
   poundsFor,
   priceTreatment,
   quoteOrder,
@@ -101,16 +102,20 @@ export function saltingMaterial(values: Record<string, string | undefined>, sett
   };
 }
 
-/** One salting visit priced by the rules every service is held to. */
+/** One salting area's visits priced by the rules every service is held to. */
 export interface SaltingVisits {
   treatments: number;
-  /** On site for one treatment. */
+  /** This area's time on site for one treatment. */
   onSiteMinutes: number;
-  /** Shop to the house and back, for one visit. */
+  /** Shop to the house and back, for one visit: once for the house, however many areas. */
   travelMinutes: number;
-  /** The visit on the clock, in whole hours, one at the least. */
+  /** This area's share of the visit on the clock, in hours. */
   billedHours: number;
-  /** Per visit, in cents. */
+  /** The whole visit on the clock, in whole hours, one at the least. */
+  visitBilledHours?: number;
+  /** How many salting areas are done on the one visit. */
+  areasOnVisit?: number;
+  /** This area's share of a visit's labour, in cents. */
   labourCents: number;
   materialCents: number;
   /** What the salt page charges a treatment. */
@@ -122,6 +127,8 @@ export interface SaltingVisits {
   lifted: boolean;
 }
 
+type SaltingTrip = { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number };
+
 /**
  * Salting a visit at a time, held to the same rules as every service: the
  * crew's time from the shop to the house, the treatment and back, charged in
@@ -129,60 +136,75 @@ export interface SaltingVisits {
  * price as gross profit after the account manager's or affiliate's share.
  * The salt page's price stands when it is already over that.
  */
-export function priceSaltingVisits(
-  values: Record<string, string | undefined>,
-  settings: SaltSettings,
-  trip: { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number }
-): SaltingVisits {
-  const order = saltingOrder(values);
-  const quote = quoteOrder(order, settings);
-  const one = priceTreatment(order.surface, order.petFriendly, settings);
+export function priceSaltingVisits(values: Record<string, string | undefined>, settings: SaltSettings, trip: SaltingTrip): SaltingVisits {
+  return priceSaltingTogether([values], settings, trip)[0];
+}
+
+/**
+ * Every salting area at one house, salted on the one visit: one drive there
+ * and back, one hour's minimum, the time on site added up. Each area carries
+ * its share of that visit's labour by its time on site, so a driveway and two
+ * walkways are one stop, not three.
+ */
+export function priceSaltingTogether(areas: Record<string, string | undefined>[], settings: SaltSettings, trip: SaltingTrip): SaltingVisits[] {
   const fallback = trip.fallbackDriveMinutes ?? 30;
   const to = trip.toSiteMinutes ?? fallback;
   const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
-  const hours = billedHours((one.minutes + to + back) / 60);
-  const labourCents = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
-  const floor = priceForTarget(labourCents, one.materialCents, trip.feePct) ?? 0;
-  const perVisitCents = Math.max(quote.perTreatmentCents, floor);
-  return {
-    treatments: quote.treatments,
-    onSiteMinutes: one.minutes,
-    travelMinutes: Math.round(to + back),
-    billedHours: hours,
-    labourCents,
-    materialCents: one.materialCents,
-    saltPageCents: quote.perTreatmentCents,
-    perVisitCents,
-    totalCents: perVisitCents * quote.treatments,
-    lifted: perVisitCents > quote.perTreatmentCents,
-  };
+  const each = areas.map((values) => {
+    const order = saltingOrder(values);
+    const treatment = priceTreatment(order.surface, order.petFriendly, settings);
+    // On the ground only: the drive is added once below, for the whole house.
+    return { quote: quoteOrder(order, settings), one: { ...treatment, minutes: ON_SITE_MINUTES[order.surface] } };
+  });
+  const onSite = each.reduce((sum, a) => sum + a.one.minutes, 0);
+  const hours = billedHours((onSite + to + back) / 60);
+  const visitLabourCents = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
+  let labourLeft = visitLabourCents;
+  return each.map(({ quote, one }, index) => {
+    const share = onSite > 0 ? one.minutes / onSite : 1 / each.length;
+    // The last area takes what rounding left, so the shares add up to the visit.
+    const labourCents = index === each.length - 1 ? labourLeft : Math.round(visitLabourCents * share);
+    labourLeft -= labourCents;
+    const floor = priceForTarget(labourCents, one.materialCents, trip.feePct) ?? 0;
+    const perVisitCents = Math.max(quote.perTreatmentCents, floor);
+    return {
+      treatments: quote.treatments,
+      onSiteMinutes: one.minutes,
+      travelMinutes: Math.round(to + back),
+      billedHours: hours * share,
+      visitBilledHours: hours,
+      areasOnVisit: each.length,
+      labourCents,
+      materialCents: one.materialCents,
+      saltPageCents: quote.perTreatmentCents,
+      perVisitCents,
+      totalCents: perVisitCents * quote.treatments,
+      lifted: perVisitCents > quote.perTreatmentCents,
+    };
+  });
 }
 
 /**
  * A salting area's words brought to a new price, when the account manager
- * sets the job's price by hand: "3 treatments at $40 each, $120 in all"
- * becomes the new total, split over the same treatments. Words that are not
- * salting's are returned as they were.
+ * sets the job's price by hand: "3 applications included in this quote,
+ * $120 in all" becomes the new total. The client is told the total, never a
+ * price a visit. Words that are not salting's are returned as they were.
  */
 export function repriceSaltingScope(text: string, totalCents: number): string {
   return text.replace(
-    /^Pre-paid salting: (\d+) (?:treatments at|applications included in this quote, at) \$[\d,.]+ each, \$[\d,.]+ in all/,
-    (_, n: string) => {
-      const applications = Math.max(1, Number(n));
-      const each = Math.round(totalCents / applications);
-      return `Pre-paid salting: ${applications} applications included in this quote, at ${money(each)} each, ${money(totalCents)} in all`;
-    }
+    /^Pre-paid salting: (\d+) (?:treatments at \$[\d,.]+ each|applications included in this quote(?:, at \$[\d,.]+ each)?), \$[\d,.]+ in all/,
+    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote, ${money(totalCents)} in all`
   );
 }
 
-/** What the proposal says about it, in the client's words: at the salt page's price, or at the one given. */
+/** What the proposal says about it, in the client's words: the total at the salt page's price, or at the one given a treatment. */
 export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS, perTreatmentCents?: number): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
   const where = order.surfaceLabel.toLowerCase();
   const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} applications included in this quote, at ${money(each)} each, ${money(each * quote.treatments)} in all, on the ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on the ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
       ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`

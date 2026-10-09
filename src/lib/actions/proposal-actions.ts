@@ -35,7 +35,8 @@ import { formatMeasurements, zoneMeasurements } from "@/lib/proposal-pricing";
 import { type JobEstimate } from "@/lib/job-estimate";
 import { priceSiteMap } from "@/lib/job-price";
 import { feesForJobs } from "@/lib/data/job-fee";
-import { repriceSaltingScope } from "@/lib/salting";
+import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
+import { repriceSaltingScope, saltingScope } from "@/lib/salting";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
@@ -177,7 +178,11 @@ export async function generateProposal(
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
       // Salting says its price in its words: at the price it came to.
-      scopeText: approved.get(zone.name) ?? (priced.salting[index] ? repriceSaltingScope(scopeTexts[index], areaPrices[index]) : scopeTexts[index]),
+      // Salting in its own area's words: a walkway is not "on the driveway"
+      // because a driveway on the same job came first.
+      scopeText:
+        approved.get(zone.name) ??
+        (priced.salting[index] ? repriceSaltingScope(saltingScope(zone.service?.values ?? {}, catalog.salt ?? DEFAULT_SALT_SETTINGS), areaPrices[index]) : scopeTexts[index]),
       photoPaths: zone.service?.photos ?? [],
       points: zone.points,
       color: zone.color,

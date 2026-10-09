@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { evaluationEvents, jobWorkEvents } from "@/lib/calendar-events";
+import { completedDetail, evaluationEvents, jobWorkEvents } from "@/lib/calendar-events";
 import type { JobWithLocation } from "@/lib/data/jobs";
 
 function job(overrides: Partial<JobWithLocation> = {}): JobWithLocation {
@@ -35,6 +35,25 @@ function job(overrides: Partial<JobWithLocation> = {}): JobWithLocation {
 }
 
 describe("evaluationEvents", () => {
+  it("moves a completed visit to the day it was done and says when it was booked", () => {
+    const [e] = evaluationEvents([
+      job({ evaluation_status: "completed", evaluation_date: "2026-09-15T14:00:00", evaluation_submitted_at: "2026-09-09T15:30:00" } as Partial<JobWithLocation>),
+    ]);
+    expect(e.date).toBe("2026-09-09");
+    expect(e.scheduledFor).toBe("2026-09-15T14:00:00");
+    expect(e.detail).toBe("Done 6 days early · booked for Sep 15");
+  });
+
+  it("leaves a completed visit with no done date where it was booked", () => {
+    const [e] = evaluationEvents([job({ evaluation_status: "completed", evaluation_date: "2026-09-15T14:00:00" })]);
+    expect(e.date).toBe("2026-09-15");
+  });
+
+  it("says late and on the day too", () => {
+    expect(completedDetail("2026-09-15T14:00:00", "2026-09-17T10:00:00")).toBe("Done 2 days late · booked for Sep 15");
+    expect(completedDetail("2026-09-15T14:00:00", "2026-09-15T18:00:00")).toBe("Done on the day booked");
+  });
+
   it("puts a scheduled visit on the calendar", () => {
     expect(evaluationEvents([job()])).toHaveLength(1);
   });

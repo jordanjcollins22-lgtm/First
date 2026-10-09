@@ -8,6 +8,7 @@ import { Menu, Plus, X } from "lucide-react";
 import { logout } from "@/lib/actions/auth-actions";
 import { isFieldOnly, roleViewFor } from "@/lib/affiliate-roles";
 import { navModules } from "@/lib/modules";
+import { isOwnerLevel } from "@/lib/roles";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 /**
@@ -98,6 +99,12 @@ export function SiteNav({
       {/* The two things somebody reaches for without meaning to navigate:
           starting the next job, and the messages waiting on them. Everything
           else is a destination and lives in the menu. */}
+      {/* The way into the new four-page layout while it is being built. */}
+      {isOwnerLevel(roles) && (
+        <Link href="/v2" className="rounded-lg border border-primary/40 px-2.5 py-1.5 text-primary hover:bg-primary/10">
+          New layout
+        </Link>
+      )}
       {!fieldOnly && can("conversations") && (
         <Link href="/conversations" aria-label="Inbox" className="hidden hover:text-primary sm:inline">
           Inbox

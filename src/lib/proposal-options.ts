@@ -34,6 +34,8 @@ export interface ProposalOption {
   recommended?: boolean;
   /** In the proposal's area order. */
   areas: OptionArea[];
+  /** For a salting package: how many applications the option buys. */
+  treatments?: number | null;
 }
 
 export interface ProposalOptions {
@@ -66,6 +68,7 @@ export function readOptions(raw: unknown, areaCount: number): ProposalOptions | 
       bonus: typeof r.bonus === "string" && r.bonus.trim() ? r.bonus : null,
       recommended: r.recommended === true,
       areas: areas as OptionArea[],
+      treatments: Number.isFinite(r.treatments) && (r.treatments as number) > 0 ? Math.round(r.treatments as number) : null,
     });
   }
   if (options.length < 2 || new Set(options.map((o) => o.key)).size !== options.length) return null;

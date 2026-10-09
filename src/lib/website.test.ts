@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_WEBSITE, MAX_SERVICES, normalizeWebsite, websiteLinks } from "@/lib/website";
+import { DEFAULT_WEBSITE, MAX_SERVICES, normalizeWebsite, websiteLinks, websiteRewrite } from "@/lib/website";
 
 describe("normalizeWebsite", () => {
   it("starts from the defaults, under the business's own name", () => {
@@ -40,5 +40,18 @@ describe("websiteLinks", () => {
   it("sends every button to the app's own pages for this business", () => {
     expect(websiteLinks("js-landscaping").book).toBe("/book?org=js-landscaping");
     expect(websiteLinks(null).mow).toBe("/mow");
+  });
+});
+
+describe("websiteRewrite", () => {
+  it("serves the website at the root of the business's own domain", () => {
+    expect(websiteRewrite("jslandscapingmd.com", "/")).toBe("/site");
+    expect(websiteRewrite("www.jslandscapingmd.com", "/")).toBe("/site");
+  });
+
+  it("leaves the app's own domain and every other page alone", () => {
+    expect(websiteRewrite("app.jslandscapingmd.com", "/")).toBeNull();
+    expect(websiteRewrite("jslandscapingmd.com", "/book")).toBeNull();
+    expect(websiteRewrite(null, "/")).toBeNull();
   });
 });

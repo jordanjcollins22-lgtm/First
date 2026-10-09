@@ -150,6 +150,14 @@ export function poundsFor(surface: Surface, settings: SaltSettings): number {
   return settings.sidewalkPounds + settings.drivewayPounds;
 }
 
+/**
+ * The crew's time on the ground for one treatment, the drive left out: the
+ * salt page's minutes carry the stop, and a visit priced off the site map
+ * adds its own drive there and back. Spreading a driveway's worth of melt
+ * takes about ten minutes, a run of sidewalk about five.
+ */
+export const ON_SITE_MINUTES: Record<Surface, number> = { driveway: 10, sidewalks: 5, both: 15 };
+
 /** Minutes one treatment of this surface takes, driving included. */
 export function minutesFor(surface: Surface, settings: SaltSettings): number {
   if (surface === "sidewalks") return settings.sidewalkMinutes;

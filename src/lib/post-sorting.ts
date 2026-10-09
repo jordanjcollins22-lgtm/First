@@ -126,7 +126,7 @@ export function sortSystemPrompt(context: SortContext): string {
     "",
     '1. "category", exactly one of:',
     '- "for-us": a homeowner or property owner wants to pay someone for work that is one of the services listed above, is still looking, and the property is in or near our area. Asking who to hire, asking for recommendations, asking for quotes, or describing a yard problem and asking who can fix it all count. The work has to be one of those services: being outdoors, or near a yard, is not enough.',
-    '- "other-trade": a person wants to hire for work that is not one of the services listed above. That includes dumpsters, junk hauling, concrete, steps, porches, decks, fences, pools and pool tile, paving, driveways, tree felling and stump grinding, roofing, gutters, plumbing, HVAC, electrical, cleaning, cars, pets and childcare. Also a recommendation for a restaurant, shop or other business.',
+    '- "other-trade": a person wants to hire for work that is not one of the services listed above. That includes dumpsters, junk hauling, concrete, steps, porches, decks, fences, pools and pool tile, paving, driveways, roofing, gutters, plumbing, HVAC, electrical, cleaning, cars, pets and childcare. Also a recommendation for a restaurant, shop or other business.',
     '- "far": a request for one of our services at a property clearly outside our area, such as Baltimore City or another county or state named in the post or group.',
     '- "business-ad": somebody advertising their own business, services, availability, products, events or things for sale.',
     '- "hiring": a business looking for workers or for a subcontractor crew, or a person looking for a job.',

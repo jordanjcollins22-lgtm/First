@@ -104,7 +104,7 @@ describe("spreadPrice on salting", () => {
     const [out] = spreadPrice([zone], 142);
     expect(out.priceCents).toBe(14200);
     expect(out.scopeText).toBe(
-      "Pre-paid salting: 3 applications included in this quote, at $47.33 each, $142 in all, on the driveway. Three treatments is the minimum to book."
+      "Pre-paid salting: 3 applications included in this quote, $142 in all, on the driveway. Three treatments is the minimum to book."
     );
   });
 });
