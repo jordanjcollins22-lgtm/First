@@ -33,7 +33,7 @@ export function SiteMapImage({
    * `number` overrides the marker, for when the caller is drawing a subset:
    * showing zone five on its own must still call it five, and counting the
    * zones actually drawn would call it one. */
-  zones: (Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points"> & { number?: number })[];
+  zones: (Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points" | "shapes"> & { number?: number })[];
   /** Crop the view to a region of the canvas instead of showing all of it.
    * Placement of the photo is independent of this, so cropping is safe. */
   frame?: { x: number; y: number; width: number; height: number };
@@ -151,9 +151,9 @@ export function SiteMapImage({
           <defs>
             <mask id={maskId}>
               <rect x={view.x} y={view.y} width={view.width} height={view.height} fill="white" />
-              {zonesWithOutlines.map(({ zone }, i) => (
-                <polygon key={i} points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")} fill="black" />
-              ))}
+              {zonesWithOutlines.flatMap(({ zone }, i) =>
+                outlinesOf(zone).map((outline, k) => <polygon key={`${i}-${k}`} points={outline.map((p) => `${p.x},${p.y}`).join(" ")} fill="black" />)
+              )}
             </mask>
           </defs>
         )}
@@ -189,22 +189,26 @@ export function SiteMapImage({
                   a green zone on grass worst of all. White separates the line
                   from the photo whatever colour either happens to be, which a
                   dark casing cannot do under a dark zone. */}
-              <polygon
-                points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill="none"
-                stroke="#ffffff"
-                strokeOpacity={0.9}
-                strokeWidth={casingWidth}
-                strokeLinejoin="round"
-              />
-              <polygon
-                points={zone.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill={zone.color}
-                fillOpacity={0.28}
-                stroke={zone.color}
-                strokeWidth={strokeWidth}
-                strokeLinejoin="round"
-              />
+              {outlinesOf(zone).map((outline, k) => (
+                <g key={k}>
+                  <polygon
+                    points={outline.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="none"
+                    stroke="#ffffff"
+                    strokeOpacity={0.9}
+                    strokeWidth={casingWidth}
+                    strokeLinejoin="round"
+                  />
+                  <polygon
+                    points={outline.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill={zone.color}
+                    fillOpacity={0.28}
+                    stroke={zone.color}
+                    strokeWidth={strokeWidth}
+                    strokeLinejoin="round"
+                  />
+                </g>
+              ))}
             </g>
           );
         })}
@@ -244,4 +248,9 @@ export function SiteMapImage({
       )}
     </div>
   );
+}
+
+/** A line's outline and any others that are part of it, such as every salting area at one house. */
+function outlinesOf(zone: Pick<ProposalZoneSnapshot, "points" | "shapes">): { x: number; y: number }[][] {
+  return [zone.points, ...(zone.shapes ?? [])].filter((outline) => outline.length >= 2);
 }

@@ -3,7 +3,7 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { buildEstimate, withTravelShare, type EstimateTravelInput, type JobEstimate } from "@/lib/job-estimate";
 import { computeProposalTotal, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
-import { isSalting, priceSaltingTogether, type SaltingVisits } from "@/lib/salting";
+import { combinedSaltingValues, isSalting, priceSaltingTogether, type SaltingVisits } from "@/lib/salting";
 
 /**
  * A whole site map priced the one way, for the proposal the client gets and
@@ -48,21 +48,23 @@ export function priceSiteMap(input: {
   const ownCents = own.map((o) => Math.round(o.total * 100));
   const salt = catalog.salt ?? DEFAULT_SALT_SETTINGS;
 
-  // Every salting area at the house is done on the one visit.
+  // Every salting area at the house is sold as one: one visit, one price.
+  // The first salting area carries it; the others are part of it and carry
+  // nothing of their own, so the areas still add up to the total.
   const saltIndexes = zones.map((_, index) => index).filter((index) => isSalting(zones[index].service?.typeId));
-  const together = priceSaltingTogether(
-    saltIndexes.map((index) => zones[index].service!.values),
-    salt,
-    {
-      toSiteMinutes: input.travel.toSiteMinutes,
-      fromSiteMinutes: input.travel.fromSiteMinutes,
-      crewCostPerHourCents: catalog.crewCostPerHourCents,
-      feePct: input.feePct,
-    }
-  );
-  const salting = zones.map((_, index) => {
+  const together =
+    saltIndexes.length > 0
+      ? priceSaltingTogether([combinedSaltingValues(saltIndexes.map((index) => zones[index].service!.values))], salt, {
+          toSiteMinutes: input.travel.toSiteMinutes,
+          fromSiteMinutes: input.travel.fromSiteMinutes,
+          crewCostPerHourCents: catalog.crewCostPerHourCents,
+          feePct: input.feePct,
+        })[0]
+      : null;
+  const salting: (SaltingVisits | null)[] = zones.map((_, index) => {
     const at = saltIndexes.indexOf(index);
-    return at < 0 ? null : together[at];
+    if (at < 0 || !together) return null;
+    return at === 0 ? together : { ...together, billedHours: 0, labourCents: 0, materialCents: 0, perVisitCents: 0, totalCents: 0, onSiteMinutes: 0 };
   });
   const workIndexes = zones.map((_, index) => index).filter((index) => !salting[index]);
 

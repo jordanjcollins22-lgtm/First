@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { costSalting, priceSaltingTogether, priceSaltingVisits, repriceSaltingScope, saltingMaterial, saltingOrder, saltingScope } from "./salting";
+import { combinedSaltingValues, costSalting, priceSaltingTogether, saltingAreas, priceSaltingVisits, repriceSaltingScope, saltingMaterial, saltingOrder, saltingScope } from "./salting";
 import { DEFAULT_SALT_SETTINGS, quoteOrder } from "./salt";
 import { margin } from "./gross-profit";
 
@@ -82,5 +82,25 @@ describe("salting a visit at a time", () => {
   it("calls the pet blend a pet friendly snow melt on the proposal", () => {
     expect(saltingScope({ surface: "Driveway", treatments: "3", petSafe: "Yes" })).toMatch(/Each application is a pet friendly snow melt, never rock salt/);
     expect(saltingScope({ surface: "Driveway", treatments: "3", petSafe: "No" })).toMatch(/Each application is calcium chloride/);
+  });
+});
+
+describe("every salting area at one house, sold as one", () => {
+  it("adds the surfaces up and keeps the pet blend and the most treatments", () => {
+    expect(
+      combinedSaltingValues([
+        { surface: "Driveway", petSafe: "No", treatments: "3" },
+        { surface: "Sidewalks and walkways", petSafe: "Yes", treatments: "4" },
+      ])
+    ).toEqual({ surface: "Driveway and walkways", petSafe: "Yes", treatments: "4" });
+    expect(combinedSaltingValues([{ surface: "Sidewalks and walkways" }, { surface: "Other", surface__other: "Back deck" }]).surface).toBe("Sidewalks and walkways");
+    expect(combinedSaltingValues([{ surface: "Driveway" }, { surface: "Driveway" }]).surface).toBe("Driveway");
+  });
+
+  it("names the areas in the client's words, each once", () => {
+    expect(
+      saltingAreas([{ surface: "Driveway" }, { surface: "Sidewalks and walkways" }, { surface: "Sidewalks and walkways" }, { surface: "Other", surface__other: "Back deck" }])
+    ).toBe("the driveway, the sidewalks and walkways and the back deck");
+    expect(saltingAreas([{ surface: "Driveway" }])).toBe("the driveway");
   });
 });

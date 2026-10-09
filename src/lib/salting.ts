@@ -198,13 +198,19 @@ export function repriceSaltingScope(text: string, totalCents: number): string {
 }
 
 /** What the proposal says about it, in the client's words: the total at the salt page's price, or at the one given a treatment. */
-export function saltingScope(values: Record<string, string | undefined>, settings: SaltSettings = DEFAULT_SALT_SETTINGS, perTreatmentCents?: number): string {
+export function saltingScope(
+  values: Record<string, string | undefined>,
+  settings: SaltSettings = DEFAULT_SALT_SETTINGS,
+  perTreatmentCents?: number,
+  /** Where it goes, in the client's words, when it is more than one area: "the driveway and the back deck". */
+  areas?: string
+): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
-  const where = order.surfaceLabel.toLowerCase();
+  const where = areas ?? `the ${order.surfaceLabel.toLowerCase()}`;
   const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on the ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
       ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`
@@ -214,4 +220,36 @@ export function saltingScope(values: Record<string, string | undefined>, setting
     SALT_KEPT_LINE,
     `Snow removal, when you want it, is billed after each storm by how much fell.`,
   ].join(" ");
+}
+
+/**
+ * Every salting area at one house, sold as one: one line on the proposal,
+ * one price, one visit. The surface is what they add up to (a driveway and
+ * a walk is "Driveway and walkways"), the pet blend if any area wants it,
+ * and the most treatments any area was given.
+ */
+export function combinedSaltingValues(areas: Record<string, string | undefined>[]): Record<string, string> {
+  const orders = areas.map((values) => ({ values, order: saltingOrder(values) }));
+  // An area named in its own words ("Back deck", "Stairs") is walked and
+  // salted like a walkway.
+  const surfaces = new Set(orders.map(({ values, order }) => (values.surface === "Other" ? "sidewalks" : order.surface)));
+  const surface: Surface =
+    surfaces.has("both") || (surfaces.has("driveway") && surfaces.has("sidewalks")) ? "both" : surfaces.has("driveway") ? "driveway" : "sidewalks";
+  return {
+    surface: SALTING_SURFACES.find((s) => s.surface === surface)!.label,
+    petSafe: orders.some(({ order }) => order.petFriendly) ? "Yes" : "No",
+    treatments: String(Math.max(MINIMUM_TREATMENTS, ...orders.map(({ order }) => order.treatments))),
+  };
+}
+
+/** The areas in the client's words: "the driveway, the sidewalks and walkways and the back deck". */
+export function saltingAreas(areas: Record<string, string | undefined>[]): string {
+  const names: string[] = [];
+  for (const values of areas) {
+    const own = values.surface === "Other" ? values.surface__other?.trim() : null;
+    const name = (own || saltingOrder(values).surfaceLabel).toLowerCase();
+    if (!names.includes(name)) names.push(name);
+  }
+  const the = names.map((n) => `the ${n}`);
+  return the.length <= 1 ? (the[0] ?? "the driveway and walkways") : `${the.slice(0, -1).join(", ")} and ${the[the.length - 1]}`;
 }

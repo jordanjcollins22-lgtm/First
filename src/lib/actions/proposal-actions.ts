@@ -36,7 +36,7 @@ import { type JobEstimate } from "@/lib/job-estimate";
 import { priceSiteMap } from "@/lib/job-price";
 import { feesForJobs } from "@/lib/data/job-fee";
 import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
-import { repriceSaltingScope, saltingScope } from "@/lib/salting";
+import { combinedSaltingValues, repriceSaltingScope, saltingAreas, saltingScope } from "@/lib/salting";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone-scope";
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
@@ -161,12 +161,32 @@ export async function generateProposal(
       return { service: serviceLabelFor(scopeInputs[index].def, scopeInputs[index].pricing), sizeLabel: measured ? formatMeasurements(measured, zone) : null };
     },
   });
-  const estimate: JobEstimate = { ...priced.estimate, salting: priced.salting.filter((s): s is NonNullable<typeof s> => s != null) };
+  // The salting areas folded into the first carry nothing of their own.
+  const estimate: JobEstimate = {
+    ...priced.estimate,
+    salting: priced.salting.filter((s, index): s is NonNullable<typeof s> => s != null && (s.totalCents > 0 || priced.salting.findIndex((x) => x != null) === index)),
+  };
   const areaPrices = priced.areaPricesCents;
   const total = priced.totalCents / 100;
   const own = zones.map((_, index) => ({ hasMissingTiming: priced.hasMissingTiming[index], hasUnknownMaterialCost: priced.hasUnknownMaterialCost[index] }));
 
-  const scopeSnapshot: ProposalZoneSnapshot[] = zones.map((zone, index) => {
+  // Every salting area at the house is one line: one price, the areas named
+  // together, drawn together on the map, every photo. Written out once on
+  // the first salting area; the rest are part of it.
+  const saltIndexes = zones.map((_, index) => index).filter((index) => priced.salting[index] != null);
+  const firstSalt = saltIndexes[0] ?? -1;
+  const saltValues = saltIndexes.map((index) => zones[index].service?.values ?? {});
+  const saltingText =
+    firstSalt < 0
+      ? ""
+      : repriceSaltingScope(
+          saltingScope(combinedSaltingValues(saltValues), catalog.salt ?? DEFAULT_SALT_SETTINGS, undefined, saltingAreas(saltValues)),
+          areaPrices[firstSalt]
+        );
+
+  const scopeSnapshot: ProposalZoneSnapshot[] = zones.flatMap((zone, index): ProposalZoneSnapshot[] => {
+    if (priced.salting[index] && index !== firstSalt) return [];
+    const salting = index === firstSalt;
     const def = scopeInputs[index].def;
     const pricingRow = zone.service ? pricingBy.get(zone.service.typeId) : undefined;
     const pricing = scopeInputs[index].pricing;
@@ -174,17 +194,16 @@ export async function generateProposal(
     // later asks to drop an area can be shown the price they were quoted
     // minus that area — rather than whatever today's rate card would say.
     const areaCost = own[index];
-    return {
+    return [{
       zoneName: zone.name,
       serviceLabel: serviceLabelFor(def, pricing),
       // Salting says its price in its words: at the price it came to.
       // Salting in its own area's words: a walkway is not "on the driveway"
       // because a driveway on the same job came first.
-      scopeText:
-        approved.get(zone.name) ??
-        (priced.salting[index] ? repriceSaltingScope(saltingScope(zone.service?.values ?? {}, catalog.salt ?? DEFAULT_SALT_SETTINGS), areaPrices[index]) : scopeTexts[index]),
-      photoPaths: zone.service?.photos ?? [],
+      scopeText: approved.get(zone.name) ?? (salting ? saltingText : scopeTexts[index]),
+      photoPaths: salting ? saltIndexes.flatMap((i) => zones[i].service?.photos ?? []) : (zone.service?.photos ?? []),
       points: zone.points,
+      ...(salting && saltIndexes.length > 1 ? { shapes: saltIndexes.slice(1).map((i) => zones[i].points) } : {}),
       color: zone.color,
       // With its share of the travel: the areas add up to the total.
       priceCents: areaPrices[index],
@@ -194,7 +213,7 @@ export async function generateProposal(
       // Who a client will actually meet, frozen with the rest of the quote.
       performedBy: pricingRow?.performed_by === "partner" ? "partner" : "own",
       partnerName: pricingRow?.partner_name ?? null,
-    };
+    }];
   });
 
   const siteImageTransform: ProposalSiteImageTransform | null = design.image_path
