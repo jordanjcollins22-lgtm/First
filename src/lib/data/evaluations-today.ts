@@ -51,13 +51,16 @@ export async function getEvaluationsToday(viewer: { id: string; seesAll: boolean
     .select(
       "id, status, evaluation_date, evaluation_status, evaluator_on_way_at, evaluator_arrived_at, evaluation_submitted_at, evaluation_plan, assignee:profiles!jobs_assigned_to_fkey(full_name, email), properties(address, customers(name, account_manager_id))"
     )
-    .gte("evaluation_date", from)
-    .lte("evaluation_date", to)
+    // Booked for today, or done today whenever it was booked for: a visit
+    // got to early is today's, and one already done on an earlier day is
+    // not something to go and do.
+    .or(`and(evaluation_date.gte."${from}",evaluation_date.lte."${to}"),and(evaluation_submitted_at.gte."${from}",evaluation_submitted_at.lte."${to}")`)
     .order("evaluation_date");
   const rows = ((data ?? []) as unknown as Row[]).filter(
     (r) =>
       r.status !== "cancelled" &&
       r.evaluation_status !== "cancelled" &&
+      !(r.evaluation_status === "completed" && r.evaluation_submitted_at && r.evaluation_submitted_at < from) &&
       (viewer.seesAll || r.properties?.customers?.account_manager_id === viewer.id)
   );
   if (rows.length === 0) return [];
