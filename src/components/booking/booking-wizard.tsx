@@ -842,7 +842,10 @@ export function BookingWizard({
             <select
               id="heardAbout"
               value={heardAbout}
-              onChange={(e) => setHeardAbout(e.target.value)}
+              onChange={(e) => {
+                setHeardAbout(e.target.value);
+                setError(null);
+              }}
               className="h-12 rounded-md border border-input bg-background px-3 text-base"
               required
             >
