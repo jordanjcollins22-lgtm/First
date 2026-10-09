@@ -43,6 +43,8 @@ export interface CalendarEvent {
   assignedTo: string | null;
   /** Short status line shown next to the event. */
   detail: string;
+  /** A completed evaluation: when it was booked for, since it now sits on the day it was done. */
+  scheduledFor?: string | null;
 }
 
 function dateKey(d: Date): string {
@@ -68,25 +70,47 @@ function daysBetween(startKey: string, endKey: string): string[] {
   return out;
 }
 
-/** Evaluations: one event on the day of the appointment. */
+/**
+ * Evaluations: one event on the day of the appointment, or, once it is done,
+ * on the day it was done. A visit got to a week early belongs on the day we
+ * were there, and it says when it was booked for, so getting there early
+ * shows.
+ */
 export function evaluationEvents(jobs: JobWithLocation[]): CalendarEvent[] {
   return jobs
     // A cancelled visit keeps its date so the history survives, which means
     // the date alone is not enough to put it on the calendar.
     .filter((j) => j.evaluation_date && j.evaluation_status !== "cancelled" && j.status !== "cancelled")
-    .map((j) => ({
-      id: `eval-${j.id}`,
-      layer: "evaluations" as const,
-      jobId: j.id,
-      date: dateKey(new Date(j.evaluation_date!)),
-      at: j.evaluation_date,
-      address: j.property.address,
-      customerName: j.property.customer.name,
-      lat: j.property.lat,
-      lng: j.property.lng,
-      assignedTo: j.assigned_to,
-      detail: EVALUATION_STATUS_LABELS[j.evaluation_status] ?? "Evaluation",
-    }));
+    .map((j) => {
+      const doneAt = j.evaluation_status === "completed" ? ((j as { evaluation_submitted_at?: string | null }).evaluation_submitted_at ?? null) : null;
+      const at = doneAt ?? j.evaluation_date!;
+      return {
+        id: `eval-${j.id}`,
+        layer: "evaluations" as const,
+        jobId: j.id,
+        date: dateKey(new Date(at)),
+        at,
+        address: j.property.address,
+        customerName: j.property.customer.name,
+        lat: j.property.lat,
+        lng: j.property.lng,
+        assignedTo: j.assigned_to,
+        detail: doneAt ? completedDetail(j.evaluation_date!, doneAt) : (EVALUATION_STATUS_LABELS[j.evaluation_status] ?? "Evaluation"),
+        scheduledFor: doneAt ? j.evaluation_date : null,
+      };
+    });
+}
+
+/** "Done 6 days early · booked for Oct 15", in the client's local days. */
+export function completedDetail(scheduledIso: string, doneIso: string): string {
+  const scheduled = new Date(scheduledIso);
+  const done = new Date(doneIso);
+  const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000;
+  const diff = day(scheduled) - day(done);
+  const booked = scheduled.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  if (diff === 0) return `Done on the day booked`;
+  const n = Math.abs(diff);
+  return `Done ${n} day${n === 1 ? "" : "s"} ${diff > 0 ? "early" : "late"} · booked for ${booked}`;
 }
 
 /**
