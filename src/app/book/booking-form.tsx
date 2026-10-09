@@ -150,6 +150,9 @@ export function BookingForm() {
       proof={options.proof}
       service={options.service}
       start={readStartAddress(searchParams)}
+      // ?preview=1 is the owner looking at it from the website studio: the
+      // arrows to step through it, no visit counted and nothing booked.
+      preview={searchParams.get("preview") === "1"}
     />
   );
 }

@@ -2,6 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { attributionReport } from "@/lib/data/attribution";
+import { loadWebsiteForEditor, type WebsiteState } from "@/lib/data/website";
+import { CHANNEL_LABEL } from "@/lib/attribution";
 
 /**
  * The live numbers behind the new four-page layout at /v2.
@@ -38,6 +41,8 @@ export interface V2Pillar {
   sub: string;
   blocks: V2Block[];
   links: { label: string; href: string }[];
+  /** A pillar with a screen of its own rather than blocks of numbers. */
+  view?: "website";
 }
 
 export interface V2Section {
@@ -47,6 +52,8 @@ export interface V2Section {
   groups: { a: { title: string; note: string }; b: { title: string; note: string } };
   pillars: V2Pillar[];
   loadedAt: string;
+  /** Marketing only: the website editor's content. */
+  website?: WebsiteState;
 }
 
 type Row = Record<string, unknown>;
@@ -118,12 +125,16 @@ const stamp = () =>
 /* Marketing                                                           */
 /* ------------------------------------------------------------------ */
 
+const PROSPECT_STATUSES = ["new", "queued", "contacted", "converted", "rejected"] as const;
+const PLAY_LABEL: Record<string, string> = { yard_sign: "Yard signs", knocks: "Door knocks", door_hangers: "Door hangers", flyers: "Flyers" };
+
 export async function loadMarketing(): Promise<V2Section> {
   const sb = await db();
   const [
     links, posts, profiles, referredJobs,
     newContacts, seen, answers, finder, bookVisits, booked, located, salt, mow,
-    reviews, proof, rank, adClicks, plays, prospects, campaigns, advances,
+    reviews, proof, rank, adClicks, plays, prospectCounts, campaigns, advances,
+    mailings, flyerRuns, pmCompanies, pmSent, groups, attribution, openPlays, website,
   ] = await Promise.all([
     rows(sb, "outreach_links", "platform,kind,click_count,profile_id,created_at,posted_comment,comment"),
     rows(sb, "social_posts", "status,channel,scheduled_for,hook,caption"),
@@ -143,9 +154,19 @@ export async function loadMarketing(): Promise<V2Section> {
     count(sb, "rank_keywords"),
     count(sb, "job_ad_clicks"),
     count(sb, "marketing_plays"),
-    count(sb, "lead_prospects"),
-    count(sb, "email_campaigns"),
+    Promise.all(PROSPECT_STATUSES.map((st) => count(sb, "lead_prospects", (q) => q.eq("status", st)))),
+    rows(sb, "email_campaigns", "name,status,service_label,started_at"),
     rows(sb, "commission_advances", "amount,status"),
+    rows(sb, "eddm_mailings", "name,pieces,status,mailed_on", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "flyer_runs", "name,mails_on,flyer_count,status", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "pm_companies", "status"),
+    count(sb, "pm_emails", (q) => q.eq("status", "sent")),
+    rows(sb, "community_groups", "name,platform,member_count,archived_at"),
+    attributionReport(365).catch(() => null),
+    rows(sb, "marketing_plays", "kind", (q) => q.eq("status", "open")),
+    getCurrentOrganizationId()
+      .then((id) => loadWebsiteForEditor(id))
+      .catch(() => null),
   ]);
 
   const name = (id: unknown) => {
@@ -162,6 +183,8 @@ export async function loadMarketing(): Promise<V2Section> {
   const refBy = tally(referredJobs, "referred_by_profile_id");
   const advanced = advances.filter((a) => a.status === "paid").reduce((s, a) => s + num(a.amount), 0);
   const latest = [...comments].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at))).slice(0, 4);
+  const prospectTotal = prospectCounts.reduce<number>((a, c) => a + (c ?? 0), 0);
+  const liveGroups = groups.filter((g) => !g.archived_at);
   const channels: [string, string][] = [
     ["facebook", "Facebook"], ["nextdoor", "Nextdoor"], ["instagram", "Instagram"],
     ["google", "Google Business posts"], ["tiktok", "TikTok"], ["youtube", "YouTube"],
@@ -182,7 +205,8 @@ export async function loadMarketing(): Promise<V2Section> {
     {
       id: "website", label: "Website", kind: "auto", who: ["owner"], group: "a",
       blurb: `${n(bookVisits)} visits · ${n(booked)} booked (30 days)`,
-      title: "Website", sub: "Pages and funnels that turn visitors into booked jobs.",
+      title: "Website", sub: "Your website and every page a customer lands on. Edit it, preview it on a phone or a desktop, and publish.",
+      view: "website",
       blocks: [
         { t: "Booking page", v: n(bookVisits), d: `Visits in 30 days · ${n(booked)} booked · ${pct(booked ?? 0, bookVisits ?? 0)}` },
         { t: "Salt pre-book", v: n(salt), d: "Prepaid ice melt orders" },
@@ -194,6 +218,90 @@ export async function loadMarketing(): Promise<V2Section> {
         { label: "Quick mow pipeline", href: "/mow-orders" },
         { label: "Salt route", href: "/admin/salt" },
       ],
+    },
+    {
+      id: "print", label: "Door hangers & mail", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(openPlays.length)} open plays · ${n(mailings.length)} mailings`,
+      title: "Door hangers & mail", sub: "Hangers, yard signs, flyers and every-door mail around the jobs we do.",
+      blocks: [
+        {
+          t: "Open plays", v: n(openPlays.length), d: "Set off by an evaluation or a client, waiting to go out",
+          rows: [...tally(openPlays, "kind")].map(([k, c]) => `${PLAY_LABEL[k] ?? k} · ${n(c)}`),
+        },
+        { t: "Plays in total", v: n(plays), d: "Every hanger run, sign, knock and flyer drop on file" },
+        {
+          t: "EDDM mailings", v: n(mailings.length), d: `${n(mailings.reduce((a, m) => a + num(m.pieces), 0))} pieces planned or mailed`,
+          rows: mailings.slice(0, 5).map((m) => `${str(m.name)} · ${n(num(m.pieces))} pieces · ${str(m.status)}${m.mailed_on ? ` · ${day(m.mailed_on)}` : ""}`),
+        },
+        {
+          t: "Shared flyer runs", v: n(flyerRuns.length), d: "Flyers with paid ad squares from other local businesses",
+          rows: flyerRuns.slice(0, 5).map((f) => `${str(f.name)} · ${n(num(f.flyer_count))} flyers · ${str(f.status)}${f.mails_on ? ` · ${day(f.mails_on)}` : ""}`),
+        },
+      ],
+      links: [],
+    },
+    {
+      id: "lists", label: "Lead lists", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(prospectTotal)} property owners`,
+      title: "Lead lists", sub: "Property owners to reach, and where each one has got to.",
+      blocks: [
+        {
+          t: "Prospects", v: n(prospectTotal), d: "Owners and addresses on file",
+          rows: PROSPECT_STATUSES.map((st, i) => `${st[0].toUpperCase() + st.slice(1)} · ${n(prospectCounts[i])}`),
+        },
+      ],
+      links: [],
+    },
+    {
+      id: "email", label: "Email campaigns", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(campaigns.filter((c) => c.status === "running").length)} running`,
+      title: "Email campaigns", sub: "Offers emailed to past and nearby clients, a few at a time.",
+      blocks: [
+        {
+          t: "Campaigns", v: n(campaigns.length), d: "Draft, running, paused and done",
+          rows: campaigns.map((c) => `${str(c.name)} · ${str(c.service_label)} · ${str(c.status)}${c.started_at ? ` · started ${day(c.started_at)}` : ""}`),
+        },
+      ],
+      links: [],
+    },
+    {
+      id: "pm", label: "Property managers", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(pmCompanies.length)} companies · ${n(pmSent)} emails sent`,
+      title: "Property managers", sub: "Cold email to local property management companies, in your words, a few each weekday.",
+      blocks: [
+        { t: "Companies", v: n(pmCompanies.length), d: "Found and on the list", rows: [...tally(pmCompanies, "status")].map(([k, c]) => `${k.replace(/_/g, " ")} · ${n(c)}`) },
+        { t: "Emails sent", v: n(pmSent), d: `${n(pmCompanies.filter((c) => c.status === "replied" || c.status === "interested").length)} replied or interested` },
+      ],
+      links: [],
+    },
+    {
+      id: "groups", label: "Local groups", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(liveGroups.length)} groups`,
+      title: "Local groups", sub: "The neighborhood groups we run, and the businesses that pay to post in them.",
+      blocks: [
+        {
+          t: "Groups we run", v: n(liveGroups.length), d: "Members as last counted",
+          rows: liveGroups.map((g) => `${str(g.name)} · ${str(g.platform)}${g.member_count == null ? "" : ` · ${n(num(g.member_count))} members`}`),
+        },
+      ],
+      links: [],
+    },
+    {
+      id: "worked", label: "What worked", kind: "auto", who: ["owner"], group: "a",
+      blurb: attribution ? `${usd(attribution.totals.totalRevenueCents / 100)} traced over a year` : "Not available",
+      title: "What worked", sub: "Money actually received in the last year, traced back to what brought it in.",
+      blocks: attribution
+        ? [
+            {
+              t: "By channel", v: usd(attribution.totals.totalRevenueCents / 100), d: `${n(attribution.totals.totalJobs)} paid jobs`,
+              rows: attribution.totals.channels.map((c) => `${CHANNEL_LABEL[c.channel]} · ${usd(c.revenueCents / 100)} · ${n(c.jobs)} jobs${c.inferredJobs ? ` (${n(c.inferredJobs)} inferred)` : ""}`),
+            },
+            { t: "Couldn't be told apart", v: usd(attribution.totals.unknown.revenueCents / 100), d: `${n(attribution.totals.unknown.jobs)} jobs a campaign may have reached` },
+            { t: "Nothing recorded", v: usd(attribution.totals.unattributed.revenueCents / 100), d: `${n(attribution.totals.unattributed.jobs)} jobs no campaign reached` },
+            ...(attribution.health.length ? [{ t: "Read this first", v: "", d: "What the numbers can and can't support", rows: attribution.health }] : []),
+          ]
+        : [{ t: "Not available", v: "—", d: "The report couldn't be read for this account" }],
+      links: [],
     },
     {
       id: "seo", label: "SEO", kind: "auto", who: ["owner"], group: "a",
@@ -286,14 +394,11 @@ export async function loadMarketing(): Promise<V2Section> {
       b: { title: "Get lead getters", note: "Affiliates share a personal link and earn on every project it brings in." },
     },
     pillars: [
-      overview("Marketing overview", "Two jobs: bring in leads automatically, and grow the people who bring in work.", [
-        { t: "Door hangers & mail", v: n(plays), d: "Marketing plays on file — no tab in the new layout yet" },
-        { t: "Lead prospect list", v: n(prospects), d: "Property owners — no tab in the new layout yet" },
-        { t: "Email campaigns", v: n(campaigns), d: "No tab in the new layout yet" },
-      ], [{ label: "Current marketing page", href: "/marketing" }]),
+      overview("Marketing overview", "Two jobs: bring in leads automatically, and grow the people who bring in work.", [], [{ label: "Current marketing page", href: "/marketing" }]),
       ...pillars,
     ],
     loadedAt: stamp(),
+    website: website ?? undefined,
   };
 }
 

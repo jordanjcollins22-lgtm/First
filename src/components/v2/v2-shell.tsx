@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
+import { WebsiteStudio } from "@/components/v2/website-studio";
 
 /**
  * The new four-page layout: one page per department, a bar of pillars across
@@ -124,7 +125,13 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
 
       {current && current.id === "overview" && <Overview section={section} pillar={current} role={role} open={setPillarId} />}
       {current && current.id === "tasks" && <TaskList unplaced={unplaced ?? []} />}
-      {current && current.id !== "overview" && current.id !== "tasks" && <Detail pillar={current} />}
+      {current && current.view === "website" && section.website && (
+        <div className="grid gap-5">
+          <Blocks pillar={current} />
+          <WebsiteStudio website={section.website} />
+        </div>
+      )}
+      {current && current.id !== "overview" && current.id !== "tasks" && !(current.view === "website" && section.website) && <Detail pillar={current} />}
 
     </div>
   );
@@ -210,7 +217,13 @@ const TASKS: [string, [string, Status, string][]][] = [
   ["Marketing", [
     ["Overview", "Partly built", "Shell is live here. Numbers come from the tabs below."],
     ["Google Ads", "Not built", "No account connected. Bookings already record ad click IDs."],
-    ["Website", "Partly built", "Booking, quick-mow and salt pages exist. Instant address booking only has the locate-me button."],
+    ["Website", "Partly built", "Website editor and live previews are here. Still to do: point the business's own domain at /site, and add photos and reviews to it."],
+    ["Door hangers & mail", "Partly built", "Numbers are here. Planning a run or a mailing is still only in the current app."],
+    ["Lead lists", "Partly built", "Counts are here. Importing and working a list is still only in the current app."],
+    ["Email campaigns", "Partly built", "Campaigns are listed. Writing and starting one is still only in the current app."],
+    ["Property managers", "Partly built", "Numbers are here. Approving the emails is still only in the current app."],
+    ["Local groups", "Partly built", "Groups are listed. Group rules and paid posts are still only in the current app."],
+    ["What worked", "Partly built", "Revenue by channel is here."],
     ["SEO", "Partly built", "Reviews work. Keyword tracker is empty; Business Profile stats not connected."],
     ["Social media › Facebook & Nextdoor", "Partly built", "Tracked links work. Scheduled posts aren't publishing on their date."],
     ["Social media › Instagram, Google Business posts, TikTok, YouTube", "Not built", "Nothing on these channels yet."],
