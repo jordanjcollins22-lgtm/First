@@ -130,6 +130,8 @@ export interface Job {
   project_end_date: string | null;
   client_notes: string | null;
   budget_range: string | null;
+  /** "How did you hear about us?", asked on every booking. Null on older jobs. */
+  heard_about: string | null;
   referred_by_profile_id: string | null;
   /** Somebody said this second job at the address is more work, not a copy. */
   duplicate_cleared_at: string | null;

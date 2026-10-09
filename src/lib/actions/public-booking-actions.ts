@@ -14,6 +14,7 @@ import { getBookingNotice } from "@/lib/data/public-booking";
 import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
 import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
+import { heardAboutAnswer, heardAboutProblem } from "@/lib/heard-about";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
@@ -42,6 +43,10 @@ export interface SubmitPublicBookingInput {
   requestedServiceTypeIds: string[];
   notes: string;
   budgetRange: string;
+  /** "How did you hear about us?": one of HEARD_ABOUT_OPTIONS. Required. */
+  heardAbout: string;
+  /** What they typed when the answer was "Other". */
+  heardAboutOther?: string | null;
   /** The code off a posted recommendation link, if this came through one. */
   referralCode?: string | null;
   /** The address test: which side this browser was on, how the address went in, and the visit it came from. */
@@ -159,6 +164,11 @@ async function makePublicBooking(
   if (budgetRange && !BUDGET_RANGES.includes(budgetRange as (typeof BUDGET_RANGES)[number])) {
     throw new Error("Select a budget range.");
   }
+  // Required, and checked here as well as on the page: most bookings before
+  // this had no source, so nobody could tell which marketing was working.
+  const heardAboutIssue = heardAboutProblem(input.heardAbout, input.heardAboutOther);
+  if (heardAboutIssue) throw new Error(heardAboutIssue);
+  const heardAbout = heardAboutAnswer(input.heardAbout, input.heardAboutOther);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) {
     throw new Error("Select a date and time.");
   }
@@ -320,6 +330,7 @@ async function makePublicBooking(
       address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
       client_notes: input.notes.trim() || null,
       budget_range: budgetRange || null,
+      heard_about: heardAbout,
       referred_by_profile_id: input.referredByProfileId,
     })
     .select()

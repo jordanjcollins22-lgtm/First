@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { heardAboutAnswer } from "@/lib/heard-about";
 import { claimBooking, releaseClaim, settleClaim } from "@/lib/data/booking-claims";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
@@ -312,6 +313,10 @@ export interface ManualEvaluationInput {
   /** Who is going. Optional: the office books first and assigns second often. */
   evaluatorId?: string | null;
   notes?: string | null;
+  /** "How did you hear about us?": one of HEARD_ABOUT_OPTIONS. Required. */
+  heardAbout?: string | null;
+  /** What they said when the answer was "Other". */
+  heardAboutOther?: string | null;
 }
 
 export type BookedEvaluation =
@@ -371,6 +376,11 @@ async function makeEvaluationBooking(input: ManualEvaluationInput): Promise<Book
     const start = new Date(input.startsAt);
     if (Number.isNaN(start.getTime())) return { ok: false, message: "That is not a date and time." };
 
+    // Required on every booking, phone ones included: most evaluations used
+    // to have no source, so nobody could tell which marketing was working.
+    const heardAbout = heardAboutAnswer(input.heardAbout, input.heardAboutOther);
+    if (!heardAbout) return { ok: false, message: "Ask them how they heard about us." };
+
     const minutes = Math.max(15, Math.min(480, Math.round(Number(input.minutes) || 60)));
     const end = new Date(start.getTime() + minutes * 60_000);
 
@@ -400,6 +410,7 @@ async function makeEvaluationBooking(input: ManualEvaluationInput): Promise<Book
         evaluation_status: "scheduled",
         evaluation_mode: modeForAddress(input.lat ?? null, input.lng ?? null, address).mode,
         client_notes: input.notes?.trim() || null,
+        heard_about: heardAbout,
       })
       .select("id")
       .single();

@@ -183,6 +183,7 @@ export default async function JobPage({
     photos_approved_by: string | null;
     client_notes: string | null;
     budget_range: string | null;
+    heard_about: string | null;
     ghl_appointment_id: string | null;
     assigned_to: string | null;
     property: {
@@ -396,7 +397,7 @@ export default async function JobPage({
   );
   // What they told us before the visit. Null when this job has no evaluation.
   const intake = job.evaluation_date ? await getIntakeForJob(jobId).catch(() => null) : null;
-  const hasClientRequest = Boolean(intake) || requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
+  const hasClientRequest = Boolean(intake) || requestedServiceNames.length > 0 || job.client_notes || job.budget_range || job.heard_about;
 
   const zones = design ? ((design.zones as unknown as WorkZone[]).filter((z) => z.service)) : [];
   // What the job costs us and what it prices at, from the same function the
@@ -1168,6 +1169,12 @@ export default async function JobPage({
                         <p>
                           <span className="text-muted-foreground">Services: </span>
                           {requestedServiceNames.join(", ")}
+                        </p>
+                      )}
+                      {job.heard_about && (
+                        <p>
+                          <span className="text-muted-foreground">Heard about us: </span>
+                          {job.heard_about}
                         </p>
                       )}
                       {job.budget_range && (

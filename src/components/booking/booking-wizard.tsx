@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { readAdClick, type AdClick } from "@/lib/ad-click";
+import { HEARD_ABOUT_OPTIONS, heardAboutProblem } from "@/lib/heard-about";
 import { cn } from "@/lib/utils";
 import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
 import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
@@ -200,6 +201,8 @@ export function BookingWizard({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
+  const [heardAboutOther, setHeardAboutOther] = useState("");
   const [addressQuery, setAddressQuery] = useState("");
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<GeocodeSuggestion | null>(null);
@@ -434,7 +437,7 @@ export function BookingWizard({
     if (!firstName.trim() || !lastName.trim()) return "Enter your first and last name.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
     if (!phone.trim()) return "Enter a phone number.";
-    return null;
+    return heardAboutProblem(heardAbout, heardAboutOther);
   }
 
   function handleSubmit() {
@@ -472,6 +475,8 @@ export function BookingWizard({
           notes: service ? `Asked about ${service} in the post we answered.` : "",
           // Not asked any more: the pre-evaluation form covers what they want.
           budgetRange: "Not sure yet",
+          heardAbout,
+          heardAboutOther,
         });
         // Kept in their own browser so a second booking is a tap rather than
         // the same four fields typed again on a phone.
@@ -830,6 +835,36 @@ export function BookingWizard({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="phone">Phone</Label>
             <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" autoComplete="tel" />
+          </div>
+          {/* Required: without it nobody can tell which marketing is bringing in work. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="heardAbout">How did you hear about us?</Label>
+            <select
+              id="heardAbout"
+              value={heardAbout}
+              onChange={(e) => setHeardAbout(e.target.value)}
+              className="h-12 rounded-md border border-input bg-background px-3 text-base"
+              required
+            >
+              <option value="" disabled>
+                Choose one
+              </option>
+              {HEARD_ABOUT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            {heardAbout === "Other" && (
+              <Input
+                id="heardAboutOther"
+                value={heardAboutOther}
+                onChange={(e) => setHeardAboutOther(e.target.value)}
+                placeholder="Where did you hear about us?"
+                maxLength={80}
+                className="h-12 text-base"
+              />
+            )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">

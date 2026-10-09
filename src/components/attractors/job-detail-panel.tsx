@@ -118,12 +118,18 @@ export function JobDetailPanel({
         Open job <ExternalLink className="h-3 w-3" />
       </Link>
 
-      {(job.budget_range || job.client_notes || referredBy) && (
+      {(job.budget_range || job.client_notes || job.heard_about || referredBy) && (
         <div className="flex flex-col gap-1 rounded-lg border border-border bg-muted/30 p-2.5 text-xs">
           {referredBy && (
             <p>
               <span className="text-muted-foreground">Booked via: </span>
               {referredBy.full_name || referredBy.email}&apos;s link
+            </p>
+          )}
+          {job.heard_about && (
+            <p>
+              <span className="text-muted-foreground">Heard about us: </span>
+              {job.heard_about}
             </p>
           )}
           {job.budget_range && (

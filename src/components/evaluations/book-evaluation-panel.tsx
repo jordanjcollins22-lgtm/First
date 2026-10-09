@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { bookEvaluation } from "@/lib/actions/property-actions";
+import { HEARD_ABOUT_OPTIONS, heardAboutAnswer } from "@/lib/heard-about";
 
 /**
  * Booking an evaluation the way the office actually takes one: on the phone.
@@ -43,10 +44,12 @@ export function BookEvaluationPanel({
   const [minutes, setMinutes] = useState(60);
   const [evaluatorId, setEvaluatorId] = useState("");
   const [notes, setNotes] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
+  const [heardAboutOther, setHeardAboutOther] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  const ready = name.trim() !== "" && picked != null && startsAt !== "";
+  const ready = name.trim() !== "" && picked != null && startsAt !== "" && heardAboutAnswer(heardAbout, heardAboutOther) != null;
 
   function submit() {
     setError(null);
@@ -66,6 +69,8 @@ export function BookEvaluationPanel({
         minutes,
         evaluatorId: evaluatorId || null,
         notes: notes || null,
+        heardAbout,
+        heardAboutOther,
       });
 
       if (!result.ok) {
@@ -79,6 +84,8 @@ export function BookEvaluationPanel({
       setPicked(null);
       setStartsAt("");
       setNotes("");
+      setHeardAbout("");
+      setHeardAboutOther("");
       router.refresh();
     });
   }
@@ -174,6 +181,34 @@ export function BookEvaluationPanel({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Required: ask them on the call. Without it nobody can tell which
+              marketing is bringing in work. */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="book-heard" className="text-xs font-medium">
+                How did they hear about us?
+              </label>
+              <select
+                id="book-heard"
+                value={heardAbout}
+                onChange={(event) => setHeardAbout(event.target.value)}
+                className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+              >
+                <option value="" disabled>
+                  Ask them
+                </option>
+                {HEARD_ABOUT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {heardAbout === "Other" && (
+              <Field id="book-heard-other" label="Where?" value={heardAboutOther} onChange={setHeardAboutOther} />
+            )}
           </div>
 
           <div className="flex flex-col gap-1">
