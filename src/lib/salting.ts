@@ -232,7 +232,9 @@ export function combinedSaltingValues(areas: Record<string, string | undefined>[
   const orders = areas.map((values) => ({ values, order: saltingOrder(values) }));
   // An area named in its own words ("Back deck", "Stairs") is walked and
   // salted like a walkway.
-  const surfaces = new Set(orders.map(({ values, order }) => (values.surface === "Other" ? "sidewalks" : order.surface)));
+  const surfaces = new Set(
+    orders.map(({ values, order }) => (SALTING_SURFACES.some((s) => s.label === values.surface) ? order.surface : "sidewalks"))
+  );
   const surface: Surface =
     surfaces.has("both") || (surfaces.has("driveway") && surfaces.has("sidewalks")) ? "both" : surfaces.has("driveway") ? "driveway" : "sidewalks";
   return {
@@ -242,14 +244,17 @@ export function combinedSaltingValues(areas: Record<string, string | undefined>[
   };
 }
 
-/** The areas in the client's words: "the driveway, the sidewalks and walkways and the back deck". */
+/** The areas in the client's words: "the driveway, the stairs and the sidewalks and walkways", driveways first. */
 export function saltingAreas(areas: Record<string, string | undefined>[]): string {
+  const named = areas.map((values) => {
+    const listed = SALTING_SURFACES.find((s) => s.label === values.surface);
+    // "Other" with its own words, or anything typed in place of a listed
+    // surface ("Stairs"), is called what the evaluator called it.
+    const own = values.surface === "Other" ? values.surface__other?.trim() : !listed ? values.surface?.trim() : null;
+    return { name: (own || listed?.label || SALTING_SURFACES[0].label).toLowerCase(), driveway: listed?.surface === "driveway" || listed?.surface === "both" };
+  });
   const names: string[] = [];
-  for (const values of areas) {
-    const own = values.surface === "Other" ? values.surface__other?.trim() : null;
-    const name = (own || saltingOrder(values).surfaceLabel).toLowerCase();
-    if (!names.includes(name)) names.push(name);
-  }
+  for (const { name } of [...named.filter((n) => n.driveway), ...named.filter((n) => !n.driveway)]) if (!names.includes(name)) names.push(name);
   const the = names.map((n) => `the ${n}`);
   return the.length <= 1 ? (the[0] ?? "the driveway and walkways") : `${the.slice(0, -1).join(", ")} and ${the[the.length - 1]}`;
 }

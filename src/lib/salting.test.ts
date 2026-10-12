@@ -102,5 +102,10 @@ describe("every salting area at one house, sold as one", () => {
       saltingAreas([{ surface: "Driveway" }, { surface: "Sidewalks and walkways" }, { surface: "Sidewalks and walkways" }, { surface: "Other", surface__other: "Back deck" }])
     ).toBe("the driveway, the sidewalks and walkways and the back deck");
     expect(saltingAreas([{ surface: "Driveway" }])).toBe("the driveway");
+    // Typed in place of a listed surface, and driveways first.
+    expect(saltingAreas([{ surface: "Sidewalks and walkways" }, { surface: "Stairs" }, { surface: "Driveway" }])).toBe(
+      "the driveway, the sidewalks and walkways and the stairs"
+    );
+    expect(combinedSaltingValues([{ surface: "Stairs" }, { surface: "Sidewalks and walkways" }]).surface).toBe("Sidewalks and walkways");
   });
 });
