@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { PriceCard } from "@/components/proposal/price-approvals";
@@ -16,6 +17,15 @@ const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { m
  */
 export function PriceQueue({ items, initialOpen = null }: { items: PriceApproval[]; initialOpen?: string | null }) {
   const [open, setOpen] = useState<string | null>(initialOpen ?? (items.length === 1 ? items[0].jobId : null));
+  const router = useRouter();
+  // An evaluation still going on: its areas come in as the evaluator adds
+  // them, so the list looks again every 20 seconds while one is open.
+  const live = items.some((i) => i.evaluating);
+  useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => router.refresh(), 20_000);
+    return () => clearInterval(timer);
+  }, [live, router]);
   // Opened from an evaluation's Price it: brought into view.
   useEffect(() => {
     if (initialOpen) document.getElementById(`price-${initialOpen}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -56,14 +66,15 @@ export function PriceQueue({ items, initialOpen = null }: { items: PriceApproval
                 <span
                   className={cn(
                     "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                    item.stage === "price" ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"
+                    item.evaluating ? "bg-amber-100 text-amber-900" : item.stage === "price" ? "bg-emerald-100 text-emerald-800" : "bg-sky-100 text-sky-800"
                   )}
                 >
-                  {item.stage === "price" ? "Ready to price" : "Ready to send"}
+                  {item.evaluating ? `Evaluating now · ${item.areaCount} area${item.areaCount === 1 ? "" : "s"}` : item.stage === "price" ? "Ready to price" : "Ready to send"}
                 </span>
                 {item.stage === "send" && <span className="shrink-0 text-sm font-semibold tabular-nums">{dollars(item.totalCents)}</span>}
               </button>
-              {on && <PriceCard item={item} />}
+              {/* Started afresh when another area comes in, so it prices every area there is. */}
+              {on && <PriceCard key={`${item.jobId}-${item.areaCount}`} item={item} />}
             </li>
           );
         })}
