@@ -48,3 +48,6 @@ next-env.d.ts
 research_notes/
 reports/
 .claude/worktrees/
+
+# Supabase CLI local state
+supabase/.temp/
