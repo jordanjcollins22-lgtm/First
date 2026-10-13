@@ -100,6 +100,10 @@ export function findRoleProblems(people: PersonForMapping[]): MappingFinding[] {
     const roles = p.roles.filter(Boolean);
     const keys = roleKeysOf(roles);
 
+    // The affiliate flag is a role of its own in the new layout: somebody who
+    // holds it and nothing else needs no decision.
+    if (keys.length === 0 && roles.length === 0 && p.isAffiliate) continue;
+
     if (keys.length === 0) {
       const key = suggestRoleKey(p);
       const held = roles.length ? `Holds ${roles.map((r) => `"${r}"`).join(", ")}, which none of the five roles recognise.` : "Holds no role.";

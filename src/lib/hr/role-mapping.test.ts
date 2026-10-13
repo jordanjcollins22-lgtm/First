@@ -14,6 +14,11 @@ const person = (over: Partial<PersonForMapping>): PersonForMapping => ({
 });
 
 describe("findRoleProblems", () => {
+  it("leaves alone somebody who is only an affiliate", () => {
+    expect(findRoleProblems([person({ roles: [], isAffiliate: true })])).toEqual([]);
+  });
+
+
   it("passes people who hold a RoleKey and nothing odd", () => {
     expect(findRoleProblems([person({ roles: ["admin"] }), person({ roles: ["crew"] }), person({ roles: ["account manager"] })])).toEqual([]);
   });

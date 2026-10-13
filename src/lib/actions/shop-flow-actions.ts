@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { getCrewDay, localDayKey } from "@/lib/data/crew-day";
@@ -183,10 +184,15 @@ export async function headOut(input: { shopDayId: string; firstJobId: string }):
     const supabase = gate.supabase;
     const organizationId = await getCurrentOrganizationId();
     const day = localDayKey();
+    // A person may only read and write their own day's taps, but the lead
+    // sends the whole crew out: read and write past that, for this business,
+    // today, and only the people on the first stop's crew. The lead check
+    // above is what allows it.
+    const admin = createAdminClient();
 
     const [{ data: crewRows }, { data: eventRows }] = await Promise.all([
       supabase.from("job_crew").select("profile_id").eq("job_id", input.firstJobId),
-      supabase.from("crew_day_events").select("profile_id, kind").eq("day", day),
+      admin.from("crew_day_events").select("profile_id, kind").eq("organization_id", organizationId).eq("day", day),
     ]);
     const onJob = new Set(((crewRows ?? []) as { profile_id: string }[]).map((r) => r.profile_id));
     const byPerson = new Map<string, Set<string>>();
@@ -204,7 +210,7 @@ export async function headOut(input: { shopDayId: string; firstJobId: string }):
       rows.push({ organization_id: organizationId, profile_id: profileId, day, kind: "travelling", job_id: input.firstJobId, at: new Date(now + 1000).toISOString() });
     }
     if (rows.length > 0) {
-      const { error } = await supabase.from("crew_day_events").insert(rows);
+      const { error } = await admin.from("crew_day_events").insert(rows);
       if (error) return { ok: false, message: describeDbError(error) };
     }
     const { error } = await supabase

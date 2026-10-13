@@ -57,7 +57,7 @@ export function TutorialRunner({ tours, autoStart }: { tours: Tour[]; autoStart:
         <HelpCircle className="h-5 w-5" /> Help
       </button>
       {step && (
-        <div className="fixed inset-x-0 bottom-0 z-[60] flex justify-center p-3 sm:bottom-6" role="dialog" aria-modal="false" aria-label={step.title}>
+        <div className="fixed inset-x-0 bottom-0 z-[70] flex justify-center p-3 sm:bottom-6" role="dialog" aria-modal="false" aria-label={step.title}>
           <div className="w-full max-w-md rounded-2xl border bg-card p-4 shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {step.tour.title} · {i + 1} of {steps.length}
