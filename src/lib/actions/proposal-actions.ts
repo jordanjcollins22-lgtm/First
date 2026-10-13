@@ -201,7 +201,11 @@ export async function generateProposal(
       // Salting says its price in its words: at the price it came to.
       // Salting in its own area's words: a walkway is not "on the driveway"
       // because a driveway on the same job came first.
-      scopeText: approved.get(zone.name) ?? (salting ? saltingText : scopeTexts[index]),
+      // Salting says its price in its words, so approved words are brought to
+      // the price this rebuild came to: never "$375 in all" on a $285 line.
+      scopeText: salting
+        ? repriceSaltingScope(approved.get(zone.name) ?? saltingText, areaPrices[index])
+        : (approved.get(zone.name) ?? scopeTexts[index]),
       photoPaths: salting ? saltIndexes.flatMap((i) => zones[i].service?.photos ?? []) : (zone.service?.photos ?? []),
       points: zone.points,
       ...(salting && saltIndexes.length > 1 ? { shapes: saltIndexes.slice(1).map((i) => zones[i].points) } : {}),
