@@ -2,10 +2,13 @@ import type { ReactNode } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import type { BackOfficeItem } from "@/lib/data/back-office-queue";
+import { backOfficeRef } from "@/lib/entities/handlers/admin-format";
+import { OpenButton } from "./admin-open";
 
 /**
  * The layout pieces the back-office panels share, rendered on the server:
- * the needs-you strip at the top, the KPI tiles, and the automation card.
+ * the needs-you strip at the top (each item opens in the drawer), the KPI
+ * tiles, and the automation card.
  */
 
 /** The strip of things that need a person. Empty is a good answer and says so. */
@@ -19,16 +22,20 @@ export function NeedsYouStrip({ items, renderAction }: { items: BackOfficeItem[]
   }
   return (
     <ul className="grid gap-2">
-      {items.map((item) => (
-        <li key={item.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 dark:border-orange-800 dark:bg-orange-950/40">
-          <AlertTriangle className="h-4 w-4 shrink-0 text-orange-700 dark:text-orange-300" />
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold">{item.title}</p>
-            {item.detail && <p className="text-sm text-muted-foreground">{item.detail}</p>}
-          </div>
-          {renderAction?.(item)}
-        </li>
-      ))}
+      {items.map((item) => {
+        const ref = backOfficeRef(item.key);
+        return (
+          <li key={item.key} className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-300 bg-orange-50 px-4 py-3 dark:border-orange-800 dark:bg-orange-950/40">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-orange-700 dark:text-orange-300" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">{item.title}</p>
+              {item.detail && <p className="text-sm text-muted-foreground">{item.detail}</p>}
+            </div>
+            {renderAction?.(item)}
+            {ref && <OpenButton kind={ref.kind} id={ref.id} />}
+          </li>
+        );
+      })}
     </ul>
   );
 }

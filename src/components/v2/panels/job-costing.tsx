@@ -1,10 +1,9 @@
-import Link from "next/link";
-
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadJobCosting } from "@/lib/data/ops-panels";
 import { money, hours } from "@/lib/ops/kpis";
 import { RecomputeButton } from "@/components/v2/panels/ops-autopilot-client";
 import { NotReady, SectionTitle, shortDate } from "@/components/v2/panels/ops-shared";
+import { OpenButton, OpenEntity } from "@/components/v2/panels/admin-open";
 
 /**
  * Admin › Finance: what each finished job really cost.
@@ -38,9 +37,7 @@ export async function JobCostingPanel() {
                     {hours(r.actualHours)} worked against {hours(r.budgetHours)} budgeted ({Math.round(r.hoursVariancePct ?? 0)}% over).
                   </span>
                 </span>
-                <Link href={`/jobs/${r.jobId}`} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-semibold hover:bg-muted">
-                  Open job
-                </Link>
+                <OpenButton kind="admin.job" id={r.jobId} label="Open job" />
               </li>
             ))}
           </ul>
@@ -70,9 +67,9 @@ export async function JobCostingPanel() {
             {data.rows.map((r) => (
               <li key={r.jobId} className="grid gap-2 rounded-xl border bg-card p-3">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <Link href={`/jobs/${r.jobId}`} className="min-w-0 flex-1 font-semibold hover:underline">
+                  <OpenEntity kind="admin.job" id={r.jobId} className="min-w-0 flex-1 font-semibold">
                     {r.name}
-                  </Link>
+                  </OpenEntity>
                   <span className="text-xs text-muted-foreground">
                     {r.final ? "Final" : "Provisional"} · {shortDate(r.computedAt)}
                   </span>
@@ -122,7 +119,9 @@ export async function JobCostingPanel() {
           <ul className="grid gap-1.5">
             {data.uncosted.slice(0, 20).map((j) => (
               <li key={j.jobId} className="flex flex-wrap items-center gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
-                <span className="min-w-0 flex-1">{j.name}</span>
+                <OpenEntity kind="admin.job" id={j.jobId} className="min-w-0 flex-1">
+                  {j.name}
+                </OpenEntity>
                 <RecomputeButton jobId={j.jobId} />
               </li>
             ))}

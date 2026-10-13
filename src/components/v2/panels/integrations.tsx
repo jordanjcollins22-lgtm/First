@@ -7,6 +7,7 @@ import { allProviders } from "@/lib/integrations/catalog";
 import { redirectUriFor } from "@/lib/integrations/oauth";
 import { listIntegrations } from "@/lib/integrations/store";
 import { IntegrationCard, OAuthReturnNotice, type ProviderView } from "@/components/v2/panels/integrations-client";
+import { OpenButton } from "@/components/v2/panels/admin-open";
 
 /**
  * Admin › Settings › Integrations: every login and key the business needs,
@@ -79,13 +80,19 @@ export async function IntegrationsPanel() {
       {(broken.length > 0 || missingExisting.length > 0) && (
         <ul className="space-y-2" aria-label="Needs you">
           {broken.map((p) => (
-            <li key={p.id} className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">
-              <b>{p.name}</b> isn&apos;t working{p.lastError ? `: ${p.lastError}` : "."} Open its card below and press Test or Connect.
+            <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">
+              <span className="min-w-0 flex-1">
+                <b>{p.name}</b> isn&apos;t working{p.lastError ? `: ${p.lastError}` : "."} Open it to test it, or press Connect on its card below.
+              </span>
+              <OpenButton kind="admin.integration" id={p.id} />
             </li>
           ))}
           {missingExisting.map((c) => (
-            <li key={c.id} className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-              <b>{c.name}</b> is {c.status === "missing" ? "not set up" : "partly set up"}: missing {c.checks.filter((k) => !k.present && !k.optional).map((k) => k.name).join(", ")}.
+            <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+              <span className="min-w-0 flex-1">
+                <b>{c.name}</b> is {c.status === "missing" ? "not set up" : "partly set up"}: missing {c.checks.filter((k) => !k.present && !k.optional).map((k) => k.name).join(", ")}.
+              </span>
+              <OpenButton kind="admin.integration" id={c.id} />
             </li>
           ))}
         </ul>
@@ -178,11 +185,7 @@ function ExistingCard({ c }: { c: AppConnection }) {
             ))}
           </ol>
         )}
-        {c.settingsHref && (
-          <a href={c.settingsHref} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
-            Open its settings
-          </a>
-        )}
+        <OpenButton kind="admin.integration" id={c.id} />
       </div>
     </details>
   );

@@ -1,16 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { approveQueueItem, declineQueueItem } from "@/lib/actions/approval-queue-actions";
 import { DECLINE_REASONS, DECLINE_REASON_LABEL, type DeclineReason } from "@/lib/approvals/declines";
 import { QUEUE_TYPE_LABEL, type QueueItem } from "@/lib/approvals/queue";
 import { staleLine } from "@/lib/outbound-approval";
+import { OpenButton } from "@/components/v2/panels/admin-open";
 
 /**
  * One row per thing waiting on the owner, with one button to say yes, one
- * tap for a reason to say no, and a link to open it in full. An email's
+ * tap for a reason to say no, and Open for the whole thing in the drawer. An email's
  * words open in place, because reading it is the approval.
  */
 export function ApprovalQueueList({ items }: { items: QueueItem[] }) {
@@ -83,11 +83,7 @@ export function ApprovalQueueList({ items }: { items: QueueItem[] }) {
                     {item.type === "price" ? "Change price" : "Decline"}
                   </button>
                 )}
-                {item.href && (
-                  <Link href={item.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-semibold">
-                    Open
-                  </Link>
-                )}
+                <OpenButton kind="admin.queue_item" id={`${item.type}:${item.id}`} />
               </div>
             </div>
 

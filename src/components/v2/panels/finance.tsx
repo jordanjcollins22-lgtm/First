@@ -7,6 +7,7 @@ import { achFeeCents, cardFeeCents } from "@/lib/finance/fees";
 import { DIVISION_BAND, type Tone } from "@/lib/finance/metrics";
 import { log } from "@/lib/log";
 import { AutopayList, FinanceSettingsForm, PayrollCard, QboSyncCard } from "@/components/v2/panels/finance-client";
+import { OpenEntity } from "@/components/v2/panels/admin-open";
 
 /**
  * Admin › Finance: the owner's money in one screen. What needs a person
@@ -178,7 +179,9 @@ export async function FinancePanel() {
               .slice(0, 10)
               .map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
-                  <span className="min-w-0 flex-1 font-medium">{r.customerName}</span>
+                  <OpenEntity kind="admin.invoice" id={r.id} className="min-h-11 min-w-0 flex-1 font-medium">
+                    {r.customerName}
+                  </OpenEntity>
                   <span className="font-mono">{usd(r.amount)}</span>
                   <span className="text-muted-foreground">{r.daysLate} days late</span>
                   {r.hostedUrl && (
