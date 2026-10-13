@@ -32,7 +32,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   google_places: "Rank tracker key",
 };
 
-const INTEGRATIONS_HREF = "/v2/admin";
+const INTEGRATIONS_HREF = "/v2/admin?choice=settings";
 
 const DIGITAL_SWITCHES: Automation[] = ["review_replies", "gbp_weekly_post", "social_autopost", "social_reslot", "ads_import", "rank_weekly", "seasonal_email"];
 

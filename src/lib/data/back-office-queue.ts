@@ -47,11 +47,11 @@ export interface BackOfficeItem {
   at: string | null;
 }
 
-/** The Admin page; the choice (Finance, Team & access, Settings) is picked on it. */
+/** The Admin page, opened on the choice that holds each screen. */
 export const PANEL_HREF = {
-  finance: "/v2/admin",
-  teamAccess: "/v2/admin",
-  settings: "/v2/admin",
+  finance: "/v2/admin?choice=finance",
+  teamAccess: "/v2/admin?choice=people",
+  settings: "/v2/admin?choice=settings",
 };
 
 /** How close a renewal has to be before it is an exception on Settings. */

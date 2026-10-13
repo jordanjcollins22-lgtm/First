@@ -25,8 +25,15 @@ type SectionKey = keyof typeof V2_LOADERS;
  * It is drawn as whoever the owner picked in Preview as: their pages, their
  * choices, and their own visits and work days, nothing more and nothing less.
  */
-export default async function V2SectionPage({ params }: { params: Promise<{ section: string }> }) {
+export default async function V2SectionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ section: string }>;
+  searchParams: Promise<{ choice?: string | string[] }>;
+}) {
   const { section } = await params;
+  const { choice } = await searchParams;
   if (!(section in V2_LOADERS)) notFound();
 
   const me = await getRealProfile();
@@ -83,7 +90,7 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
   }
 
   // Keyed by page and person, so the chosen pillar starts fresh on each.
-  return <V2Shell key={`${section}:${viewer.id}`} section={data} roles={roles} unplaced={unplaced} panels={panels} />;
+  return <V2Shell key={`${section}:${viewer.id}:${typeof choice === "string" ? choice : ""}`} section={data} roles={roles} unplaced={unplaced} panels={panels} start={typeof choice === "string" ? choice : undefined} />;
 }
 
 /** Runs one panel on the server and turns a failure into a card, not a broken page. */

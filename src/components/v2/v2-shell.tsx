@@ -19,25 +19,15 @@ import { EntityDrawerProvider, RowItem } from "@/components/v2/entity-drawer";
  * screen at a time.
  */
 
-/**
- * What a working screen is called on its button, where the shared name is
- * an internal word ("autopilot"). Plain names only; the screen is the same.
- * Belongs in panels/labels.ts once that file is free to change.
- */
-const PLAIN_LABEL: Record<string, string> = {
-  "marketing-autopilot": "Needs you & channels",
-  "pipeline-autopilot": "Needs you",
-  "projects-autopilot": "Needs you",
-  finance: "Money dashboard",
-  "task-list": "To-do list",
-};
-const labelFor = (key: string) => PLAIN_LABEL[key] ?? PANEL_LABEL[key] ?? key;
+/** What a working screen is called on its button. */
+const labelFor = (key: string) => PANEL_LABEL[key] ?? key;
 
 export function V2Shell({
   section,
   roles,
   unplaced,
   panels = {},
+  start,
 }: {
   section: V2Section;
   /** Rendered working screens, by key, for the choices that list them. */
@@ -45,6 +35,8 @@ export function V2Shell({
   /** The views of the person the page is shown as: exactly what they get, nothing more. */
   roles: V2Role[];
   unplaced?: { label: string; href: string }[];
+  /** The choice to open on, from a link such as /v2/admin?choice=settings. */
+  start?: string;
 }) {
   const sees = (p: V2Pillar) => p.who.some((r) => roles.includes(r));
   const isOwner = roles.includes("owner");
@@ -52,7 +44,7 @@ export function V2Shell({
   const panelKeysFor = (p: V2Pillar): string[] =>
     isOwner ? (p.panels ?? []) : [...new Set(roles.flatMap((r) => p.rolePanels?.[r] ?? []))];
   const visible = section.pillars.filter(sees);
-  const [pillarId, setPillarId] = useState<string>(visible[0]?.id ?? "overview");
+  const [pillarId, setPillarId] = useState<string>((start && visible.some((p) => p.id === start) ? start : visible[0]?.id) ?? "overview");
   const current = visible.find((p) => p.id === pillarId) ?? visible[0];
 
   // Inside a choice, one section at a time, picked from a row of buttons,

@@ -40,7 +40,7 @@ export async function ReviewsPanel() {
     key: r.id,
     text: `${r.author ?? "A reviewer"} left ${r.stars ?? "no"} star${r.stars === 1 ? "" : "s"}${r.replyStatus === "failed" ? ", and Google refused the reply" : ""}. The reply is waiting for you below.`,
   }));
-  if (!d.connected && d.lastError) needs.push({ key: "gbp-error", text: `Google Business Profile has a problem: ${d.lastError}`, href: "/v2/admin", action: "Settings" });
+  if (!d.connected && d.lastError) needs.push({ key: "gbp-error", text: `Google Business Profile has a problem: ${d.lastError}`, href: "/v2/admin?choice=settings", action: "Settings" });
 
   return (
     <div className="grid gap-4">
