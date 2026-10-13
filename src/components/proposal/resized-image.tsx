@@ -43,6 +43,11 @@ export function ResizedImage({
   className?: string;
 }) {
   const [full, setFull] = useState(false);
+  // The original failed too: the photo is not there (taken with no signal
+  // and still on the evaluator's phone, say). Nothing is shown rather than
+  // a broken picture on a page a client reads.
+  const [gone, setGone] = useState(false);
+  if (gone) return null;
 
   return (
     // The box, not the photo, decides the shape.
@@ -65,8 +70,8 @@ export function ResizedImage({
         decoding="async"
         // Once, and only from the resized version. Retrying the original
         // after the original failed would loop on a photo that is genuinely
-        // gone.
-        onError={() => setFull((was) => was || true)}
+        // gone, so a second failure hides it.
+        onError={() => (full ? setGone(true) : setFull(true))}
         className="h-full w-full object-contain"
       />
     </div>
