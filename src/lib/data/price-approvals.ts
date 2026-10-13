@@ -133,13 +133,16 @@ export function forwardAreas(
     areaSqFt: zoneMeasurements(z)?.areaSqFt ?? null,
   }));
   const suggested = suggestJob(facts, pricing.equation, pricing.services);
-  const saved = pricedForward(snapshot, priced.length) ? snapshot : null;
+  // Each area keeps the services it was priced with; only an area with none
+  // saved (one just added) is suggested afresh. It was all or nothing: one
+  // new area threw away every price set on the others.
+  const saved = snapshot && snapshot.length === priced.length ? snapshot : null;
   return priced.map((z, i) => ({
     notes: z.service!.notes?.trim() || null,
     photos: (z.service!.photos ?? []).map((path) => canvasImageUrl(path, PREVIEW)),
     markers: (z.service!.photos ?? []).map((path) => z.service!.photoMarkers?.[path] ?? []),
     cover: Math.max(0, (z.service!.photos ?? []).findIndex((path) => (z.service!.photoMarkers?.[path]?.length ?? 0) > 0)),
-    lines: saved ? (saved[i].lines ?? []) : suggested[i],
+    lines: saved && Array.isArray(saved[i].lines) ? saved[i].lines! : suggested[i],
     facts: facts[i],
   }));
 }
