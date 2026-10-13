@@ -108,7 +108,7 @@ export async function getSnowPanelData(organizationId: string): Promise<SnowPane
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(200),
-    listSaltClients(sb).catch(() => [] as SaltClientRow[]),
+    listSaltClients(sb, organizationId).catch(() => [] as SaltClientRow[]),
   ]);
 
   const stops = ((stopRows ?? []) as unknown as Record<string, unknown>[]).map(toStop);

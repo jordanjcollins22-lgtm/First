@@ -110,8 +110,13 @@ export function onTheRoute(c: SaltClientRow, now = new Date()): boolean {
   return c.status === "paid" && c.used < c.treatments && !saltExpired(c.paidAt, now);
 }
 
-export async function listSaltClients(client: unknown): Promise<SaltClientRow[]> {
-  const { data, error } = await untyped(client).from("salt_orders").select(SALT_CLIENT_COLUMNS).order("created_at", { ascending: true });
+/** Every salt client of one business. The organisation is named, not left to RLS, because the cron reads with the service role. */
+export async function listSaltClients(client: unknown, organizationId: string): Promise<SaltClientRow[]> {
+  const { data, error } = await untyped(client)
+    .from("salt_orders")
+    .select(SALT_CLIENT_COLUMNS)
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true });
   if (error) throw error;
   return ((data ?? []) as unknown as Record<string, unknown>[]).map(toSaltClient);
 }
@@ -120,7 +125,7 @@ export async function listSaltClients(client: unknown): Promise<SaltClientRow[]>
 export async function buildSnowRoute(client: unknown, organizationId: string): Promise<SaltClientRow[]> {
   const sb = untyped(client);
   const [clients, { data: shop }] = await Promise.all([
-    listSaltClients(sb),
+    listSaltClients(sb, organizationId),
     sb.from("business_locations").select("lat, lng").eq("organization_id", organizationId).limit(1).maybeSingle(),
   ]);
   const live = clients.filter((c) => onTheRoute(c));
@@ -369,7 +374,7 @@ export async function settleSnowEvent(eventId: string, opts: { force?: boolean }
 
   const [{ data: stopRows }, clients, { data: existing }] = await Promise.all([
     admin.from("snow_event_stops").select(STOP_COLUMNS + ", customer_id, job_id").eq("event_id", eventId),
-    listSaltClients(admin),
+    listSaltClients(admin, event.organization_id),
     admin.from("snow_event_invoices").select("salt_order_id, status").eq("event_id", eventId),
   ]);
   const settled = new Map(((existing ?? []) as { salt_order_id: string; status: string }[]).map((r) => [r.salt_order_id, r.status]));
