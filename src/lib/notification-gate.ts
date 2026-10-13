@@ -159,6 +159,7 @@ const OTHER_LABELS: Record<string, string> = {
   finder_stopped: "The post finder stopped",
   pm_reply: "A property manager replied",
   hiring_alert: "Hiring",
+  owner_digest: "Your Monday digest",
 };
 
 export function label(kind: NotificationKind): string {

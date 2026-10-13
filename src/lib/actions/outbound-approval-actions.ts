@@ -8,6 +8,8 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { isOwnerLevel } from "@/lib/roles";
 import { deliverApproval, settle } from "@/lib/data/outbound-approvals";
 import { isStale } from "@/lib/outbound-approval";
+import { DECLINE_REASON_LABEL, isDeclineReason, type DeclineReason } from "@/lib/approvals/declines";
+import { markPolicyStarted, recordDecline } from "@/lib/data/approval-queue";
 
 export type ApprovalResult = { ok: true; message: string } | { ok: false; message: string };
 
@@ -59,10 +61,17 @@ export async function approveOutbound(id: string, edits?: { subject?: string; bo
   return result;
 }
 
-/** Do not send it. Nothing else will try. */
-export async function declineOutbound(id: string): Promise<ApprovalResult> {
+/**
+ * Do not send it. Nothing else will try.
+ *
+ * With a reason when the owner gives one (one tap: wrong person, cancelled
+ * booking, wording, timing, other), written on the row and in the decline
+ * log so the trigger behind it can be fixed.
+ */
+export async function declineOutbound(id: string, reason?: DeclineReason, note?: string): Promise<ApprovalResult> {
   const who = await allowed();
   if (typeof who === "string") return { ok: false, message: who };
+  if (reason !== undefined && !isDeclineReason(reason)) return { ok: false, message: "Pick a reason." };
 
   const admin = createAdminClient();
   const { data: row } = await admin
@@ -73,7 +82,23 @@ export async function declineOutbound(id: string): Promise<ApprovalResult> {
     .eq("status", "pending")
     .maybeSingle();
   if (!row) return { ok: false, message: "That one has already been dealt with." };
-  await settle(admin, row, { status: "declined", detail: `Declined by ${who.name}.`, decidedBy: who.profileId });
+  await settle(admin, row, {
+    status: "declined",
+    detail: reason ? `Declined by ${who.name}: ${DECLINE_REASON_LABEL[reason].toLowerCase()}.` : `Declined by ${who.name}.`,
+    decidedBy: who.profileId,
+    declineReason: reason,
+  });
+  if (reason) {
+    await recordDecline(admin, {
+      organizationId: who.organizationId,
+      itemType: "email",
+      itemId: row.id,
+      itemKind: row.kind,
+      reason,
+      note: note ?? null,
+      decidedBy: who.profileId,
+    });
+  }
   refresh();
   return { ok: true, message: "Not sent." };
 }
@@ -118,6 +143,12 @@ export async function setEmailApprovalRequired(required: boolean): Promise<Appro
   const admin = createAdminClient();
   const { error } = await admin.from("organizations").update({ require_email_approval: required }).eq("id", who.organizationId);
   if (error) return { ok: false, message: error.message };
+  // The first time the master hold comes off, the per-kind policy starts.
+  // Written once, so the moment stays the moment it first happened.
+  if (!required) await markPolicyStarted(admin, who.organizationId, who.profileId).catch(() => undefined);
   refresh();
-  return { ok: true, message: required ? "Every automatic email now waits for you." : "Automatic emails go on their own again." };
+  return {
+    ok: true,
+    message: required ? "Every automatic email now waits for you." : "Automatic emails now follow the policy for each kind.",
+  };
 }
