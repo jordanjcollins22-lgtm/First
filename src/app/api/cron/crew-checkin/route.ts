@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { notifyTeamMember } from "@/lib/notifications";
 import { presenceOf, quietLine } from "@/lib/crew-presence";
 import { dateKeyIn, minutesIn } from "@/lib/time-zone";
@@ -29,7 +29,7 @@ import { allOrganizationIds, ensureSettings, ownerIdsFor, untyped } from "@/lib/
  */
 export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
-  const refused = authorizeCron(request, "crew-checkin");
+  const refused = await authorizeScheduledCall(request, "crew-checkin");
   if (refused) return refused;
 
   const now = new Date();

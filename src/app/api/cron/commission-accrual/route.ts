@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isSupabaseAdminConfigured } from "@/lib/env";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { log, describeError } from "@/lib/log";
 import { organizationsWith } from "@/lib/data/back-office-settings";
 import { buildWeeklyBatch, listBatches, sweepAccruals } from "@/lib/data/commission-accrual";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const refused = authorizeCron(request, "commission-accrual");
+  const refused = await authorizeScheduledCall(request, "commission-accrual");
   if (refused) return refused;
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Not configured." }, { status: 503 });
 

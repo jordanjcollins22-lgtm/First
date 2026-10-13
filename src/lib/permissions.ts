@@ -122,6 +122,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/snow":
+    "Storm-day stop logging for whoever is on the salt or plow route: salt used, photos, surface temperature. " +
+    "Shows only the business's own active snow event, and every save checks the person is staff of that business.",
   "/admin/outreach/posts/saved/[seenId]":
     "The saved copy of one answered post, opened from the answered posts list on Posts to Answer. " +
     "Checks the posts-to-answer tab itself, and shows only posts the viewer answered or added, or any to the owner.",

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { loadAutopilot } from "@/lib/data/marketing-autopilot";
 import { runWeeklyRank } from "@/lib/data/rank-run";
 import { isSupabaseAdminConfigured } from "@/lib/env";
@@ -19,7 +19,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
-  const refused = authorizeCron(request, "rank-check");
+  const refused = await authorizeScheduledCall(request, "rank-check");
   if (refused) return refused;
 
   const admin = createAdminClient();

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { financeDb } from "@/lib/data/finance-settings";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { runQboSync } from "@/lib/integrations/quickbooks/sync";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const refused = authorizeCron(request, "qbo-sync");
+  const refused = await authorizeScheduledCall(request, "qbo-sync");
   if (refused) return refused;
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Not configured." }, { status: 503 });
 

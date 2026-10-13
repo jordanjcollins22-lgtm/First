@@ -31,6 +31,8 @@ import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
 import { TodayBoard } from "@/components/crew/today-board";
+import { CrewBudgetRemaining } from "@/components/crew/crew-budget-remaining";
+import { CrewEquipmentLog } from "@/components/equipment/crew-equipment-log";
 import { ShopFlow } from "@/components/crew/shop-flow";
 import { ShopFlowLive } from "@/components/crew/shop-flow-live";
 import { getDayLoadout, getShopDay, getShopInfo, getSiteMaps, whoIsAtTheShop } from "@/lib/data/shop-flow";
@@ -1176,6 +1178,22 @@ async function CrewDay({ profile }: { profile: Profile }) {
       {loadout && !loading && phase !== "day_over" && (
         <div className="mt-4">
           <LoadoutPanel day={day.day} loadout={loadout} compact />
+        </div>
+      )}
+      {/* The lead's hours left against the job's budget, once they're out. */}
+      {!loading && phase !== "day_over" && leadsAStop && (
+        <div className="mt-4">
+          <Suspense fallback={null}>
+            <CrewBudgetRemaining profileId={profile.id} organizationId={profile.organization_id} />
+          </Suspense>
+        </div>
+      )}
+      {/* End of the day: hours and miles on the machines, for their upkeep. */}
+      {(phase === "stops_done" || phase === "day_over") && (
+        <div className="mt-4">
+          <Suspense fallback={null}>
+            <CrewEquipmentLog />
+          </Suspense>
         </div>
       )}
       {/* Below the board, not above it: this is what to do with the hours

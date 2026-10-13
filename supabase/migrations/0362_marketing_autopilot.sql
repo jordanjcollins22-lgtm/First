@@ -294,3 +294,6 @@ create policy seasonal_campaign_runs_own_org on public.seasonal_campaign_runs
 alter table public.social_posts add column if not exists auto_source text;
 
 notify pgrst, 'reload schema';
+
+-- A trigger function, never called directly through the API.
+revoke execute on function public.marketing_trail_from_position() from public, anon, authenticated;

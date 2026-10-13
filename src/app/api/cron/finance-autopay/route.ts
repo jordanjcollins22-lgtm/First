@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { financeDb } from "@/lib/data/finance-settings";
 import { isStripeConfigured, isSupabaseAdminConfigured } from "@/lib/env";
 import { chargeAutopayInvoices, reconcileAutopay } from "@/lib/finance/autopay";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const refused = authorizeCron(request, "finance-autopay");
+  const refused = await authorizeScheduledCall(request, "finance-autopay");
   if (refused) return refused;
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Not configured." }, { status: 503 });
   if (!isStripeConfigured) return NextResponse.json({ ok: true, skipped: "Stripe is not connected." });

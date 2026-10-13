@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { sweepApprovals } from "@/lib/data/outbound-approvals";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
-  const refused = authorizeCron(request, "approvals-sweep");
+  const refused = await authorizeScheduledCall(request, "approvals-sweep");
   if (refused) return refused;
   try {
     const result = await sweepApprovals(createAdminClient());

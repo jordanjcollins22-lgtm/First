@@ -52,9 +52,13 @@ export function SiteNav({
   // Operations only the calendar and the evaluations. A department with
   // nothing open inside it is left out entirely. Settings and View as live
   // inside Admin now, so they are not doors of their own.
-  const links = fieldOnly
-    ? [{ href: "/my-day", label: "My Day" }]
-    : navModules(allowedTabs, roleViewFor(roles)).map((mod) => ({ href: mod.href, label: mod.label }));
+  const links = [
+    ...(fieldOnly
+      ? [{ href: "/my-day", label: "My Day" }]
+      : navModules(allowedTabs, roleViewFor(roles)).map((mod) => ({ href: mod.href, label: mod.label }))),
+    // Storm days: everyone on the crew logs their salt and plow stops here.
+    { href: "/snow", label: "Snow" },
+  ];
 
   useEffect(() => {
     if (!open) return;

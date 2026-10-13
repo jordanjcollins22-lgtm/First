@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isSupabaseAdminConfigured } from "@/lib/env";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { log } from "@/lib/log";
 import { allOrganizationIds } from "@/lib/data/ops-settings";
 import { runWeeklyBonus } from "@/lib/data/ops-bonus";
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
-  const refused = authorizeCron(request, "crew-bonus");
+  const refused = await authorizeScheduledCall(request, "crew-bonus");
   if (refused) return refused;
 
   const now = new Date();

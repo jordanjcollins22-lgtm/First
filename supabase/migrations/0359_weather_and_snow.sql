@@ -246,7 +246,7 @@ create table if not exists public.snow_event_stops (
   note text,
   skip_reason text,
   -- Opens the client's proof-of-service page at /salt/serviced/<token>.
-  proof_token text not null default encode(gen_random_bytes(18), 'hex'),
+  proof_token text not null default encode(extensions.gen_random_bytes(18), 'hex'),
   client_notified_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

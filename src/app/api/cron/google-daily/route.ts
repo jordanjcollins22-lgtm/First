@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { runGoogleBusiness } from "@/lib/data/google-business-run";
 import { runAdsImport } from "@/lib/data/google-ads-run";
 import { loadAutopilot } from "@/lib/data/marketing-autopilot";
@@ -20,7 +20,7 @@ export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
-  const refused = authorizeCron(request, "google-daily");
+  const refused = await authorizeScheduledCall(request, "google-daily");
   if (refused) return refused;
 
   const admin = createAdminClient();

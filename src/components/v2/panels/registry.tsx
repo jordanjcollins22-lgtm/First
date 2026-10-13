@@ -19,6 +19,9 @@ import { PipelineAutopilotPanel } from "@/components/v2/panels/pipeline-autopilo
 import { EvaluatorScorecardPanel } from "@/components/v2/panels/evaluator-scorecard";
 import { TerritoriesPanel } from "@/components/v2/panels/territories";
 import { ClientMessagesSettingsPanel } from "@/components/v2/panels/client-messages-settings";
+import { MarketingAutopilotPanel } from "@/components/v2/panels/marketing-autopilot";
+import { ReviewsPanel } from "@/components/v2/panels/reviews";
+import { PhysicalMarketingPanel } from "@/components/v2/panels/physical-marketing";
 
 /**
  * The working screens the new layout's choices can show, by key. Each is an
@@ -45,4 +48,7 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   "evaluator-scorecard": EvaluatorScorecardPanel,
   territories: TerritoriesPanel,
   "client-messages": ClientMessagesSettingsPanel,
+  "marketing-autopilot": MarketingAutopilotPanel,
+  reviews: ReviewsPanel,
+  "physical-marketing": PhysicalMarketingPanel,
 };

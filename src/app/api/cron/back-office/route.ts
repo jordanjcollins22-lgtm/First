@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isSupabaseAdminConfigured } from "@/lib/env";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { log, describeError } from "@/lib/log";
 import { organizationsWith } from "@/lib/data/back-office-settings";
 import { runComplianceReminders } from "@/lib/data/compliance";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function GET(request: NextRequest) {
-  const refused = authorizeCron(request, "back-office");
+  const refused = await authorizeScheduledCall(request, "back-office");
   if (refused) return refused;
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Not configured." }, { status: 503 });
 

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { runAutopilotEverywhere } from "@/lib/data/sales-autopilot";
 import { log } from "@/lib/log";
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const refused = authorizeCron(request, "proposal-autopilot");
+  const refused = await authorizeScheduledCall(request, "proposal-autopilot");
   if (refused) return refused;
   if (!isSupabaseAdminConfigured) return NextResponse.json({ error: "Not configured." }, { status: 503 });
   const runs = await runAutopilotEverywhere();
