@@ -11,7 +11,7 @@ import type { SendBasis, Channel } from "@/lib/client-consent";
 import { isLiveFor, type SequenceKey, type SequenceSetting } from "@/lib/client-automations/settings";
 import { textElseEmail } from "@/lib/client-automations/channels";
 import { collectionsKey, invoiceDueAt, needsCollections } from "@/lib/client-automations/invoices";
-import { reviewDedupeKey, reviewMessage, reviewSkipReason, reviewStepDue } from "@/lib/client-automations/reviews";
+import { FIRST_ASK_WINDOW_HOURS, reviewDedupeKey, reviewMessage, reviewSkipReason, reviewStepDue } from "@/lib/client-automations/reviews";
 import { classifyMissedVisit, rebookDedupeKey, rebookMessage, rebookStepsDue } from "@/lib/client-automations/no-show";
 import { autoPhaseOne, winBackDedupeKey, winBackMessage } from "@/lib/win-back";
 import { missedCallKey, missedCallText } from "@/lib/client-automations/calls";
@@ -162,7 +162,9 @@ export async function runReviewRequests(ctx: RunContext, tally: Tally): Promise<
   const setting = ctx.settings.review_requests;
   if (!setting.enabled || !setting.startedAt || !setting.config.googleReviewLink) return;
   const sb = untyped(ctx.admin);
-  const since = new Date(Math.max(setting.startedAt.getTime(), ctx.now.getTime() - 7 * DAY)).toISOString();
+  // Only triggers still inside the first-ask window: an older one would open
+  // with the day-3 "reminder" and never the ask itself.
+  const since = new Date(Math.max(setting.startedAt.getTime(), ctx.now.getTime() - FIRST_ASK_WINDOW_HOURS * HOUR)).toISOString();
 
   // What sets one off: a /done approval, or an invoice paid.
   const [signoffs, paid] = await Promise.all([
