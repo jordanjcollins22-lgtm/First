@@ -6,7 +6,8 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { sendEmail } from "@/lib/email/send";
 import { textToHtml } from "@/lib/email/plain";
-import { approvalRequired, notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { holdDecisionFor } from "@/lib/data/approval-policy";
 import { staleAfter } from "@/lib/outbound-approval";
 import { measurementRequestEmail, unmeasuredZones, type MeasurableZone } from "@/lib/measurement-request";
 import { zoneServiceCount } from "@/lib/proposal-pricing";
@@ -80,7 +81,9 @@ export async function requestMeasurements(
   const dedupeKey = `measurements_request:${job.id}:${[...names].sort().join("|")}`;
   const toName = job.evaluator?.full_name ?? null;
 
-  if (await approvalRequired(admin, organizationId)) {
+  // A request to the team always waits for the owner under the per-kind
+  // policy, and under the master hold like everything else.
+  if ((await holdDecisionFor(admin, { organizationId, kind: "measurements_request", teamRequest: true })).hold) {
     const queued = await queueApproval(admin, {
       organizationId,
       source: "team_request",

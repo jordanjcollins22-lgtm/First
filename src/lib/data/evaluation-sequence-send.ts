@@ -3,7 +3,10 @@ import { threadSentEmail } from "@/lib/data/thread-email";
 
 import { log, maskEmail } from "@/lib/log";
 import { outboundReady, sendOutbound } from "@/lib/email/outbound";
-import { approvalRequired, notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { notifyApprovers, queueApproval } from "@/lib/data/outbound-approvals";
+import { holdDecisionFor, loadPolicy, mootFor, type PolicyState } from "@/lib/data/approval-policy";
+import { MOOT_LABEL } from "@/lib/approvals/moot";
+import { autoSendAt } from "@/lib/approvals/policy";
 import { staleAfter } from "@/lib/outbound-approval";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -31,6 +34,8 @@ export interface DueStep {
   body: string;
   reply_thread_id: string | null;
   fire_at: string;
+  /** The visit time the words were filled in from. */
+  evaluation_at?: string | null;
 }
 
 export interface SequenceCounts {
@@ -41,6 +46,8 @@ export interface SequenceCounts {
   notReady: number;
   /** Parked for the owner to read first. */
   held: number;
+  /** Closed unsent because they no longer made sense. */
+  moot: number;
   why: string | null;
 }
 
@@ -55,16 +62,16 @@ export async function sendDueEvaluationEmails(
 
   const orgNames = new Map<string, { name: string; email: string | null }>();
   const ready = new Map<string, { ready: boolean; why: string }>();
-  const gated = new Map<string, boolean>();
+  const policies = new Map<string, PolicyState>();
   const heldFor = new Set<string>();
-  const counts: SequenceCounts = { due: due.length, sent: 0, failed: 0, claimedElsewhere: 0, notReady: 0, held: 0, why: null };
+  const counts: SequenceCounts = { due: due.length, sent: 0, failed: 0, claimedElsewhere: 0, notReady: 0, held: 0, moot: 0, why: null };
 
   for (const item of due) {
     if (!orgNames.has(item.organization_id)) {
       const { data: org } = await admin.from("organizations").select("name, business_email").eq("id", item.organization_id).maybeSingle();
       orgNames.set(item.organization_id, { name: org?.name ?? "JS Landscaping MD", email: org?.business_email ?? null });
       ready.set(item.organization_id, await outboundReady(item.organization_id));
-      gated.set(item.organization_id, await approvalRequired(admin, item.organization_id));
+      policies.set(item.organization_id, await loadPolicy(admin, item.organization_id));
     }
     const org = orgNames.get(item.organization_id)!;
 
@@ -93,14 +100,40 @@ export async function sendDueEvaluationEmails(
       continue;
     }
 
-    // Parked, not sent, where the business wants to read first. The claim
-    // stands so no run sends it behind the owner's back; the log says why
-    // it is sitting there.
-    if (gated.get(item.organization_id)) {
+    // Closed unsent when it no longer makes sense. Two thirds of the
+    // declined "after the visit" emails were written after the proposal had
+    // already gone out, and a second booking of the same visit wrote a
+    // second sequence. The claim stays, marked skipped, so no run tries again.
+    const kind = `evaluation_${item.step}`;
+    const moot = await mootFor(admin, {
+      organizationId: item.organization_id,
+      kind,
+      jobId: item.job_id,
+      writtenForEvaluationAt: item.evaluation_at ?? null,
+    });
+    if (moot) {
+      await admin
+        .from("client_message_log")
+        .update({ status: "skipped", skip_reason: "moot", detail: MOOT_LABEL[moot] })
+        .eq("organization_id", item.organization_id)
+        .eq("dedupe_key", item.dedupe_key);
+      counts.moot += 1;
+      log.info("evaluation.email.moot", { jobId: item.job_id, step: item.step, reason: moot });
+      continue;
+    }
+
+    // Parked, not sent, where the policy for this step (or the master hold)
+    // says to read it first. The claim stands so no run sends it behind the
+    // owner's back; the log says why it is sitting there.
+    const hold = await holdDecisionFor(admin, { organizationId: item.organization_id, kind, state: policies.get(item.organization_id) });
+    if (hold.hold) {
+      const now = new Date();
+      const staleAt = staleAfter(kind, now);
+      const sendAt = hold.sendOnExpiry ? autoSendAt(now, staleAt) : null;
       await queueApproval(admin, {
         organizationId: item.organization_id,
         source: "evaluation_sequence",
-        kind: `evaluation_${item.step}`,
+        kind,
         dedupeKey: item.dedupe_key,
         customerId: item.customer_id,
         jobId: item.job_id,
@@ -108,8 +141,10 @@ export async function sendDueEvaluationEmails(
         toName: item.to_name,
         subject: item.subject,
         body: item.body,
-        payload: { step: item.step, reply_thread_id: item.reply_thread_id },
-        expiresAt: staleAfter(`evaluation_${item.step}`, new Date()),
+        payload: { step: item.step, reply_thread_id: item.reply_thread_id, evaluation_at: item.evaluation_at ?? null, held_because: hold.reason },
+        expiresAt: staleAt,
+        sendOnExpiry: Boolean(sendAt),
+        autoSendAt: sendAt,
       });
       await admin.from("client_message_log").update({ detail: "awaiting approval" }).eq("dedupe_key", item.dedupe_key);
       counts.held += 1;

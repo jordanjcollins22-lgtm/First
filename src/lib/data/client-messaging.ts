@@ -11,7 +11,10 @@ import {
   type SendBasis,
 } from "@/lib/client-consent";
 import { isQuiet, QUIET_DEFAULTS, type QuietWindow } from "@/lib/quiet-hours";
-import { approvalRequired, queueApproval } from "@/lib/data/outbound-approvals";
+import { queueApproval } from "@/lib/data/outbound-approvals";
+import { holdDecisionFor, mootFor } from "@/lib/data/approval-policy";
+import { MOOT_LABEL } from "@/lib/approvals/moot";
+import { autoSendAt } from "@/lib/approvals/policy";
 import { staleAfter } from "@/lib/outbound-approval";
 
 /**
@@ -44,6 +47,11 @@ export interface ClientMessage {
    * typed one goes, because the person typing it is the approval.
    */
   automatic?: boolean;
+  /**
+   * Free text an AI wrote, rather than a fixed template filled in. Always
+   * waits for a person, whatever the policy for its kind says.
+   */
+  aiWritten?: boolean;
 }
 
 export type SendOutcome =
@@ -192,6 +200,27 @@ export async function sendClientMessage(
     return { sent: false, reason: verdict.reason, detail: verdict.detail };
   }
 
+  // Written down and dropped when it no longer makes sense: the booking was
+  // cancelled, the proposal was answered or somebody has already rung about
+  // it, or this is the second booking of one visit. These were most of what
+  // the owner declined by hand. The log row under the key stops the next
+  // run writing it again.
+  if (message.automatic) {
+    const reference = message.referenceId ?? null;
+    const moot = await mootFor(admin, {
+      organizationId: message.organizationId,
+      kind: message.kind,
+      jobId: message.kind === "proposal_follow_up" ? null : reference,
+      proposalId: message.kind === "proposal_follow_up" ? reference : null,
+      now,
+    });
+    if (moot) {
+      log.info("client_message.moot", { kind: message.kind, channel: message.channel, customerId: message.customerId, reason: moot });
+      await record("skipped", { skipReason: "moot", detail: MOOT_LABEL[moot] });
+      return { sent: false, reason: "moot", detail: MOOT_LABEL[moot] };
+    }
+  }
+
   // Held rather than dropped. The cron runs again and this comes back round
   // once the window is open, which is what a person means by "the evening
   // before" when the job was scheduled at midnight.
@@ -199,10 +228,17 @@ export async function sendClientMessage(
     return { sent: false, reason: "quiet_hours", detail: "Held until the morning." };
   }
 
-  // Parked for the owner where the business asks for that. The log row
-  // under this key says so, which is what keeps the next run from parking
-  // it again, and the approval carries everything needed to send it later.
-  if (message.automatic && message.channel === "email" && (await approvalRequired(admin, message.organizationId))) {
+  // Parked for the owner where the policy for this kind says so (or the
+  // master hold is on). The log row under this key says so, which is what
+  // keeps the next run from parking it again, and the approval carries
+  // everything needed to send it later.
+  const hold =
+    message.automatic && message.channel === "email"
+      ? await holdDecisionFor(admin, { organizationId: message.organizationId, kind: message.kind, aiWritten: message.aiWritten })
+      : null;
+  if (hold?.hold) {
+    const staleAt = staleAfter(message.kind, now);
+    const sendAt = hold.sendOnExpiry ? autoSendAt(now, staleAt) : null;
     const queued = await queueApproval(admin, {
       organizationId: message.organizationId,
       source: "client_reminder",
@@ -214,8 +250,10 @@ export async function sendClientMessage(
       toName: contact.name,
       subject: message.subject,
       body: message.body,
-      payload: { reference_id: message.referenceId ?? null },
-      expiresAt: staleAfter(message.kind, now),
+      payload: { reference_id: message.referenceId ?? null, held_because: hold.reason },
+      expiresAt: staleAt,
+      sendOnExpiry: Boolean(sendAt),
+      autoSendAt: sendAt,
     });
     if (queued === "already") return { sent: false, reason: "already_sent", detail: "Already waiting for approval." };
     await record("skipped", { skipReason: "awaiting_approval", detail: "Waiting for approval." });
