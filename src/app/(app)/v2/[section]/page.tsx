@@ -1,10 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 
 import { V2Shell } from "@/components/v2/v2-shell";
-import { getRealProfile } from "@/lib/data/team";
+import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { V2_LOADERS } from "@/lib/data/v2";
 import { TABS } from "@/lib/permissions";
 import { isOwnerLevel } from "@/lib/roles";
+import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 
 export const metadata = { title: "New layout · JS Landscaping" };
 
@@ -16,6 +17,9 @@ type SectionKey = keyof typeof V2_LOADERS;
  * Owner-level only while it is being built: it is checked against the account
  * actually signed in, not whoever an admin is viewing as, so the preview can't
  * be reached by somebody it wasn't meant for.
+ *
+ * It is drawn as whoever the owner picked in Preview as: their pages, their
+ * choices, and their own visits and work days, nothing more and nothing less.
  */
 export default async function V2SectionPage({ params }: { params: Promise<{ section: string }> }) {
   const { section } = await params;
@@ -25,12 +29,25 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
   if (!me) redirect("/login");
   if (!isOwnerLevel(me.roles)) redirect("/");
 
-  const data = await V2_LOADERS[section as SectionKey]();
+  const viewer = (await getCurrentProfile()) ?? me;
+  const roles = v2RolesOf(viewer);
+  const pages = v2PagesFor(roles);
+  if (!pages.includes(section as SectionKey)) {
+    if (pages.length) redirect(`/v2/${pages[0]}`);
+    return (
+      <p className="py-10 text-center text-muted-foreground">
+        {viewer.full_name || viewer.email} has no role that the new layout shows anything for yet.
+      </p>
+    );
+  }
+  // "My" views read the person's own work; the owner's own view needs no person.
+  const viewerId = roles.includes("owner") ? null : viewer.id;
+  const data = await V2_LOADERS[section as SectionKey](viewerId);
 
   // The task list names every current screen that no tab in the new layout
   // links to yet, worked out from the links themselves so it can't go stale.
   let unplaced: { label: string; href: string }[] | undefined;
-  if (section === "admin") {
+  if (section === "admin" && roles.includes("owner")) {
     const rest = await Promise.all(
       (Object.keys(V2_LOADERS) as SectionKey[]).filter((k) => k !== "admin").map((k) => V2_LOADERS[k]())
     );
@@ -41,6 +58,6 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
       .map((t) => ({ label: t.label, href: t.href }));
   }
 
-  // Keyed by page, so the chosen pillar and role start fresh on each one.
-  return <V2Shell key={section} section={data} unplaced={unplaced} />;
+  // Keyed by page and person, so the chosen pillar starts fresh on each.
+  return <V2Shell key={`${section}:${viewer.id}`} section={data} roles={roles} unplaced={unplaced} />;
 }

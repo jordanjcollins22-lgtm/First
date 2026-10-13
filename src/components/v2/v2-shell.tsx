@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
+import { AutomationList } from "@/components/v2/automation-list";
 
 /**
  * The new four-page layout: one page per department, a bar of pillars across
- * the top, and a "Preview as" switch so the owner can see what each role
- * would be shown. Nothing here links back into the current app: this layout
+ * the top. Shown as whoever the owner picked in Preview as, so it is exactly
+ * what that person sees. Nothing here links back into the current app: this layout
  * replaces it, so every screen it needs gets built into one of the four pages.
  */
 
@@ -21,43 +22,23 @@ const TAG: Record<V2Kind, { text: string; cls: string }> = {
   people: { text: "PEOPLE", cls: "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200" },
 };
 
-export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: { label: string; href: string }[] }) {
-  const [role, setRole] = useState<V2Role>("owner");
-  const visible = useMemo(() => section.pillars.filter((p) => p.who.includes(role)), [section.pillars, role]);
+export function V2Shell({
+  section,
+  roles,
+  unplaced,
+}: {
+  section: V2Section;
+  /** The views of the person the page is shown as: exactly what they get, nothing more. */
+  roles: V2Role[];
+  unplaced?: { label: string; href: string }[];
+}) {
+  const sees = (p: V2Pillar) => p.who.some((r) => roles.includes(r));
+  const visible = section.pillars.filter(sees);
   const [pillarId, setPillarId] = useState<string>(visible[0]?.id ?? "overview");
   const current = visible.find((p) => p.id === pillarId) ?? visible[0];
-  const others = section.roles.filter((r) => r.key !== "owner").map((r) => r.label.toLowerCase());
-
-  function pickRole(r: V2Role) {
-    setRole(r);
-    const first = section.pillars.find((p) => p.who.includes(r));
-    setPillarId(first?.id ?? "overview");
-  }
 
   return (
     <div className="w-full pb-5">
-      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-        <div role="group" aria-label="Preview as role" className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Preview as</span>
-          <div className="flex flex-wrap rounded-lg bg-muted p-1">
-            {section.roles.map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                aria-pressed={role === r.key}
-                onClick={() => pickRole(r.key)}
-                className={
-                  "min-h-10 rounded-md px-3 font-semibold " +
-                  (role === r.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")
-                }
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
@@ -95,15 +76,11 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
           })}
         </div>
       </div>
-      <p className="mb-5 text-sm text-muted-foreground">
-        {role === "owner"
-          ? `Owner view: every pillar. ${others.length ? `Use Preview as to see what ${others.join(" or ")} would get.` : ""}`
-          : "Only the tools this role can use are shown."}
-      </p>
+      <div className="mb-5" />
 
       {current &&
         (current.parts ?? [current])
-          .filter((p) => p.who.includes(role))
+          .filter(sees)
           .map((p, i, shown) => (
             <div key={p.id} className={i ? "mt-8" : ""}>
               {shown.length > 1 && (
@@ -112,7 +89,7 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
                   {p.sub && <p className="text-sm text-muted-foreground">{p.sub}</p>}
                 </div>
               )}
-              <PillarBody pillar={p} section={section} role={role} open={setPillarId} unplaced={unplaced} />
+              <PillarBody pillar={p} section={section} roles={roles} open={setPillarId} unplaced={unplaced} />
             </div>
           ))}
 
@@ -124,23 +101,31 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
 function PillarBody({
   pillar,
   section,
-  role,
+  roles,
   open,
   unplaced,
 }: {
   pillar: V2Pillar;
   section: V2Section;
-  role: V2Role;
+  roles: V2Role[];
   open: (id: string) => void;
   unplaced?: { label: string; href: string }[];
 }) {
   if (pillar.id === "tasks") return <TaskList unplaced={unplaced ?? []} />;
-  if (pillar.id === "overview" && !pillar.parts) return <Overview section={section} pillar={pillar} role={role} open={open} />;
+  if (pillar.id === "overview" && !pillar.parts) return <Overview section={section} pillar={pillar} roles={roles} open={open} />;
   if (pillar.view === "website" && section.website) {
     return (
       <div className="grid gap-5">
         <Blocks pillar={pillar} />
         <WebsiteStudio website={section.website} />
+      </div>
+    );
+  }
+  if (pillar.view === "automations") {
+    return (
+      <div className="grid gap-5">
+        <AutomationList automations={pillar.automations ?? []} />
+        <Blocks pillar={pillar} />
       </div>
     );
   }
@@ -181,8 +166,8 @@ function Detail({ pillar }: { pillar: V2Pillar }) {
   );
 }
 
-function Overview({ section, pillar, role, open }: { section: V2Section; pillar: V2Pillar; role: V2Role; open: (id: string) => void }) {
-  const list = (g: "a" | "b") => section.pillars.filter((p) => p.group === g && p.who.includes(role));
+function Overview({ section, pillar, roles, open }: { section: V2Section; pillar: V2Pillar; roles: V2Role[]; open: (id: string) => void }) {
+  const list = (g: "a" | "b") => section.pillars.filter((p) => p.group === g && p.who.some((r) => roles.includes(r)));
   return (
     <div className="grid gap-5">
       {pillar.blocks.length > 0 && <Blocks pillar={pillar} />}

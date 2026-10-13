@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { attributionReport } from "@/lib/data/attribution";
 import { loadWebsiteForEditor, type WebsiteState } from "@/lib/data/website";
+import { loadAutomations } from "@/lib/data/automations";
+import type { Automation } from "@/lib/automations";
 import { CHANNEL_LABEL } from "@/lib/attribution";
 
 /**
@@ -42,7 +44,9 @@ export interface V2Pillar {
   blocks: V2Block[];
   links: { label: string; href: string }[];
   /** A pillar with a screen of its own rather than blocks of numbers. */
-  view?: "website";
+  view?: "website" | "automations";
+  /** For view "automations": every automated message and who is in it. */
+  automations?: Automation[];
   /** A combined pillar: the pillars it gathers, shown one under another. */
   parts?: V2Pillar[];
 }
@@ -130,7 +134,7 @@ const stamp = () =>
 const PROSPECT_STATUSES = ["new", "queued", "contacted", "converted", "rejected"] as const;
 const PLAY_LABEL: Record<string, string> = { yard_sign: "Yard signs", knocks: "Door knocks", door_hangers: "Door hangers", flyers: "Flyers" };
 
-export async function loadMarketing(): Promise<V2Section> {
+export async function loadMarketing(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
   const [
     links, posts, profiles, referredJobs,
@@ -175,7 +179,8 @@ export async function loadMarketing(): Promise<V2Section> {
     const p = profiles.find((x) => x.id === id);
     return p ? str(p.full_name) || str(p.email) : "Unknown";
   };
-  const comments = links.filter((l) => l.kind === "comment");
+  // Shown as an affiliate: only the replies they posted themselves.
+  const comments = links.filter((l) => l.kind === "comment" && (!viewerId || l.profile_id === viewerId));
   const clicks = (list: Row[]) => list.reduce((s, l) => s + num(l.click_count), 0);
   const byPlatform = (p: string) => links.filter((l) => l.platform === p);
   const postStatus = tally(posts, "status");
@@ -408,18 +413,17 @@ export async function loadMarketing(): Promise<V2Section> {
 /* Sales                                                               */
 /* ------------------------------------------------------------------ */
 
-export async function loadSales(): Promise<V2Section> {
+/** viewerId: the person the page is being shown as, for the views that are about "my" work. */
+export async function loadSales(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
   const orgId = await getCurrentOrganizationId().catch(() => null);
-  const [jobs, proposals, profiles, calls, approvals, msgs, rules, intakes, invoices, services, ghl,
-    views, avail, daysOff, teamRem, bookVisits, booked] = await Promise.all([
+  const [jobs, proposals, profiles, calls, approvals, intakes, invoices, services, ghl,
+    views, avail, daysOff, bookVisits, booked] = await Promise.all([
     rows(sb, "jobs", "id,name,status,evaluation_status,evaluation_date,assigned_to,referral_code,referred_by_profile_id"),
     rows(sb, "job_proposals", "status,total_cost,job_id"),
     rows(sb, "profiles", "id,full_name,email,does_evaluations,commission_pct"),
     rows(sb, "proposal_calls", "outcome"),
     rows(sb, "outbound_approvals", "status"),
-    rows(sb, "client_message_log", "kind,channel"),
-    rows(sb, "reminder_rules", "kind,enabled,offsets_hours"),
     rows(sb, "evaluation_intakes", "submitted_at"),
     rows(sb, "invoices", "status,amount"),
     rows(sb, "services", "name,status,cost,cost_unit"),
@@ -427,10 +431,10 @@ export async function loadSales(): Promise<V2Section> {
     count(sb, "proposal_views"),
     count(sb, "availability_weekly"),
     count(sb, "availability_days_off"),
-    count(sb, "team_reminder_log"),
     count(sb, "booking_visits", (q) => q.gte("created_at", since(30))),
     count(sb, "booking_visits", (q) => q.gte("created_at", since(30)).not("booked_job_id", "is", null)),
   ]);
+  const automations = orgId ? await loadAutomations(sb, orgId).catch((e) => (console.error("v2 automations failed:", e), null)) : null;
 
   const now = new Date().toISOString();
   const name = (id: unknown) => {
@@ -450,30 +454,17 @@ export async function loadSales(): Promise<V2Section> {
   const accepted = propBy("accepted").length;
   const declined = propBy("declined").length;
   const waitingApproval = propBy("needs_approval");
-  const kinds = tally(msgs, "kind");
-  const evalKinds = ["evaluation_confirmed", "evaluation_booked", "evaluation_after", "evaluation_day_before",
-    "evaluation_morning_of", "evaluation_two_days", "pre_eval_ask"];
-  const evalMsgs = evalKinds.reduce((s, k) => s + (kinds.get(k) ?? 0), 0);
   const callOutcomes = tally(calls, "outcome");
   const appr = tally(approvals, "status");
-  const rulesOn = rules.filter((r) => r.enabled);
   const activeServices = services.filter((s) => s.status === "active");
   const priced = activeServices.filter((s) => s.cost != null);
   const paidInvoices = invoices.filter((i) => i.status === "paid");
   const sync = ghl.find((g) => g.organization_id === orgId) ?? ghl[0];
   // Whoever has the most visits stands in for "an evaluator" in the preview.
-  const assignedEvals = tally(scheduled.concat(evalsDone), "assigned_to");
-  const sampleEvaluatorId = [...assignedEvals.entries()].filter(([k]) => k !== "(none)").sort((a, b) => b[1] - a[1])[0]?.[0];
-  const sampleName = sampleEvaluatorId ? name(sampleEvaluatorId) : "an evaluator";
+  const mine = (j: Row) => viewerId != null && j.assigned_to === viewerId;
+  const myJobIds = new Set(jobs.filter(mine).map((j) => j.id));
   const evaluators = profiles.filter((p) => p.does_evaluations);
   const visitRow = (j: Row) => `${when(j.evaluation_date)} · ${place(j.name)} · ${name(j.assigned_to)}`;
-  const ruleLabel: Record<string, string> = {
-    evaluation_confirmed: "Evaluation confirmed",
-    evaluation_reminder: "Evaluation reminder",
-    job_start_reminder: "Job start reminder",
-    proposal_follow_up: "Proposal follow-up",
-    invoice_reminder: "Invoice reminder",
-  };
 
   const pillars: V2Pillar[] = [
     {
@@ -517,24 +508,6 @@ export async function loadSales(): Promise<V2Section> {
       ],
     },
     {
-      id: "reminders", label: "Appointment reminders", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(evalMsgs)} evaluation reminders and confirmations sent`,
-      title: "Appointment reminders", sub: "Nobody forgets a visit.",
-      blocks: [
-        {
-          t: "Customer reminders", v: n(evalMsgs), d: "Evaluation emails and texts sent",
-          rows: evalKinds.filter((k) => kinds.get(k)).map((k) => `${k.replace(/_/g, " ")} · ${n(kinds.get(k) ?? 0)}`),
-        },
-        { t: "Evaluator reminders", v: n(teamRem), d: "Team reminders sent" },
-        {
-          t: "Rules switched on", v: `${rulesOn.length} of ${rules.length}`, d: "Automatic reminder rules",
-          rows: rules.map((r) => `${ruleLabel[str(r.kind)] ?? str(r.kind)} · ${r.enabled ? "on" : "off"}`),
-        },
-        { t: "Job start notices", v: n(kinds.get("job_start_reminder") ?? 0), d: "Texts sent before a crew arrives" },
-      ],
-      links: [{ label: "Client reminders", href: "/admin/reminders" }],
-    },
-    {
       id: "proposals", label: "Proposals", kind: "auto", who: ["owner"], group: "a",
       blurb: `${n(proposals.length)} proposals · ${accepted} signed · ${usd(sum(propBy("accepted")))}`,
       title: "Proposals", sub: "From measurements to a signed job. Pricing formulas live here.",
@@ -562,32 +535,32 @@ export async function loadSales(): Promise<V2Section> {
       ],
     },
     {
-      id: "followup", label: "Automated follow-up", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(kinds.get("proposal_follow_up") ?? 0)} follow-up emails · ${n(calls.length)} calls logged`,
-      title: "Automated follow-up", sub: "Keeps chasing until a lead says yes or no.",
+      id: "messages", label: "Automated messages", kind: "auto", who: ["owner"], group: "a",
+      blurb: automations ? `${n(automations.sales.reduce((t, x) => t + x.people.length, 0))} people in automated messages` : "Not available",
+      title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.",
+      view: "automations", automations: automations?.sales ?? [],
       blocks: [
-        { t: "Unsigned proposal", v: n(kinds.get("proposal_follow_up") ?? 0), d: "Follow-up emails sent" },
         {
-          t: "Call log", v: n(calls.length), d: "Calls about proposals",
-          rows: [...callOutcomes.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace(/_/g, " ")} · ${v}`),
-        },
-        {
-          t: "Messages needing approval", v: n(approvals.length), d: "Outbound messages",
+          t: "Messages waiting for your approval", v: n(appr.get("pending") ?? 0), d: "Automatic emails held until you approve them",
           rows: [...appr.entries()].map(([k, v]) => `${k} · ${v}`),
         },
+        {
+          t: "Calls about proposals", v: n(calls.length), d: "Logged by hand",
+          rows: [...callOutcomes.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace(/_/g, " ")} · ${v}`),
+        },
       ],
-      links: [{ label: "Conversations", href: "/conversations" }],
+      links: [],
     },
     {
       id: "myevals", label: "My evaluations", kind: "auto", who: ["evaluator"],
-      title: "My evaluations", sub: `Your visits, measurements and proposals in one place. (Showing ${sampleName}.)`,
+      title: "My evaluations", sub: "Your visits, measurements and proposals in one place.",
       blocks: [
         {
-          t: "Upcoming visits", v: n(upcoming.filter((j) => j.assigned_to === sampleEvaluatorId).length), d: "Coming up",
-          rows: upcoming.filter((j) => j.assigned_to === sampleEvaluatorId).slice(0, 6).map(visitRow),
+          t: "Upcoming visits", v: n(upcoming.filter(mine).length), d: "Coming up",
+          rows: upcoming.filter(mine).slice(0, 6).map(visitRow),
         },
-        { t: "Measure", v: n(evalsDone.filter((j) => j.assigned_to === sampleEvaluatorId).length), d: "Evaluations completed" },
-        { t: "Waiting on owner approval", v: n(waitingApproval.length), d: "Proposals priced and waiting" },
+        { t: "Measure", v: n(evalsDone.filter(mine).length), d: "Evaluations completed" },
+        { t: "Waiting on owner approval", v: n(waitingApproval.filter((p) => myJobIds.has(p.job_id)).length), d: "Your proposals, priced and waiting" },
       ],
       links: [{ label: "My visits", href: "/evaluate" }],
     },
@@ -626,9 +599,12 @@ export async function loadSales(): Promise<V2Section> {
 /* Operations                                                          */
 /* ------------------------------------------------------------------ */
 
-export async function loadOperations(): Promise<V2Section> {
+export async function loadOperations(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
   const today = new Date().toISOString().slice(0, 10);
+  const automationsP = getCurrentOrganizationId()
+    .then((orgId) => loadAutomations(sb, orgId))
+    .catch((e) => (console.error("v2 automations failed:", e), null));
   const [sessions, jobs, materials, suppliers, kits, fleet, issues, reviews, roles, profiles, applicants, pending,
     crewEvents, assignments, scopeChanges, walks, waivers, photos, supplierProducts, toolsActive, rentals, loadouts,
     shopChecks, shopDays, avail, timeEntries, indeed] = await Promise.all([
@@ -661,11 +637,23 @@ export async function loadOperations(): Promise<V2Section> {
     count(sb, "indeed_invites"),
   ]);
 
+  // The person the page is shown as: their own jobs, check-ins and photos, for "My projects" and "My day".
+  const [myCrew, myEvents, myWalks] = viewerId
+    ? await Promise.all([
+        rows(sb, "job_crew", "job_id", (q) => q.eq("profile_id", viewerId)),
+        count(sb, "crew_day_events", (q) => q.eq("profile_id", viewerId)),
+        rows(sb, "job_walkthroughs", "job_id"),
+      ])
+    : [[], 0, []];
+  const myJobIds = new Set(myCrew.map((c) => c.job_id));
+  const myPhotos = viewerId && myJobIds.size ? await count(sb, "job_photos", (q) => q.in("job_id", [...myJobIds])) : 0;
+
   const jobName = (id: unknown) => place(jobs.find((j) => j.id === id)?.name);
   const ss = tally(sessions, "status");
   const sched = sessions.filter((s) => s.status === "scheduled");
   const schedPast = sched.filter((s) => str(s.starts_on) < today);
   const schedNext = sched.filter((s) => str(s.starts_on) >= today).sort((a, b) => str(a.starts_on).localeCompare(str(b.starts_on)));
+  const mySchedNext = schedNext.filter((s) => myJobIds.has(s.job_id));
   const sessionRow = (s: Row) => `${day(str(s.starts_on) + "T12:00:00Z")} · ${str(s.purpose).slice(0, 60) || "Work day"} · ${jobName(s.job_id)}`;
   const js = tally(jobs, "status");
   const completed = jobs.filter((j) => j.status === "completed");
@@ -684,6 +672,7 @@ export async function loadOperations(): Promise<V2Section> {
   const positions = tally(applicants, "position");
   const owed = pending.reduce((s, p) => s + num(p.amount), 0);
 
+  const automations = await automationsP;
   const pillars: V2Pillar[] = [
     {
       id: "scheduling", label: "Scheduling", kind: "project", who: ["owner"], group: "a",
@@ -747,23 +736,30 @@ export async function loadOperations(): Promise<V2Section> {
     },
     {
       id: "mylead", label: "My projects", kind: "project", who: ["project-lead"],
-      title: "My projects", sub: "Everything a project lead needs to run their jobs.",
+      title: "My projects", sub: "Everything you need to run your jobs.",
       blocks: [
-        { t: "Coming up", v: n(schedNext.length), d: "Work days", rows: schedNext.slice(0, 5).map(sessionRow) },
+        { t: "Coming up", v: n(mySchedNext.length), d: "Your work days", rows: mySchedNext.slice(0, 5).map(sessionRow) },
         { t: "Order materials", v: n(below.length), d: "Materials below reorder point" },
-        { t: "Close out", v: n(walks), d: "Walkthroughs done" },
+        { t: "Close out", v: n(myWalks.filter((w) => myJobIds.has(w.job_id)).length), d: "Walkthroughs done on your jobs" },
       ],
       links: [{ label: "My day", href: "/my-day" }],
     },
     {
       id: "mytech", label: "My day", kind: "project", who: ["project-technician"],
-      title: "My day", sub: "What a project tech needs on the job.",
+      title: "My day", sub: "What you need on the job.",
       blocks: [
-        { t: "Next work days", v: n(schedNext.length), d: "Scheduled", rows: schedNext.slice(0, 3).map(sessionRow) },
-        { t: "Clock in / out", v: n(crewEvents), d: "Crew check-ins recorded" },
-        { t: "Photos", v: n(photos), d: "Job photos uploaded" },
+        { t: "Next work days", v: n(mySchedNext.length), d: "Scheduled for you", rows: mySchedNext.slice(0, 3).map(sessionRow) },
+        { t: "Clock in / out", v: n(myEvents), d: "Your check-ins recorded" },
+        { t: "Photos", v: n(myPhotos), d: "Photos on your jobs" },
       ],
       links: [{ label: "My day", href: "/my-day" }],
+    },
+    {
+      id: "opsmessages", label: "Automated messages", kind: "project", who: ["owner"], group: "a",
+      blurb: automations ? `${n(automations.operations.reduce((t, x) => t + x.people.length, 0))} people in automated messages` : "Not available",
+      title: "Automated messages", sub: "Every message about the work that goes out on its own, and who is in each one right now.",
+      view: "automations", automations: automations?.operations ?? [],
+      blocks: [], links: [],
     },
     {
       id: "team", label: "Project team", kind: "people", who: ["owner"], group: "b",
@@ -1060,11 +1056,12 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
   sales: [
     { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"] },
     { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Booking visits, the visits themselves, and the people who do them.", ids: ["booking", "myevals", "evaluators"] },
-    { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every reminder and follow-up that goes out on its own.", ids: ["reminders", "followup"] },
+    { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.", ids: ["messages"] },
   ],
   operations: [
     { id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"] },
     { id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"] },
+    { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message about the work that goes out on its own, and who is in each one right now.", ids: ["opsmessages"] },
     { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"] },
   ],
   admin: [
@@ -1092,7 +1089,8 @@ export function condense(section: V2Section): V2Section {
   return { ...section, pillars };
 }
 
-const condensed = (load: () => Promise<V2Section>) => async () => condense(await load());
+const condensed = (load: (viewerId?: string | null) => Promise<V2Section>) => async (viewerId: string | null = null) =>
+  condense(await load(viewerId));
 
 export const V2_LOADERS = {
   marketing: condensed(loadMarketing),

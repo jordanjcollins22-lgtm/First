@@ -33,7 +33,29 @@ describe("the few choices on each page", () => {
     expect(V2_GROUPS.marketing.map((g) => g.label)).toEqual(["Digital marketing", "Physical marketing"]);
   });
 
-  it("gathers Sales' reminders and follow-ups into one choice", () => {
-    expect(V2_GROUPS.sales.find((g) => g.id === "messages")?.ids).toEqual(["reminders", "followup"]);
+  it("gives Sales and Operations each one Automated messages choice", () => {
+    expect(V2_GROUPS.sales.find((g) => g.id === "messages")?.ids).toEqual(["messages"]);
+    expect(V2_GROUPS.operations.find((g) => g.id === "messages")?.ids).toEqual(["opsmessages"]);
+  });
+});
+
+describe("what each person sees", () => {
+  it("gives each role exactly the pages that have something for it", async () => {
+    const { V2_ROLE_PAGES } = await import("@/lib/v2-roles");
+    const pagesWith = new Map<string, Set<string>>();
+    for (const [key, fn] of Object.entries(LOADERS)) {
+      const start = source.indexOf(`export async function ${fn}(`);
+      const end = source.indexOf("\nexport ", start + 1);
+      for (const m of source.slice(start, end).matchAll(/id: "([a-z-]+)", label: "[^"]*", kind: "[^"]*", who: \[([^\]]*)\]/g)) {
+        if (m[1] === "overview" && key !== "admin") continue; // only Admin keeps its overview
+        for (const role of m[2].match(/[a-z-]+/g) ?? []) {
+          if (!pagesWith.has(role)) pagesWith.set(role, new Set());
+          pagesWith.get(role)!.add(key);
+        }
+      }
+    }
+    for (const [role, pages] of Object.entries(V2_ROLE_PAGES)) {
+      expect([...pages].sort(), role).toEqual([...(pagesWith.get(role) ?? [])].sort());
+    }
   });
 });

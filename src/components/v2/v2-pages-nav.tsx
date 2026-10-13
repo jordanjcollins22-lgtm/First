@@ -22,12 +22,12 @@ function Pending() {
   return pending ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null;
 }
 
-export function V2PagesNav() {
+export function V2PagesNav({ pages }: { pages: readonly string[] }) {
   const pathname = usePathname();
   const current = pathname.split("/")[2] ?? "marketing";
   return (
-    <nav aria-label="New app pages" className="mb-4 flex flex-wrap gap-1 rounded-xl border bg-card/80 p-2 shadow-sm">
-      {PAGES.map((p) => (
+    <nav aria-label="New app pages" className="flex flex-wrap gap-1 rounded-xl border bg-card/80 p-2 shadow-sm">
+      {PAGES.filter((p) => pages.includes(p.key)).map((p) => (
         <Link
           key={p.key}
           href={`/v2/${p.key}`}
