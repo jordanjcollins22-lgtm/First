@@ -6,7 +6,7 @@ import { ExternalLink, Monitor, Plus, Smartphone, Trash2 } from "lucide-react";
 import { SiteView } from "@/components/website/site-view";
 import { publishWebsite } from "@/lib/actions/website-actions";
 import type { WebsiteState } from "@/lib/data/website";
-import { MAX_REASONS, MAX_SERVICES, websiteLinks, type WebsiteContent } from "@/lib/website";
+import { areaHref, defaultAreaIntro, MAX_AREAS, MAX_REASONS, MAX_SERVICES, websiteLinks, type WebsiteContent } from "@/lib/website";
 
 /**
  * Marketing › Website in the new layout: every page a customer can land on,
@@ -253,13 +253,72 @@ function WebsiteEditor({ website, device }: { website: WebsiteState; device: Dev
           <Field label="Where you work" value={draft.serviceArea} onChange={(v) => set("serviceArea", v)} max={400} long />
           <Toggle label="Show the quick mow offer" checked={draft.showQuickMow} onChange={(v) => set("showQuickMow", v)} />
           <Toggle label="Show the salt pre-book offer" checked={draft.showSalt} onChange={(v) => set("showSalt", v)} />
+          <Toggle
+            label={`Show Google reviews${website.reviews.length ? ` (${website.reviews.length} to show)` : " (when Google Business Profile is connected)"}`}
+            checked={draft.showReviews}
+            onChange={(v) => set("showReviews", v)}
+          />
+        </Group>
+
+        <Group title={`Town pages (${draft.areas.length}/${MAX_AREAS})`}>
+          <p className="text-xs text-muted-foreground">
+            Each town gets its own page for people searching &ldquo;lawn care {draft.areas[0]?.town ?? "Bel Air"}&rdquo;. Leave the text empty for the standard paragraph.
+          </p>
+          {draft.areas.map((a, i) => (
+            <div key={i} className="grid gap-2 rounded-lg border p-2.5">
+              <div className="flex gap-2">
+                <input
+                  aria-label={`Town ${i + 1}`}
+                  value={a.town}
+                  maxLength={60}
+                  onChange={(e) => set("areas", draft.areas.map((x, j) => (j === i ? { ...x, town: e.target.value } : x)))}
+                  className="min-h-10 flex-1 rounded-md border bg-background px-2.5 text-sm font-semibold"
+                />
+                <a
+                  href={areaHref(website.orgSlug, a.town)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Open the ${a.town} page`}
+                  className="flex min-h-10 min-w-10 items-center justify-center rounded-md border text-muted-foreground hover:text-foreground"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+                <button
+                  type="button"
+                  aria-label={`Remove ${a.town || "town"}`}
+                  onClick={() => set("areas", draft.areas.filter((_, j) => j !== i))}
+                  className="flex min-h-10 min-w-10 items-center justify-center rounded-md border text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+              <textarea
+                aria-label={`What the ${a.town} page says`}
+                value={a.intro}
+                maxLength={1500}
+                rows={2}
+                placeholder={defaultAreaIntro(a.town || "this town", draft.businessName)}
+                onChange={(e) => set("areas", draft.areas.map((x, j) => (j === i ? { ...x, intro: e.target.value } : x)))}
+                className="rounded-md border bg-background px-2.5 py-1.5 text-sm"
+              />
+            </div>
+          ))}
+          {draft.areas.length < MAX_AREAS && (
+            <button
+              type="button"
+              onClick={() => set("areas", [...draft.areas, { town: "", intro: "" }])}
+              className="flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-dashed text-sm font-semibold hover:bg-muted"
+            >
+              <Plus className="h-4 w-4" /> Add a town
+            </button>
+          )}
         </Group>
       </div>
 
       <div className="xl:sticky xl:top-20 xl:self-start">
         <Frame device={device}>
           <div className="max-h-[760px] overflow-y-auto">
-            <SiteView content={draft} orgSlug={website.orgSlug} newTab />
+            <SiteView content={draft} orgSlug={website.orgSlug} reviews={website.reviews} newTab />
           </div>
         </Frame>
       </div>

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { directionsUrl, progressOf, type Stop } from "@/lib/route-walk";
 import { setMarketingPlayStatus } from "@/lib/actions/marketing-actions";
+import { WalkTracker } from "@/components/v2/panels/marketing-autopilot-controls";
 
 /**
  * Walking a round, on a phone, in a street.
@@ -75,6 +76,10 @@ export function RouteWalker({
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress.percent}%` }} />
         </div>
       </div>
+
+      {/* The walk itself, as a GPS trail: enough of it past the doors and the
+          round closes on its own, even if nobody presses "done" at the end. */}
+      <WalkTracker playId={playId} />
 
       {byHand && (
         <p className="rounded-lg border border-primary/40 bg-primary/5 p-3 text-xs">

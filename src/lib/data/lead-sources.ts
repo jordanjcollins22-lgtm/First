@@ -3,6 +3,8 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
 
 export interface LeadRecord {
+  /** The job the lead is, so other reports can join on it. */
+  jobId: string;
   createdAt: string;
   source: LeadSource;
   sold: boolean;
@@ -80,6 +82,7 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
         ? Number(mow?.amount_cents ?? 0) / 100
         : 0;
     return {
+      jobId: j.id,
       createdAt: j.created_at,
       sold: proposalSold || mowSold,
       revenue,
