@@ -22,6 +22,12 @@ import { ClientMessagesSettingsPanel } from "@/components/v2/panels/client-messa
 import { MarketingAutopilotPanel } from "@/components/v2/panels/marketing-autopilot";
 import { ReviewsPanel } from "@/components/v2/panels/reviews";
 import { PhysicalMarketingPanel } from "@/components/v2/panels/physical-marketing";
+import { AffiliateHomePanel } from "@/components/v2/panels/role/affiliate-home";
+import { AccountManagerSalesPanel } from "@/components/v2/panels/role/am-sales";
+import { AccountManagerAccountsPanel } from "@/components/v2/panels/role/am-accounts";
+import { EvaluatorHomePanel } from "@/components/v2/panels/role/evaluator-home";
+import { LeadHomePanel } from "@/components/v2/panels/role/lead-home";
+import { CrewHomePanel } from "@/components/v2/panels/role/crew-home";
 
 /**
  * The working screens the new layout's choices can show, by key. Each is an
@@ -51,4 +57,10 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   "marketing-autopilot": MarketingAutopilotPanel,
   reviews: ReviewsPanel,
   "physical-marketing": PhysicalMarketingPanel,
+  "affiliate-home": AffiliateHomePanel,
+  "am-sales": AccountManagerSalesPanel,
+  "am-accounts": AccountManagerAccountsPanel,
+  "evaluator-home": EvaluatorHomePanel,
+  "lead-home": LeadHomePanel,
+  "crew-home": CrewHomePanel,
 };

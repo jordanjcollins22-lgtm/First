@@ -59,6 +59,8 @@ export interface V2Pillar {
   parts?: V2Pillar[];
   /** Working screens shown above the numbers: keys into the panel registry. */
   panels?: string[];
+  /** Each role's own home screen on this choice. */
+  rolePanels?: Partial<Record<V2Role, string[]>>;
 }
 
 export interface V2Section {
@@ -683,7 +685,8 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       links: [],
     },
     {
-      id: "myevals", label: "My evaluations", kind: "auto", who: ["evaluator"],
+      // Replaced by the evaluator's own home screen (rolePanels); kept for the task list's links.
+      id: "myevals", label: "My evaluations", kind: "auto", who: [],
       title: "My evaluations", sub: "Your visits, measurements and proposals in one place.",
       blocks: [
         {
@@ -950,7 +953,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       links: [{ label: "Project review", href: "/jobs/review" }],
     },
     {
-      id: "mylead", label: "My projects", kind: "project", who: ["project-lead"],
+      id: "mylead", label: "My projects", kind: "project", who: [],
       title: "My projects", sub: "Everything you need to run your jobs.",
       blocks: [
         { t: "Coming up", v: n(mySchedNext.length), d: "Your work days", rows: mySchedNext.slice(0, 5).map(sessionRow) },
@@ -960,7 +963,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       links: [{ label: "My day", href: "/my-day" }],
     },
     {
-      id: "mytech", label: "My day", kind: "project", who: ["project-technician"],
+      id: "mytech", label: "My day", kind: "project", who: [],
       title: "My day", sub: "What you need on the job.",
       blocks: [
         { t: "Next work days", v: n(mySchedNext.length), d: "Scheduled for you", rows: mySchedNext.slice(0, 3).map(sessionRow) },
@@ -1349,6 +1352,8 @@ type Group = {
   id: string; label: string; title: string; sub: string; ids: string[];
   /** Working screens shown above the numbers: keys into the panel registry. Owner only. */
   panels?: string[];
+  /** A role's own home screen on this choice, for everybody who isn't the owner. */
+  rolePanels?: Partial<Record<V2Role, string[]>>;
 };
 
 /**
@@ -1364,6 +1369,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
       sub: "The website, search, ads, social, email and the people sharing links.",
       ids: ["website", "ads", "seo", "social", "comments", "groups", "email", "pm", "affiliates"],
       panels: ["marketing-autopilot", "reviews"],
+      rolePanels: { affiliate: ["affiliate-home"] },
     },
     {
       id: "physical", label: "Physical marketing", title: "Physical marketing",
@@ -1373,18 +1379,18 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     },
   ],
   sales: [
-    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-autopilot"] },
-    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Booking visits, the visits themselves, and the people who do them.", ids: ["booking", "myevals", "evaluators"], panels: ["evaluator-scorecard", "territories"] },
+    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-autopilot"], rolePanels: { "account-manager": ["am-sales"] } },
+    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Booking visits, the visits themselves, and the people who do them.", ids: ["booking", "myevals", "evaluators"], panels: ["evaluator-scorecard", "territories"], rolePanels: { evaluator: ["evaluator-home"] } },
     { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.", ids: ["messages"], panels: ["client-messages", "email-approval-policy"] },
   ],
   operations: [
-    { id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"], panels: ["projects-autopilot", "weather", "snow-ops"] },
+    { id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"], panels: ["projects-autopilot", "weather", "snow-ops"], rolePanels: { "project-lead": ["lead-home"], "project-technician": ["crew-home"] } },
     { id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"], panels: ["purchasing", "equipment"] },
     { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message about the work that goes out on its own, and who is in each one right now.", ids: ["opsmessages"] },
     { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"], panels: ["crew-budget"] },
   ],
   admin: [
-    { id: "oversight", label: "Oversight", title: "Oversight", sub: "Every department at a glance, and every customer account.", ids: ["overview", "departments", "customers"], panels: ["approval-queue"] },
+    { id: "oversight", label: "Oversight", title: "Oversight", sub: "Every department at a glance, and every customer account.", ids: ["overview", "departments", "customers"], panels: ["approval-queue"], rolePanels: { "account-manager": ["am-accounts"] } },
     { id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out.", ids: ["finance"], panels: ["finance", "job-costing", "commissions"] },
     { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people"] },
     { id: "settings", label: "Settings", title: "Settings", sub: "Integrations, the company's details and how the app is set up.", ids: ["integrations", "company", "settings"], panels: ["integrations", "compliance"] },
@@ -1396,13 +1402,13 @@ export function condense(section: V2Section): V2Section {
   const byId = new Map(section.pillars.map((p) => [p.id, p]));
   const pillars = V2_GROUPS[section.key].flatMap((g): V2Pillar[] => {
     const parts = g.ids.map((id) => byId.get(id)).filter((p): p is V2Pillar => Boolean(p));
-    if (!parts.length) return [];
+    if (!parts.length && !g.rolePanels) return [];
     return [{
       id: g.id, label: g.label, title: g.title, sub: g.sub,
       kind: parts.find((p) => p.kind)?.kind ?? "",
-      who: [...new Set(parts.flatMap((p) => p.who))],
+      who: [...new Set([...parts.flatMap((p) => p.who), ...(Object.keys(g.rolePanels ?? {}) as V2Role[])])],
       blurb: parts.map((p) => p.label).join(" · "),
-      blocks: [], links: [], parts, panels: g.panels,
+      blocks: [], links: [], parts, panels: g.panels, rolePanels: g.rolePanels,
     }];
   });
   return { ...section, pillars };

@@ -19,7 +19,7 @@ export function PreviewAs({
 }) {
   const form = useRef<HTMLFormElement>(null);
   return (
-    <form ref={form} action={previewV2As} className="flex items-center gap-2 text-sm">
+    <form data-tour="preview-as" ref={form} action={previewV2As} className="flex items-center gap-2 text-sm">
       <label htmlFor="preview-as" className="text-muted-foreground">
         Preview as
       </label>

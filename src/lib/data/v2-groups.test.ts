@@ -54,6 +54,15 @@ describe("what each person sees", () => {
         }
       }
     }
+    // A role's own home screen on a choice counts as something for it too.
+    for (const [key, groups] of Object.entries(V2_GROUPS)) {
+      for (const g of groups) {
+        for (const role of Object.keys(g.rolePanels ?? {})) {
+          if (!pagesWith.has(role)) pagesWith.set(role, new Set());
+          pagesWith.get(role)!.add(key);
+        }
+      }
+    }
     for (const [role, pages] of Object.entries(V2_ROLE_PAGES)) {
       expect([...pages].sort(), role).toEqual([...(pagesWith.get(role) ?? [])].sort());
     }

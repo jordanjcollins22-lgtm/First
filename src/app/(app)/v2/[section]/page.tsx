@@ -9,7 +9,6 @@ import { V2Shell } from "@/components/v2/v2-shell";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { V2_GROUPS, V2_LOADERS } from "@/lib/data/v2";
 import { TABS } from "@/lib/permissions";
-import { isOwnerLevel } from "@/lib/roles";
 import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 
 export const metadata = { title: "New layout · JS Landscaping" };
@@ -19,9 +18,9 @@ type SectionKey = keyof typeof V2_LOADERS;
 /**
  * One of the four pages of the new layout, with live data.
  *
- * Owner-level only while it is being built: it is checked against the account
- * actually signed in, not whoever an admin is viewing as, so the preview can't
- * be reached by somebody it wasn't meant for.
+ * Every member of staff gets it, drawn for their roles: the owner sees all
+ * four pages; everybody else sees only the pages and home screens their
+ * roles have, nothing more.
  *
  * It is drawn as whoever the owner picked in Preview as: their pages, their
  * choices, and their own visits and work days, nothing more and nothing less.
@@ -32,7 +31,6 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
 
   const me = await getRealProfile();
   if (!me) redirect("/login");
-  if (!isOwnerLevel(me.roles)) redirect("/");
 
   const viewer = (await getCurrentProfile()) ?? me;
   const roles = v2RolesOf(viewer);
@@ -66,8 +64,12 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
   // The working screens for this page's choices, owner view only. Each streams
   // in on its own, so a slow one never holds up the page.
   const panels: Record<string, React.ReactNode> = {};
-  if (roles.includes("owner")) {
-    for (const key of new Set(V2_GROUPS[section as SectionKey].flatMap((g) => g.panels ?? []))) {
+  {
+    const groups = V2_GROUPS[section as SectionKey];
+    const keys = roles.includes("owner")
+      ? groups.flatMap((g) => g.panels ?? [])
+      : groups.flatMap((g) => roles.flatMap((r) => g.rolePanels?.[r] ?? []));
+    for (const key of new Set(keys)) {
       const Panel = PANELS[key];
       if (Panel)
         panels[key] = (

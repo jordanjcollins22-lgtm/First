@@ -22,4 +22,10 @@ export const PANEL_LABEL: Record<string, string> = {
   integrations: "Integrations",
   compliance: "Compliance",
   "task-list": "Task list",
+  "affiliate-home": "My links & earnings",
+  "am-sales": "My sales",
+  "am-accounts": "My accounts",
+  "evaluator-home": "My visits",
+  "lead-home": "My crew today",
+  "crew-home": "My day",
 };

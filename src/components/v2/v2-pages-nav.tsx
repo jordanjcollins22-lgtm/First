@@ -26,7 +26,7 @@ export function V2PagesNav({ pages }: { pages: readonly string[] }) {
   const pathname = usePathname();
   const current = pathname.split("/")[2] ?? "marketing";
   return (
-    <nav aria-label="New app pages" className="flex flex-wrap gap-1 rounded-xl border bg-card/80 p-2 shadow-sm">
+    <nav data-tour="pages" aria-label="New app pages" className="flex flex-wrap gap-1 rounded-xl border bg-card/80 p-2 shadow-sm">
       {PAGES.filter((p) => pages.includes(p.key)).map((p) => (
         <Link
           key={p.key}

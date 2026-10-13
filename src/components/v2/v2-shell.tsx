@@ -38,6 +38,10 @@ export function V2Shell({
   unplaced?: { label: string; href: string }[];
 }) {
   const sees = (p: V2Pillar) => p.who.some((r) => roles.includes(r));
+  const isOwner = roles.includes("owner");
+  // The working screens a person gets on a choice: the owner's set, or their own role's home.
+  const panelKeysFor = (p: V2Pillar): string[] =>
+    isOwner ? (p.panels ?? []) : [...new Set(roles.flatMap((r) => p.rolePanels?.[r] ?? []))];
   const visible = section.pillars.filter(sees);
   const [pillarId, setPillarId] = useState<string>(visible[0]?.id ?? "overview");
   const current = visible.find((p) => p.id === pillarId) ?? visible[0];
@@ -47,7 +51,7 @@ export function V2Shell({
   // first (they hold what needs doing), then the numbers. The pick is kept
   // per choice, so coming back to a choice lands where you left it.
   const parts = current ? (current.parts ?? [current]).filter(sees) : [];
-  const shownPanels = current && roles.includes("owner") ? (current.panels ?? []).filter((k) => panels[k]) : [];
+  const shownPanels = current ? panelKeysFor(current).filter((k) => panels[k]) : [];
   const sections = [
     ...shownPanels.map((k) => ({ key: `panel:${k}`, label: PANEL_LABEL[k] ?? k })),
     ...parts.map((p) => ({ key: `part:${p.id}`, label: p.label })),
@@ -71,7 +75,7 @@ export function V2Shell({
       </div>
 
       <div className="mb-2 rounded-xl border bg-card p-2">
-        <div role="tablist" aria-label={`${section.name} pillars`} className="flex gap-1.5 overflow-x-auto pb-0.5">
+        <div data-tour="choices" role="tablist" aria-label={`${section.name} pillars`} className="flex gap-1.5 overflow-x-auto pb-0.5">
           {visible.map((p) => {
             const on = p.id === current?.id;
             return (
@@ -98,7 +102,7 @@ export function V2Shell({
         </div>
       </div>
       {sections.length > 1 && current && (
-        <div role="tablist" aria-label={`${current.label} sections`} className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+        <div data-tour="sections" role="tablist" aria-label={`${current.label} sections`} className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
           {sections.map((x) => {
             const on = x.key === activeKey;
             return (

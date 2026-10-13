@@ -4,6 +4,11 @@ import { getCurrentProfile, getRealProfile, listProfiles } from "@/lib/data/team
 import { isSupabaseConfigured } from "@/lib/env";
 import { isOwnerLevel } from "@/lib/roles";
 import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
+import { TutorialRunner } from "@/components/tutorial/tutorial-runner";
+import { toursFor } from "@/lib/tutorials";
+import type { Tour } from "@/lib/tutorials/types";
+import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * The four-page bar, shared by every page of the new layout so it never waits
@@ -13,9 +18,24 @@ import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 export default async function V2Layout({ children }: { children: React.ReactNode }) {
   let pages: ("marketing" | "sales" | "operations" | "admin")[] = ["marketing", "sales", "operations", "admin"];
   let picker: React.ReactNode = null;
+  let tours: Tour[] = [];
+  let autoStart = false;
   if (isSupabaseConfigured) {
     const [me, viewer] = await Promise.all([getRealProfile(), getCurrentProfile()]);
-    if (me && viewer) pages = v2PagesFor(v2RolesOf(viewer));
+    if (me && viewer) {
+      const roles = v2RolesOf(viewer);
+      pages = v2PagesFor(roles);
+      // The tutorial for the person being shown. It opens by itself the first
+      // time somebody opens the app as themselves; while the owner previews
+      // somebody else it waits for the Help button.
+      tours = toursFor(roles);
+      if (tours.length && viewer.id === me.id) {
+        const sb = (await createClient()) as unknown as SupabaseClient;
+        const { data } = await sb.from("tutorial_progress").select("tour").eq("profile_id", me.id);
+        const done = new Set((data ?? []).map((r: { tour: string }) => r.tour));
+        autoStart = tours.some((t) => !done.has(t.id));
+      }
+    }
     if (me && isOwnerLevel(me.roles) && me.roles.includes("admin")) {
       const team = await listProfiles().catch(() => []);
       picker = (
@@ -36,6 +56,7 @@ export default async function V2Layout({ children }: { children: React.ReactNode
         {picker}
       </div>
       {children}
+      <TutorialRunner tours={tours} autoStart={autoStart} />
     </div>
   );
 }
