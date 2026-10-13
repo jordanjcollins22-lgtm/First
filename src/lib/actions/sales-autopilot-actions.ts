@@ -35,7 +35,7 @@ async function owner(): Promise<{ id: string; organizationId: string } | { error
 }
 
 function refresh() {
-  revalidatePath("/v2");
+  revalidatePath("/v2", "layout");
   revalidatePath("/pipeline");
 }
 
@@ -67,7 +67,7 @@ export async function saveAutopilotSettings(input: AutopilotSettingsInput): Prom
   try {
     const supabase = await createClient();
     const current = await readAutopilotSettings(supabase, who.organizationId);
-    if (!current.ready) return { ok: false, error: "The autopilot's table isn't set up yet (migration 0361)." };
+    if (!current.ready) return { ok: false, error: "Automatic pricing isn't set up in the database yet." };
     const now = new Date();
     const { error } = await untyped(supabase)
       .from("sales_autopilot_settings")

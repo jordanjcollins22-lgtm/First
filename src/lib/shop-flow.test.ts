@@ -47,5 +47,8 @@ describe("canLead", () => {
     expect(canLead({ roles: ["crew"], leadsAStop: false })).toBe(false);
     expect(canLead({ roles: ["owner"], leadsAStop: false })).toBe(true);
     expect(canLead({ roles: ["project-lead"], leadsAStop: false })).toBe(true);
+    // As the roles are stored.
+    expect(canLead({ roles: ["project lead"], leadsAStop: false })).toBe(true);
+    expect(canLead({ roles: ["foreman"], leadsAStop: false })).toBe(true);
   });
 });

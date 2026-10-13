@@ -80,7 +80,7 @@ export function ApprovalQueueList({ items }: { items: QueueItem[] }) {
                     aria-expanded={declining === k}
                     className="min-h-11 rounded-lg border px-3 text-sm font-semibold disabled:opacity-50"
                   >
-                    {item.type === "price" ? "Change price" : "Decline"}
+                    {item.type === "price" ? "Not this price" : "Decline"}
                   </button>
                 )}
                 <OpenButton kind="admin.queue_item" id={`${item.type}:${item.id}`} />

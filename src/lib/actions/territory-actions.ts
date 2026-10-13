@@ -43,7 +43,7 @@ export async function saveTerritory(input: { evaluatorId: string; zips: string; 
       { onConflict: "organization_id,evaluator_id" }
     );
     if (error) return { ok: false, error: /evaluator_territories/.test(error.message) ? "Territories aren't set up yet (migration 0361)." : error.message };
-    revalidatePath("/v2");
+    revalidatePath("/v2", "layout");
     const parts = [zips.length ? `${zips.length} zip code${zips.length === 1 ? "" : "s"}` : null, areas.length ? `${areas.length} drawn area${areas.length === 1 ? "" : "s"}` : null].filter(Boolean);
     return { ok: true, message: parts.length ? `Saved: ${parts.join(" and ")}.` : "Saved: no territory, so they cover everywhere." };
   } catch (err) {

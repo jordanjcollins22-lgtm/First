@@ -28,7 +28,7 @@ export type SnowActionResult<T = null> = { ok: true; message: string; value?: T 
 const untyped = (c: unknown) => c as SupabaseClient;
 
 function refresh() {
-  revalidatePath("/v2");
+  revalidatePath("/v2", "layout");
   revalidatePath("/snow");
   revalidatePath("/admin/salt");
 }

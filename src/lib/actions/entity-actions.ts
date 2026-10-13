@@ -34,6 +34,8 @@ const OWNER_ONLY_ACTIONS: Record<string, string[]> = {
   "admin.job": ["recompute_cost"],
   "ops.job": ["recost"],
   "ops.issue": ["blocking"],
+  // Moving payments is admin-only in the action itself.
+  "admin.payment": ["detach"],
 };
 
 const ownerOnly = (kind: string, action: string) => OWNER_ONLY_ACTIONS[kind]?.includes(action) ?? false;
@@ -63,7 +65,13 @@ export async function openEntity(ref: EntityRef): Promise<{ ok: true; view: Enti
     if (ctx.isOwner) return { ok: true, view };
     const actions = view.actions.filter((a) => !ownerOnly(ref.kind, a.id));
     const hidden = actions.length < view.actions.length;
-    return { ok: true, view: { ...view, actions, note: hidden && !actions.length ? "The owner deals with this one." : view.note } };
+    // A row that would open something this role can't (a crew member's pay, a
+    // purchase order) is shown as plain words rather than a dead end.
+    const sections = view.sections?.map((s) => ({
+      ...s,
+      rows: s.rows.map((r) => (r.ref && !ACCOUNT_MANAGER_KINDS.test(r.ref.kind) ? { text: r.text } : r)),
+    }));
+    return { ok: true, view: { ...view, sections, actions, note: hidden && !actions.length ? "The owner deals with this one." : view.note } };
   } catch (err) {
     log.error("entity.open_failed", err, { kind: ref.kind });
     return { ok: false, error: "Couldn't load it just now." };

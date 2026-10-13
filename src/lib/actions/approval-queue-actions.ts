@@ -39,7 +39,7 @@ async function owner(): Promise<{ profileId: string; organizationId: string } | 
 }
 
 function refresh() {
-  revalidatePath("/v2");
+  revalidatePath("/v2", "layout");
   revalidatePath("/my-day");
 }
 
@@ -128,7 +128,7 @@ async function decline(type: Exclude<QueueType, "email">, id: string, reason: De
       // Saying no to a price is typing the right one, which happens on the
       // job. The reason is still kept, and the job opens from the row.
       if (!(await belongs("job_proposals", id, organizationId, "job_id"))) return { ok: false, message: "That proposal isn't yours." };
-      return { ok: true, message: "Noted. Open the job to type the price it should be." };
+      return { ok: true, message: "Noted. Open the job and approve it at the right price." };
     case "play": {
       const done = await setMarketingPlayStatus(id, "skipped");
       return done.ok ? { ok: true, message: "Skipped." } : { ok: false, message: done.error };

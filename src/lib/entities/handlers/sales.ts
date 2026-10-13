@@ -872,7 +872,7 @@ const service: EntityHandler = {
         { label: "Updated", value: salesDay(str(s.updated_at)) },
       ],
       actions: [{ id: "rate", label: "Set the rate", tone: "primary", input: { type: "text", label: `Rate in dollars (${str(s.cost_unit) || "flat rate"}); blank clears it`, initial: s.cost == null ? "" : String(s.cost) } }],
-      note: "The autopilot prices proposals from this rate. A service without one holds every price it is on.",
+      note: "Proposals are priced automatically from this rate. A service without one holds every price it is on.",
     };
   },
   async act(ctx, id, action, value) {

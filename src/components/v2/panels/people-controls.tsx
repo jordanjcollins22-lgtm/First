@@ -56,26 +56,33 @@ export function RoleFixButton({ profileId, fix, choose }: { profileId: string; f
 export function ItemToggle({ itemId, done, waived }: { itemId: string; done: boolean; waived: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const run = (state: "done" | "waived" | "open") =>
     start(async () => {
-      await setOnboardingItem({ itemId, state });
+      const r = await setOnboardingItem({ itemId, state });
+      setError(r.ok ? null : r.error);
       router.refresh();
     });
+  const failed = error && <span className="w-full text-xs text-destructive">{error}</span>;
   if (done || waived) {
     return (
-      <Button type="button" size="sm" variant="ghost" className="min-h-11" disabled={pending} onClick={() => run("open")}>
-        Undo
-      </Button>
+      <span className="flex flex-wrap gap-1">
+        <Button type="button" size="sm" variant="ghost" className="min-h-11" disabled={pending} onClick={() => run("open")}>
+          Undo
+        </Button>
+        {failed}
+      </span>
     );
   }
   return (
-    <span className="flex gap-1">
+    <span className="flex flex-wrap gap-1">
       <Button type="button" size="sm" className="min-h-11" disabled={pending} onClick={() => run("done")}>
         Done
       </Button>
       <Button type="button" size="sm" variant="ghost" className="min-h-11" disabled={pending} onClick={() => run("waived")}>
         Doesn&apos;t apply
       </Button>
+      {failed}
     </span>
   );
 }
@@ -84,9 +91,11 @@ export function ItemToggle({ itemId, done, waived }: { itemId: string; done: boo
 export function ChecklistSettings({ checklistId, startDate, handlesPesticides }: { checklistId: string; startDate: string; handlesPesticides: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const save = (patch: { startDate?: string; handlesPesticides?: boolean }) =>
     start(async () => {
-      await updateChecklist({ checklistId, ...patch });
+      const r = await updateChecklist({ checklistId, ...patch });
+      setError(r.ok ? null : r.error);
       router.refresh();
     });
   return (
@@ -99,6 +108,7 @@ export function ChecklistSettings({ checklistId, startDate, handlesPesticides }:
         <input type="checkbox" className="h-5 w-5" defaultChecked={handlesPesticides} disabled={pending} onChange={(e) => save({ handlesPesticides: e.target.checked })} />
         Handles pesticides
       </label>
+      {error && <span className="w-full text-xs text-destructive">{error}</span>}
     </div>
   );
 }

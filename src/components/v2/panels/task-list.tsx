@@ -34,7 +34,7 @@ export async function TaskListPanel() {
 
       {tasks.length === 0 ? (
         <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-          No tasks yet. Once migration 0356b has run the 33 build tasks appear here; anything added below is saved straight away.
+          No tasks yet. Anything added below is saved straight away.
         </p>
       ) : null}
       {/* Keyed on what the tasks say, so a change made in the drawer shows here too. */}

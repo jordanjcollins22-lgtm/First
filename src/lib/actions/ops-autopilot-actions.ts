@@ -56,7 +56,7 @@ const EDITABLE: Record<string, "boolean" | "number"> = {
 
 export async function saveAutopilotSettings(patch: Record<string, boolean | number>): Promise<OpsResult> {
   const who = await owner();
-  if (!who) return { ok: false, message: "Only the owner changes the autopilot." };
+  if (!who) return { ok: false, message: "Only the owner changes these settings." };
   const clean: SettingsRow = {};
   for (const [key, value] of Object.entries(patch)) {
     const kind = EDITABLE[key];
@@ -68,7 +68,7 @@ export async function saveAutopilotSettings(patch: Record<string, boolean | numb
 
   const db = admin();
   const { ready } = await ensureSettings(who.organization_id, db);
-  if (!ready) return { ok: false, message: "The autopilot tables aren't set up yet (migration 0358)." };
+  if (!ready) return { ok: false, message: "The project automations aren't set up in the database yet." };
   const { data: current } = await db.from("ops_autopilot_settings").select("*").eq("organization_id", who.organization_id).maybeSingle();
   const before = (current ?? {}) as SettingsRow;
 

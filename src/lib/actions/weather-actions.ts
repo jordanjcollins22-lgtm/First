@@ -21,7 +21,7 @@ export type WeatherActionResult = { ok: true; message: string } | { ok: false; e
 const untyped = (c: unknown) => c as SupabaseClient;
 
 function refresh() {
-  revalidatePath("/v2");
+  revalidatePath("/v2", "layout");
   revalidatePath("/evaluations");
   revalidatePath("/my-day");
 }

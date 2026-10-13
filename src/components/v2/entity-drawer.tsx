@@ -96,13 +96,16 @@ function Drawer({
   function run(action: EntityAction, value?: string) {
     if (action.confirm && !window.confirm(action.confirm)) return;
     setMessage(null);
+    setError(null);
     startTransition(async () => {
       const r = await runEntityAction(entity, action.id, value);
       if (r.ok) {
         setMessage(r.message ?? "Done.");
         router.refresh();
         const again = await openEntity(entity);
+        // Gone (deleted, say): keep what it was, but nothing left to press.
         if (again.ok) setView(again.view);
+        else setView((v) => (v ? { ...v, actions: [] } : v));
       } else setError(r.error);
     });
   }

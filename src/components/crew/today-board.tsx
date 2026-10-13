@@ -31,6 +31,7 @@ export function TodayBoard({
   leaveBlockedBy = null,
   actions,
   inline = false,
+  sheets = true,
 }: {
   stops: Stop[];
   events: CrewEvent[];
@@ -45,6 +46,8 @@ export function TodayBoard({
    * sends them off to another page.
    */
   inline?: boolean;
+  /** Inline only: whether the job sheets are drawn below, so "Job sheet" has somewhere to go. */
+  sheets?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -97,7 +100,7 @@ export function TodayBoard({
         </p>
 
         {!hideWhere && (day.currentStop ?? day.nextStop) && (
-          <StopCallout stop={(day.currentStop ?? day.nextStop)!} phase={day.phase} directionsInButton={day.action?.kind === "travelling"} inline={inline} />
+          <StopCallout stop={(day.currentStop ?? day.nextStop)!} phase={day.phase} directionsInButton={day.action?.kind === "travelling"} inline={inline} sheet={!inline || sheets} />
         )}
 
         {day.action && (
@@ -159,6 +162,7 @@ export function TodayBoard({
                 done={done.has(stop.jobId)}
                 current={day.currentStop?.jobId === stop.jobId || day.nextStop?.jobId === stop.jobId}
                 inline={inline}
+                sheet={!inline || sheets}
               />
             ))}
           </ol>
@@ -170,7 +174,7 @@ export function TodayBoard({
 }
 
 /** The address, big, with the two things you do with an address. */
-function StopCallout({ stop, phase, directionsInButton = false, inline = false }: { stop: Stop; phase: string; directionsInButton?: boolean; inline?: boolean }) {
+function StopCallout({ stop, phase, directionsInButton = false, inline = false, sheet = true }: { stop: Stop; phase: string; directionsInButton?: boolean; inline?: boolean; sheet?: boolean }) {
   return (
     <div className="mt-3 rounded-xl border border-border bg-background/70 p-3">
       <p className="text-xs font-medium text-muted-foreground">
@@ -189,10 +193,12 @@ function StopCallout({ stop, phase, directionsInButton = false, inline = false }
             Directions
           </Go>
         )}
-        <Go href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
-          <MapPin className="h-4 w-4" />
-          {inline ? "Job sheet" : "Crew sheet"}
-        </Go>
+        {sheet && (
+          <Go href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
+            <MapPin className="h-4 w-4" />
+            {inline ? "Job sheet" : "Crew sheet"}
+          </Go>
+        )}
       </div>
     </div>
   );
@@ -204,12 +210,15 @@ function StopRow({
   done,
   current,
   inline = false,
+  sheet = true,
 }: {
   stop: Stop;
   index: number;
   done: boolean;
   current: boolean;
   inline?: boolean;
+  /** Whether there is a sheet to open; not once the sheets are put away for the day. */
+  sheet?: boolean;
 }) {
   return (
     <li
@@ -243,13 +252,15 @@ function StopRow({
       {/* Always tappable, even when it isn't the current stop — "show me which
           house that was" and "what am I doing there" are fair questions about
           any of them. The job opens as the crew sheet: site map, scope, photos. */}
-      <Go
-        href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`}
-        aria-label={`Site map and sheet for ${stop.address}`}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
-      >
-        <MapPin className="h-4 w-4" />
-      </Go>
+      {sheet && (
+        <Go
+          href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`}
+          aria-label={`Site map and sheet for ${stop.address}`}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
+        >
+          <MapPin className="h-4 w-4" />
+        </Go>
+      )}
       <Go
         href={inline ? externalNavUrl(stop) : directionsUrl(stop)}
         external={inline}

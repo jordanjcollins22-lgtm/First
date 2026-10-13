@@ -73,7 +73,7 @@ export function SectionTitle({ children, sub }: { children: React.ReactNode; sub
 export function NotReady() {
   return (
     <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-      The operations autopilot isn&apos;t set up in the database yet (migration 0358). Nothing here runs until it is.
+      The project automations aren&apos;t set up in the database yet. Nothing here runs until they are.
     </p>
   );
 }

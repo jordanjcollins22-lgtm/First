@@ -11,7 +11,7 @@ import { clockIn } from "@/lib/actions/time-clock-actions";
 import { myOpenEntry } from "@/lib/data/time-clock";
 import { describeDbError } from "@/lib/setup-errors";
 import type { LoadoutKind } from "@/lib/loadout";
-import type { ShopStage } from "@/lib/shop-flow";
+import { canLead, type ShopStage } from "@/lib/shop-flow";
 
 export type ShopResult = { ok: true } | { ok: false; message: string };
 
@@ -101,9 +101,20 @@ async function leadOnly(shopDayId: string): Promise<{ ok: true; supabase: Awaite
   const supabase = await createClient();
   const { data } = await supabase.from("crew_shop_days").select("lead_profile_id").eq("id", shopDayId).maybeSingle();
   if (!data) return { ok: false, message: "No shop day open." };
-  const office = profile.roles.some((r) => r === "owner" || r === "admin" || r === "project-lead");
-  if (data.lead_profile_id !== profile.id && !office) return { ok: false, message: "Only the lead moves the screen on." };
+  // The same rule the screen uses to show the lead's buttons, so nobody is shown one that refuses them.
+  if (data.lead_profile_id !== profile.id && !canLead({ roles: profile.roles, leadsAStop: await leadsAStopToday(supabase, profile.id) })) {
+    return { ok: false, message: "Only the lead moves the screen on." };
+  }
   return { ok: true, supabase };
+}
+
+/** Whether this person is marked lead on any of today's jobs. */
+async function leadsAStopToday(supabase: Awaited<ReturnType<typeof createClient>>, profileId: string): Promise<boolean> {
+  const day = await getCrewDay(localDayKey()).catch(() => null);
+  const jobIds = day?.stops.map((s) => s.jobId) ?? [];
+  if (jobIds.length === 0) return false;
+  const { data } = await supabase.from("job_crew").select("job_id").eq("profile_id", profileId).eq("is_lead", true).in("job_id", jobIds).limit(1);
+  return (data ?? []).length > 0;
 }
 
 /** Which page of the load-out is up. The lead's call. */

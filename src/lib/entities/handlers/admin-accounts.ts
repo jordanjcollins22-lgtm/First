@@ -6,7 +6,7 @@ import { DECLINE_REASONS, DECLINE_REASON_LABEL } from "@/lib/approvals/declines"
 import { approveQueueItem, declineQueueItem } from "@/lib/actions/approval-queue-actions";
 import { assignAccountManager, updateCustomerContact } from "@/lib/actions/customer-actions";
 import { generateClientCoi, openClientCoi, sendClientCoi } from "@/lib/actions/back-office-actions";
-import { acceptPrice } from "@/lib/actions/price-approval-actions";
+import { acceptPrice, setPrice } from "@/lib/actions/price-approval-actions";
 import { raiseInvoiceForJob } from "@/lib/actions/job-invoice-actions";
 import { cancelEstimate } from "@/lib/actions/job-actions";
 import { closeOneSession, closePastSessions, recomputeJobCost } from "@/lib/actions/ops-autopilot-actions";
@@ -391,7 +391,11 @@ const jobHandler: EntityHandler = {
     const pStatus = str(proposal?.status);
 
     const actions: EntityAction[] = [];
-    if (pStatus === "needs_approval") actions.push({ id: "accept_price", label: `Accept the price (${usd(num(proposal?.total_cost))})`, tone: "primary" });
+    if (pStatus === "needs_approval") {
+      actions.push({ id: "accept_price", label: `Accept the price (${usd(num(proposal?.total_cost))})`, tone: "primary" });
+      // Where "Not this price" in the approval queue sends the owner to type the right one.
+      actions.push({ id: "set_price", label: "Approve at a different price", input: { type: "number", label: "Total, in dollars", initial: String(Math.round(num(proposal?.total_cost) - num(proposal?.discount_amount))), required: true } });
+    }
     if (!live && (pStatus === "accepted" || j.status === "approved") && j.status !== "cancelled") {
       actions.push({ id: "raise_invoice", label: "Send the invoice", tone: "primary", confirm: "Raise the invoice and text the client the payment link?" });
     }
@@ -430,6 +434,11 @@ const jobHandler: EntityHandler = {
       case "accept_price": {
         const r = await acceptPrice(id);
         return r.ok ? { ok: true, message: "Price accepted. Send it to the client from the job." } : { ok: false, error: r.error };
+      }
+      case "set_price": {
+        const total = Number(value);
+        const r = await setPrice(id, total);
+        return r.ok ? { ok: true, message: `Approved at ${usd(total)}. Send it to the client from the job.` } : { ok: false, error: r.error };
       }
       case "raise_invoice":
         return result(await raiseInvoiceForJob(id));

@@ -165,6 +165,7 @@ export async function CrewDay({
               personName={profile.full_name || profile.email}
               leaveBlockedBy={blockedBy}
               inline={inline}
+              sheets={showSheets}
             />
           </div>
         )

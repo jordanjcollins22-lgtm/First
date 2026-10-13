@@ -7,6 +7,7 @@
  */
 
 import type { Loadout, LoadoutItem } from "@/lib/loadout";
+import { hasRole, isOwnerLevel } from "@/lib/roles";
 
 export type ShopStage = "loadout" | "maps" | "en_route";
 
@@ -57,7 +58,8 @@ export function allLoaded(pages: LoadPage[]): boolean {
 
 /** Whether this person runs the shop screen: a lead on any stop today, or the office. */
 export function canLead(input: { roles: readonly string[]; leadsAStop: boolean }): boolean {
-  const office = input.roles.some((r) => r === "owner" || r === "admin" || r === "project-lead");
+  // Role names as they are stored ("project lead", "foreman"), not only the keys.
+  const office = isOwnerLevel(input.roles) || hasRole(input.roles, "project-lead") || input.roles.includes("project-lead");
   return office || input.leadsAStop;
 }
 

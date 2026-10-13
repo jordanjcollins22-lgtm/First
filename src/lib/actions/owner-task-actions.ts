@@ -42,7 +42,7 @@ async function logEvent(client: SupabaseClient, e: { organizationId: string; tas
 }
 
 function refresh() {
-  revalidatePath("/v2");
+  revalidatePath("/v2", "layout");
 }
 
 export async function addOwnerTask(input: { title: string; section?: string; note?: string }): Promise<TaskResult> {

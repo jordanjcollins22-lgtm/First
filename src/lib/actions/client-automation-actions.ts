@@ -24,7 +24,6 @@ async function owner() {
 }
 
 function refresh() {
-  revalidatePath("/v2");
   revalidatePath("/v2", "layout");
 }
 

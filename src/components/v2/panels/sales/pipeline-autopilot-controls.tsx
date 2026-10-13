@@ -107,7 +107,7 @@ export function AutopilotSettingsForm({ settings }: { settings: SettingsView }) 
   const { pending, run, message, failed } = useAction();
 
   if (!settings.ready) {
-    return <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">The autopilot isn&apos;t set up yet: migration 0361 has to be applied first.</p>;
+    return <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Automatic pricing isn&apos;t set up in the database yet. Nothing here runs until it is.</p>;
   }
 
   return (
@@ -152,7 +152,7 @@ export function AutopilotSettingsForm({ settings }: { settings: SettingsView }) 
           checked={overdue}
           onChange={setOverdue}
         />
-        <Toggle label="Offer Good / Better / Best" help="On proposals the autopilot sends: the essentials, as priced, and with a weed preventer." checked={offerOptions} onChange={setOfferOptions} />
+        <Toggle label="Offer Good / Better / Best" help="On proposals sent automatically: the essentials, as priced, and with a weed preventer." checked={offerOptions} onChange={setOfferOptions} />
       </div>
 
       <fieldset className="grid gap-2">

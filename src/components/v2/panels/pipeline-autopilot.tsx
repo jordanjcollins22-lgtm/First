@@ -25,7 +25,7 @@ export async function PipelineAutopilotPanel() {
 
   return (
     <div className="grid gap-6">
-      <PanelSection title="Needs you" sub="Only what the autopilot couldn't settle on its own.">
+      <PanelSection title="Needs you" sub="Only what couldn't be settled on its own.">
         <NeedsYouStrip
           empty="Nothing is waiting on you. Every price inside the guardrails went out on its own."
           items={data.needsYou.map((item) => ({
@@ -77,7 +77,7 @@ export async function PipelineAutopilotPanel() {
       </PanelSection>
 
       <PanelSection
-        title="Autopilot"
+        title="Automatic pricing"
         sub={`A price goes out on its own when every line has a rate, the margin meets its division's target, and it is within ±${Math.round(settings.tolerance * 100)}% of the formula. Anything else is held above with the reason.`}
       >
         <div className="grid grid-cols-3 gap-2 text-center">

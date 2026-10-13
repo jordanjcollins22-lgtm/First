@@ -160,7 +160,7 @@ export function ShopFlow({
             )}
             {isLead && (
               <div className="mt-4 flex gap-2">
-                <Button type="button" variant="outline" disabled={isPending || index === 0} onClick={() => run(() => setShopPage({ shopDayId: shopDay.id, pageIndex: index - 1 }))} className="h-12">
+                <Button type="button" variant="outline" disabled={isPending || index === 0} onClick={() => run(() => setShopPage({ shopDayId: shopDay.id, pageIndex: index - 1 }))} className="h-12" aria-label="Previous kit">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 {index < pages.length - 1 ? (
@@ -263,7 +263,7 @@ export function ShopFlow({
 
         {isLead && (
           <div className="mt-4 flex gap-2">
-            <Button type="button" variant="outline" disabled={isPending} onClick={() => run(() => setShopStage({ shopDayId: shopDay.id, stage: "loadout" }))} className="h-12">
+            <Button type="button" variant="outline" disabled={isPending} onClick={() => run(() => setShopStage({ shopDayId: shopDay.id, stage: "loadout" }))} className="h-12" aria-label="Back to loading the truck">
               <Package className="h-4 w-4" />
             </Button>
             <Button type="button" disabled={isPending || !first} onClick={() => first && run(() => headOut({ shopDayId: shopDay.id, firstJobId: first.jobId }))} className="h-12 flex-1 text-base font-semibold">
