@@ -15,6 +15,10 @@ import { SnowOpsPanel } from "@/components/v2/panels/snow-ops-panel";
 import { CompliancePanel } from "@/components/v2/panels/compliance-panel";
 import { CommissionsPanel } from "@/components/v2/panels/commissions-panel";
 import { PeoplePanel } from "@/components/v2/panels/people-panel";
+import { PipelineAutopilotPanel } from "@/components/v2/panels/pipeline-autopilot";
+import { EvaluatorScorecardPanel } from "@/components/v2/panels/evaluator-scorecard";
+import { TerritoriesPanel } from "@/components/v2/panels/territories";
+import { ClientMessagesSettingsPanel } from "@/components/v2/panels/client-messages-settings";
 
 /**
  * The working screens the new layout's choices can show, by key. Each is an
@@ -37,4 +41,8 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   compliance: CompliancePanel,
   commissions: CommissionsPanel,
   people: PeoplePanel,
+  "pipeline-autopilot": PipelineAutopilotPanel,
+  "evaluator-scorecard": EvaluatorScorecardPanel,
+  territories: TerritoriesPanel,
+  "client-messages": ClientMessagesSettingsPanel,
 };

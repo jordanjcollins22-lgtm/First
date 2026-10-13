@@ -5,6 +5,8 @@ import { getCurrentOrganization } from "@/lib/data/organizations";
 import { buildMessageSequence, type SequenceMessage } from "@/lib/client-message-sequence";
 import { SAMPLE_VARS } from "@/lib/evaluation-sequence";
 import { DEFAULT_RULES } from "@/lib/client-reminders";
+import { loadSequenceSettings } from "@/lib/data/client-automations";
+import { createClient } from "@/lib/supabase/server";
 
 /** Every automated message to a client, in order, as this business has them. */
 export async function getClientMessageSequence(): Promise<{ messages: SequenceMessage[]; businessName: string; fromEmail: string | null }> {
@@ -13,6 +15,8 @@ export async function getClientMessageSequence(): Promise<{ messages: SequenceMe
     getEvaluationSequence().catch(() => null),
     getReminderSettings().catch(() => null),
   ]);
+  // Invoice reminders send only once their own switch is on (Sales › Automated messages).
+  const automations = await loadSequenceSettings(await createClient(), organization.id).catch(() => null);
   const businessName = organization.name ?? "JS Landscaping MD";
   const baseUrl = (env.appUrl || "https://app.jslandscapingmd.com").replace(/\/$/, "");
   const messages = buildMessageSequence({
@@ -20,6 +24,7 @@ export async function getClientMessageSequence(): Promise<{ messages: SequenceMe
     steps: sequence?.steps ?? [],
     rules: settings?.rules ?? DEFAULT_RULES,
     remindersOn: settings?.enabled ?? false,
+    invoiceRemindersOn: automations?.invoice_reminders?.enabled ?? false,
     approvalRequired: Boolean((organization as unknown as { require_email_approval?: boolean }).require_email_approval),
     vars: { ...SAMPLE_VARS, business: businessName },
     sample: { clientName: "Deanna Fields", address: SAMPLE_VARS.address, evaluator: SAMPLE_VARS.evaluator, manager: "Jace", baseUrl },
