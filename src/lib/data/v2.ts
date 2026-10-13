@@ -6,6 +6,7 @@ import { attributionReport } from "@/lib/data/attribution";
 import { loadWebsiteForEditor, type WebsiteState } from "@/lib/data/website";
 import { loadAutomations } from "@/lib/data/automations";
 import type { Automation } from "@/lib/automations";
+import type { ListRow } from "@/lib/entities/types";
 import { CHANNEL_LABEL } from "@/lib/attribution";
 
 /**
@@ -28,7 +29,8 @@ export interface V2Block {
   t: string;
   v: string;
   d: string;
-  rows?: string[];
+  /** Each row is words, or words that open something in the drawer. */
+  rows?: ListRow[];
 }
 
 export interface V2Pillar {

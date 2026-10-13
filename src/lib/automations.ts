@@ -11,6 +11,8 @@ export interface AutomationPerson {
   why: string;
   /** The next message they will get, and when. */
   next: string;
+  /** What opens when they're clicked: the job, proposal or person behind it. */
+  ref?: { kind: string; id: string };
 }
 
 export interface Automation {

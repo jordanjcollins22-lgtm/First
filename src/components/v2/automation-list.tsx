@@ -4,23 +4,25 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 import type { Automation } from "@/lib/automations";
+import { useOpenEntity } from "@/components/v2/entity-drawer";
 
 /**
  * Every automated message, with how many people are in it right now. Tap one
  * to see who they are, why they're in it, and what they get next.
  */
 export function AutomationList({ automations }: { automations: Automation[] }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const open = useOpenEntity();
   return (
     <div className="grid gap-3">
       {automations.map((a) => {
-        const isOpen = open === a.id;
+        const isOpen = expanded === a.id;
         return (
           <section key={a.id} className="rounded-xl border bg-card">
             <button
               type="button"
               aria-expanded={isOpen}
-              onClick={() => setOpen(isOpen ? null : a.id)}
+              onClick={() => setExpanded(isOpen ? null : a.id)}
               className="flex w-full items-center gap-4 p-4 text-left hover:bg-muted/50"
             >
               {isOpen ? <ChevronDown className="h-5 w-5 shrink-0" /> : <ChevronRight className="h-5 w-5 shrink-0" />}
@@ -46,13 +48,28 @@ export function AutomationList({ automations }: { automations: Automation[] }) {
                   <p className="text-sm text-muted-foreground">Nobody is in this right now.</p>
                 ) : (
                   <ul className="grid gap-1.5">
-                    {a.people.map((p, i) => (
-                      <li key={i} className="grid gap-0.5 rounded-lg bg-muted px-3 py-2 text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,16rem)] sm:gap-3">
-                        <span className="font-semibold">{p.name}</span>
-                        <span className="text-muted-foreground">{p.why}</span>
-                        <span>{p.next}</span>
-                      </li>
-                    ))}
+                    {a.people.map((p, i) => {
+                      const cls = "grid w-full gap-0.5 rounded-lg bg-muted px-3 py-2 text-left text-sm sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_minmax(0,16rem)] sm:gap-3";
+                      const body = (
+                        <>
+                          <span className="font-semibold">{p.name}</span>
+                          <span className="text-muted-foreground">{p.why}</span>
+                          <span>{p.next}</span>
+                        </>
+                      );
+                      const ref = p.ref;
+                      return (
+                        <li key={i}>
+                          {ref && open ? (
+                            <button type="button" onClick={() => open(ref)} className={cls + " hover:bg-primary/10"}>
+                              {body}
+                            </button>
+                          ) : (
+                            <div className={cls}>{body}</div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

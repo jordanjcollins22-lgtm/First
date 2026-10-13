@@ -6,6 +6,7 @@ import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
 import { AutomationList } from "@/components/v2/automation-list";
 import { PANEL_LABEL } from "@/components/v2/panels/labels";
+import { EntityDrawerProvider, RowItem } from "@/components/v2/entity-drawer";
 
 /**
  * The new four-page layout: one page per department, a bar of pillars across
@@ -57,6 +58,7 @@ export function V2Shell({
   const activePanel = activeKey?.startsWith("panel:") ? activeKey.slice(6) : undefined;
 
   return (
+    <EntityDrawerProvider>
     <div className="w-full pb-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -128,6 +130,7 @@ export function V2Shell({
         </div>
       )}
     </div>
+    </EntityDrawerProvider>
   );
 }
 
@@ -182,9 +185,7 @@ function Blocks({ pillar }: { pillar: V2Pillar }) {
           {b.rows && b.rows.length > 0 && (
             <ul className="mt-2.5 grid gap-1.5 text-sm">
               {b.rows.map((r, i) => (
-                <li key={i} className="rounded-lg bg-muted px-2.5 py-1.5">
-                  {r}
-                </li>
+                <RowItem key={i} row={r} className="rounded-lg bg-muted px-2.5 py-1.5" />
               ))}
             </ul>
           )}
