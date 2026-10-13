@@ -12,7 +12,6 @@ import { areaSlug } from "@/lib/website";
 // Admin: rows that open in the drawer, the alerts it opens, and every connection.
 import { row as entityRow } from "@/lib/entities/types";
 import { ALERT_KEYS, alertLine, type AlertKey } from "@/lib/entities/handlers/admin-format";
-import { allProviders } from "@/lib/integrations/catalog";
 import { listAppConnections, type AppConnection } from "@/lib/data/app-connections";
 
 /**
@@ -234,17 +233,6 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
 
   const pillars: V2Pillar[] = [
     {
-      id: "ads", label: "Google Ads", kind: "auto", who: ["owner"], group: "a",
-      blurb: adClicks ? `${n(adClicks)} ad clicks recorded` : "Not live",
-      title: "Google Ads", sub: "Paid search for priority services across Harford County.",
-      blocks: [
-        { t: "Ad clicks recorded", v: n(adClicks), d: "Bookings already record Google and Facebook click IDs" },
-        { t: "Campaigns", v: "0", d: "None live", rows: ["Aeration + overseeding", "Fall cleanup + leaf removal", "Snow removal + holiday lighting"] },
-        { t: "Targeting", v: "Harford", d: "Owner-occupied, $100k+ household income" },
-      ],
-      links: [],
-    },
-    {
       id: "website", label: "Website", kind: "auto", who: ["owner"], group: "a",
       blurb: `${n(bookVisits)} visits · ${n(booked)} booked (30 days)`,
       title: "Website", sub: "Your website and every page a customer lands on. Edit it, preview it on a phone or a desktop, and publish.",
@@ -305,35 +293,18 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       links: [],
     },
     {
-      id: "email", label: "Email campaigns", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(campaigns.filter((c) => c.status === "running").length)} running`,
-      title: "Email campaigns", sub: "Offers emailed to past and nearby clients, a few at a time.",
+      id: "email", label: "Email", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(campaigns.filter((c) => c.status === "running").length)} running · ${n(pmSent)} property manager emails sent`,
+      title: "Email", sub: "Offers to past and nearby clients, and cold email to local property managers, a few at a time.",
       blocks: [
         {
-          t: "Campaigns", v: n(campaigns.length), d: "Draft, running, paused and done",
+          t: "Campaigns", v: n(campaigns.length), d: "Offers to clients: draft, running, paused and done",
           rows: campaigns.slice(0, MKT_ROWS).map((c) => row(`${str(c.name)} · ${str(c.service_label)} · ${str(c.status)}${c.started_at ? ` · started ${day(c.started_at)}` : ""}`, "mkt.campaign", c.id)),
         },
-      ],
-      links: [],
-    },
-    {
-      id: "pm", label: "Property managers", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(pmCompanies.length)} companies · ${n(pmSent)} emails sent`,
-      title: "Property managers", sub: "Cold email to local property management companies, in your words, a few each weekday.",
-      blocks: [
-        { t: "Companies", v: n(pmCompanies.length), d: "Found and on the list", rows: [...tally(pmCompanies, "status")].map(([k, c]) => row(`${k.replace(/_/g, " ")} · ${n(c)}`, "mkt.pm_list", k)) },
-        { t: "Emails sent", v: n(pmSent), d: `${n(pmCompanies.filter((c) => c.status === "replied" || c.status === "interested").length)} replied or interested` },
-      ],
-      links: [],
-    },
-    {
-      id: "groups", label: "Local groups", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(liveGroups.length)} groups`,
-      title: "Local groups", sub: "The neighborhood groups we run, and the businesses that pay to post in them.",
-      blocks: [
         {
-          t: "Groups we run", v: n(liveGroups.length), d: "Members as last counted",
-          rows: liveGroups.map((g) => row(`${str(g.name)} · ${str(g.platform)}${g.member_count == null ? "" : ` · ${n(num(g.member_count))} members`}`, "mkt.group", g.id)),
+          t: "Property managers", v: n(pmCompanies.length),
+          d: `${n(pmSent)} emails sent · ${n(pmCompanies.filter((c) => c.status === "replied" || c.status === "interested").length)} replied or interested`,
+          rows: [...tally(pmCompanies, "status")].map(([k, c]) => row(`${cap(k.replace(/_/g, " "))} · ${n(c)}`, "mkt.pm_list", k)),
         },
       ],
       links: [],
@@ -356,23 +327,24 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       links: [],
     },
     {
-      id: "seo", label: "SEO", kind: "auto", who: ["owner"], group: "a",
-      blurb: `${n(reviews)} reviews`,
-      title: "SEO", sub: "Local search visibility and reviews.",
+      id: "seo", label: "Google", kind: "auto", who: ["owner"], group: "a",
+      blurb: `${n(reviews)} reviews · ${n(adClicks)} ad clicks`,
+      title: "Google", sub: "How people find us on Google: reviews, search ranking and ads.",
       blocks: [
         {
           t: "Google reviews", v: n(googleReviews.length), d: heldReviews.length ? `${n(heldReviews.length)} replies waiting for you` : "Newest first",
           rows: [...heldReviews, ...googleReviews.filter((r) => !heldReviews.includes(r))].slice(0, MKT_ROWS).map(reviewRow),
         },
         { t: "Client reviews approved", v: n(reviews), d: `${n(proof)} shown as proof on the booking page` },
-        { t: "Keyword tracking", v: n(rank), d: rank ? "Keywords tracked" : "Rank tracker built but empty" },
+        { t: "Search ranking", v: n(rank), d: rank ? "Search terms tracked" : "No search terms tracked yet" },
+        { t: "Ad clicks", v: n(adClicks), d: "Google and Facebook ad clicks recorded at booking" },
       ],
       links: [],
     },
     {
       id: "social", label: "Social media", kind: "auto", who: ["owner"], group: "a",
       blurb: `${n(links.length)} links · ${n(clicks(links))} clicks`,
-      title: "Social media", sub: "Every channel, posting and replying on autopilot.",
+      title: "Social media", sub: "Every channel and the neighborhood groups we run, posting and replying on their own.",
       blocks: [
         {
           t: "Channels", v: n(links.length), d: "Tracked links shared, by channel",
@@ -391,7 +363,10 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
             row(`Skipped · ${n(postStatus.get("skipped") ?? 0)}`, "mkt.post_list", "skipped"),
           ],
         },
-        { t: "Local groups", v: "", d: "Facebook group rules and paid business posts" },
+        {
+          t: "Local groups", v: n(liveGroups.length), d: "Groups we run, members as last counted",
+          rows: liveGroups.map((g) => row(`${str(g.name)} · ${str(g.platform)}${g.member_count == null ? "" : ` · ${n(num(g.member_count))} members`}`, "mkt.group", g.id)),
+        },
       ],
       links: [
         { label: "Before & after posts", href: "/admin/social" },
@@ -399,9 +374,9 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       ],
     },
     {
-      id: "comments", label: "Auto comment responder", kind: "auto", who: ["owner", "affiliate"], group: "a",
+      id: "comments", label: "Comment replies", kind: "auto", who: ["owner", "affiliate"], group: "a",
       blurb: `${n(comments.length)} replies · ${n(clicks(comments))} clicks`,
-      title: "Auto comment responder", sub: "Finds local posts asking for help and replies with a tracked link.",
+      title: "Comment replies", sub: "Finds local posts asking for help and replies with a tracked link.",
       blocks: [
         { t: "Posts scanned", v: n(seen), d: `Post finder running on ${n(finder)} computers` },
         {
@@ -784,7 +759,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
   ]);
 
   // The things behind the counts, so each one can be opened: newest first, a page's worth.
-  const [toolList, walkList, assignList, scopeList, eventList, loadoutList, availList, inviteList, poList, exceptionList] = await Promise.all([
+  const [toolList, walkList, assignList, scopeList, eventList, loadoutList, availList, inviteList, exceptionList] = await Promise.all([
     rows(sb, "tools", "id,name,category,quantity,is_rental", (q) => q.eq("active", true).order("name").limit(OPS_CAP)),
     rows(sb, "job_walkthroughs", "id,job_id,status,requested_at", (q) => q.order("requested_at", { ascending: false }).limit(OPS_CAP)),
     rows(sb, "job_crew_assignments", "id,job_id,profile_id,role,assigned_at,unassigned_at", (q) => q.order("assigned_at", { ascending: false }).limit(OPS_CAP)),
@@ -793,7 +768,6 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
     rows(sb, "loadout_checks", "profile_id,day", (q) => q.order("day", { ascending: false }).limit(300)),
     rows(sb, "availability_weekly", "profile_id"),
     rows(sb, "indeed_invites", "id,name,position,status,created_at,applicant_id", (q) => q.order("created_at", { ascending: false }).limit(OPS_CAP)),
-    rows(sb, "purchase_orders", "id,po_number,status,supplier_id,subtotal_cents,created_at", (q) => q.order("created_at", { ascending: false }).limit(60)),
     rows(sb, "job_exceptions", "id,job_id,summary,state,reported_at", (q) => q.in("state", ["reported", "acknowledged"]).order("reported_at", { ascending: false }).limit(OPS_CAP)),
   ]);
 
@@ -842,9 +816,6 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
   const positions = tally(applicants, "position");
   const owed = pending.reduce((s, p) => s + num(p.amount), 0);
   const newestApplicants = [...applicants].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
-  const supplierName = (id: unknown) => str(suppliers.find((s) => s.id === id)?.name) || "no supplier";
-  const openPos = poList.filter((p) => ["draft", "sent", "confirmed", "partial"].includes(str(p.status)));
-  const poRow = (p: Row) => row(`PO ${p.po_number} · ${supplierName(p.supplier_id)} · ${opsWords(p.status)} · ${usd(num(p.subtotal_cents) / 100)}`, "ops.po", p.id);
   const walkRow = (w: Row) => row(`${jobName(w.job_id)} · ${opsWords(w.status)} · ${day(w.requested_at)}`, "ops.walkthrough", w.id);
   const reviewRow = (r: Row) => row(`${jobName(r.job_id)} · ${opsWords(r.status)}${r.sent_at ? ` · sent ${day(r.sent_at)}` : ""}`, "ops.review", r.id);
   const loadoutBy = new Map<string, { day: string; n: number }>();
@@ -886,7 +857,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
           d: `Signed jobs · ${n((js.get("approved") ?? 0) + (js.get("in_progress") ?? 0))} not finished · ${n(js.get("completed") ?? 0)} completed`,
           rows: live.slice(0, OPS_CAP).map(jobRow),
         },
-        { t: "Project file", v: n(photos), d: `Job photos · ${n(walks)} walkthroughs`, rows: walkList.map(walkRow) },
+        { t: "Project file", v: n(photos), d: `Job photos · ${n(walks)} walkthroughs (listed under Close-out)` },
         {
           t: "Crew assignments", v: n(assignments), d: "People assigned to jobs",
           rows: assignList.map((a) => row(`${who(a.profile_id)} · ${opsWords(a.role)} · ${jobName(a.job_id)}${a.unassigned_at ? " · taken off" : ""}`, "ops.job", a.job_id)),
@@ -899,25 +870,23 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       links: [{ label: "Project review", href: "/jobs/review" }, { label: "Operations", href: "/operations" }],
     },
     {
-      id: "materials", label: "Materials & ordering", kind: "project", who: ["owner"], group: "a",
+      id: "materials", label: "Materials & suppliers", kind: "project", who: ["owner"], group: "a",
       blurb: `${n(materials.length)} materials · ${n(below.length)} below reorder · ${n(suppliers.length)} suppliers`,
-      title: "Materials & ordering", sub: "The right materials on site when the crew gets there.",
+      title: "Materials & suppliers", sub: "Every material we stock and who we buy it from. Orders are under Purchasing.",
       blocks: [
-        { t: "Below reorder point", v: n(below.length), d: "Need ordering", rows: below.slice(0, OPS_CAP).map(materialRow) },
         {
           t: "Material list", v: n(materials.length), d: `${n(materials.filter((m) => m.active).length)} active`,
           rows: materials.filter((m) => m.active).sort((a, b) => str(a.name).localeCompare(str(b.name))).slice(0, OPS_CAP)
             .map((m) => row(`${str(m.name).slice(0, 40)}${m.quantity_on_hand != null ? ` · ${num(m.quantity_on_hand)} ${str(m.unit)} on hand` : ""}`, "ops.material", m.id)),
         },
         { t: "Suppliers", v: n(suppliers.length), d: `${n(supplierProducts)} products priced`, rows: suppliers.slice(0, OPS_CAP).map((s) => row(`${str(s.name)}${s.delivery_minimum ? ` · ${num(s.delivery_minimum)} yd min` : ""}`, "ops.supplier", s.id)) },
-        { t: "Purchase orders", v: n(openPos.length), d: `Open · ${n(poList.length)} in the last few months`, rows: (openPos.length ? openPos : poList).slice(0, OPS_CAP).map(poRow) },
       ],
       links: [{ label: "Materials", href: "/admin/materials" }, { label: "Bulk suppliers", href: "/admin/suppliers" }],
     },
     {
-      id: "equipment", label: "Equipment & tools", kind: "project", who: ["owner"], group: "a",
+      id: "equipment", label: "Tools & vehicles", kind: "project", who: ["owner"], group: "a",
       blurb: `${n(toolsActive)} tools · ${n(liveKits.length)} kit containers · ${n(liveFleet.length)} vehicles`,
-      title: "Equipment & tools", sub: "What goes out with each crew, and what comes back.",
+      title: "Tools & vehicles", sub: "What goes out with each crew, and what comes back. Servicing is under Equipment.",
       blocks: [
         {
           t: "Tools", v: n(toolsActive), d: `Active tools and gear · ${n(rentals)} rentals`,
@@ -933,7 +902,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       links: [{ label: "Inventory", href: "/admin/tools" }, { label: "Kit checklists", href: "/admin/tools/kits" }, { label: "Fleet", href: "/admin/fleet" }],
     },
     {
-      id: "closeout", label: "Completion & close-out", kind: "project", who: ["owner"], group: "a",
+      id: "closeout", label: "Close-out", kind: "project", who: ["owner"], group: "a",
       blurb: `${n(walks)} walkthroughs · ${n(reviews.length)} reviews · ${n(openIssues.length)} open issues`,
       title: "Completion & close-out", sub: "Finish clean and hand the job back.",
       blocks: [
@@ -1031,9 +1000,9 @@ const joined = (r: Row, key: string) => str((r[key] as Row | null | undefined)?.
 export async function loadAdmin(): Promise<V2Section> {
   const sb = await db();
   const orgId = await getCurrentOrganizationId().catch(() => null);
-  const [payments, profiles, roles, ghl, health, domains, locations, services, recent, proposals, jobs, issues, materials, fleet, posts, sessions, pending, advances,
+  const [payments, profiles, roles, ghl, health, domains, locations, services, recent, proposals, jobs, issues, materials, fleet, posts, sessions, pending,
     customers, cust30, sourced, msgs, jobMsgs, bankTx, bankAcc, recurring, perms, roleEdits, finder, designs, notifPrefs, notifLog,
-    recentPayments, openInvoices, openUploads, recentBank, batches, unsourced, recentMsgs, editLog, permRows, applicants, obligations, finders, connections] = await Promise.all([
+    recentPayments, openInvoices, openUploads, recentBank, unsourced, recentMsgs, editLog, permRows, applicants, finders, connections] = await Promise.all([
     rows(sb, "payments", "amount_cents,received_at"),
     rows(sb, "profiles", "id,full_name,email,commission_pct"),
     rows(sb, "profile_roles", "profile_id,role_name"),
@@ -1051,7 +1020,6 @@ export async function loadAdmin(): Promise<V2Section> {
     rows(sb, "social_posts", "id,hook,caption,status,scheduled_for"),
     rows(sb, "job_work_sessions", "id,job_id,status,starts_on"),
     rows(sb, "team_payments", "id,profile_id,amount,period_end", (q) => q.eq("status", "pending")),
-    rows(sb, "commission_advances", "amount,status"),
     count(sb, "customers"),
     count(sb, "customers", (q) => q.gte("created_at", since(30))),
     count(sb, "customers", (q) => q.not("source", "is", null)),
@@ -1070,13 +1038,11 @@ export async function loadAdmin(): Promise<V2Section> {
     rows(sb, "invoices", "id,amount,created_at,jobs(name)", (q) => q.eq("status", "open").order("created_at", { ascending: true }).limit(25)),
     rows(sb, "client_invoices", "id,amount,issued_on,title,customers(name)", (q) => q.is("paid_on", null).not("amount", "is", null).order("issued_on", { ascending: true }).limit(25)),
     rows(sb, "bank_transactions", "id,name,merchant,amount,posted_on", (q) => q.order("posted_on", { ascending: false }).limit(25)),
-    rows(sb, "commission_payout_batches", "id,week_start,week_end,total,status", (q) => q.order("week_start", { ascending: false }).limit(12)),
     rows(sb, "customers", "id,name,created_at", (q) => q.is("source", null).order("created_at", { ascending: false }).limit(25)),
     rows(sb, "client_message_log", "id,channel,kind,status,created_at,customers(name)", (q) => q.order("created_at", { ascending: false }).limit(25)),
     rows(sb, "role_edit_log", "id,at,action,role_name,actor_name", (q) => q.order("at", { ascending: false }).limit(25)),
     rows(sb, "role_permissions", "role_name,granted"),
     rows(sb, "job_applicants", "id,name,position,stage,created_at", (q) => q.order("created_at", { ascending: false }).limit(25)),
-    rows(sb, "compliance_obligations", "id,title,due_on,active,date_confirmed", (q) => q.eq("active", true).order("due_on", { ascending: true, nullsFirst: false })),
     rows(sb, "finder_computers", "id,label,last_seen_at", (q) => q.order("last_seen_at", { ascending: false }).limit(25)),
     orgId ? listAppConnections(orgId).catch(() => [] as AppConnection[]) : Promise.resolve([] as AppConnection[]),
   ]);
@@ -1138,35 +1104,14 @@ export async function loadAdmin(): Promise<V2Section> {
   const roleRows = (counts: Map<string, number>, suffix: string) =>
     [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => entityRow(`${k} · ${v}${suffix}`, "admin.role", k));
   const pageRules = tally(permRows.filter((r) => r.granted !== false), "role_name");
-  const providers = allProviders();
   const connection = (id: string) => connections.find((c) => c.id === id);
-  const integrationRows: ListRow[] = [
-    ...providers.map((p) => entityRow(`${p.name} · ${p.area}`, "admin.integration", p.id)),
-    ...connections.map((c) => entityRow(`${c.name} · ${c.status === "configured" ? "set" : c.status === "partial" ? "partly set" : "missing"}`, "admin.integration", c.id)),
-  ];
   const openInvoiceRows: ListRow[] = [
     ...openInvoices.map((i) => entityRow(`${joined(i, "jobs") || "Job"} · ${usd(num(i.amount))} · sent ${day(i.created_at)}`, "admin.invoice", i.id)),
     ...openUploads.map((i) => entityRow(`${joined(i, "customers") || str(i.title) || "Client"} · ${usd(num(i.amount))} · issued ${day(i.issued_on)}`, "admin.invoice", i.id)),
   ].slice(0, 25);
-  const awaitingBatches = batches.filter((b) => b.status === "awaiting_approval");
   const sentRows = [...sent].sort((a, b) => str(a.sent_at).localeCompare(str(b.sent_at))).slice(0, 25).map((p) => entityRow(`${jobName(p.job_id)} · ${usd(num(p.total_cost))} · sent ${day(p.sent_at)}`, "admin.job", p.job_id));
 
   const pillars: V2Pillar[] = [
-    {
-      id: "departments", label: "Departments", kind: "admin", who: ["owner", "account-manager"], group: "a",
-      blurb: `${alerts.length} things flagged across the three departments`,
-      title: "Departments", sub: "One place to keep Marketing, Sales and Operations on track.",
-      blocks: [
-        { t: "Marketing", v: n(cust30), d: "New contacts in 30 days", rows: newCustomers.map(customerRow) },
-        {
-          t: "Sales", v: pct(accepted, accepted + declined), d: `Close rate on answered proposals · ${usd(waiting)} waiting on clients`,
-          rows: sentRows,
-        },
-        { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished", rows: approvedJobs.slice(0, 25).map((j) => entityRow(str(j.name) || "Job", "admin.job", j.id)) },
-        { t: "Alerts", v: n(alerts.length), d: "Flagged right now", rows: alerts },
-      ],
-      links: [{ label: "Dashboard", href: "/dashboard" }, { label: "Alerts", href: "/notifications" }],
-    },
     {
       id: "customers", label: "Customer accounts", kind: "admin", who: ["owner", "account-manager"], group: "a",
       blurb: `${n(customers)} customers · ${n(cust30)} new in 30 days`,
@@ -1186,9 +1131,9 @@ export async function loadAdmin(): Promise<V2Section> {
       links: [{ label: "Contacts", href: "/contacts" }, { label: "Conversations", href: "/conversations" }],
     },
     {
-      id: "finance", label: "Finance", kind: "admin", who: ["owner"], group: "a",
+      id: "finance", label: "Payments & bank", kind: "admin", who: ["owner"], group: "a",
       blurb: `${usd(total)} collected · ${usd(thisMonth)} this month`,
-      title: "Finance", sub: "Money in, money out.",
+      title: "Payments & bank", sub: "Every payment, open invoice, pay period and bank transaction.",
       blocks: [
         {
           t: "Payments received", v: usd(total), d: `${n(payments.length)} payments`,
@@ -1203,10 +1148,6 @@ export async function loadAdmin(): Promise<V2Section> {
         {
           t: "Payroll", v: usd(pendingPay), d: `${pending.length} pay periods pending`,
           rows: pending.slice(0, 25).map((p) => entityRow(`${name(p.profile_id)} · ${usd(num(p.amount))}${p.period_end ? ` · to ${day(p.period_end)}` : ""}`, "admin.team_payment", p.id)),
-        },
-        {
-          t: "Commissions", v: usd(advances.filter((a) => a.status === "paid").reduce((s, a) => s + num(a.amount), 0)), d: `Advances paid · ${awaitingBatches.length} weekly statements waiting`,
-          rows: batches.map((b) => entityRow(`Week of ${day(b.week_start)} · ${usd(num(b.total))} · ${b.status === "awaiting_approval" ? "waiting for approval" : str(b.status)}`, "admin.commission_batch", b.id)),
         },
         {
           t: "Bookkeeping", v: n(bankTx), d: `Bank transactions across ${n(bankAcc)} accounts · ${n(recurring)} recurring charges reviewed`,
@@ -1227,7 +1168,7 @@ export async function loadAdmin(): Promise<V2Section> {
             return entityRow(`${name(p.id)} · ${held.join(", ") || "no role"}`, "admin.profile", p.id);
           }),
         },
-        { t: "Roles in use", v: n(roleCounts.size), d: "To map onto the new roles", rows: roleRows(roleCounts, "") },
+        { t: "Roles in use", v: n(roleCounts.size), d: "How many people hold each role", rows: roleRows(roleCounts, "") },
         { t: "Page access rules", v: n(perms), d: "Role permissions defined today", rows: roleRows(pageRules, " pages") },
         {
           t: "Activity log", v: n(roleEdits), d: "Role edits logged",
@@ -1237,9 +1178,9 @@ export async function loadAdmin(): Promise<V2Section> {
       links: [{ label: "Settings & permissions", href: "/admin/settings" }, { label: "View as", href: "/admin/view-as" }],
     },
     {
-      id: "integrations", label: "Integrations", kind: "admin", who: ["owner"], group: "a",
+      id: "integrations", label: "Connection health", kind: "admin", who: ["owner"], group: "a",
       blurb: "GoHighLevel, Stripe, email, banks",
-      title: "Integrations", sub: "The connections the automations run on.",
+      title: "Connection health", sub: "When each connection last worked. Paste or fix logins under Integrations.",
       blocks: [
         {
           t: "GoHighLevel", v: sync ? (/[1-9]\d* failed/.test(str(sync.last_result)) ? "Errors" : "OK") : "—", d: sync ? `Last pull ${day(sync.last_pulled_at)} · ${str(sync.last_result)}` : "No sync on record",
@@ -1252,31 +1193,16 @@ export async function loadAdmin(): Promise<V2Section> {
         { t: "Email sending", v: n(domains.length), d: "Sending domains", rows: domains.map((d) => entityRow(`${str(d.hostname)} · ${str(d.status)}`, "admin.integration", "resend")) },
         { t: "Banks", v: n(bankAcc), d: "Bank accounts connected", rows: [entityRow(`Plaid · ${connection("plaid")?.status ?? "open"}`, "admin.integration", "plaid")] },
         { t: "Post finder extension", v: n(finder), d: "Computers running it", rows: finders.map((f) => `${str(f.label) || "Computer"} · last seen ${day(f.last_seen_at)}`) },
-        { t: "Every connection", v: n(integrationRows.length), d: "Open one to see what is saved and test it", rows: integrationRows },
       ],
       links: [{ label: "Settings", href: "/admin/settings" }],
     },
     {
-      id: "company", label: "Company & compliance", kind: "admin", who: ["owner"], group: "a",
-      blurb: `${n(locations.length)} locations · ${n(designs)} design files`,
-      title: "Company & compliance", sub: "The paperwork that keeps the business running.",
+      id: "company", label: "Business details", kind: "admin", who: ["owner"], group: "a",
+      blurb: `${n(locations.length)} locations · ${n(services.length)} services`,
+      title: "Business details", sub: "Your business, its locations, the services you sell, and your notifications.",
       blocks: [
         { t: "The business", v: "1", d: "Name, phone, email and address on every document", rows: orgId ? [entityRow("Business details", "admin.organization", orgId)] : [] },
         { t: "Locations", v: n(locations.length), d: "On file", rows: locations.map((l) => entityRow(`${str(l.name).slice(0, 40)} · ${str(l.address).split(",").slice(1, 2).join("").trim()}`, "admin.location", l.id)) },
-        {
-          t: "Compliance calendar", v: n(obligations.length), d: `${n(obligations.filter((o) => o.due_on && str(o.due_on) < today).length)} overdue · soonest first`,
-          rows: obligations.slice(0, 25).map((o) => entityRow(`${str(o.title)} · ${o.due_on ? `due ${day(o.due_on)}` : "no date"}${o.due_on && !o.date_confirmed ? " (confirm)" : ""}`, "admin.obligation", o.id)),
-        },
-        { t: "Contracts & legal wording", v: "0", d: "Not in the current app yet" },
-        { t: "Documents & designs", v: n(designs), d: "Flyer and design files" },
-      ],
-      links: [{ label: "Organizations", href: "/admin/organizations" }],
-    },
-    {
-      id: "settings", label: "Settings", kind: "admin", who: ["owner"], group: "a",
-      blurb: `${n(services.length)} services on file · ${n(svc.get("active") ?? 0)} active`,
-      title: "Settings", sub: "How the whole app is set up.",
-      blocks: [
         {
           t: "Services", v: n(services.length), d: [...svc.entries()].map(([k, v]) => `${v} ${k}`).join(" · ") + (dupes.length ? ` · duplicates: ${dupes.map(([k, v]) => `${k} ×${v}`).join(", ")}` : ""),
           rows: [...services]
@@ -1285,8 +1211,9 @@ export async function loadAdmin(): Promise<V2Section> {
         },
         { t: "Service area", v: "1", d: "Harford County" },
         { t: "Your notifications", v: n(notifLog), d: notifPrefs ? "Sent to you · your preferences are set" : "Sent to you · no preferences set yet" },
+        { t: "Documents & designs", v: n(designs), d: "Flyer and design files" },
       ],
-      links: [{ label: "Settings", href: "/admin/settings" }, { label: "Team & services", href: "/admin/team" }],
+      links: [{ label: "Organizations", href: "/admin/organizations" }, { label: "Settings", href: "/admin/settings" }, { label: "Team & services", href: "/admin/team" }],
     },
     {
       id: "managers", label: "Account managers", kind: "people", who: ["owner"], group: "b",
@@ -1311,9 +1238,9 @@ export async function loadAdmin(): Promise<V2Section> {
       links: [{ label: "Hiring", href: "/admin/hiring" }],
     },
     {
-      id: "tasks", label: "Task list", kind: "admin", who: ["owner"], group: "a",
-      blurb: "What's left to build in the new layout",
-      title: "Task list", sub: "Every tab in the new layout that still has to be built.",
+      id: "tasks", label: "Old screens", kind: "admin", who: ["owner"], group: "a",
+      blurb: "Old screens not moved over yet",
+      title: "Old screens", sub: "Screens from the old app that have no place here yet.",
       blocks: [],
       links: [],
     },
@@ -1328,12 +1255,12 @@ export async function loadAdmin(): Promise<V2Section> {
       b: { title: "Hire managers", note: "One position: account manager." },
     },
     pillars: [
-      overview("Admin overview", "Oversee every department, run the back office, and hire the managers.", [
+      overview("Admin overview", "Every department at a glance. Open any row to act on it.", [
         { t: "Marketing", v: n(cust30), d: "New contacts in 30 days", rows: newCustomers.map(customerRow) },
         { t: "Sales", v: pct(accepted, accepted + declined), d: `Close rate on answered proposals · ${usd(waiting)} waiting on clients`, rows: sentRows },
         { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished", rows: approvedJobs.slice(0, 25).map((j) => entityRow(str(j.name) || "Job", "admin.job", j.id)) },
         { t: "Alerts", v: n(alerts.length), d: "Flagged right now", rows: alerts },
-      ], [{ label: "Current admin page", href: "/admin" }]),
+      ], [{ label: "Current admin page", href: "/admin" }, { label: "Dashboard", href: "/dashboard" }, { label: "Alerts", href: "/notifications" }]),
       ...pillars,
     ],
     loadedAt: stamp(),
@@ -1367,7 +1294,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     {
       id: "digital", label: "Digital marketing", title: "Digital marketing",
       sub: "The website, search, ads, social, email and the people sharing links.",
-      ids: ["website", "ads", "seo", "social", "comments", "groups", "email", "pm", "affiliates"],
+      ids: ["website", "seo", "social", "email", "comments", "affiliates"],
       panels: ["marketing-autopilot", "reviews"],
       rolePanels: { affiliate: ["affiliate-home"] },
     },
@@ -1390,11 +1317,11 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"], panels: ["crew-budget"] },
   ],
   admin: [
-    { id: "oversight", label: "Oversight", title: "Oversight", sub: "Every department at a glance, and every customer account.", ids: ["overview", "departments", "customers"], panels: ["approval-queue"], rolePanels: { "account-manager": ["am-accounts"] } },
-    { id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out.", ids: ["finance"], panels: ["finance", "job-costing", "commissions"] },
+    { id: "oversight", label: "Oversight", title: "Oversight", sub: "What's waiting on you, every department at a glance, and every customer.", ids: ["overview", "customers"], panels: ["approval-queue"], rolePanels: { "account-manager": ["am-accounts"] } },
+    { id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out, against target.", ids: ["finance"], panels: ["finance", "job-costing", "commissions"] },
     { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people"] },
-    { id: "settings", label: "Settings", title: "Settings", sub: "Integrations, the company's details and how the app is set up.", ids: ["integrations", "company", "settings"], panels: ["integrations", "compliance"] },
-    { id: "tasks", label: "Task list", title: "Task list", sub: "Everything left to build before the new layout takes over.", ids: ["tasks"], panels: ["task-list"] },
+    { id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, and your business details.", ids: ["integrations", "company"], panels: ["integrations", "compliance"] },
+    { id: "tasks", label: "Task list", title: "Task list", sub: "Your shared to-do list.", ids: ["tasks"], panels: ["task-list"] },
   ],
 };
 
