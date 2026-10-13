@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
@@ -120,7 +120,9 @@ function PillarBody({
   open: (id: string) => void;
   unplaced?: { label: string; href: string }[];
 }) {
-  if (pillar.id === "tasks") return <TaskList unplaced={unplaced ?? []} />;
+  // The task list itself is TaskListPanel (owner_tasks); this keeps only the
+  // screens of the old app that no choice reaches yet, worked out live.
+  if (pillar.id === "tasks") return <UnplacedScreens unplaced={unplaced ?? []} />;
   if (pillar.id === "overview" && !pillar.parts) return <Overview section={section} pillar={pillar} roles={roles} open={open} />;
   if (pillar.view === "website" && section.website) {
     return (
@@ -212,159 +214,23 @@ function Overview({ section, pillar, roles, open }: { section: V2Section; pillar
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Task list                                                           */
-/* ------------------------------------------------------------------ */
-
-type Status = "Not built" | "Partly built";
-const TASKS: [string, [string, Status, string][]][] = [
-  ["Marketing", [
-    ["Google Ads", "Not built", "No account connected. Bookings already record ad click IDs."],
-    ["Website", "Partly built", "Website editor and live previews are here. Still to do: point the business's own domain at /site, and add photos and reviews to it."],
-    ["Door hangers & mail", "Partly built", "Numbers are here. Planning a run or a mailing is still only in the current app."],
-    ["Lead lists", "Partly built", "Counts are here. Importing and working a list is still only in the current app."],
-    ["Email campaigns", "Partly built", "Campaigns are listed. Writing and starting one is still only in the current app."],
-    ["Property managers", "Partly built", "Numbers are here. Approving the emails is still only in the current app."],
-    ["Local groups", "Partly built", "Groups are listed. Group rules and paid posts are still only in the current app."],
-    ["What worked", "Partly built", "Revenue by channel is here."],
-    ["SEO", "Partly built", "Reviews work. Keyword tracker is empty; Business Profile stats not connected."],
-    ["Social media › Facebook & Nextdoor", "Partly built", "Tracked links work. Scheduled posts aren't publishing on their date."],
-    ["Social media › Instagram, Google Business posts, TikTok, YouTube", "Not built", "Nothing on these channels yet."],
-    ["Affiliates", "Partly built", "Codes and links work. Commission payouts never recorded; rates on file aren't 4%."],
-    ["Affiliate-only view", "Not built", "An affiliate signing in should land on the comment responder only."],
-  ]],
-  ["Sales", [
-    ["Evaluation booking", "Partly built", "Booking and availability work. Routing by area and workload not built."],
-    ["Proposals › Pricing formulas", "Partly built", "Most active services have no rate set."],
-    ["Automated follow-up", "Partly built", "Proposal and invoice follow-ups work. No-show rebook and seasonal re-engage not built."],
-    ["My evaluations (evaluator view)", "Partly built", "The evaluator's visit screens exist; no evaluator-only home in the new layout."],
-    ["Evaluators", "Partly built", "Roster and pay are on profiles. No performance view."],
-  ]],
-  ["Operations", [
-    ["Scheduling", "Partly built", "Work days exist. Auto-placement and weather reschedule not built; past work days don't close."],
-    ["Materials & ordering", "Partly built", "Materials and suppliers work. Purchase orders and delivery tracking not built."],
-    ["Completion & close-out", "Partly built", "Walkthroughs and reviews work. Job costing is rarely filled in."],
-    ["My projects (project lead view)", "Not built", "No project leads yet and no lead-only home."],
-    ["My day (project tech view)", "Partly built", "My Day and crew check-ins exist; no tech-only home in the new layout."],
-    ["Project team", "Partly built", "Roster and pay exist. Performance view not built."],
-  ]],
-  ["Admin", [
-    ["Departments", "Partly built", "Alerts are computed here; goals per department not built."],
-    ["Customer accounts", "Partly built", "Contacts and messages exist. One timeline per customer not built."],
-    ["Users & permissions", "Partly built", "Map the old roles onto the new ones and per-tab access."],
-    ["Integrations", "Partly built", "GoHighLevel, Stripe, email and banks work. Google Ads not connected."],
-    ["Company & compliance", "Partly built", "Locations and designs exist. Insurance, licenses, contracts and legal wording not built."],
-    ["Settings", "Partly built", "Services list exists (with duplicates). Service area and notification settings need a screen."],
-    ["Account managers", "Partly built", "Role exists. Assignments and oversight not built."],
-    ["Hiring (account managers)", "Not built", "The hiring flow covers project tech and project lead only."],
-    ["Switch the main address to the new layout", "Not built", "Last step, once everything above is done."],
-  ]],
-];
-const STORE = "v2-build-tasks";
-
-function TaskList({ unplaced }: { unplaced: { label: string; href: string }[] }) {
-  const [done, setDone] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORE);
-      // Restoring ticks saved by an earlier visit, on this device only.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (raw) setDone(JSON.parse(raw));
-    } catch {
-      /* private window or blocked storage: start empty */
-    }
-  }, []);
-  function toggle(key: string) {
-    setDone((d) => {
-      const next = { ...d, [key]: !d[key] };
-      try {
-        window.localStorage.setItem(STORE, JSON.stringify(next));
-      } catch {
-        /* not saved, still ticked on screen */
-      }
-      return next;
-    });
-  }
-  const all = TASKS.flatMap(([, items]) => items);
-  const notBuilt = all.filter((i) => i[1] === "Not built").length;
-  const ticked = Object.values(done).filter(Boolean).length;
-
+function UnplacedScreens({ unplaced }: { unplaced: { label: string; href: string }[] }) {
+  if (!unplaced.length) return null;
   return (
     <section className="rounded-2xl border bg-card p-5">
-      <div className="mb-4 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-        <Stat label="Not built" value={notBuilt} cls="bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100" />
-        <Stat label="Partly built" value={all.length - notBuilt} cls="bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100" />
-        <Stat label="Screens with no tab yet" value={unplaced.length} cls="bg-sky-100 text-sky-900 dark:bg-sky-900/40 dark:text-sky-100" />
-        <Stat label="Ticked off" value={ticked} cls="bg-muted" />
-      </div>
-      <p className="mb-5 text-sm text-muted-foreground">Ticks are saved on this device.</p>
-      <div className="grid gap-6">
-        {TASKS.map(([page, items]) => (
-          <div key={page}>
-            <h3 className="mb-2 text-base font-extrabold">
-              {page} <span className="font-mono text-xs font-normal text-muted-foreground">{items.length}</span>
-            </h3>
-            <ul className="grid gap-2">
-              {items.map(([t, st, note]) => {
-                const key = `${page}|${t}`;
-                const on = !!done[key];
-                return (
-                  <li key={key} className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
-                    <input
-                      id={key}
-                      type="checkbox"
-                      checked={on}
-                      onChange={() => toggle(key)}
-                      className="mt-0.5 size-5 shrink-0 accent-[var(--primary)]"
-                    />
-                    <label htmlFor={key} className="flex-1 cursor-pointer">
-                      <span className="flex flex-wrap items-baseline gap-2">
-                        <span className={"font-bold " + (on ? "text-muted-foreground line-through" : "")}>{t}</span>
-                        <span
-                          className={
-                            "rounded-full px-2 py-0.5 font-mono text-[11px] " +
-                            (st === "Not built"
-                              ? "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-100"
-                              : "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100")
-                          }
-                        >
-                          {st}
-                        </span>
-                      </span>
-                      <span className="mt-0.5 block text-sm text-muted-foreground">{note}</span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+      <h3 className="mb-1 text-base font-extrabold">
+        Current screens with no tab in the new layout yet{" "}
+        <span className="font-mono text-xs font-normal text-muted-foreground">{unplaced.length}</span>
+      </h3>
+      <p className="mb-2 text-sm text-muted-foreground">Each one needs a home on one of the four pages.</p>
+      <ul className="flex flex-wrap gap-2">
+        {unplaced.map((u) => (
+          <li key={u.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm">
+            {u.label}
+          </li>
         ))}
-        {unplaced.length > 0 && (
-          <div>
-            <h3 className="mb-1 text-base font-extrabold">
-              Current screens with no tab in the new layout yet{" "}
-              <span className="font-mono text-xs font-normal text-muted-foreground">{unplaced.length}</span>
-            </h3>
-            <p className="mb-2 text-sm text-muted-foreground">Each one needs a home on one of the four pages.</p>
-            <ul className="flex flex-wrap gap-2">
-              {unplaced.map((u) => (
-                <li key={u.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm">
-                  {u.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+      </ul>
     </section>
   );
 }
 
-function Stat({ label, value, cls }: { label: string; value: number; cls: string }) {
-  return (
-    <div className={"rounded-lg p-3 " + cls}>
-      <div className="text-xs">{label}</div>
-      <div className="font-mono text-2xl">{value}</div>
-    </div>
-  );
-}

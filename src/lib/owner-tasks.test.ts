@@ -7,13 +7,10 @@ import { countTasks, seedValuesSql, sortTasks, TASK_SEED, toggledStatus } from "
 const root = join(__dirname, "..", "..");
 
 describe("TASK_SEED", () => {
-  it("is the 33 items of the v2 Task list, word for word", () => {
+  // The list moved out of the browser and into owner_tasks; the seed is now
+  // the only copy, so it is checked against the migration that loads it.
+  it("carries the 33 items of the old v2 Task list", () => {
     expect(TASK_SEED).toHaveLength(33);
-    const shell = readFileSync(join(root, "src/components/v2/v2-shell.tsx"), "utf8");
-    for (const task of TASK_SEED) {
-      const status = task.status === "not_built" ? "Not built" : "Partly built";
-      expect(shell, task.title).toContain(`["${task.title}", "${status}", "${task.note}"]`);
-    }
   });
 
   it("matches the seed migration exactly", () => {
