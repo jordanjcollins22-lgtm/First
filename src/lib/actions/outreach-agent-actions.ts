@@ -147,6 +147,7 @@ export async function pauseGroupAgent(input: { hours: number | null; reason: str
 export async function acceptAgentPost(seenId: string): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   const row = await getSeen(profile.organization_id, seenId);
   if (!row) return { ok: false, error: "Couldn't find that post." };
   if (row.decision !== "read" && row.decision !== "advert") return { ok: false, error: "That one has already been picked." };
@@ -191,6 +192,7 @@ export async function acceptAgentPost(seenId: string): Promise<Result> {
 export async function setAgentPostKind(input: { seenId: string; kind: "request" | "promotion" | "other" }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   const result = await setPostKind(profile.organization_id, input.seenId, input.kind);
   // Marked as for us: its comment is written for the card straight away.
   if (input.kind === "request") after(() => draftWaitingPosts(profile.organization_id).then(() => undefined, (err) => console.error("drafting failed:", err)));
@@ -203,6 +205,7 @@ export async function setAgentPostKind(input: { seenId: string; kind: "request" 
 export async function removeAgentBusiness(id: string): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   try {
     await removeBusiness(profile.organization_id, id);
   } catch (err) {
@@ -260,6 +263,7 @@ export async function markAgentCommentPosted(seenId: string): Promise<Result> {
 export async function approveAgentComment(input: { seenId: string; comment: string }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   const result = await approveReady(profile.organization_id, input.seenId, input.comment);
   if (!result.ok) return { ok: false, error: result.error ?? "Couldn't approve that." };
   revalidatePath("/admin/outreach/agent");
@@ -271,6 +275,7 @@ export async function approveAgentComment(input: { seenId: string; comment: stri
 export async function declineAgentComment(input: { seenId: string; reason?: string }): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   const result = await declineReady(profile.organization_id, input.seenId, input.reason ?? null);
   if (!result.ok) return { ok: false, error: result.error ?? "Couldn't decline that." };
   revalidatePath("/admin/outreach/agent");
@@ -282,6 +287,7 @@ export async function declineAgentComment(input: { seenId: string; reason?: stri
 export async function markGroupJoined(id: string): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   try {
     await setGroupJoined(profile.organization_id, id, true);
   } catch (err) {
@@ -296,6 +302,7 @@ export async function markGroupJoined(id: string): Promise<Result> {
 export async function dismissGroupToJoin(id: string): Promise<Result> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
+  if (!isOwnerLevel(profile.roles)) return { ok: false, error: "Only the owner can do this." };
   try {
     await dismissGroup(profile.organization_id, id);
   } catch (err) {

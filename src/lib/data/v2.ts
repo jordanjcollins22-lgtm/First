@@ -399,7 +399,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       ],
     },
     {
-      id: "comments", label: "Auto comment responder", kind: "auto", who: ["owner", "affiliate"], group: "a",
+      id: "comments", label: "Auto comment responder", kind: "auto", who: ["owner"], group: "a",
       blurb: `${n(comments.length)} replies · ${n(clicks(comments))} clicks`,
       title: "Auto comment responder", sub: "Finds local posts asking for help and replies with a tracked link.",
       blocks: [
@@ -1423,3 +1423,24 @@ export const V2_LOADERS = {
   operations: condensed(loadOperations),
   admin: condensed(loadAdmin),
 } as const;
+
+/**
+ * A page cut down to what these roles may see, before it leaves the server.
+ * The shell hides what a role doesn't get, but hiding isn't enough: anything
+ * handed to the browser can be read there. The owner gets the page as is.
+ */
+export function v2ForViewer(section: V2Section, roles: V2Role[]): V2Section {
+  if (roles.includes("owner")) return section;
+  const sees = (p: V2Pillar) => p.who.some((r) => roles.includes(r));
+  const hasHome = (p: V2Pillar) => roles.some((r) => (p.rolePanels?.[r] ?? []).length > 0);
+  const pillars = section.pillars
+    .filter((p) => sees(p) || hasHome(p))
+    .map((p): V2Pillar => {
+      const parts = p.parts?.filter(sees);
+      // Kept only for a role's home screen: none of the choice's own numbers go with it.
+      if (!sees(p)) return { ...p, blocks: [], links: [], automations: undefined, parts: parts ?? [], panels: undefined };
+      return { ...p, parts, panels: undefined, blurb: parts ? parts.map((x) => x.label).join(" · ") : p.blurb };
+    });
+  const showsWebsite = pillars.some((p) => [p, ...(p.parts ?? [])].some((x) => x.view === "website" && sees(x)));
+  return { ...section, pillars, website: showsWebsite ? section.website : undefined };
+}

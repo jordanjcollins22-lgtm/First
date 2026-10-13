@@ -7,7 +7,7 @@ import { log } from "@/lib/log";
 
 import { V2Shell } from "@/components/v2/v2-shell";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
-import { V2_GROUPS, V2_LOADERS } from "@/lib/data/v2";
+import { V2_GROUPS, V2_LOADERS, v2ForViewer } from "@/lib/data/v2";
 import { TABS } from "@/lib/permissions";
 import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 
@@ -45,7 +45,7 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
   }
   // "My" views read the person's own work; the owner's own view needs no person.
   const viewerId = roles.includes("owner") ? null : viewer.id;
-  const data = await V2_LOADERS[section as SectionKey](viewerId);
+  const data = v2ForViewer(await V2_LOADERS[section as SectionKey](viewerId), roles);
 
   // The task list names every current screen that no tab in the new layout
   // links to yet, worked out from the links themselves so it can't go stale.
