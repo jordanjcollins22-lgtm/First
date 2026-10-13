@@ -33,7 +33,7 @@ export async function PipelineAutopilotPanel() {
             summary: item.summary,
             detail: item.kind === "price_held" ? item.detail : null,
             who: item.kind === "proposal_overdue" ? item.assignee : null,
-            href: item.href,
+            open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
             actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
           }))}
         />

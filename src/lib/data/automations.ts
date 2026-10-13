@@ -191,7 +191,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     const e = new Date(String(j.evaluation_date));
     const togo = evaluationStepsToGo({ evaluationAt: e, bookedAt: new Date(String(j.created_at)), now, timeZone: tz, sent: done, disabled: stepOff });
     if (!togo.length) continue;
-    evalEmails.push({ name: nameOf(c, j.name), why: `Evaluation ${visitTime(e)}`, next: `Next: ${STEP_LABEL[togo[0].step]} email, ${when(togo[0].at)}${togo.length > 1 ? ` (${togo.length - 1} more after)` : ""}` });
+    evalEmails.push({ name: nameOf(c, j.name), why: `Evaluation ${visitTime(e)}`, next: `Next: ${STEP_LABEL[togo[0].step]} email, ${when(togo[0].at)}${togo.length > 1 ? ` (${togo.length - 1} more after)` : ""}`, ref: { kind: "sales.evaluation", id } });
   }
 
   // Evaluation reminder text.
@@ -203,7 +203,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     if (e <= now || !canText(c) || !evalRule.channels.includes("sms")) continue;
     const done = new Set(evalRule.offsetsHours.filter((o) => sent.has(`evaluation_reminder:${j.id}:${o}:sms`)));
     const togo = offsetsToGo(e, evalRule.offsetsHours, now, done);
-    if (togo.length) evalTexts.push({ name: nameOf(c, j.name), why: `Evaluation ${visitTime(e)}`, next: `Text ${when(togo[0].at)}` });
+    if (togo.length) evalTexts.push({ name: nameOf(c, j.name), why: `Evaluation ${visitTime(e)}`, next: `Text ${when(togo[0].at)}`, ref: { kind: "sales.evaluation", id: String(j.id) } });
   }
 
   // Proposal follow-ups: the five-touch plan for proposals sent since it was
@@ -231,6 +231,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
       name: nameOf(c, job.name),
       why: `Proposal sent ${visitTime(at)}, not answered`,
       next: `Follow-up ${touch?.channel === "sms" ? "text" : "email"} ${when(togo[0].at)}${togo.length > 1 ? ` (${togo.length - 1} more after)` : ""}`,
+      ref: { kind: "sales.proposal", id: String(p.id) },
     });
   }
 
@@ -259,13 +260,14 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
         name: teamNames.get(String(j.assigned_to)) ?? "Evaluator",
         why: `Visit with ${nameOf(customerOf(j), j.name)} ${visitTime(e)}`,
         next: `Reminder ${when(new Date(Math.max(now.getTime(), e.getTime() - lead * HOUR)))}`,
+        ref: { kind: "sales.evaluation", id: String(j.id) },
       };
     });
 
   // Morning open-time email to everybody who sells.
-  const openTime: AutomationPerson[] = (team as { name: string; email: string | null }[])
+  const openTime: AutomationPerson[] = (team as { id: string; name: string; email: string | null }[])
     .filter((t) => t.email)
-    .map((t) => ({ name: t.name, why: "Sells or does evaluations", next: "Every morning, Monday to Saturday" }));
+    .map((t) => ({ name: t.name, why: "Sells or does evaluations", next: "Every morning, Monday to Saturday", ref: { kind: "sales.evaluator", id: t.id } }));
 
   // Crew check-in alert: crew on today's work days.
   const crewToday = new Map<string, AutomationPerson>();
@@ -345,7 +347,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     const done = new Set(rebookDays.filter((d) => sent.has(`no_show_rebook:${j.id}:${d}:sms`) || sent.has(`no_show_rebook:${j.id}:${d}:email`)));
     const togo = offsetsToGo(anchor, rebookDays.map((d) => d * 24), now, new Set([...done].map((d) => d * 24)));
     if (!togo.length) continue;
-    rebookPeople.push({ name: nameOf(c, j.name), why: `${kind === "no_show" ? "No-show" : "Cancelled"} ${visitTime(new Date(String(j.evaluation_date)))}`, next: `Rebook link ${when(togo[0].at)}` });
+    rebookPeople.push({ name: nameOf(c, j.name), why: `${kind === "no_show" ? "No-show" : "Cancelled"} ${visitTime(new Date(String(j.evaluation_date)))}`, next: `Rebook link ${when(togo[0].at)}`, ref: { kind: "sales.evaluation", id: String(j.id) } });
   }
 
   // Win-back of declines since the switch.
@@ -358,11 +360,12 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     const done = new Set(winDays.filter((d) => sent.has(`win_back:${p.job_id}:${d}:sms`) || sent.has(`win_back:${p.job_id}:${d}:email`)).map((d) => d * 24));
     const togo = offsetsToGo(declinedAt, winDays.map((d) => d * 24), now, done);
     if (!togo.length) continue;
-    winPeople.push({ name: nameOf(c, job.name), why: `Declined ${visitTime(declinedAt)}`, next: `Win-back ${when(togo[0].at)} (if they said yes to marketing)` });
+    winPeople.push({ name: nameOf(c, job.name), why: `Declined ${visitTime(declinedAt)}`, next: `Win-back ${when(togo[0].at)} (if they said yes to marketing)`, ref: { kind: "sales.proposal", id: String(p.id) } });
   }
 
   // Missed callers in the last day, and whether they were texted.
   const missedPeople: AutomationPerson[] = a2.calls.map((call) => ({
+    ...((call.customer as Customer | null)?.id ? { ref: { kind: "sales.client", id: String((call.customer as Customer).id) } } : {}),
     name: nameOf((call.customer as Customer | null) ?? {}, call.from_number),
     why: `Missed call ${visitTime(new Date(String(call.created_at)))}`,
     next: [...sent].some((k) => k.startsWith(`missed_call_text:${String(call.from_number ?? "").replace(/\D/g, "").slice(-10)}:`)) ? "Texted back" : "Text going out when sending hours open",
@@ -376,7 +379,12 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     how,
     on: false,
     offNote: "You start this one: nobody gets it until you press Start in Sales › Automated messages. The list is who would.",
-    people: (preview?.rows ?? []).filter((r) => !r.skip).map((r) => ({ name: r.name, why: r.detail, next: r.channels.map((ch) => (ch === "sms" ? "Text" : "Email")).join(" + ") })),
+    people: (preview?.rows ?? []).filter((r) => !r.skip).map((r) => ({
+      name: r.name,
+      why: r.detail,
+      next: r.channels.map((ch) => (ch === "sms" ? "Text" : "Email")).join(" + "),
+      ref: { kind: "sales.client", id: r.customerId },
+    })),
   });
 
   const a2Sales: Automation[] = [

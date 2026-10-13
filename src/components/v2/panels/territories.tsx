@@ -23,7 +23,7 @@ export async function TerritoriesPanel() {
     ...(!data.ready ? [{ id: "setup", summary: "Territories aren't set up yet: migration 0361 has to be applied first." }] : []),
     ...withTerritory
       .filter((e) => e.bookings >= 5 && e.inTerritory / e.bookings < 0.5)
-      .map((e) => ({ id: e.id, summary: `${e.name} did ${e.bookings - e.inTerritory} of ${e.bookings} evaluations outside their territory.`, detail: "Either the territory is drawn too small, or nobody covers where the work is." })),
+      .map((e) => ({ id: e.id, open: { kind: "sales.evaluator", id: e.id }, summary: `${e.name} did ${e.bookings - e.inTerritory} of ${e.bookings} evaluations outside their territory.`, detail: "Either the territory is drawn too small, or nobody covers where the work is." })),
   ];
 
   return (

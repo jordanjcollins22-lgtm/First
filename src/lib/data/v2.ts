@@ -417,26 +417,41 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
 /* Sales                                                               */
 /* ------------------------------------------------------------------ */
 
+/** A Sales row that opens its thing in the drawer (the same shape as entities' row()). */
+const salesRow = (text: string, kind: string, id: unknown): ListRow => (typeof id === "string" && id ? { text, ref: { kind, id } } : text);
+/** The client's name on a job row read with its property and customer. */
+const clientOf = (j: Row) => str(((j.property as Row | null)?.customer as Row | null)?.name);
+/** "12 Haystack Court, Forest Hill · Jane Smith" */
+const jobLabel = (j: Row) => {
+  const where = place((j.property as Row | null)?.address ?? j.name);
+  const who = clientOf(j);
+  return who ? `${where} · ${who}` : where;
+};
+const SALES_CAP = 25;
+
 /** viewerId: the person the page is being shown as, for the views that are about "my" work. */
 export async function loadSales(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
   const orgId = await getCurrentOrganizationId().catch(() => null);
   const [jobs, proposals, profiles, calls, approvals, intakes, invoices, services, ghl,
-    views, avail, daysOff, bookVisits, booked] = await Promise.all([
-    rows(sb, "jobs", "id,name,status,evaluation_status,evaluation_date,assigned_to,referral_code,referred_by_profile_id"),
-    rows(sb, "job_proposals", "status,total_cost,job_id"),
+    views, avail, daysOff, bookVisits, booked, bookedRows, clients, clientCount] = await Promise.all([
+    rows(sb, "jobs", "id,name,status,evaluation_status,evaluation_date,assigned_to,referral_code,referred_by_profile_id,created_at,property:properties(address,customer:customers(id,name))"),
+    rows(sb, "job_proposals", "id,status,total_cost,discount_amount,job_id,created_at,sent_at,expires_at,responded_at"),
     rows(sb, "profiles", "id,full_name,email,does_evaluations,commission_pct"),
-    rows(sb, "proposal_calls", "outcome"),
-    rows(sb, "outbound_approvals", "status"),
-    rows(sb, "evaluation_intakes", "submitted_at"),
-    rows(sb, "invoices", "status,amount"),
-    rows(sb, "services", "name,status,cost,cost_unit"),
+    rows(sb, "proposal_calls", "id,outcome,proposal_id,job_id,created_at", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "outbound_approvals", "id,status,subject,kind,to_name,to_email,created_at"),
+    rows(sb, "evaluation_intakes", "job_id,submitted_at"),
+    rows(sb, "invoices", "id,job_id,status,amount,created_at,paid_at", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "services", "service_type_id,name,status,cost,cost_unit"),
     rows(sb, "ghl_sync_state", "organization_id,last_pulled_at,last_result"),
     count(sb, "proposal_views"),
     count(sb, "availability_weekly"),
     count(sb, "availability_days_off"),
     count(sb, "booking_visits", (q) => q.gte("created_at", since(30))),
     count(sb, "booking_visits", (q) => q.gte("created_at", since(30)).not("booked_job_id", "is", null)),
+    rows(sb, "booking_visits", "booked_job_id,booked_at", (q) => q.gte("created_at", since(30)).not("booked_job_id", "is", null).order("booked_at", { ascending: false }).limit(SALES_CAP)),
+    rows(sb, "customers", "id,name,do_not_contact,created_at", (q) => q.order("created_at", { ascending: false }).limit(SALES_CAP)),
+    count(sb, "customers"),
   ]);
   const automations = orgId ? await loadAutomations(sb, orgId).catch((e) => (console.error("v2 automations failed:", e), null)) : null;
 
@@ -445,12 +460,20 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
     const p = profiles.find((x) => x.id === id);
     return p ? str(p.full_name) || str(p.email) : "Unassigned";
   };
+  const jobById = new Map(jobs.map((j) => [str(j.id), j]));
+  const jobText = (id: unknown) => {
+    const j = jobById.get(str(id));
+    return j ? jobLabel(j) : "A job";
+  };
   const open = jobs.filter((j) => j.status !== "cancelled");
   const st = tally(jobs, "status");
   const scheduled = jobs.filter((j) => j.evaluation_status === "scheduled");
   const upcoming = scheduled
     .filter((j) => str(j.evaluation_date) >= now)
     .sort((a, b) => str(a.evaluation_date).localeCompare(str(b.evaluation_date)));
+  const staleList = scheduled
+    .filter((j) => j.evaluation_date && str(j.evaluation_date) < now)
+    .sort((a, b) => str(b.evaluation_date).localeCompare(str(a.evaluation_date)));
   const stale = scheduled.length - upcoming.length;
   const evalsDone = jobs.filter((j) => j.evaluation_status === "completed");
   const propBy = (s: string) => proposals.filter((p) => p.status === s);
@@ -460,15 +483,34 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
   const waitingApproval = propBy("needs_approval");
   const callOutcomes = tally(calls, "outcome");
   const appr = tally(approvals, "status");
+  const pendingApprovals = approvals.filter((a) => a.status === "pending").sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
   const activeServices = services.filter((s) => s.status === "active");
   const priced = activeServices.filter((s) => s.cost != null);
+  const unpriced = activeServices.filter((s) => s.cost == null);
   const paidInvoices = invoices.filter((i) => i.status === "paid");
   const sync = ghl.find((g) => g.organization_id === orgId) ?? ghl[0];
   // Whoever has the most visits stands in for "an evaluator" in the preview.
   const mine = (j: Row) => viewerId != null && j.assigned_to === viewerId;
   const myJobIds = new Set(jobs.filter(mine).map((j) => j.id));
   const evaluators = profiles.filter((p) => p.does_evaluations);
-  const visitRow = (j: Row) => `${when(j.evaluation_date)} · ${place(j.name)} · ${name(j.assigned_to)}`;
+  const visitRow = (j: Row) => salesRow(`${when(j.evaluation_date)} · ${jobLabel(j)} · ${name(j.assigned_to)}`, "sales.evaluation", j.id);
+  const jobRow = (j: Row) => salesRow(`${jobLabel(j)} · ${str(j.status).replace(/_/g, " ")}`, "sales.job", j.id);
+  const proposalRow = (p: Row) =>
+    salesRow(`${jobText(p.job_id)} · ${str(p.status).replace(/_/g, " ")} · ${usd(num(p.total_cost) - num(p.discount_amount))}`, "sales.proposal", p.id);
+  // Most urgent first: waiting on the owner, then out with the client (soonest to expire), then the rest newest first.
+  const urgency = (p: Row) => (p.status === "needs_approval" ? 0 : p.status === "sent" ? 1 : 2);
+  const proposalsByUrgency = [...proposals].sort(
+    (a, b) =>
+      urgency(a) - urgency(b) ||
+      (a.status === "sent" ? str(a.expires_at).localeCompare(str(b.expires_at)) : str(b.created_at).localeCompare(str(a.created_at)))
+  );
+  const decidedRecent = proposals
+    .filter((p) => p.status === "accepted" || p.status === "declined")
+    .sort((a, b) => str(b.responded_at).localeCompare(str(a.responded_at)));
+  const newestOpen = [...open].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
+  const referred = jobs.filter((j) => j.referral_code || j.referred_by_profile_id).sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
+  const answeredIntakes = intakes.filter((i) => i.submitted_at).sort((a, b) => str(b.submitted_at).localeCompare(str(a.submitted_at)));
+  const invoiceRow = (i: Row) => salesRow(`${jobText(i.job_id)} · ${usd(num(i.amount))} · ${str(i.status)}${i.paid_at ? ` ${day(i.paid_at)}` : ""}`, "sales.invoice", i.id);
 
   const pillars: V2Pillar[] = [
     {
@@ -481,14 +523,22 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
           rows: ["estimating", "quoted", "approved", "completed"].map((s) => `${s[0].toUpperCase() + s.slice(1)} · ${n(st.get(s) ?? 0)}`),
         },
         {
-          t: "Lead source", v: n(jobs.filter((j) => j.referral_code || j.referred_by_profile_id).length),
-          d: "Jobs with a referral code or affiliate attached",
-          rows: [
-            `Referral code on job · ${n(jobs.filter((j) => j.referral_code).length)}`,
-            `Referred by an affiliate · ${n(jobs.filter((j) => j.referred_by_profile_id).length)}`,
-          ],
+          t: "Leads and jobs", v: n(open.length), d: `Newest ${Math.min(SALES_CAP, open.length)} open: open one to change its status or evaluator, or add a note`,
+          rows: newestOpen.slice(0, SALES_CAP).map(jobRow),
         },
-        { t: "Close rate", v: pct(accepted, accepted + declined), d: `${accepted} signed of ${accepted + declined} proposals with an answer` },
+        {
+          t: "Clients", v: n(clientCount), d: "Newest first: contact details, jobs, messages and consent",
+          rows: clients.map((c) => salesRow(`${str(c.name) || "Unnamed client"}${c.do_not_contact ? " · do not contact" : ""} · added ${day(c.created_at)}`, "sales.client", c.id)),
+        },
+        {
+          t: "Lead source", v: n(referred.length),
+          d: `Jobs with a referral code (${n(jobs.filter((j) => j.referral_code).length)}) or an affiliate (${n(jobs.filter((j) => j.referred_by_profile_id).length)}) attached`,
+          rows: referred.slice(0, SALES_CAP).map(jobRow),
+        },
+        {
+          t: "Close rate", v: pct(accepted, accepted + declined), d: `${accepted} signed of ${accepted + declined} proposals with an answer · latest answers below`,
+          rows: decidedRecent.slice(0, SALES_CAP).map(proposalRow),
+        },
         { t: "GoHighLevel sync", v: sync ? "OK" : "—", d: sync ? `Last pulled ${day(sync.last_pulled_at)} · ${str(sync.last_result)}` : "No sync on record" },
       ],
       links: [{ label: "Pipeline", href: "/pipeline" }],
@@ -498,13 +548,22 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       blurb: `${n(bookVisits)} booking page visits · ${n(booked)} booked`,
       title: "Evaluation booking", sub: "Leads pick a time for an evaluator to visit.",
       blocks: [
-        { t: "Booking link", v: n(bookVisits), d: `Booking page visits in 30 days · ${n(booked)} booked` },
+        {
+          t: "Booking link", v: n(bookVisits), d: `Booking page visits in 30 days · ${n(booked)} booked`,
+          rows: bookedRows.map((b) => salesRow(`${day(b.booked_at)} · ${jobText(b.booked_job_id)}`, "sales.job", b.booked_job_id)),
+        },
         { t: "Availability", v: n(avail), d: `Weekly time blocks · ${n(daysOff)} days off` },
         {
-          t: "Scheduled evaluations", v: n(scheduled.length), d: "Upcoming visits",
-          rows: [...upcoming.slice(0, 6).map(visitRow), ...(stale ? [`${stale} past their date and still marked scheduled`] : [])],
+          t: "Scheduled evaluations", v: n(scheduled.length), d: `Upcoming visits${stale ? `, then ${stale} past their date and still marked scheduled` : ""}`,
+          rows: [
+            ...upcoming.slice(0, SALES_CAP - Math.min(10, staleList.length)).map(visitRow),
+            ...staleList.slice(0, 10).map((j) => salesRow(`Past, still scheduled · ${when(j.evaluation_date)} · ${jobLabel(j)}`, "sales.evaluation", j.id)),
+          ],
         },
-        { t: "Pre-visit questions", v: n(intakes.filter((i) => i.submitted_at).length), d: `Filled in before the visit (${n(intakes.length)} sent)` },
+        {
+          t: "Pre-visit questions", v: n(answeredIntakes.length), d: `Filled in before the visit (${n(intakes.length)} sent)`,
+          rows: answeredIntakes.slice(0, SALES_CAP).map((i) => salesRow(`${day(i.submitted_at)} · ${jobText(i.job_id)}`, "sales.evaluation", i.job_id)),
+        },
       ],
       links: [
         { label: "Calendar", href: "/evaluations" },
@@ -518,9 +577,15 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       blocks: [
         {
           t: "Pricing formulas", v: n(activeServices.length), d: `Active services · ${priced.length} with a rate`,
-          rows: priced.map((s) => `${str(s.name)} · $${num(s.cost)} ${str(s.cost_unit)}`),
+          rows: [
+            ...unpriced.map((s) => salesRow(`${str(s.name)} · no rate`, "sales.service", s.service_type_id)),
+            ...priced.map((s) => salesRow(`${str(s.name)} · $${num(s.cost)} ${str(s.cost_unit)}`, "sales.service", s.service_type_id)),
+          ],
         },
-        { t: "Proposals made", v: n(proposals.length), d: `${n(views)} views` },
+        {
+          t: "Proposals made", v: n(proposals.length), d: `${n(views)} views · waiting on you first, then out with the client`,
+          rows: proposalsByUrgency.slice(0, SALES_CAP).map(proposalRow),
+        },
         {
           t: "Tracking", v: usd(sum(proposals)), d: "Total value proposed",
           rows: [
@@ -530,7 +595,10 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
             `Needs your approval · ${waitingApproval.length} · ${usd(sum(waitingApproval))}`,
           ],
         },
-        { t: "E-sign + deposit", v: usd(paidInvoices.reduce((s, i) => s + num(i.amount), 0)), d: `${paidInvoices.length} invoices paid` },
+        {
+          t: "E-sign + deposit", v: usd(paidInvoices.reduce((s, i) => s + num(i.amount), 0)), d: `${paidInvoices.length} invoices paid · newest invoices below`,
+          rows: invoices.slice(0, SALES_CAP).map(invoiceRow),
+        },
       ],
       links: [
         { label: "Proposals", href: "/proposals" },
@@ -545,12 +613,16 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       view: "automations", automations: automations?.sales ?? [],
       blocks: [
         {
-          t: "Messages waiting for your approval", v: n(appr.get("pending") ?? 0), d: "Automatic emails held until you approve them",
-          rows: [...appr.entries()].map(([k, v]) => `${k} · ${v}`),
+          t: "Messages waiting for your approval", v: n(appr.get("pending") ?? 0),
+          d: `Automatic emails held until you approve them · ${[...appr.entries()].map(([k, v]) => `${k} ${v}`).join(", ") || "none on record"}`,
+          rows: pendingApprovals.slice(0, SALES_CAP).map((a) =>
+            salesRow(`${str(a.subject) || str(a.kind).replace(/_/g, " ")} · to ${str(a.to_name) || str(a.to_email)} · ${day(a.created_at)}`, "sales.approval", a.id)
+          ),
         },
         {
-          t: "Calls about proposals", v: n(calls.length), d: "Logged by hand",
-          rows: [...callOutcomes.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace(/_/g, " ")} · ${v}`),
+          t: "Calls about proposals", v: n(calls.length),
+          d: `Logged by hand · ${[...callOutcomes.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(", ") || "none yet"}`,
+          rows: calls.slice(0, SALES_CAP).map((c) => salesRow(`${day(c.created_at)} · ${str(c.outcome).replace(/_/g, " ")} · ${jobText(c.job_id)}`, "sales.proposal", c.proposal_id)),
         },
       ],
       links: [],
@@ -561,10 +633,16 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       blocks: [
         {
           t: "Upcoming visits", v: n(upcoming.filter(mine).length), d: "Coming up",
-          rows: upcoming.filter(mine).slice(0, 6).map(visitRow),
+          rows: upcoming.filter(mine).slice(0, SALES_CAP).map(visitRow),
         },
-        { t: "Measure", v: n(evalsDone.filter(mine).length), d: "Evaluations completed" },
-        { t: "Waiting on owner approval", v: n(waitingApproval.filter((p) => myJobIds.has(p.job_id)).length), d: "Your proposals, priced and waiting" },
+        {
+          t: "Measure", v: n(evalsDone.filter(mine).length), d: "Evaluations completed",
+          rows: evalsDone.filter(mine).sort((a, b) => str(b.evaluation_date).localeCompare(str(a.evaluation_date))).slice(0, SALES_CAP).map(visitRow),
+        },
+        {
+          t: "Waiting on owner approval", v: n(waitingApproval.filter((p) => myJobIds.has(p.job_id)).length), d: "Your proposals, priced and waiting",
+          rows: waitingApproval.filter((p) => myJobIds.has(p.job_id)).slice(0, SALES_CAP).map(proposalRow),
+        },
       ],
       links: [{ label: "My visits", href: "/evaluate" }],
     },
@@ -574,12 +652,14 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
       title: "Evaluators", sub: "Lead closers who visit, measure and propose.",
       blocks: [
         {
-          t: "Roster", v: n(evaluators.length), d: "People who can be booked for an evaluation",
-          rows: evaluators.map((e) => `${str(e.full_name) || str(e.email)} · ${e.commission_pct == null ? "no commission set" : e.commission_pct + "% commission"}`),
+          t: "Roster", v: n(evaluators.length), d: "People who can be booked for an evaluation: visits, scorecard, territory",
+          rows: evaluators.map((e) => salesRow(`${str(e.full_name) || str(e.email)} · ${e.commission_pct == null ? "no commission set" : e.commission_pct + "% commission"}`, "sales.evaluator", e.id)),
         },
         {
           t: "Completed evaluations", v: n(evalsDone.length), d: "By evaluator",
-          rows: [...tally(evalsDone, "assigned_to").entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k === "(none)" ? "Unassigned" : name(k)} · ${v}`),
+          rows: [...tally(evalsDone, "assigned_to").entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([k, v]) => (k === "(none)" ? `Unassigned · ${v}` : salesRow(`${name(k)} · ${v}`, "sales.evaluator", k))),
         },
       ],
       links: [{ label: "Team & services", href: "/admin/team" }],

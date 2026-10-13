@@ -4,6 +4,7 @@ import { CLOSE_RATE_BAND, type ScorecardRow, type Tone } from "@/lib/sales/score
 import { formatHours } from "@/lib/sales/speed-to-proposal";
 import { KpiTile, NeedsYouStrip, PanelSection, TONE_CLASS, pct, usd } from "@/components/v2/panels/sales/sales-ui";
 import { ExceptionButtons } from "@/components/v2/panels/sales/pipeline-autopilot-controls";
+import { OpenEntityName } from "@/components/v2/panels/sales/open-entity-button";
 
 /**
  * Sales › Evaluations: one row per evaluator, judged on close rate.
@@ -28,7 +29,7 @@ export async function EvaluatorScorecardPanel() {
             id: item.id,
             summary: item.summary,
             who: item.assignee,
-            href: item.href,
+            open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
             actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
           }))}
         />
@@ -87,7 +88,7 @@ function EvaluatorCard({ row, speedTargetHours }: { row: ScorecardRow; speedTarg
   return (
     <li className="grid gap-3 rounded-xl border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-base font-bold">{row.name}</p>
+        <OpenEntityName entity={{ kind: "sales.evaluator", id: row.evaluatorId }} name={row.name} className="text-base font-bold" />
         <p className={`rounded-full border px-3 py-1 text-sm font-semibold ${TONE_CLASS[row.closeTone]}`}>
           Close rate {pct(row.closeRate)} <span className="font-normal">({row.accepted} of {row.accepted + row.declined})</span>
         </p>

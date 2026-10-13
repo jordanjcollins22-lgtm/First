@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
+import type { EntityRef } from "@/lib/entities/types";
 import type { Tone } from "@/lib/sales/scorecard";
+import { OpenEntityButton } from "@/components/v2/panels/sales/open-entity-button";
 
 /**
  * Pieces the three sales panels share: the needs-you strip, a KPI tile
@@ -48,7 +49,8 @@ export interface StripItem {
   summary: string;
   detail?: string | null;
   who?: string | null;
-  href?: string | null;
+  /** What Open shows in the drawer: the job, client or evaluator behind it. */
+  open?: EntityRef | null;
   /** Buttons, from a client component. */
   actions?: React.ReactNode;
 }
@@ -69,11 +71,7 @@ export function NeedsYouStrip({ items, empty }: { items: StripItem[]; empty: str
             {item.who && <p className="text-xs opacity-80">For {item.who}</p>}
           </div>
           <div className="flex flex-wrap gap-2">
-            {item.href && (
-              <Link href={item.href} className="inline-flex min-h-11 items-center rounded-lg border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted">
-                Open
-              </Link>
-            )}
+            {item.open && <OpenEntityButton entity={item.open} />}
             {item.actions}
           </div>
         </li>

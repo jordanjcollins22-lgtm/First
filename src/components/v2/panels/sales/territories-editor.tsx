@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { saveTerritory, type TerritoryResult } from "@/lib/actions/territory-actions";
 import type { LatLng } from "@/lib/sales/territories";
 import { TerritoryMap } from "@/components/v2/panels/sales/territory-map";
+import { OpenEntityButton } from "@/components/v2/panels/sales/open-entity-button";
 
 export interface EvaluatorTerritoryView {
   id: string;
@@ -65,6 +66,7 @@ function EditOne({ evaluator, others, pins }: { evaluator: EvaluatorTerritoryVie
   const [result, setResult] = useState<TerritoryResult | null>(null);
   return (
     <div className="grid gap-3 rounded-xl border bg-card p-4">
+      <OpenEntityButton entity={{ kind: "sales.evaluator", id: evaluator.id }} label={`Open ${evaluator.name}: visits and scorecard`} />
       <p className="text-sm text-muted-foreground">
         {evaluator.bookings} evaluation{evaluator.bookings === 1 ? "" : "s"} in the last 90 days
         {evaluator.zips.length || evaluator.areas.length ? `, ${evaluator.inTerritory} inside their territory` : ""}. Green dots are theirs.

@@ -15,6 +15,7 @@ import {
   SequenceSwitch,
   TimingField,
 } from "@/components/v2/panels/client-messages-settings-controls";
+import { OpenEntityButton } from "@/components/v2/panels/sales/open-entity-button";
 
 /**
  * Sales › Automated messages: the client sequences that run without anybody,
@@ -29,8 +30,8 @@ import {
 
 const DAY = 86_400_000;
 
-type ExceptionRow = { id: string; kind: string; summary: string; detail: string | null; created_at: string };
-type CallRow = { id: string; created_at: string; direction: string; duration_seconds: number; customer: { name: string | null } | null };
+type ExceptionRow = { id: string; kind: string; summary: string; detail: string | null; created_at: string; customer_id: string | null; job_id: string | null };
+type CallRow = { id: string; created_at: string; direction: string; duration_seconds: number; customer: { id: string; name: string | null } | null };
 
 export async function ClientMessagesSettingsPanel() {
   const supabase = await createClient();
@@ -42,10 +43,10 @@ export async function ClientMessagesSettingsPanel() {
   const [org, settings, exceptions, calls, invoices, log30, ratings, proposals60] = await Promise.all([
     supabase.from("organizations").select("client_reminders_enabled, reminder_time_zone, reminder_quiet_start, reminder_quiet_end").eq("id", organizationId).maybeSingle(),
     loadSequenceSettings(supabase, organizationId),
-    sb.from("client_automation_exceptions").select("id, kind, summary, detail, created_at").eq("organization_id", organizationId).eq("state", "open").order("created_at", { ascending: false }).limit(30),
+    sb.from("client_automation_exceptions").select("id, kind, summary, detail, created_at, customer_id, job_id").eq("organization_id", organizationId).eq("state", "open").order("created_at", { ascending: false }).limit(30),
     sb
       .from("voice_calls")
-      .select("id, created_at, direction, duration_seconds, customer:customers(name)")
+      .select("id, created_at, direction, duration_seconds, customer:customers(id, name)")
       .eq("organization_id", organizationId)
       .eq("missed", false)
       .is("disposition", null)
@@ -113,7 +114,14 @@ export async function ClientMessagesSettingsPanel() {
                   <span className="font-semibold">{e.summary}</span>
                   {e.detail && <span className="block text-sm text-muted-foreground">{e.detail}</span>}
                 </span>
-                <ExceptionButtons id={e.id} />
+                <span className="flex flex-wrap gap-2">
+                  {e.job_id ? (
+                    <OpenEntityButton entity={{ kind: "sales.job", id: e.job_id }} />
+                  ) : e.customer_id ? (
+                    <OpenEntityButton entity={{ kind: "sales.client", id: e.customer_id }} />
+                  ) : null}
+                  <ExceptionButtons id={e.id} />
+                </span>
               </li>
             ))}
             {waitingCalls.map((c) => (
@@ -126,6 +134,7 @@ export async function ClientMessagesSettingsPanel() {
                   </span>
                   <span className="block text-sm text-muted-foreground">What did they say about their proposal?</span>
                 </span>
+                {c.customer?.id && <OpenEntityButton entity={{ kind: "sales.client", id: c.customer.id }} label="Open client" />}
                 <CallDisposition callId={c.id} />
               </li>
             ))}
