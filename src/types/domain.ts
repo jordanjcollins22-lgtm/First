@@ -393,7 +393,9 @@ export type NotificationKind =
   // To the owner when a property manager answers a cold email. Asked for, not a toggle.
   | "pm_reply"
   // To the owner when an Indeed applicant couldn't be sent our application link. Asked for, not a toggle.
-  | "hiring_alert";
+  | "hiring_alert"
+  // The Monday digest to the owner. Switched on and off in Admin › Oversight, not a toggle here.
+  | "owner_digest";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */
