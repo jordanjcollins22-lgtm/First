@@ -71,6 +71,7 @@ export function WorkOrderView({
   crew = false,
   arrived = false,
   practice = false,
+  inline = false,
   checklist,
   areaBoard,
   receipts = [],
@@ -123,6 +124,11 @@ export function WorkOrderView({
   arrived?: boolean;
   /** A sample sheet with no job behind it: the links that need a job say so instead. */
   practice?: boolean;
+  /**
+   * Part of the crew's home screen rather than a page of its own: no back
+   * link, and no directions button, which is already on the day card above.
+   */
+  inline?: boolean;
   /** What to load and what to do, at the top of the sheet. */
   checklist?: CrewChecklist;
   /** Who is in which area, and each area's steps: the job on site. */
@@ -161,23 +167,29 @@ export function WorkOrderView({
   const grouped = worthGrouping(zoneGroups);
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 px-4 py-4">
-      <Link
-        href={back?.href ?? (bare ? "/my-day" : "/today")}
-        className="flex min-h-9 items-center gap-1 text-sm text-muted-foreground hover:text-primary"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {back?.label ?? "Back to today"}
-      </Link>
+    <div className={inline ? "flex flex-col gap-4" : "mx-auto flex max-w-md flex-col gap-4 px-4 py-4"}>
+      {!inline && (
+        <Link
+          href={back?.href ?? (bare ? "/my-day" : "/today")}
+          className="flex min-h-9 items-center gap-1 text-sm text-muted-foreground hover:text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {back?.label ?? "Back to today"}
+        </Link>
+      )}
 
       <header>
-        <h1 className="text-xl font-bold leading-snug">{address}</h1>
+        {inline ? (
+          <h3 className="text-lg font-bold leading-snug">{address}</h3>
+        ) : (
+          <h1 className="text-xl font-bold leading-snug">{address}</h1>
+        )}
         <p className="text-sm text-muted-foreground">
           {customerName}
           {jobName && ` · ${jobName}`}
           {formatJobNumber(jobNumber) && ` · ${formatJobNumber(jobNumber)}`}
         </p>
-        {practice || demo ? (
+        {inline ? null : practice || demo ? (
           <p className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary/60 text-base font-semibold text-primary-foreground" title="On a real job this opens the route in maps.">
             <Navigation className="h-5 w-5" />
             Directions

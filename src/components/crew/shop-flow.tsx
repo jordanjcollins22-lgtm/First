@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { SayIt } from "@/components/ui/say-it";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import * as serverShop from "@/lib/actions/shop-flow-actions";
+import { externalNavUrl } from "@/lib/directions";
 import { allLoaded, clampPage, loadPages, pageComplete, STAGE_LABEL } from "@/lib/shop-flow";
 import { sayTime } from "@/lib/sub-crew";
 import { zonesBounds } from "@/lib/work-order";
@@ -35,7 +36,10 @@ export function ShopFlow({
   present,
   shop = null,
   actions,
+  inline = false,
 }: {
+  /** On the new layout's home screen: directions open the phone's maps app and the sheet is on the same screen. */
+  inline?: boolean;
   me: { profileId: string; name: string; canLead: boolean; arrived: boolean };
   /** When they are due, and how to get in. */
   shop?: { arriveBy: string | null; accessCodes: string | null } | null;
@@ -247,9 +251,11 @@ export function ShopFlow({
                     ))}
                   </ol>
                 )}
-                <Link href={`/jobs/${card.jobId}/work-order`} className="mt-1 inline-block text-xs text-primary underline-offset-2 hover:underline">
-                  Full crew sheet
-                </Link>
+                {!inline && (
+                  <Link href={`/jobs/${card.jobId}/work-order`} className="mt-1 inline-block text-xs text-primary underline-offset-2 hover:underline">
+                    Full crew sheet
+                  </Link>
+                )}
               </div>
             ))}
           </div>
@@ -278,12 +284,18 @@ export function ShopFlow({
       {header}
       <p className="mt-1 text-lg font-bold leading-snug">{first ? `On the way to ${first.customerName}` : "On the road"}</p>
       {first && <p className="text-sm text-muted-foreground">{first.address}</p>}
-      {first && (
-        <Link href={`/jobs/${first.jobId}/directions`} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground">
-          <Navigation className="h-5 w-5" />
-          Directions
-        </Link>
-      )}
+      {first &&
+        (inline ? (
+          <a href={externalNavUrl(first)} target="_blank" rel="noreferrer" className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground">
+            <Navigation className="h-5 w-5" />
+            Directions
+          </a>
+        ) : (
+          <Link href={`/jobs/${first.jobId}/directions`} className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-lg bg-primary text-base font-semibold text-primary-foreground">
+            <Navigation className="h-5 w-5" />
+            Directions
+          </Link>
+        ))}
     </section>
   );
 }

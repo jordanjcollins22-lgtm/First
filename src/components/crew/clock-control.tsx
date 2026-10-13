@@ -105,7 +105,7 @@ export function ClockControl({
               })}
             </p>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => run(null, () => clockOut())}>
+          <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => run(null, () => clockOut())}>
             <Square className="mr-1 h-4 w-4" />
             Clock out
           </Button>
@@ -125,6 +125,8 @@ export function ClockControl({
             type="button"
             size="sm"
             variant="outline"
+            // Thumb-sized: this is pressed outdoors, often in gloves.
+            className="min-h-11"
             // The stop is the visit, so the hours land on it and the
             // visit can say who worked it.
             onClick={() =>
@@ -141,6 +143,7 @@ export function ClockControl({
           type="button"
           size="sm"
           variant="ghost"
+          className="min-h-11"
           // Loading up, the shop, the yard — real hours that belong to no job.
           onClick={() => run(startingNow(null, null, null), () => clockIn(null))}
         >
