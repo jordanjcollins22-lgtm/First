@@ -8,6 +8,7 @@ import { toE164 } from "@/lib/sms";
 import { env, isTwilioConfigured } from "@/lib/env";
 import { postJobMessage } from "@/lib/actions/job-message-actions";
 import { refuseInDemo } from "@/lib/demo-mode";
+import { outboundBaseUrl } from "@/lib/base-url";
 
 function escapeXml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -34,11 +35,18 @@ export async function startCall(jobId: string): Promise<void> {
   const clientNumber = toE164(contact.phone);
   if (!clientNumber) throw new Error("The client's phone number on file doesn't look valid.");
 
+  // How the call ended goes to dial-status, which logs "no answer" on the
+  // proposal by itself and holds an answered call for a one-tap outcome.
+  // Absolute, because an inline TwiML has no address to resolve against.
+  const base = await outboundBaseUrl().catch(() => "");
+  const action = base
+    ? ` action="${escapeXml(`${base}/api/webhooks/twilio-voice/dial-status?dir=out&job=${encodeURIComponent(jobId)}&p=${encodeURIComponent(profile.id)}`)}" method="POST"`
+    : "";
   const client = Twilio(env.twilioAccountSid, env.twilioAuthToken);
   await client.calls.create({
     to: myNumber,
     from: env.twilioPhoneNumber,
-    twiml: `<Response><Say>Connecting you to ${escapeXml(contact.customerName)}.</Say><Dial callerId="${env.twilioPhoneNumber}">${clientNumber}</Dial></Response>`,
+    twiml: `<Response><Say>Connecting you to ${escapeXml(contact.customerName)}.</Say><Dial callerId="${env.twilioPhoneNumber}"${action}>${clientNumber}</Dial></Response>`,
   });
 
   await postJobMessage(jobId, "internal", `Called ${contact.customerName} (${contact.phone}).`);

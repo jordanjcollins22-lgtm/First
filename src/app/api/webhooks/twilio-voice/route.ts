@@ -1,16 +1,26 @@
 import Twilio from "twilio";
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { log } from "@/lib/log";
+import { outboundBaseUrl } from "@/lib/base-url";
+import { recordDialResult } from "@/lib/data/voice-calls";
 import { last10Digits, toE164 } from "@/lib/sms";
 import { qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
 import { env, isTwilioConfigured } from "@/lib/env";
 
-function dialResponse(numbers: string[]): NextResponse {
+/**
+ * Ring these numbers. The Dial reports how it ended to dial-status (a
+ * relative action URL, resolved by Twilio against this one), which records
+ * the call, texts a missed caller back, and then plays the voicemail. With
+ * nobody to ring the call is missed already, and recorded as such here.
+ */
+function dialResponse(numbers: string[], profileId: string | null): NextResponse {
   const dials = numbers.map((n) => `<Number>${n}</Number>`).join("");
+  const action = `/api/webhooks/twilio-voice/dial-status?dir=in${profileId ? `&amp;p=${encodeURIComponent(profileId)}` : ""}`;
   const twiml =
     numbers.length > 0
-      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Dial callerId="${env.twilioPhoneNumber}">${dials}</Dial></Response>`
+      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Dial callerId="${env.twilioPhoneNumber}" action="${action}" method="POST">${dials}</Dial></Response>`
       : `<?xml version="1.0" encoding="UTF-8"?><Response><Say>Sorry, no one is available to take your call right now. Please leave a message after the tone.</Say><Record maxLength="120" /></Response>`;
   return new NextResponse(twiml, { status: 200, headers: { "Content-Type": "text/xml" } });
 }
@@ -95,7 +105,7 @@ export async function POST(request: NextRequest) {
     if (!profileId) continue;
     const { data: routedProfile } = await admin.from("profiles").select("phone").eq("id", profileId).maybeSingle();
     const e164 = routedProfile?.phone ? toE164(routedProfile.phone) : null;
-    if (e164) return dialResponse([e164]);
+    if (e164) return dialResponse([e164], profileId);
   }
 
   // No specific match (or they have no phone on file) — ring the whole sales team.
@@ -112,5 +122,24 @@ export async function POST(request: NextRequest) {
     .map((p) => toE164(p.phone as string))
     .filter((n): n is string => n !== null);
 
-  return dialResponse(teamNumbers);
+  if (teamNumbers.length === 0 && from) {
+    // Nobody to ring: missed before it started. Written down (and texted
+    // back, when that is switched on) after the voicemail prompt is sent.
+    const origin = (await outboundBaseUrl().catch(() => "")) || request.nextUrl.origin;
+    after(() =>
+      recordDialResult({
+        callSid: params.CallSid ?? `${Date.now()}`,
+        direction: "inbound",
+        clientNumber: from,
+        businessNumber: params.To ?? null,
+        dialStatus: "no-answer",
+        durationSeconds: 0,
+        origin,
+      }).then(
+        () => undefined,
+        (err) => log.error("twilio_voice.missed_record", err)
+      )
+    );
+  }
+  return dialResponse(teamNumbers, null);
 }
