@@ -8,6 +8,7 @@ import { recordCheckoutSession } from "@/lib/actions/stripe-settlement";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer } from "@/lib/stripe-customer";
 import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
+import { accrueForStripeInvoice } from "@/lib/data/commission-accrual";
 
 /**
  * Stripe's webhook — set this URL (https://yourdomain/api/webhooks/stripe)
@@ -52,6 +53,10 @@ export async function POST(request: NextRequest) {
       .eq("stripe_invoice_id", invoice.id);
     // A snow event's bill keeps its own row, one per client per storm.
     await snowInvoices(admin).update({ status: "paid", paid_at: new Date().toISOString() }).eq("stripe_invoice_id", invoice.id);
+    // Commission on this payment, for whoever carried the job. Off until the
+    // owner switches it on; idempotent and never throws, so a retried
+    // delivery adds nothing and a failure here cannot fail the webhook.
+    await accrueForStripeInvoice(invoice.id);
   } else if (event.type === "invoice.voided") {
     const invoice = event.data.object as Stripe.Invoice;
     await admin.from("invoices").update({ status: "void" }).eq("stripe_invoice_id", invoice.id);

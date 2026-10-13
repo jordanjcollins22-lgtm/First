@@ -160,6 +160,7 @@ const OTHER_LABELS: Record<string, string> = {
   pm_reply: "A property manager replied",
   hiring_alert: "Hiring",
   owner_digest: "Your Monday digest",
+  compliance_alert: "Back office",
 };
 
 export function label(kind: NotificationKind): string {

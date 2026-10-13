@@ -16,6 +16,7 @@ import {
   type ProposalStatus,
 } from "@/lib/evaluation-resubmit";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { fertilizerBlock } from "@/lib/data/fertilizer-guard";
 import { forwardPriceForJob } from "@/lib/data/forward-price";
 import { requestMeasurements } from "@/lib/data/measurement-request";
 import { deliverApproval, queueApproval } from "@/lib/data/outbound-approvals";
@@ -450,6 +451,15 @@ export async function approveProposal(jobId: string): Promise<ApproveOutcome> {
   if (!priced) throw new Error("There is no proposal on this job to send.");
   const priceBlocker = zeroPriceBlocker(priced);
   if (priceBlocker) throw new Error(priceBlocker);
+
+  // A fertilizer line planned for a day inside Maryland's blackout is not
+  // something to promise a client. Quoting in winter for spring is fine:
+  // only a start date already set inside the blackout stops it.
+  const { data: planned } = await supabase.from("jobs").select("project_start_date, project_end_date").eq("id", jobId).maybeSingle();
+  if (planned?.project_start_date) {
+    const blackout = await fertilizerBlock(jobId, planned.project_start_date, planned.project_end_date ?? planned.project_start_date);
+    if (blackout) throw new Error(`This proposal has fertilizer planned for ${planned.project_start_date}. ${blackout}`);
+  }
 
   // The clock starts now. Seven or fourteen days, whichever was chosen on
   // the draft, and after that it closes on its own.

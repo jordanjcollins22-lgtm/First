@@ -395,7 +395,9 @@ export type NotificationKind =
   // To the owner when an Indeed applicant couldn't be sent our application link. Asked for, not a toggle.
   | "hiring_alert"
   // The Monday digest to the owner. Switched on and off in Admin › Oversight, not a toggle here.
-  | "owner_digest";
+  | "owner_digest"
+  // To the owner: a license, policy or filing coming due, a new-hire item overdue, a payout to approve. Asked for, not a toggle.
+  | "compliance_alert";
 
 /** How one person wants to hear about one group. "default" follows their
  * general Team group messages setting. */
