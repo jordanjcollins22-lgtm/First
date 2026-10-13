@@ -17,6 +17,7 @@ import {
   rescheduleDedupeKey,
   workTypeFor,
   type CascadeSession,
+  type DayWeather,
   type PlannedMove,
 } from "@/lib/weather-cascade/rules";
 import { fetchCascadeForecast, locationKeyFor, pointFromKey } from "@/lib/weather-cascade/forecast";
@@ -62,7 +63,7 @@ export async function loadWeatherOpsSettings(client: unknown, organizationId: st
   return weatherOpsFrom(data as Record<string, unknown> | null, !error);
 }
 
-interface SessionRow {
+export interface SessionRow {
   id: string;
   job_id: string;
   starts_on: string;
@@ -81,17 +82,20 @@ interface SessionRow {
   } | null;
 }
 
-export async function runWeatherCascade(organizationId: string, now = new Date()): Promise<CascadeRunResult> {
-  const admin = untyped(createAdminClient());
-  const result: CascadeRunResult = { organizationId, sessionsRead: 0, applied: 0, proposed: 0, stuck: 0, failed: 0, clientsNotified: 0, crewNotified: 0 };
-  const settings = await loadWeatherOpsSettings(admin, organizationId);
-  if (!settings.ready) return { ...result, skipped: "The weather tables are not set up yet." };
-  if (!settings.cascadeEnabled) return { ...result, skipped: "The weather cascade is switched off." };
+export interface CrewDays {
+  sessions: SessionRow[];
+  cascade: CascadeSession[];
+}
 
-  const today = dateKeyIn(now);
+/**
+ * The crews' visits from today through the next three weeks, as the rules
+ * see them. Shared by the cron and the weather panel, so the panel's "risky
+ * days" are judged exactly as the cascade will judge them.
+ */
+export async function readCrewDays(client: unknown, organizationId: string, settings: WeatherOpsSettings, today: string): Promise<CrewDays> {
+  const sb = untyped(client);
   const until = addDays(today, CHAIN_DAYS);
-
-  const { data: rows, error } = await admin
+  const { data: rows, error } = await sb
     .from("job_work_sessions")
     .select(
       "id, job_id, starts_on, ends_on, status, subcontractor_id, created_at, updated_at, " +
@@ -104,18 +108,17 @@ export async function runWeatherCascade(organizationId: string, now = new Date()
   if (error) throw error;
 
   const sessions = ((rows ?? []) as unknown as SessionRow[]).filter((s) => s.jobs && s.jobs.status !== "cancelled" && s.jobs.status !== "completed");
-  result.sessionsRead = sessions.length;
-  if (sessions.length === 0) return finish(admin, organizationId, now, result);
+  if (sessions.length === 0) return { sessions, cascade: [] };
 
   const jobIds = [...new Set(sessions.map((s) => s.job_id))];
   const [{ data: mowRows }, { data: saltRows }] = await Promise.all([
-    admin.from("mow_orders").select("job_id").in("job_id", jobIds),
-    admin.from("salt_orders").select("job_id").in("job_id", jobIds),
+    sb.from("mow_orders").select("job_id").in("job_id", jobIds),
+    sb.from("salt_orders").select("job_id").in("job_id", jobIds),
   ]);
   const mowJobs = new Set((mowRows ?? []).map((r: { job_id: string | null }) => r.job_id));
   const saltJobs = new Set((saltRows ?? []).map((r: { job_id: string | null }) => r.job_id));
 
-  const cascadeSessions: CascadeSession[] = sessions.map((s) => {
+  const cascade: CascadeSession[] = sessions.map((s) => {
     const job = s.jobs!;
     const property = embeddedOne(job.properties);
     return {
@@ -134,24 +137,55 @@ export async function runWeatherCascade(organizationId: string, now = new Date()
       movable: cascadeMayMove(s, settings),
     };
   });
+  return { sessions, cascade };
+}
 
-  // Only the places with weather-sensitive work in the forecast window need asking.
+/**
+ * The forecast at every place with weather-sensitive work, trimmed to the
+ * days it is trusted for: beyond them nobody knows, and those days are
+ * dropped rather than guessed. Throws when the service does not answer.
+ */
+export async function forecastFor(sessions: readonly CascadeSession[], today: string): Promise<Map<string, Map<string, DayWeather>>> {
   const keys = new Set<string>();
-  for (const s of cascadeSessions) {
+  for (const s of sessions) {
     if (s.locationKey && (s.workType === "mowing" || s.workType === "install")) keys.add(s.locationKey);
   }
-  let weather = new Map<string, Map<string, import("@/lib/weather-cascade/rules").DayWeather>>();
+  const weather = await fetchCascadeForecast([...keys].map(pointFromKey), today, FORECAST_DAYS, 2);
+  const lastTrusted = addDays(today, FORECAST_DAYS - 1);
+  for (const [key, days] of weather) {
+    weather.set(key, new Map([...days].filter(([date]) => date <= lastTrusted)));
+  }
+  return weather;
+}
+
+export async function runWeatherCascade(organizationId: string, now = new Date()): Promise<CascadeRunResult> {
+  const admin = untyped(createAdminClient());
+  const result: CascadeRunResult = { organizationId, sessionsRead: 0, applied: 0, proposed: 0, stuck: 0, failed: 0, clientsNotified: 0, crewNotified: 0 };
+  const settings = await loadWeatherOpsSettings(admin, organizationId);
+  if (!settings.ready) return { ...result, skipped: "The weather tables are not set up yet." };
+  if (!settings.cascadeEnabled) return { ...result, skipped: "The weather cascade is switched off." };
+
+  const today = dateKeyIn(now);
+  // A proposal for a day that has passed is no longer a decision anybody can make.
+  await admin
+    .from("weather_reschedules")
+    .update({ status: "superseded" })
+    .eq("organization_id", organizationId)
+    .eq("status", "proposed")
+    .lt("from_starts_on", today);
+
+  const days = await readCrewDays(admin, organizationId, settings, today);
+  result.sessionsRead = days.sessions.length;
+  if (days.sessions.length === 0) return finish(admin, organizationId, now, result);
+  const cascadeSessions = days.cascade;
+
+  let weather: Map<string, Map<string, DayWeather>>;
   try {
-    weather = await fetchCascadeForecast([...keys].map(pointFromKey), today, FORECAST_DAYS, 2);
+    weather = await forecastFor(cascadeSessions, today);
   } catch (err) {
     // No forecast is "move nothing", never "no rain".
     result.forecastError = err instanceof Error ? err.message : String(err);
     return finish(admin, organizationId, now, result);
-  }
-  // Beyond the trusted window nobody knows, so those days are dropped.
-  const lastTrusted = addDays(today, FORECAST_DAYS - 1);
-  for (const [key, days] of weather) {
-    weather.set(key, new Map([...days].filter(([date]) => date <= lastTrusted)));
   }
 
   const plan = planCascade({

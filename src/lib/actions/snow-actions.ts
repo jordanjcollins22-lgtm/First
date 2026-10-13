@@ -331,7 +331,9 @@ export async function logSnowStop(stopId: string, input: LogStopInput): Promise<
     .from("snow_event_stops")
     .update({
       status: input.status,
-      serviced_at: input.status === "done" ? new Date().toISOString() : null,
+      // Stamped once. Correcting the pounds on a stop already logged keeps
+      // the time it was actually done.
+      serviced_at: input.status === "done" ? (stop.status === "done" ? undefined : new Date().toISOString()) : null,
       logged_by: me.id,
       gps_lat: num(input.gps?.lat),
       gps_lng: num(input.gps?.lng),

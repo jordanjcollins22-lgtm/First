@@ -20,7 +20,6 @@ import {
   servicedDedupeKey,
   servicedNotice,
   snowBillFor,
-  type ContractType,
   type LoggedStop,
   type SnowContract,
 } from "@/lib/snow/billing";
@@ -558,4 +557,14 @@ export async function suggestSnowFromForecast(organizationId: string, now = new 
     }).catch(() => false);
   }
   return { suggested: true };
+}
+
+/** The live storm and its stops, for the crew's route screen. Null when nothing is running. */
+export async function getActiveSnowRoute(client: unknown): Promise<{ event: { id: string; label: string; service: "pretreat" | "salt" | "plow" }; stops: SnowStop[] } | null> {
+  const sb = untyped(client);
+  const { data: event, error } = await sb.from("snow_events").select("id, label, service").eq("status", "active").limit(1).maybeSingle();
+  if (error || !event) return null;
+  const e = event as { id: string; label: string; service: "pretreat" | "salt" | "plow" };
+  const { data: rows } = await sb.from("snow_event_stops").select(STOP_COLUMNS).eq("event_id", e.id).order("position");
+  return { event: e, stops: ((rows ?? []) as unknown as Record<string, unknown>[]).map(toStop) };
 }
