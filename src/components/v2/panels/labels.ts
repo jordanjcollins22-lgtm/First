@@ -26,6 +26,6 @@ export const PANEL_LABEL: Record<string, string> = {
   "am-sales": "My sales",
   "am-accounts": "My accounts",
   "evaluator-home": "My visits",
-  "lead-home": "My crew today",
+  "lead-home": "My day",
   "crew-home": "My day",
 };

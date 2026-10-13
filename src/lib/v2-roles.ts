@@ -34,3 +34,14 @@ export function v2PagesFor(roles: readonly V2Role[]) {
   const all = ["marketing", "sales", "operations", "admin"] as const;
   return all.filter((p) => roles.some((r) => V2_ROLE_PAGES[r].includes(p)));
 }
+
+/**
+ * The home screens these roles get on a choice. A lead's home already holds
+ * the crew's whole day, so someone who is both gets the lead's alone rather
+ * than two buttons that each draw the same day.
+ */
+export function roleHomes(rolePanels: Partial<Record<V2Role, string[]>> | undefined, roles: readonly V2Role[]): string[] {
+  const keys = new Set(roles.flatMap((r) => rolePanels?.[r] ?? []));
+  if (keys.has("lead-home")) keys.delete("crew-home");
+  return [...keys];
+}

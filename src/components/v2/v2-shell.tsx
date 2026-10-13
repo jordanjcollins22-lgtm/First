@@ -6,6 +6,7 @@ import type { V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
 import { AutomationList } from "@/components/v2/automation-list";
 import { PANEL_LABEL } from "@/components/v2/panels/labels";
+import { roleHomes } from "@/lib/v2-roles";
 import { EntityDrawerProvider, RowItem } from "@/components/v2/entity-drawer";
 
 /**
@@ -42,7 +43,7 @@ export function V2Shell({
   const isOwner = roles.includes("owner");
   // The working screens a person gets on a choice: the owner's set, or their own role's home.
   const panelKeysFor = (p: V2Pillar): string[] =>
-    isOwner ? (p.panels ?? []) : [...new Set(roles.flatMap((r) => p.rolePanels?.[r] ?? []))];
+    isOwner ? (p.panels ?? []) : roleHomes(p.rolePanels, roles);
   const visible = section.pillars.filter(sees);
   const [pillarId, setPillarId] = useState<string>((start && visible.some((p) => p.id === start) ? start : visible[0]?.id) ?? "overview");
   const current = visible.find((p) => p.id === pillarId) ?? visible[0];

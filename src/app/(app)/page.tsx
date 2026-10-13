@@ -14,6 +14,7 @@ import { getMyScheduleData } from "@/lib/data/my-schedule";
 import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
 import { isAccountManager, isCommenterOnly, isFieldOnly } from "@/lib/affiliate-roles";
 import { MOVED } from "@/lib/moved-routes";
+import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 
 export default async function Home({
   searchParams,
@@ -24,6 +25,15 @@ export default async function Home({
 
   const { new: wantsForm } = await searchParams;
   const { allowed, profile } = await checkTabAccess("new-property");
+
+  // Everybody but the owner opens the app on the new layout: their own home
+  // screen, and the first-open tutorial the first time. The owner keeps this
+  // page until the old screens are all placed in the new layout.
+  if (profile && !wantsForm) {
+    const roles = v2RolesOf(profile);
+    const pages = v2PagesFor(roles);
+    if (!roles.includes("owner") && pages.length) redirect(`/v2/${pages[0]}`);
+  }
 
   // Anybody who only works in the field lands on their day and stays there.
   // The office view is noise to somebody standing in a yard with a mower.

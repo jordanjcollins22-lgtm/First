@@ -9,7 +9,7 @@ import { V2Shell } from "@/components/v2/v2-shell";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { V2_GROUPS, V2_LOADERS, v2ForViewer } from "@/lib/data/v2";
 import { TABS } from "@/lib/permissions";
-import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
+import { roleHomes, v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
 
 export const metadata = { title: "New layout · JS Landscaping" };
 
@@ -75,7 +75,7 @@ export default async function V2SectionPage({
     const groups = V2_GROUPS[section as SectionKey];
     const keys = roles.includes("owner")
       ? groups.flatMap((g) => g.panels ?? [])
-      : groups.flatMap((g) => roles.flatMap((r) => g.rolePanels?.[r] ?? []));
+      : groups.flatMap((g) => roleHomes(g.rolePanels, roles));
     for (const key of new Set(keys)) {
       const Panel = PANELS[key];
       if (Panel)
