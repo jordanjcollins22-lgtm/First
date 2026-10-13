@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadEquipmentPanel } from "@/lib/data/equipment";
@@ -13,6 +11,7 @@ import {
   MarkDone,
   NewInterval,
 } from "@/components/v2/panels/equipment-controls";
+import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
  * Operations › Materials & equipment: equipment upkeep, kits and load-out.
@@ -89,7 +88,9 @@ export async function EquipmentPanel() {
           <ul className="mt-2 grid gap-2">
             {data.alerts.map((a) => (
               <li key={a.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                <span className="font-medium">{a.summary}</span>
+                <OpenEntity kind="ops.asset" id={a.assetId} className="font-medium">
+                  {a.summary}
+                </OpenEntity>
                 <span className="flex flex-wrap gap-2">
                   <MarkDone assetId={a.assetId} task={a.task} meter={assetById.get(a.assetId)?.meter ?? "none"} />
                   <DismissAlert id={a.id} />
@@ -98,9 +99,9 @@ export async function EquipmentPanel() {
             ))}
             {data.loadoutExceptions.map((e) => (
               <li key={e.id} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                <Link className="font-medium underline" href={`/jobs/${e.jobId}`}>
+                <OpenEntity kind="ops.exception" id={e.id} className="font-medium">
                   {e.summary}
-                </Link>
+                </OpenEntity>
                 {e.detail && <span className="block text-muted-foreground">{e.detail}</span>}
               </li>
             ))}
@@ -132,7 +133,10 @@ export async function EquipmentPanel() {
               <li key={`${d.assetId}-${d.intervalId}`} className={`grid gap-2 rounded-lg p-3 text-sm ${STATE_CLASS[d.state]}`}>
                 <div className="flex flex-wrap justify-between gap-2">
                   <span>
-                    <span className="font-medium">{d.assetName}</span> · {d.task}
+                    <OpenEntity kind="ops.asset" id={d.assetId} className="font-medium">
+                      {d.assetName}
+                    </OpenEntity>{" "}
+                    · {d.task}
                   </span>
                   <span className="font-semibold">{STATE_LABEL[d.state]}</span>
                 </div>
@@ -153,7 +157,9 @@ export async function EquipmentPanel() {
             <ul className="grid gap-2">
               {[...neverByAsset].map(([assetId, tasks]) => (
                 <li key={assetId} className="rounded-lg bg-muted p-3 text-sm">
-                  <div className="font-medium">{assetById.get(assetId)?.name}</div>
+                  <OpenEntity kind="ops.asset" id={assetId} className="font-medium">
+                    {assetById.get(assetId)?.name}
+                  </OpenEntity>
                   <ul className="mt-1 grid gap-2">
                     {tasks.map((task) => (
                       <li key={task} className="grid gap-1">
@@ -174,12 +180,15 @@ export async function EquipmentPanel() {
         <summary className="min-h-11 cursor-pointer py-2 font-semibold">Machines and meters · {data.assets.length}</summary>
         {data.assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No machines yet. Add trucks, trailers, mowers and the rest on <Link className="underline" href="/admin/fleet">Fleet</Link>.
+            No machines yet. Trucks, trailers, mowers and the rest show here once they are on the fleet list.
           </p>
         ) : (
           <ul className="grid gap-3">
             {data.assets.map((a) => (
-              <li key={a.id} className="rounded-lg bg-muted p-2">
+              <li key={a.id} className="grid gap-1 rounded-lg bg-muted p-2">
+                <OpenEntity kind="ops.asset" id={a.id} className="text-sm font-semibold" chevron>
+                  Open {a.name}
+                </OpenEntity>
                 <AssetMeterForm asset={a} />
               </li>
             ))}
@@ -223,8 +232,7 @@ export async function EquipmentPanel() {
         <h3 className="font-semibold">Automation</h3>
         <EquipmentSettingsForm settings={data.settings} />
         <p className="mt-2 text-xs text-muted-foreground">
-          Kits are defined on <Link className="underline" href="/admin/tools/kits">Kit checklists</Link>; which tools each service needs on{" "}
-          <Link className="underline" href="/admin/tools">Inventory</Link>.
+          Kit containers and tools open from the Equipment &amp; tools lists below, one at a time.
         </p>
       </div>
     </section>
