@@ -401,7 +401,16 @@ export async function buildWeeklyBatch(organizationId: string, settings: BackOff
 
   const { data: batch, error } = await sb
     .from("commission_payout_batches")
-    .insert({ organization_id: organizationId, week_start: weekStart, week_end: weekEnd, total, people: statements.filter((s) => s.total > 0).length })
+    .insert({
+      organization_id: organizationId,
+      week_start: weekStart,
+      week_end: weekEnd,
+      total,
+      people: statements.filter((s) => s.total > 0).length,
+      // Everything payable was already paid by hand: nothing to approve, so
+      // the week is settled as it is built rather than asking for a $0 yes.
+      ...(total <= 0 ? { status: "approved", approved_at: new Date().toISOString() } : {}),
+    })
     .select("id")
     .single();
   // Another run got there first.
@@ -425,11 +434,11 @@ export async function buildWeeklyBatch(organizationId: string, settings: BackOff
   );
   await sb
     .from("commission_accruals")
-    .update({ status: "batched", batch_id: batchId, updated_at: new Date().toISOString() })
+    .update({ status: total <= 0 ? "paid" : "batched", batch_id: batchId, updated_at: new Date().toISOString() })
     .in("id", payable.map((p) => p.id))
     .eq("status", "accrued");
   log.info("commission.batch_built", { organizationId, weekStart, total, people: statements.length });
-  return batchId;
+  return total > 0 ? batchId : null;
 }
 
 export interface BatchView {

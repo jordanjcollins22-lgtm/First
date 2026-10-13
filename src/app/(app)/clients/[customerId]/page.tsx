@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { ClientDetailPanel } from "@/components/attractors/client-detail-panel";
 import { ArchivedProposalsPanel } from "@/components/clients/archived-proposals-panel";
 import { listArchivedProposals } from "@/lib/data/archived-proposals";
+import { ClientCoiCard } from "@/components/clients/client-coi-card";
 import type { Customer, JobProposal } from "@/types/domain";
 import type { PropertyWithCustomer } from "@/lib/data/properties";
 
@@ -92,6 +93,8 @@ export default async function ClientAccountPage({
       <div className="rounded-2xl border border-white/60 bg-card/70 p-6 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <ArchivedProposalsPanel customerId={customerId} proposals={archived} />
       </div>
+
+      <ClientCoiCard customerId={customerId} customerName={(customer as { name: string }).name} />
     </div>
   );
 }
