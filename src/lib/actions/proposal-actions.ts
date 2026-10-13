@@ -304,8 +304,13 @@ export async function generateProposal(
   // card prices it, so the job page, the proposal and the card all say the
   // same price from the start. Best effort: the rate card's price above
   // stands if it can't be worked out. Salting keeps its own.
+  //
+  // A proposal already approved or sent is priced the same way. It used to
+  // be left at the rate card's price, which on a job with no rates set is
+  // an hour's minimum: an area added and the evaluation submitted again
+  // took a sent $1,084 proposal to $77, live on the client's link.
   let forwardPriced = false;
-  if (nextStatus === "needs_approval") {
+  {
     const forward = await forwardPriceForJob(supabase, organizationId, jobId).catch((err: unknown) => {
       console.error("[proposal] forward price failed:", jobId, err);
       return null;
@@ -318,6 +323,12 @@ export async function generateProposal(
       if (forwardError) console.error("[proposal] forward price not saved:", jobId, forwardError.message);
       else forwardPriced = true;
     }
+  }
+  // Could not be priced that way and the client has, or is about to have,
+  // a price: that price stands rather than the rate card's.
+  if (!forwardPriced && existing && existing.status !== "needs_approval" && existing.total_cost != null && !priced.salting.some((s) => s != null)) {
+    await supabase.from("job_proposals").update({ total_cost: Number(existing.total_cost) }).eq("job_id", jobId);
+    console.error("[proposal] rebuilt without a forward price; kept the price already given:", jobId, existing.total_cost);
   }
 
   revalidateJobViews(jobId);
