@@ -1,5 +1,7 @@
 "use client";
 
+import { money } from "@/lib/marketing/money";
+
 import { useEffect, useRef, useState, useTransition } from "react";
 import { CheckCircle2, Loader2, MapPin, Play, RefreshCw, Square, Upload } from "lucide-react";
 
@@ -30,11 +32,6 @@ import { SPEND_CHANNEL_LABEL, SPEND_CHANNELS, type ChannelReport } from "@/lib/m
  * server action that checks who is pressing it; these only draw the result.
  */
 
-export function money(cents: number | null | undefined): string {
-  if (cents == null) return "—";
-  const dollars = cents / 100;
-  return dollars >= 1000 ? `$${Math.round(dollars).toLocaleString()}` : `$${dollars.toFixed(dollars < 10 ? 2 : 0)}`;
-}
 
 function Message({ text, error }: { text: string | null; error?: boolean }) {
   if (!text) return null;

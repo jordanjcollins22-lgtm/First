@@ -1,5 +1,6 @@
 import { loadDigitalPanel, type IntegrationStatus } from "@/lib/data/marketing-panels";
 import type { Automation } from "@/lib/marketing/autopilot-settings";
+import { money } from "@/lib/marketing/money";
 import { SEASON_INFO } from "@/lib/marketing/seasonal";
 
 import {
@@ -7,7 +8,7 @@ import {
   ChannelTable,
   GoogleRunButton,
   ListSettings,
-  money,
+  
   NumberSettings,
   SeasonalModeForm,
   SeasonCard,

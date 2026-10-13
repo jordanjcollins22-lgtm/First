@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 
 import { PANELS } from "@/components/v2/panels/registry";
+import { PanelBoundary, PanelFailed } from "@/components/v2/panels/panel-boundary";
+import { log } from "@/lib/log";
 
 import { V2Shell } from "@/components/v2/v2-shell";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
@@ -67,12 +69,31 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
   if (roles.includes("owner")) {
     for (const key of new Set(V2_GROUPS[section as SectionKey].flatMap((g) => g.panels ?? []))) {
       const Panel = PANELS[key];
-      if (Panel) panels[key] = <Suspense fallback={<PanelLoading />}><Panel /></Suspense>;
+      if (Panel)
+        panels[key] = (
+          <PanelBoundary name={key}>
+            <Suspense fallback={<PanelLoading />}>
+              <SafePanel name={key} render={Panel} />
+            </Suspense>
+          </PanelBoundary>
+        );
     }
   }
 
   // Keyed by page and person, so the chosen pillar starts fresh on each.
   return <V2Shell key={`${section}:${viewer.id}`} section={data} roles={roles} unplaced={unplaced} panels={panels} />;
+}
+
+/** Runs one panel on the server and turns a failure into a card, not a broken page. */
+async function SafePanel({ name, render }: { name: string; render: () => Promise<React.JSX.Element> }) {
+  try {
+    return await render();
+  } catch (err) {
+    // A redirect or not-found thrown on purpose still has to reach Next.
+    if (err && typeof err === "object" && "digest" in err && /^NEXT_/.test(String((err as { digest: unknown }).digest))) throw err;
+    log.error("v2.panel_failed", err, { panel: name });
+    return <PanelFailed name={name} />;
+  }
 }
 
 function PanelLoading() {

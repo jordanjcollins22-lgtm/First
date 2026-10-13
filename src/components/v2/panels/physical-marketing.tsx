@@ -1,9 +1,10 @@
 import { loadPhysicalPanel, type PlayRow } from "@/lib/data/marketing-panels";
 import { getRealProfile } from "@/lib/data/team";
+import { money } from "@/lib/marketing/money";
 import { isApproved, KIND_LABEL, playTitle, REASON_LABEL, shortAddress } from "@/lib/marketing-plays";
 import { isStale } from "@/lib/marketing/play-closure";
 
-import { AutomationSwitches, ExpireBacklogButton, money, NumberSettings, PlayActions, WalkTracker } from "./marketing-autopilot-controls";
+import { AutomationSwitches, ExpireBacklogButton, NumberSettings, PlayActions, WalkTracker } from "./marketing-autopilot-controls";
 import { Kpi, NeedsYou, pct, Section, type NeedsYouItem } from "./marketing-panel-parts";
 
 /**
