@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
+
+import { PANELS } from "@/components/v2/panels/registry";
 
 import { V2Shell } from "@/components/v2/v2-shell";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
-import { V2_LOADERS } from "@/lib/data/v2";
+import { V2_GROUPS, V2_LOADERS } from "@/lib/data/v2";
 import { TABS } from "@/lib/permissions";
 import { isOwnerLevel } from "@/lib/roles";
 import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
@@ -58,6 +61,20 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
       .map((t) => ({ label: t.label, href: t.href }));
   }
 
+  // The working screens for this page's choices, owner view only. Each streams
+  // in on its own, so a slow one never holds up the page.
+  const panels: Record<string, React.ReactNode> = {};
+  if (roles.includes("owner")) {
+    for (const key of new Set(V2_GROUPS[section as SectionKey].flatMap((g) => g.panels ?? []))) {
+      const Panel = PANELS[key];
+      if (Panel) panels[key] = <Suspense fallback={<PanelLoading />}><Panel /></Suspense>;
+    }
+  }
+
   // Keyed by page and person, so the chosen pillar starts fresh on each.
-  return <V2Shell key={`${section}:${viewer.id}`} section={data} roles={roles} unplaced={unplaced} />;
+  return <V2Shell key={`${section}:${viewer.id}`} section={data} roles={roles} unplaced={unplaced} panels={panels} />;
+}
+
+function PanelLoading() {
+  return <div className="h-40 animate-pulse rounded-2xl border bg-card/40" aria-busy="true" />;
 }

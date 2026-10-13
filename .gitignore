@@ -47,3 +47,4 @@ next-env.d.ts
 # Research notes and reports from Claude sessions, not app code.
 research_notes/
 reports/
+.claude/worktrees/

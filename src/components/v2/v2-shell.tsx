@@ -26,8 +26,11 @@ export function V2Shell({
   section,
   roles,
   unplaced,
+  panels = {},
 }: {
   section: V2Section;
+  /** Rendered working screens, by key, for the choices that list them. */
+  panels?: Record<string, React.ReactNode>;
   /** The views of the person the page is shown as: exactly what they get, nothing more. */
   roles: V2Role[];
   unplaced?: { label: string; href: string }[];
@@ -77,6 +80,12 @@ export function V2Shell({
         </div>
       </div>
       <div className="mb-5" />
+
+      {current && roles.includes("owner") && (current.panels ?? []).some((k) => panels[k]) && (
+        <div className="mb-8 grid gap-6">
+          {(current.panels ?? []).map((k) => (panels[k] ? <div key={k}>{panels[k]}</div> : null))}
+        </div>
+      )}
 
       {current &&
         (current.parts ?? [current])

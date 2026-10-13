@@ -49,6 +49,8 @@ export interface V2Pillar {
   automations?: Automation[];
   /** A combined pillar: the pillars it gathers, shown one under another. */
   parts?: V2Pillar[];
+  /** Working screens shown above the numbers: keys into the panel registry. */
+  panels?: string[];
 }
 
 export interface V2Section {
@@ -1032,7 +1034,11 @@ function overview(title: string, sub: string, blocks: V2Block[], links: V2Pillar
 /* The few choices on each page                                        */
 /* ------------------------------------------------------------------ */
 
-type Group = { id: string; label: string; title: string; sub: string; ids: string[] };
+type Group = {
+  id: string; label: string; title: string; sub: string; ids: string[];
+  /** Working screens shown above the numbers: keys into the panel registry. Owner only. */
+  panels?: string[];
+};
 
 /**
  * Each page offers a handful of choices, not a dozen. The loaders still build
@@ -1083,7 +1089,7 @@ export function condense(section: V2Section): V2Section {
       kind: parts.find((p) => p.kind)?.kind ?? "",
       who: [...new Set(parts.flatMap((p) => p.who))],
       blurb: parts.map((p) => p.label).join(" · "),
-      blocks: [], links: [], parts,
+      blocks: [], links: [], parts, panels: g.panels,
     }];
   });
   return { ...section, pillars };
