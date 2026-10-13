@@ -22,9 +22,23 @@ import { createClient } from "@/lib/supabase/server";
  * and invoices. Pay, roles, commissions, integrations and settings stay the
  * owner's.
  */
-const ACCOUNT_MANAGER_KINDS = /^(sales\.|admin\.(customer|invoice|job|work_day|message|coi|queue_item)$|ops\.(job|work_day|issue|exception|client|walkthrough|review)$)/;
+const ACCOUNT_MANAGER_KINDS = /^(sales\.(?!service$|evaluator$)|admin\.(customer|invoice|job|job_issue|payment|work_day|message|coi)$|ops\.(job|work_day|issue|exception|client|walkthrough|review)$)/;
 
-async function context(kind: string): Promise<EntityContext | null> {
+/**
+ * Buttons inside a drawer an account manager may open but not press: held
+ * emails are released by the owner, job costs and job stops are the owner's
+ * call. They are taken off the drawer, not left there to be refused.
+ */
+const OWNER_ONLY_ACTIONS: Record<string, string[]> = {
+  "sales.approval": ["send", "decline"],
+  "admin.job": ["recompute_cost"],
+  "ops.job": ["recost"],
+  "ops.issue": ["blocking"],
+};
+
+const ownerOnly = (kind: string, action: string) => OWNER_ONLY_ACTIONS[kind]?.includes(action) ?? false;
+
+async function context(kind: string): Promise<(EntityContext & { isOwner: boolean }) | null> {
   const me = await getRealProfile();
   if (!me) return null;
   const allowed = isOwnerLevel(me.roles) || (v2RolesOf(me).includes("account-manager") && ACCOUNT_MANAGER_KINDS.test(kind));
@@ -34,6 +48,7 @@ async function context(kind: string): Promise<EntityContext | null> {
     admin: createAdminClient() as unknown as SupabaseClient,
     organizationId: me.organization_id,
     profileId: me.id,
+    isOwner: isOwnerLevel(me.roles),
   };
 }
 
@@ -44,7 +59,11 @@ export async function openEntity(ref: EntityRef): Promise<{ ok: true; view: Enti
   if (!handler) return { ok: false, error: "This can't be opened yet." };
   try {
     const view = await handler.load(ctx, ref.id);
-    return view ? { ok: true, view } : { ok: false, error: "It isn't there any more." };
+    if (!view) return { ok: false, error: "It isn't there any more." };
+    if (ctx.isOwner) return { ok: true, view };
+    const actions = view.actions.filter((a) => !ownerOnly(ref.kind, a.id));
+    const hidden = actions.length < view.actions.length;
+    return { ok: true, view: { ...view, actions, note: hidden && !actions.length ? "The owner deals with this one." : view.note } };
   } catch (err) {
     log.error("entity.open_failed", err, { kind: ref.kind });
     return { ok: false, error: "Couldn't load it just now." };
@@ -53,7 +72,7 @@ export async function openEntity(ref: EntityRef): Promise<{ ok: true; view: Enti
 
 export async function runEntityAction(ref: EntityRef, action: string, value?: string): Promise<ActionResult> {
   const ctx = await context(ref.kind);
-  if (!ctx) return { ok: false, error: "That isn't something your role can change." };
+  if (!ctx || (!ctx.isOwner && ownerOnly(ref.kind, action))) return { ok: false, error: "That isn't something your role can change." };
   const handler = ENTITY_HANDLERS[ref.kind];
   if (!handler?.act) return { ok: false, error: "Nothing can be done to this here." };
   try {

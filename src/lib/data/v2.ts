@@ -1268,7 +1268,7 @@ export async function loadAdmin(): Promise<V2Section> {
 }
 
 function overview(title: string, sub: string, blocks: V2Block[], links: V2Pillar["links"]): V2Pillar {
-  return { id: "overview", label: "Overview", kind: "", who: ["owner", "account-manager"], title, sub, blocks, links };
+  return { id: "overview", label: "Overview", kind: "", who: ["owner"], title, sub, blocks, links };
 }
 
 /* ------------------------------------------------------------------ */
