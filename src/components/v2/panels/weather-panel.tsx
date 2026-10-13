@@ -5,6 +5,7 @@ import { getWeatherPanelData } from "@/lib/data/weather-panel";
 import { longDay } from "@/lib/weather-cascade/rules";
 import { monthDayTime } from "@/lib/time-zone";
 import { ProposalActions, WeatherSettingsForm } from "@/components/v2/panels/weather-panel-client";
+import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
  * Operations › Projects: the weather.
@@ -59,7 +60,9 @@ export async function WeatherPanel() {
           <ul className="grid gap-2">
             {data.proposals.map((p) => (
               <li key={p.key} className="rounded-xl border border-amber-400/60 bg-card p-3">
-                <p className="text-sm font-semibold">Rain delay: {p.reason}</p>
+                <OpenEntity kind="ops.weather_move" id={p.ids[0]} className="text-sm font-semibold">
+                  Rain delay: {p.reason}
+                </OpenEntity>
                 {p.why && <p className="text-xs text-muted-foreground">{p.why}</p>}
                 <ul className="mt-2 grid gap-1 text-sm">
                   {p.moves.map((m, i) => (
@@ -107,7 +110,9 @@ export async function WeatherPanel() {
             {data.risky.map((r) => (
               <li key={r.sessionId} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 py-2 text-sm">
                 <span className="font-medium">{longDay(r.date)}</span>
-                <span>{r.label}</span>
+                <OpenEntity kind="ops.work_day" id={r.sessionId}>
+                  {r.label}
+                </OpenEntity>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{r.workType}</span>
                 <span className="w-full text-xs text-muted-foreground">
                   {r.reason}
@@ -132,7 +137,9 @@ export async function WeatherPanel() {
             {data.recent.map((m) => (
               <li key={m.id} className="grid gap-0.5 px-4 py-2 text-sm">
                 <span className="flex flex-wrap gap-x-2">
-                  <span className="font-medium">{m.label}</span>
+                  <OpenEntity kind="ops.weather_move" id={m.id} className="font-medium">
+                    {m.label}
+                  </OpenEntity>
                   <span className="text-muted-foreground">
                     {longDay(m.from)} → {longDay(m.to)}
                   </span>

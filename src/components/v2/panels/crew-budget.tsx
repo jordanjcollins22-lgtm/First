@@ -4,6 +4,7 @@ import { loadBonusPreview, loadCrewBudgets } from "@/lib/data/ops-panels";
 import { money } from "@/lib/ops/kpis";
 import { AutopilotSettingsForm, ApproveBonusButton } from "@/components/v2/panels/ops-autopilot-client";
 import { BudgetBar, NotReady, SectionTitle } from "@/components/v2/panels/ops-shared";
+import { OpenBlock, OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
  * Operations › Team: today's hours against budget, job by job, and the
@@ -27,7 +28,7 @@ export async function CrewBudgetPanel() {
           <ul className="grid gap-2">
             {over.map((j) => (
               <li key={j.jobId} className="rounded-xl border border-orange-300 bg-card p-3 text-sm dark:border-orange-800">
-                <span className="font-semibold">{j.name}</span>: {j.meter.line}
+                <OpenEntity kind="ops.job" id={j.jobId} className="font-semibold">{j.name}</OpenEntity>: {j.meter.line}
               </li>
             ))}
             {accrued.length > 0 && (
@@ -50,7 +51,9 @@ export async function CrewBudgetPanel() {
         ) : (
           <div className="grid gap-4 rounded-xl border bg-card p-4">
             {jobs.map((j) => (
-              <BudgetBar key={j.jobId} meter={j.meter} label={j.name} />
+              <OpenBlock key={j.jobId} kind="ops.job" id={j.jobId} className="p-1">
+                <BudgetBar meter={j.meter} label={j.name} />
+              </OpenBlock>
             ))}
           </div>
         )}
@@ -72,7 +75,7 @@ export async function CrewBudgetPanel() {
           <ul className="grid gap-1.5">
             {bonus.thisWeek.map((p) => (
               <li key={p.profileId} className="flex flex-wrap items-center gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
-                <span className="min-w-0 flex-1 font-semibold">{p.name}</span>
+                <OpenEntity kind="ops.crew_member" id={p.profileId} className="min-w-0 flex-1 font-semibold">{p.name}</OpenEntity>
                 <span className="text-muted-foreground">{p.reason}</span>
                 <span className="font-mono">{p.earned ? money(p.amountCents) : "–"}</span>
               </li>

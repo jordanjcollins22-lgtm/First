@@ -60,7 +60,7 @@ async function loadA2(sb: SupabaseClient, organizationId: string, now: Date) {
   const s = settings;
   const [invoices, reviews, missed, declined, calls, renewals, salt] = await Promise.all([
     s.invoice_reminders.enabled
-      ? sb.from("invoices").select(`id,amount,sent_at,created_at,pay_by,job:jobs!inner(name,${custSelect})`).eq("organization_id", organizationId).eq("status", "open").gte("created_at", iso(s.invoice_reminders.startedAt)).limit(300)
+      ? sb.from("invoices").select(`id,job_id,amount,sent_at,created_at,pay_by,job:jobs!inner(name,${custSelect})`).eq("organization_id", organizationId).eq("status", "open").gte("created_at", iso(s.invoice_reminders.startedAt)).limit(300)
       : empty,
     s.review_requests.enabled
       ? sb.from("review_requests").select("id,trigger,triggered_at,customer:customers(id,name,email,phone,do_not_contact)").eq("organization_id", organizationId).is("rated_at", null).gte("triggered_at", new Date(now.getTime() - (s.review_requests.config.reviewReminderDays + 2) * 24 * HOUR).toISOString()).limit(300)
@@ -245,7 +245,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
     const done = new Set(startRule.offsetsHours.filter((o) => sent.has(`job_start_reminder:${j.id}:${o}:sms`)));
     const togo = offsetsToGo(anchor, startRule.offsetsHours, now, done);
     const day = new Date(`${j.project_start_date}T12:00:00Z`).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
-    if (togo.length) starts.push({ name: nameOf(c, j.name), why: `Job starts ${day}`, next: `Text ${when(togo[0].at)}` });
+    if (togo.length) starts.push({ name: nameOf(c, j.name), why: `Job starts ${day}`, next: `Text ${when(togo[0].at)}`, ref: { kind: "ops.job", id: String(j.id) } });
   }
 
   // Evaluator reminders: every upcoming visit with somebody assigned.
@@ -281,6 +281,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
         name: prof.full_name || prof.email || "Crew member",
         why: `On ${String(job.name ?? "a job").split(/\s+[—-]\s+|,/)[0]} today`,
         next: "Owner is texted at 8:30 AM if they haven't checked in",
+        ref: { kind: "ops.crew_member", id: String(m.profile_id) },
       });
     }
   }
@@ -320,6 +321,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
       name: nameOf(c, (inv.job as Row | null)?.name),
       why: `${amount} due ${dueAt.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric" })}`,
       next: togo.length ? `Reminder ${when(togo[0].at)}` : `Collections after ${a2.settings.invoice_reminders.config.collectionsAfterDays} days past due`,
+      ...(inv.job_id ? { ref: { kind: "ops.job", id: String(inv.job_id) } } : {}),
     });
   }
 
@@ -333,6 +335,7 @@ export async function loadAutomations(sb: SupabaseClient, organizationId: string
       name: nameOf((r.customer as Customer | null) ?? {}, "Client"),
       why: `${r.trigger === "paid" ? "Paid the invoice" : "Approved the before and afters"} ${visitTime(triggered)}`,
       next: !askSent && step === "ask" ? "Rating link, going out on the next run" : reminderAt > now ? `Reminder ${when(reminderAt)}` : "Waiting on their rating",
+      ...((r.customer as Customer | null)?.id ? { ref: { kind: "ops.client", id: String((r.customer as Customer).id) } } : {}),
     };
   });
 

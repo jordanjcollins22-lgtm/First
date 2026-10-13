@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
+import { useOpenEntity } from "@/components/v2/entity-drawer";
 
 import {
   acknowledgeCheckinAlert,
@@ -48,6 +48,7 @@ export function NeedsYouStrip({ items }: { items: NeedsYou[] }) {
 
 function NeedsYouItem({ item }: { item: NeedsYou }) {
   const { pending, result, run } = useAction();
+  const open = useOpenEntity();
   if (result?.ok) return null;
   return (
     <li className="grid gap-2 rounded-xl border border-orange-300 bg-card p-3 dark:border-orange-800">
@@ -76,10 +77,15 @@ function NeedsYouItem({ item }: { item: NeedsYou }) {
             I&apos;ll book it
           </button>
         )}
-        {item.jobId && (
-          <Link href={`/jobs/${item.jobId}`} className={`${button} inline-flex items-center`}>
+        {open && item.kind === "unclosed" && item.sessionId && (
+          <button type="button" className={button} onClick={() => open({ kind: "ops.work_day", id: item.sessionId! })}>
+            Open work day
+          </button>
+        )}
+        {open && item.jobId && (
+          <button type="button" className={button} onClick={() => open({ kind: "ops.job", id: item.jobId! })}>
             Open job
-          </Link>
+          </button>
         )}
       </div>
       <Said result={result} />
@@ -95,6 +101,7 @@ function NeedsYouItem({ item }: { item: NeedsYou }) {
 export function BacklogReview({ sessions }: { sessions: BacklogSession[] }) {
   const [picked, setPicked] = useState<Set<string>>(() => new Set(sessions.filter((s) => s.finishedTap || s.jobCompleted).map((s) => s.id)));
   const { pending, result, run } = useAction();
+  const open = useOpenEntity();
   if (sessions.length === 0) return null;
   if (result?.ok) return <Said result={result} />;
   const toggle = (id: string) =>
@@ -115,8 +122,8 @@ export function BacklogReview({ sessions }: { sessions: BacklogSession[] }) {
       </div>
       <ul className="grid gap-1.5">
         {sessions.map((s) => (
-          <li key={s.id}>
-            <label className="flex min-h-11 items-center gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
+          <li key={s.id} className="flex items-stretch gap-1">
+            <label className="flex min-h-11 flex-1 items-center gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
               <input type="checkbox" className="h-5 w-5" checked={picked.has(s.id)} onChange={() => toggle(s.id)} />
               <span className="min-w-0 flex-1">
                 <span className="font-semibold">{s.address || s.jobName}</span>
@@ -126,6 +133,11 @@ export function BacklogReview({ sessions }: { sessions: BacklogSession[] }) {
                 </span>
               </span>
             </label>
+            {open && (
+              <button type="button" className={button} onClick={() => open({ kind: "ops.work_day", id: s.id })} aria-label="Open this work day">
+                Open
+              </button>
+            )}
           </li>
         ))}
       </ul>

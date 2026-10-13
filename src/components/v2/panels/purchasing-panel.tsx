@@ -1,10 +1,9 @@
-import Link from "next/link";
-
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadPurchasingPanel, untyped, type PoView } from "@/lib/data/purchasing";
 import { PO_STATUS_LABEL, type PoStatus } from "@/lib/purchasing/takeoff";
 import { PoActions, PurchasingSettingsForm, RaiseReordersButton, SourcingEditor } from "@/components/v2/panels/purchasing-controls";
+import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
  * Operations › Materials & equipment: purchasing.
@@ -42,16 +41,16 @@ function OrderCard({ order, suppliers }: { order: PoView; suppliers: { id: strin
   return (
     <li className="rounded-xl border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="font-semibold">
+        <OpenEntity kind="ops.po" id={order.id} className="font-semibold">
           PO {order.poNumber} · {order.supplierName ?? "No supplier yet"}
-        </div>
+        </OpenEntity>
         <div className="text-sm text-muted-foreground">
           {money(order.subtotalCents)}
           {!order.fullyPriced && " + unpriced"}
         </div>
       </div>
       <div className="mt-1 text-sm text-muted-foreground">
-        {order.source === "reorder" ? "Reorder for stock" : order.jobId ? <Link className="underline" href={`/jobs/${order.jobId}`}>{order.jobName ?? "Job"}</Link> : "By hand"}
+        {order.source === "reorder" ? "Reorder for stock" : order.jobId ? <OpenEntity kind="ops.job" id={order.jobId}>{order.jobName ?? "Job"}</OpenEntity> : "By hand"}
         {" · "}
         {order.fulfilment === "pickup" ? "Pickup" : "Delivery"}
         {order.neededBy && ` · needed by ${order.neededBy}`}
@@ -61,7 +60,7 @@ function OrderCard({ order, suppliers }: { order: PoView; suppliers: { id: strin
       <ul className="mt-2 grid gap-1 text-sm">
         {order.lines.map((l) => (
           <li key={l.id}>
-            {qty(l.orderQuantity ?? l.quantity)} {l.orderUnit ?? l.unit} {l.name}
+            {qty(l.orderQuantity ?? l.quantity)} {l.orderUnit ?? l.unit} <OpenEntity kind="ops.material" id={l.materialId}>{l.name}</OpenEntity>
             {l.received > 0 && <span className="text-muted-foreground"> · {qty(l.received)} of {qty(l.quantity)} {l.unit} in</span>}
             {l.unitCostCents == null && <span className="text-orange-700 dark:text-orange-300"> · no price</span>}
           </li>
@@ -93,14 +92,14 @@ export async function PurchasingPanel() {
   const failed = open.filter((o) => o.sendError);
   const lateNeeds = data.upcoming.filter((u) => u.late);
   const needsYou = [
-    ...data.openExceptions.map((e) => ({ key: `x-${e.id}`, text: `${e.jobName}: ${e.summary}`, detail: e.detail, href: `/jobs/${e.jobId}` })),
+    ...data.openExceptions.map((e) => ({ key: `x-${e.id}`, text: `${e.jobName}: ${e.summary}`, detail: e.detail, open: { kind: "ops.exception", id: e.id } })),
     ...toApprove.map((o) => ({
       key: `a-${o.id}`,
       text: o.supplierId ? `PO ${o.poNumber} to ${o.supplierName} needs approving (${money(o.subtotalCents)}${o.fullyPriced ? "" : ", some lines unpriced"})` : `PO ${o.poNumber} has no supplier`,
       detail: o.jobName ? `For ${o.jobName}${o.neededBy ? `, needed by ${o.neededBy}` : ""}` : null,
-      href: null,
+      open: { kind: "ops.po", id: o.id },
     })),
-    ...failed.map((o) => ({ key: `f-${o.id}`, text: `PO ${o.poNumber} didn't send`, detail: o.sendError, href: null })),
+    ...failed.map((o) => ({ key: `f-${o.id}`, text: `PO ${o.poNumber} didn't send`, detail: o.sendError, open: { kind: "ops.po", id: o.id } })),
   ];
 
   const onTimePct = data.onTime.started ? Math.round((data.onTime.inHand / data.onTime.started) * 100) : null;
@@ -122,13 +121,9 @@ export async function PurchasingPanel() {
           <ul className="mt-2 grid gap-2">
             {needsYou.map((n) => (
               <li key={n.key} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                {n.href ? (
-                  <Link className="font-medium underline" href={n.href}>
-                    {n.text}
-                  </Link>
-                ) : (
-                  <span className="font-medium">{n.text}</span>
-                )}
+                <OpenEntity kind={n.open.kind} id={n.open.id} className="font-medium">
+                  {n.text}
+                </OpenEntity>
                 {n.detail && <span className="block text-muted-foreground">{n.detail}</span>}
               </li>
             ))}
@@ -182,7 +177,9 @@ export async function PurchasingPanel() {
                 .filter((o) => !STATUS_ORDER.includes(o.status))
                 .map((o) => (
                   <li key={o.id}>
-                    PO {o.poNumber} · {o.supplierName ?? "no supplier"} · {PO_STATUS_LABEL[o.status]} · {money(o.subtotalCents)}
+                    <OpenEntity kind="ops.po" id={o.id}>
+                      PO {o.poNumber} · {o.supplierName ?? "no supplier"} · {PO_STATUS_LABEL[o.status]} · {money(o.subtotalCents)}
+                    </OpenEntity>
                   </li>
                 ))}
             </ul>
@@ -200,9 +197,9 @@ export async function PurchasingPanel() {
             {data.upcoming.map((u) => (
               <li key={u.jobId} className={`rounded-lg p-3 text-sm ${u.late ? "bg-red-50 dark:bg-red-950/40" : "bg-muted"}`}>
                 <div className="flex flex-wrap justify-between gap-2">
-                  <Link className="font-medium underline" href={`/jobs/${u.jobId}`}>
+                  <OpenEntity kind="ops.job" id={u.jobId} className="font-medium">
                     {u.jobName}
-                  </Link>
+                  </OpenEntity>
                   <span className="text-muted-foreground">
                     {u.firstWorkDay ? `Starts ${u.firstWorkDay}` : "Not scheduled"}
                     {u.neededBy && ` · in hand by ${u.neededBy}`}
@@ -239,7 +236,9 @@ export async function PurchasingPanel() {
           <ul className="mt-2 grid gap-1 text-sm">
             {data.reorders.map((r) => (
               <li key={r.id} className="flex flex-wrap justify-between gap-2 rounded-lg bg-muted px-3 py-2">
-                <span className="font-medium">{r.name}</span>
+                <OpenEntity kind="ops.material" id={r.id} className="font-medium">
+                  {r.name}
+                </OpenEntity>
                 <span className="text-muted-foreground">
                   {qty(r.onHand)} on hand · reorder at {qty(r.threshold)} {r.unit}
                   {r.onOrder > 0 ? ` · ${qty(r.onOrder)} on order` : r.hasDraft ? " · draft order waiting" : r.suggested ? ` · order ${qty(r.suggested)}` : ""}
@@ -249,8 +248,7 @@ export async function PurchasingPanel() {
           </ul>
         )}
         <p className="mt-2 text-xs text-muted-foreground">
-          Set reorder points and quantities on <Link className="underline" href="/admin/materials">Materials</Link>; supplier emails and which product is preferred on{" "}
-          <Link className="underline" href="/admin/suppliers">Suppliers</Link>.
+          Open a material to set its reorder point or count, or a supplier to set where its orders are emailed. Which product is preferred is under &ldquo;Where things come from&rdquo;.
         </p>
       </div>
 

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Snowflake } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -18,6 +17,7 @@ import {
   StartEventButtons,
   SuggestionActions,
 } from "@/components/v2/panels/snow-ops-client";
+import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
  * Operations › Projects: snow.
@@ -74,9 +74,9 @@ export async function SnowOpsPanel() {
           <ul className="grid gap-2">
             {data.suggestions.map((s) => (
               <li key={s.id} className="rounded-xl border border-sky-400/60 bg-card p-3">
-                <p className="text-sm font-semibold">
+                <OpenEntity kind="ops.snow_event" id={s.id} className="text-sm font-semibold">
                   Forecast says go out {s.forecastDate ? weekdayDate(`${s.forecastDate}T12:00:00`) : "soon"}: {s.service === "plow" ? "plow and salt" : "salt"}
-                </p>
+                </OpenEntity>
                 {s.forecastNote && <p className="text-xs text-muted-foreground">{s.forecastNote}</p>}
                 <SuggestionActions id={s.id} service={s.service as "salt" | "plow" | "pretreat"} disabled={Boolean(active)} />
               </li>
@@ -93,11 +93,7 @@ export async function SnowOpsPanel() {
             )}
             {unplaced.length > 0 && (
               <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
-                {unplaced.length} salt client{unplaced.length === 1 ? " has" : "s have"} no client record, so {unplaced.length === 1 ? "it" : "they"} can&apos;t be told or billed. Place them from{" "}
-                <Link href="/admin/salt" className="underline">
-                  the salt route
-                </Link>
-                .
+                {unplaced.length} salt client{unplaced.length === 1 ? " has" : "s have"} no client record, so {unplaced.length === 1 ? "it" : "they"} can&apos;t be told or billed until each is matched to a client.
               </li>
             )}
           </ul>
@@ -120,7 +116,15 @@ export async function SnowOpsPanel() {
       {/* The live storm, or the button to start one */}
       <div className="rounded-xl border bg-card">
         <div className="border-b px-4 py-2">
-          <h3 className="text-sm font-semibold">{active ? `Running: ${active.label}` : "Start a snow event"}</h3>
+          <h3 className="text-sm font-semibold">
+            {active ? (
+              <OpenEntity kind="ops.snow_event" id={active.id}>
+                Running: {active.label}
+              </OpenEntity>
+            ) : (
+              "Start a snow event"
+            )}
+          </h3>
           <p className="text-xs text-muted-foreground">
             {active
               ? `Started ${active.startedAt ? monthDayTime(active.startedAt) : ""}. The crew logs stops from the Snow route screen.`
@@ -181,7 +185,9 @@ export async function SnowOpsPanel() {
             {data.history.map((e) => (
               <li key={e.id} className="grid gap-1 px-4 py-2 text-sm">
                 <span className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{e.label}</span>
+                  <OpenEntity kind="ops.snow_event" id={e.id} className="font-medium">
+                    {e.label}
+                  </OpenEntity>
                   <span className="text-xs text-muted-foreground">{e.closedAt ? monthDayTime(e.closedAt) : ""}</span>
                 </span>
                 <span className="text-xs text-muted-foreground">

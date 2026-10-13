@@ -733,6 +733,10 @@ export async function loadSales(viewerId: string | null = null): Promise<V2Secti
 /* Operations                                                          */
 /* ------------------------------------------------------------------ */
 
+/** Lists in the Operations blocks stop here: newest or most urgent first. */
+const OPS_CAP = 25;
+const opsWords = (s: unknown) => str(s).replace(/[_-]+/g, " ");
+
 export async function loadOperations(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
   const today = new Date().toISOString().slice(0, 10);
@@ -742,18 +746,18 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
   const [sessions, jobs, materials, suppliers, kits, fleet, issues, reviews, roles, profiles, applicants, pending,
     crewEvents, assignments, scopeChanges, walks, waivers, photos, supplierProducts, toolsActive, rentals, loadouts,
     shopChecks, shopDays, avail, timeEntries, indeed] = await Promise.all([
-    rows(sb, "job_work_sessions", "status,starts_on,purpose,job_id,kits"),
-    rows(sb, "jobs", "id,name,status,final_crew_hours"),
-    rows(sb, "materials", "name,quantity_on_hand,reorder_threshold,unit,active"),
-    rows(sb, "material_suppliers", "name,delivery_minimum,active"),
-    rows(sb, "kit_containers", "name,kits,archived_at"),
-    rows(sb, "fleet_assets", "name,kind,year,make,model,condition,retired_on"),
-    rows(sb, "job_issues", "status,title,severity,created_at"),
-    rows(sb, "job_client_reviews", "status,job_id"),
+    rows(sb, "job_work_sessions", "id,status,starts_on,ends_on,purpose,job_id,kits"),
+    rows(sb, "jobs", "id,name,status,final_crew_hours,project_start_date,completed_at"),
+    rows(sb, "materials", "id,name,quantity_on_hand,reorder_threshold,unit,active"),
+    rows(sb, "material_suppliers", "id,name,delivery_minimum,active"),
+    rows(sb, "kit_containers", "id,name,kits,archived_at"),
+    rows(sb, "fleet_assets", "id,name,kind,year,make,model,condition,retired_on"),
+    rows(sb, "job_issues", "id,job_id,status,title,severity,created_at"),
+    rows(sb, "job_client_reviews", "id,status,job_id,sent_at"),
     rows(sb, "profile_roles", "profile_id,role_name"),
     rows(sb, "profiles", "id,full_name,email"),
-    rows(sb, "job_applicants", "position,stage,source,created_at"),
-    rows(sb, "team_payments", "amount,status,period_start", (q) => q.eq("status", "pending")),
+    rows(sb, "job_applicants", "id,name,position,stage,source,created_at"),
+    rows(sb, "team_payments", "id,profile_id,amount,status,period_start,period_end", (q) => q.eq("status", "pending")),
     count(sb, "crew_day_events"),
     count(sb, "job_crew_assignments"),
     count(sb, "job_scope_changes"),
@@ -771,12 +775,26 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
     count(sb, "indeed_invites"),
   ]);
 
+  // The things behind the counts, so each one can be opened: newest first, a page's worth.
+  const [toolList, walkList, assignList, scopeList, eventList, loadoutList, availList, inviteList, poList, exceptionList] = await Promise.all([
+    rows(sb, "tools", "id,name,category,quantity,is_rental", (q) => q.eq("active", true).order("name").limit(OPS_CAP)),
+    rows(sb, "job_walkthroughs", "id,job_id,status,requested_at", (q) => q.order("requested_at", { ascending: false }).limit(OPS_CAP)),
+    rows(sb, "job_crew_assignments", "id,job_id,profile_id,role,assigned_at,unassigned_at", (q) => q.order("assigned_at", { ascending: false }).limit(OPS_CAP)),
+    rows(sb, "job_scope_changes", "id,job_id,status,requested_at,requested_note", (q) => q.order("requested_at", { ascending: false }).limit(OPS_CAP)),
+    rows(sb, "crew_day_events", "id,profile_id,kind,job_id,at", (q) => q.order("at", { ascending: false }).limit(OPS_CAP)),
+    rows(sb, "loadout_checks", "profile_id,day", (q) => q.order("day", { ascending: false }).limit(300)),
+    rows(sb, "availability_weekly", "profile_id"),
+    rows(sb, "indeed_invites", "id,name,position,status,created_at,applicant_id", (q) => q.order("created_at", { ascending: false }).limit(OPS_CAP)),
+    rows(sb, "purchase_orders", "id,po_number,status,supplier_id,subtotal_cents,created_at", (q) => q.order("created_at", { ascending: false }).limit(60)),
+    rows(sb, "job_exceptions", "id,job_id,summary,state,reported_at", (q) => q.in("state", ["reported", "acknowledged"]).order("reported_at", { ascending: false }).limit(OPS_CAP)),
+  ]);
+
   // The person the page is shown as: their own jobs, check-ins and photos, for "My projects" and "My day".
   const [myCrew, myEvents, myWalks] = viewerId
     ? await Promise.all([
         rows(sb, "job_crew", "job_id", (q) => q.eq("profile_id", viewerId)),
         count(sb, "crew_day_events", (q) => q.eq("profile_id", viewerId)),
-        rows(sb, "job_walkthroughs", "job_id"),
+        rows(sb, "job_walkthroughs", "id,job_id,status,requested_at"),
       ])
     : [[], 0, []];
   const myJobIds = new Set(myCrew.map((c) => c.job_id));
@@ -788,23 +806,47 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
   const schedPast = sched.filter((s) => str(s.starts_on) < today);
   const schedNext = sched.filter((s) => str(s.starts_on) >= today).sort((a, b) => str(a.starts_on).localeCompare(str(b.starts_on)));
   const mySchedNext = schedNext.filter((s) => myJobIds.has(s.job_id));
-  const sessionRow = (s: Row) => `${day(str(s.starts_on) + "T12:00:00Z")} · ${str(s.purpose).slice(0, 60) || "Work day"} · ${jobName(s.job_id)}`;
+  const sessionText = (s: Row) => `${day(str(s.starts_on) + "T12:00:00Z")} · ${str(s.purpose).slice(0, 60) || "Work day"} · ${jobName(s.job_id)}`;
+  const sessionRow = (s: Row) => row(sessionText(s), "ops.work_day", s.id);
+  const recentSessions = [...sessions].sort((a, b) => str(b.starts_on).localeCompare(str(a.starts_on))).filter((s) => str(s.starts_on) <= today);
   const js = tally(jobs, "status");
   const completed = jobs.filter((j) => j.status === "completed");
   const costed = completed.filter((j) => num(j.final_crew_hours) > 0).length;
+  const live = jobs
+    .filter((j) => j.status === "approved" || j.status === "in_progress")
+    .sort((a, b) => (str(a.project_start_date) || "9999").localeCompare(str(b.project_start_date) || "9999"));
+  const jobRow = (j: Row) =>
+    row(`${place(j.name)} · ${opsWords(j.status)}${j.project_start_date ? ` · starts ${day(str(j.project_start_date) + "T12:00:00Z")}` : ""}`, "ops.job", j.id);
   const below = materials.filter(
     (m) => m.quantity_on_hand != null && m.reorder_threshold != null && num(m.quantity_on_hand) < num(m.reorder_threshold)
   );
-  const openIssues = issues.filter((i) => i.status === "open");
+  const materialRow = (m: Row) => row(`${str(m.name).slice(0, 40)} · ${num(m.quantity_on_hand)} on hand (reorder at ${num(m.reorder_threshold)})`, "ops.material", m.id);
+  const openIssues = issues.filter((i) => i.status === "open").sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
   const liveFleet = fleet.filter((f) => !f.retired_on);
+  const liveKits = kits.filter((k) => !k.archived_at);
   const crewIds = roles.filter((r) => r.role_name === "crew").map((r) => r.profile_id);
   const leadIds = roles.filter((r) => r.role_name === "project lead").map((r) => r.profile_id);
   const who = (id: unknown) => {
     const p = profiles.find((x) => x.id === id);
     return p ? str(p.full_name) || "[no name on profile]" : "Unknown";
   };
+  const personRow = (id: unknown) => row(who(id), "ops.crew_member", id);
   const positions = tally(applicants, "position");
   const owed = pending.reduce((s, p) => s + num(p.amount), 0);
+  const newestApplicants = [...applicants].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at)));
+  const supplierName = (id: unknown) => str(suppliers.find((s) => s.id === id)?.name) || "no supplier";
+  const openPos = poList.filter((p) => ["draft", "sent", "confirmed", "partial"].includes(str(p.status)));
+  const poRow = (p: Row) => row(`PO ${p.po_number} · ${supplierName(p.supplier_id)} · ${opsWords(p.status)} · ${usd(num(p.subtotal_cents) / 100)}`, "ops.po", p.id);
+  const walkRow = (w: Row) => row(`${jobName(w.job_id)} · ${opsWords(w.status)} · ${day(w.requested_at)}`, "ops.walkthrough", w.id);
+  const reviewRow = (r: Row) => row(`${jobName(r.job_id)} · ${opsWords(r.status)}${r.sent_at ? ` · sent ${day(r.sent_at)}` : ""}`, "ops.review", r.id);
+  const loadoutBy = new Map<string, { day: string; n: number }>();
+  for (const l of loadoutList) {
+    const k = str(l.profile_id);
+    const cur = loadoutBy.get(k);
+    if (!cur) loadoutBy.set(k, { day: str(l.day), n: 1 });
+    else if (cur.day === str(l.day)) cur.n++;
+  }
+  const availBy = tally(availList, "profile_id");
 
   const automations = await automationsP;
   const pillars: V2Pillar[] = [
@@ -813,10 +855,16 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(ss.get("done") ?? 0)} work days done · ${n(schedNext.length)} coming up`,
       title: "Scheduling", sub: "Signed jobs land on the calendar and stay organized.",
       blocks: [
-        { t: "Calendar", v: n(sessions.length), d: "Work days on the books", rows: [`Done · ${n(ss.get("done") ?? 0)}`, `Coming up · ${n(schedNext.length)}`] },
-        { t: "Coming up", v: n(schedNext.length), d: "Next work days", rows: schedNext.slice(0, 5).map(sessionRow) },
-        { t: "Past date, never closed", v: n(schedPast.length), d: "Still marked scheduled", rows: schedPast.slice(-4).map(sessionRow) },
-        { t: "Crew day tracking", v: n(crewEvents), d: "Check-ins: left shop, travelling, arrived, finished" },
+        {
+          t: "Calendar", v: n(sessions.length), d: `Work days on the books · ${n(ss.get("done") ?? 0)} done · ${n(schedNext.length)} coming up`,
+          rows: recentSessions.slice(0, OPS_CAP).map((s) => row(`${sessionText(s)} · ${opsWords(s.status)}`, "ops.work_day", s.id)),
+        },
+        { t: "Coming up", v: n(schedNext.length), d: "Next work days", rows: schedNext.slice(0, OPS_CAP).map(sessionRow) },
+        { t: "Past date, never closed", v: n(schedPast.length), d: "Still marked scheduled", rows: schedPast.slice(-OPS_CAP).reverse().map(sessionRow) },
+        {
+          t: "Crew day tracking", v: n(crewEvents), d: "Check-ins: left shop, travelling, arrived, finished",
+          rows: eventList.map((e) => row(`${who(e.profile_id)} · ${opsWords(e.kind)} · ${e.job_id ? jobName(e.job_id) : "shop"} · ${day(e.at)}`, "ops.crew_member", e.profile_id)),
+        },
       ],
       links: [{ label: "Calendar", href: "/evaluations" }, { label: "Operations", href: "/operations" }],
     },
@@ -825,10 +873,20 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(js.get("approved") ?? 0)} approved · ${n(js.get("completed") ?? 0)} completed · ${n(photos)} photos`,
       title: "Projects", sub: "The full file and status of every job.",
       blocks: [
-        { t: "Project board", v: n((js.get("approved") ?? 0) + (js.get("completed") ?? 0)), d: "Signed jobs", rows: [`Approved, not finished · ${n(js.get("approved") ?? 0)}`, `Completed · ${n(js.get("completed") ?? 0)}`] },
-        { t: "Project file", v: n(photos), d: `Job photos · ${n(walks)} walkthroughs` },
-        { t: "Crew assignments", v: n(assignments), d: "People assigned to jobs" },
-        { t: "Change orders", v: n(scopeChanges), d: "Scope changes recorded" },
+        {
+          t: "Project board", v: n((js.get("approved") ?? 0) + (js.get("in_progress") ?? 0) + (js.get("completed") ?? 0)),
+          d: `Signed jobs · ${n((js.get("approved") ?? 0) + (js.get("in_progress") ?? 0))} not finished · ${n(js.get("completed") ?? 0)} completed`,
+          rows: live.slice(0, OPS_CAP).map(jobRow),
+        },
+        { t: "Project file", v: n(photos), d: `Job photos · ${n(walks)} walkthroughs`, rows: walkList.map(walkRow) },
+        {
+          t: "Crew assignments", v: n(assignments), d: "People assigned to jobs",
+          rows: assignList.map((a) => row(`${who(a.profile_id)} · ${opsWords(a.role)} · ${jobName(a.job_id)}${a.unassigned_at ? " · taken off" : ""}`, "ops.job", a.job_id)),
+        },
+        {
+          t: "Change orders", v: n(scopeChanges), d: "Scope changes recorded",
+          rows: scopeList.map((c) => row(`${jobName(c.job_id)} · ${opsWords(c.status)} · ${day(c.requested_at)}${c.requested_note ? ` · ${str(c.requested_note).slice(0, 40)}` : ""}`, "ops.job", c.job_id)),
+        },
       ],
       links: [{ label: "Project review", href: "/jobs/review" }, { label: "Operations", href: "/operations" }],
     },
@@ -837,22 +895,32 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(materials.length)} materials · ${n(below.length)} below reorder · ${n(suppliers.length)} suppliers`,
       title: "Materials & ordering", sub: "The right materials on site when the crew gets there.",
       blocks: [
-        { t: "Below reorder point", v: n(below.length), d: "Need ordering", rows: below.map((m) => `${str(m.name).slice(0, 40)} · ${num(m.quantity_on_hand)} on hand (reorder at ${num(m.reorder_threshold)})`) },
-        { t: "Material list", v: n(materials.length), d: `${n(materials.filter((m) => m.active).length)} active` },
-        { t: "Suppliers", v: n(suppliers.length), d: `${n(supplierProducts)} products priced`, rows: suppliers.map((s) => `${str(s.name)}${s.delivery_minimum ? ` · ${num(s.delivery_minimum)} yd min` : ""}`) },
-        { t: "Purchase orders", v: "0", d: "Not in the current app yet" },
+        { t: "Below reorder point", v: n(below.length), d: "Need ordering", rows: below.slice(0, OPS_CAP).map(materialRow) },
+        {
+          t: "Material list", v: n(materials.length), d: `${n(materials.filter((m) => m.active).length)} active`,
+          rows: materials.filter((m) => m.active).sort((a, b) => str(a.name).localeCompare(str(b.name))).slice(0, OPS_CAP)
+            .map((m) => row(`${str(m.name).slice(0, 40)}${m.quantity_on_hand != null ? ` · ${num(m.quantity_on_hand)} ${str(m.unit)} on hand` : ""}`, "ops.material", m.id)),
+        },
+        { t: "Suppliers", v: n(suppliers.length), d: `${n(supplierProducts)} products priced`, rows: suppliers.slice(0, OPS_CAP).map((s) => row(`${str(s.name)}${s.delivery_minimum ? ` · ${num(s.delivery_minimum)} yd min` : ""}`, "ops.supplier", s.id)) },
+        { t: "Purchase orders", v: n(openPos.length), d: `Open · ${n(poList.length)} in the last few months`, rows: (openPos.length ? openPos : poList).slice(0, OPS_CAP).map(poRow) },
       ],
       links: [{ label: "Materials", href: "/admin/materials" }, { label: "Bulk suppliers", href: "/admin/suppliers" }],
     },
     {
       id: "equipment", label: "Equipment & tools", kind: "project", who: ["owner"], group: "a",
-      blurb: `${n(toolsActive)} tools · ${n(kits.filter((k) => !k.archived_at).length)} kit containers · ${n(liveFleet.length)} vehicles`,
+      blurb: `${n(toolsActive)} tools · ${n(liveKits.length)} kit containers · ${n(liveFleet.length)} vehicles`,
       title: "Equipment & tools", sub: "What goes out with each crew, and what comes back.",
       blocks: [
-        { t: "Tools", v: n(toolsActive), d: `Active tools and gear · ${n(rentals)} rentals` },
-        { t: "Kit containers", v: n(kits.filter((k) => !k.archived_at).length), d: "What the kits travel in", rows: kits.filter((k) => !k.archived_at).map((k) => `${str(k.name)} · kits ${(k.kits as number[] | null)?.join(", ") ?? "—"}`) },
-        { t: "Load-out checks", v: n(loadouts), d: `${n(shopChecks)} shop checks over ${n(shopDays)} shop days` },
-        { t: "Vehicles & trailers", v: n(liveFleet.length), d: "Condition on file", rows: liveFleet.map((f) => `${str(f.name)}${f.year ? ` · ${f.year} ${str(f.make)} ${str(f.model)}` : ""} · ${str(f.condition) || "—"}`) },
+        {
+          t: "Tools", v: n(toolsActive), d: `Active tools and gear · ${n(rentals)} rentals`,
+          rows: toolList.map((t) => row(`${str(t.name)}${t.quantity != null ? ` · ${num(t.quantity)}` : ""}${t.is_rental ? " · rented" : ""}`, "ops.tool", t.id)),
+        },
+        { t: "Kit containers", v: n(liveKits.length), d: "What the kits travel in", rows: liveKits.slice(0, OPS_CAP).map((k) => row(`${str(k.name)} · kits ${(k.kits as number[] | null)?.join(", ") ?? "—"}`, "ops.kit", k.id)) },
+        {
+          t: "Load-out checks", v: n(loadouts), d: `${n(shopChecks)} shop checks over ${n(shopDays)} shop days`,
+          rows: [...loadoutBy.entries()].slice(0, OPS_CAP).map(([pid, l]) => row(`${who(pid)} · last ticked ${day(l.day + "T12:00:00Z")} · ${l.n} items`, "ops.crew_member", pid)),
+        },
+        { t: "Vehicles & trailers", v: n(liveFleet.length), d: "Condition on file", rows: liveFleet.slice(0, OPS_CAP).map((f) => row(`${str(f.name)}${f.year ? ` · ${f.year} ${str(f.make)} ${str(f.model)}` : ""} · ${str(f.condition) || "—"}`, "ops.asset", f.id)) },
       ],
       links: [{ label: "Inventory", href: "/admin/tools" }, { label: "Kit checklists", href: "/admin/tools/kits" }, { label: "Fleet", href: "/admin/fleet" }],
     },
@@ -861,10 +929,18 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(walks)} walkthroughs · ${n(reviews.length)} reviews · ${n(openIssues.length)} open issues`,
       title: "Completion & close-out", sub: "Finish clean and hand the job back.",
       blocks: [
-        { t: "Final walkthrough", v: n(walks), d: `Walkthroughs · ${n(waivers)} photo waivers` },
-        { t: "Customer sign-off", v: n(reviews.filter((r) => r.status === "approved").length), d: "Client reviews approved", rows: reviews.filter((r) => r.status === "approved").map((r) => jobName(r.job_id)) },
-        { t: "Job costing", v: `${costed} of ${completed.length}`, d: "Completed jobs with final hours filled in" },
-        { t: "Open issues", v: n(openIssues.length), d: `${n(issues.length)} logged`, rows: openIssues.map((i) => `${str(i.title)} · ${day(i.created_at)}`) },
+        { t: "Final walkthrough", v: n(walks), d: `Walkthroughs · ${n(waivers)} photo waivers`, rows: walkList.map(walkRow) },
+        {
+          t: "Customer sign-off", v: n(reviews.filter((r) => r.status === "approved").length), d: `Client reviews approved · ${n(reviews.filter((r) => r.status !== "approved").length)} waiting or sent back`,
+          rows: [...reviews].sort((a, b) => Number(a.status === "approved") - Number(b.status === "approved") || str(b.sent_at).localeCompare(str(a.sent_at))).slice(0, OPS_CAP).map(reviewRow),
+        },
+        {
+          t: "Job costing", v: `${costed} of ${completed.length}`, d: "Completed jobs with final hours filled in",
+          rows: [...completed].sort((a, b) => str(b.completed_at).localeCompare(str(a.completed_at))).slice(0, OPS_CAP)
+            .map((j) => row(`${place(j.name)} · ${num(j.final_crew_hours) > 0 ? `${num(j.final_crew_hours)} crew hours` : "no final hours"}`, "ops.job", j.id)),
+        },
+        { t: "Open issues", v: n(openIssues.length), d: `${n(issues.length)} logged`, rows: openIssues.slice(0, OPS_CAP).map((i) => row(`${str(i.title)} · ${jobName(i.job_id)} · ${day(i.created_at)}`, "ops.issue", i.id)) },
+        { t: "Open exceptions", v: n(exceptionList.length), d: "Reported from site, not settled", rows: exceptionList.map((e) => row(`${str(e.summary).slice(0, 60)} · ${jobName(e.job_id)} · ${opsWords(e.state)}`, "ops.exception", e.id)) },
       ],
       links: [{ label: "Project review", href: "/jobs/review" }],
     },
@@ -873,8 +949,8 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       title: "My projects", sub: "Everything you need to run your jobs.",
       blocks: [
         { t: "Coming up", v: n(mySchedNext.length), d: "Your work days", rows: mySchedNext.slice(0, 5).map(sessionRow) },
-        { t: "Order materials", v: n(below.length), d: "Materials below reorder point" },
-        { t: "Close out", v: n(myWalks.filter((w) => myJobIds.has(w.job_id)).length), d: "Walkthroughs done on your jobs" },
+        { t: "Order materials", v: n(below.length), d: "Materials below reorder point", rows: below.slice(0, OPS_CAP).map(materialRow) },
+        { t: "Close out", v: n(myWalks.filter((w) => myJobIds.has(w.job_id)).length), d: "Walkthroughs done on your jobs", rows: myWalks.filter((w) => myJobIds.has(w.job_id)).slice(0, OPS_CAP).map(walkRow) },
       ],
       links: [{ label: "My day", href: "/my-day" }],
     },
@@ -900,10 +976,14 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(crewIds.length)} crew · ${n(leadIds.length)} project leads`,
       title: "Project team", sub: "Everyone who runs and works the jobs.",
       blocks: [
-        { t: "Project techs (crew)", v: n(crewIds.length), d: "People with the crew role", rows: crewIds.map(who) },
-        { t: "Project leads", v: n(leadIds.length), d: "People with the project lead role", rows: leadIds.map(who) },
-        { t: "Availability", v: n(avail), d: "Weekly time blocks" },
-        { t: "Hours & pay", v: usd(owed), d: `${pending.length} pay periods pending · ${n(timeEntries)} time entries` },
+        { t: "Project techs (crew)", v: n(crewIds.length), d: "People with the crew role", rows: crewIds.map(personRow) },
+        { t: "Project leads", v: n(leadIds.length), d: "People with the project lead role", rows: leadIds.map(personRow) },
+        { t: "Availability", v: n(avail), d: "Weekly time blocks", rows: [...availBy.entries()].slice(0, OPS_CAP).map(([pid, c]) => row(`${who(pid)} · ${c} block${c === 1 ? "" : "s"} a week`, "ops.crew_member", pid)) },
+        {
+          t: "Hours & pay", v: usd(owed), d: `${pending.length} pay periods pending · ${n(timeEntries)} time entries`,
+          rows: [...pending].sort((a, b) => str(a.period_start).localeCompare(str(b.period_start))).slice(0, OPS_CAP)
+            .map((p) => row(`${who(p.profile_id)} · ${usd(num(p.amount))}${p.period_start ? ` · ${day(str(p.period_start) + "T12:00:00Z")}` : ""}`, "ops.payment", p.id)),
+        },
       ],
       links: [{ label: "Team & services", href: "/admin/team" }],
     },
@@ -912,9 +992,9 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
       blurb: `${n(applicants.length)} applicants`,
       title: "Hiring", sub: "Fill project lead and project tech positions.",
       blocks: [
-        { t: "Applicants", v: n(applicants.length), d: "By position", rows: [...positions.entries()].map(([k, v]) => `${k.replace(/-/g, " ")} · ${v}`) },
-        { t: "Newest", v: "", d: "", rows: [...applicants].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at))).slice(0, 5).map((a) => `${day(a.created_at)} · ${str(a.position).replace(/-/g, " ")} · ${str(a.stage).replace(/_/g, " ")} · ${str(a.source)}`) },
-        { t: "Indeed invites", v: n(indeed), d: "Sent" },
+        { t: "Applicants", v: n(applicants.length), d: [...positions.entries()].map(([k, v]) => `${opsWords(k)} ${v}`).join(" · ") || "By position", rows: newestApplicants.filter((a) => !["not_a_fit", "withdrawn", "hired", "screened_out"].includes(str(a.stage))).slice(0, OPS_CAP).map((a) => row(`${str(a.name) || "Applicant"} · ${opsWords(a.position)} · ${opsWords(a.stage)}`, "ops.applicant", a.id)) },
+        { t: "Newest", v: "", d: "", rows: newestApplicants.slice(0, 5).map((a) => row(`${day(a.created_at)} · ${str(a.name) || opsWords(a.position)} · ${opsWords(a.stage)} · ${str(a.source)}`, "ops.applicant", a.id)) },
+        { t: "Indeed invites", v: n(indeed), d: "Sent", rows: inviteList.map((i) => row(`${str(i.name) || "Candidate"} · ${opsWords(i.position)} · ${opsWords(i.status)} · ${day(i.created_at)}`, "ops.indeed_invite", i.id)) },
       ],
       links: [{ label: "Hiring", href: "/admin/hiring" }],
     },
