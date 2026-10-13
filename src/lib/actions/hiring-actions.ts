@@ -15,6 +15,7 @@ import { parseAsBusinessTime, shortWhen } from "@/lib/time-zone";
 import { positionFor } from "@/lib/hiring/positions";
 import { applicantEmail, stageAfter, type ApplicantEmailKind } from "@/lib/hiring/emails";
 import { isStage, nextStages, type Stage } from "@/lib/hiring/screening";
+import { onApplicantHired } from "@/lib/data/onboarding";
 
 /**
  * The reviewer's side of hiring: rate and note, move an application along,
@@ -98,6 +99,12 @@ async function moveTo(
     })
     .eq("id", id);
   if (error) return { ok: false, message: "Couldn't save that. Try again." };
+  // Hired: their new-hire checklist (I-9, W-4, MW507, the Maryland report...).
+  // Does nothing unless the owner switched checklists on; never throws.
+  if (to === "hired") {
+    const { data: org } = await admin.from("job_applicants").select("organization_id").eq("id", id).maybeSingle();
+    if (org?.organization_id) await onApplicantHired(org.organization_id, id);
+  }
   await admin.from("applicant_events").insert({
     applicant_id: id,
     kind: "stage_changed",

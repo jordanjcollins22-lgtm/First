@@ -11,6 +11,7 @@ import { getBusyBlocks } from "@/lib/data/busy";
 import { conflictFor, describeConflict } from "@/lib/busy";
 import { canRescheduleJob } from "@/lib/job-lifecycle";
 import { daysNotWorked, describeDayNotWorked } from "@/lib/crew-availability";
+import { fertilizerBlock } from "@/lib/data/fertilizer-guard";
 import type {
   JobStatus,
   TicketCause,
@@ -128,6 +129,10 @@ export async function addWorkSession(
     const clash = await crewClash(supabase, jobId, startsOn, endsOn);
     if (clash) return { ok: false, message: clash };
 
+    // Maryland's fertilizer blackout: no fertilizer visit Nov 16 to Mar 1.
+    const blackout = await fertilizerBlock(jobId, startsOn, endsOn);
+    if (blackout) return { ok: false, message: blackout };
+
     const { error } = await supabase.from("job_work_sessions").insert({
       job_id: jobId,
       organization_id: organizationId,
@@ -175,6 +180,9 @@ export async function rescheduleWorkSession(
 
     const clash = await crewClash(supabase, (existing as { job_id: string }).job_id, startsOn, endsOn);
     if (clash) return { ok: false, message: clash };
+
+    const blackout = await fertilizerBlock((existing as { job_id: string }).job_id, startsOn, endsOn);
+    if (blackout) return { ok: false, message: blackout };
 
     const { data, error } = await supabase
       .from("job_work_sessions")
