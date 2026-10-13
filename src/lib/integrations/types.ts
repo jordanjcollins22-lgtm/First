@@ -1,3 +1,5 @@
+import type { OAuthConfigResolver } from "@/lib/integrations/oauth";
+
 /**
  * An outside service the app can be connected to, and what the owner types
  * in to connect it. Each provider lives in its own file under ./providers and
@@ -25,6 +27,12 @@ export interface IntegrationProvider {
   docsUrl?: string;
   /** If set, a "Connect" button sends the owner here to sign in (OAuth). */
   oauthStartPath?: string;
+  /**
+   * For OAuth providers: builds the client config from what is saved (see
+   * ./oauth.ts). When set, the Integrations page refreshes the token before
+   * Test, so a token that expired overnight isn't reported as broken.
+   */
+  oauthConfig?: OAuthConfigResolver;
   /** Checks the saved values work. Server only. */
   test?: (secrets: Record<string, string>, settings: Record<string, unknown>) => Promise<{ ok: true } | { ok: false; error: string }>;
 }

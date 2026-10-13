@@ -1,4 +1,4 @@
-import { qboClientWith, QboError } from "@/lib/integrations/quickbooks/api";
+import { qboClientWith, QboError, quickbooksOAuth } from "@/lib/integrations/quickbooks/api";
 import type { IntegrationProvider } from "@/lib/integrations/types";
 
 /**
@@ -36,6 +36,7 @@ export const quickbooksProvider: IntegrationProvider = {
   ],
   docsUrl: "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0",
   oauthStartPath: "/api/integrations/quickbooks/start",
+  oauthConfig: quickbooksOAuth,
   async test(secrets, settings) {
     const realmId = typeof settings.realm_id === "string" ? settings.realm_id : "";
     if (!secrets.access_token || !realmId) return { ok: false, error: "Not connected yet — press Connect." };

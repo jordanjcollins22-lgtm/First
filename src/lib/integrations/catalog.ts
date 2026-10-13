@@ -1,7 +1,6 @@
-import { accessTokenFor, type OAuthConfigResolver } from "@/lib/integrations/oauth";
+import { accessTokenFor } from "@/lib/integrations/oauth";
 import { payrollProvider } from "@/lib/integrations/providers/payroll";
 import { quickbooksProvider } from "@/lib/integrations/providers/quickbooks";
-import { quickbooksOAuth } from "@/lib/integrations/quickbooks/api";
 import { PROVIDERS } from "@/lib/integrations/registry";
 import type { IntegrationProvider } from "@/lib/integrations/types";
 
@@ -22,16 +21,11 @@ export function findProvider(id: string): IntegrationProvider | undefined {
 }
 
 /**
- * OAuth providers whose token this page can refresh before a Test, so a
- * token that expired overnight isn't reported as broken. Another workstream's
- * OAuth provider without an entry here is tested with the token as saved.
+ * Refreshes the saved token before a Test, so a token that expired overnight
+ * isn't reported as broken. Uses the provider's own `oauthConfig`; a provider
+ * without one is tested with the token as saved.
  */
-export const OAUTH_RESOLVERS: Record<string, OAuthConfigResolver> = {
-  quickbooks: quickbooksOAuth,
-};
-
-/** Refreshes the saved token when this page knows how. */
 export async function freshenToken(organizationId: string, providerId: string): Promise<void> {
-  const resolver = OAUTH_RESOLVERS[providerId];
+  const resolver = findProvider(providerId)?.oauthConfig;
   if (resolver) await accessTokenFor(organizationId, providerId, resolver);
 }
