@@ -27,6 +27,8 @@ export function VisitHeader({
   preview?: boolean;
 }) {
   const link = (href: string) => (preview ? "#" : href);
+  // The map comes back to this visit, not to the job page.
+  const directionsHref = `/jobs/${jobId}/directions?back=${encodeURIComponent(`/evaluate/${jobId}`)}`;
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div>
@@ -40,11 +42,11 @@ export function VisitHeader({
             <Phone className="h-4 w-4" /> Call
           </a>
         )}
-        <Link href={link(`/jobs/${jobId}/directions`)} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium">
+        <Link href={link(directionsHref)} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium">
           <Navigation className="h-4 w-4" /> Directions
         </Link>
       </div>
-      <VisitAction jobId={jobId} stage={stage} arrivedAt={arrivedAt} timeZone={timeZone} openVisitAfterArrive={false} preview={preview} />
+      <VisitAction jobId={jobId} stage={stage} arrivedAt={arrivedAt} timeZone={timeZone} openVisitAfterArrive={false} preview={preview} directionsHref={directionsHref} />
     </section>
   );
 }

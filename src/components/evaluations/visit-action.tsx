@@ -20,6 +20,7 @@ export function VisitAction({
   timeZone,
   openVisitAfterArrive = true,
   preview = false,
+  directionsHref,
 }: {
   jobId: string;
   stage: VisitStage;
@@ -28,6 +29,8 @@ export function VisitAction({
   openVisitAfterArrive?: boolean;
   /** For the owner's walk-through: the buttons show, and record nothing. */
   preview?: boolean;
+  /** Where On my way opens the map, with its way back. Defaults to the job's directions. */
+  directionsHref?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -39,7 +42,7 @@ export function VisitAction({
     start(async () => {
       const result = await markVisit(jobId, step);
       if (!result.ok) return setError(result.message);
-      if (step === "on_way") router.push(`/jobs/${jobId}/directions`);
+      if (step === "on_way") router.push(directionsHref ?? `/jobs/${jobId}/directions`);
       else if (openVisitAfterArrive) router.push(`/evaluate/${jobId}`);
       else router.refresh();
     });

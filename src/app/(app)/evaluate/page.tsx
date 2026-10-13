@@ -1,4 +1,9 @@
+import { redirect } from "next/navigation";
+
 import { isSupabaseConfigured } from "@/lib/env";
+import { getCurrentProfile } from "@/lib/data/team";
+import { EVALUATOR_HOME, visitBackHref } from "@/lib/evaluator-home";
+import { v2RolesOf } from "@/lib/v2-roles";
 import { requireTab } from "@/lib/data/access";
 import { getEvaluatorDay } from "@/lib/data/evaluator-day";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -12,6 +17,9 @@ export const dynamic = "force-dynamic";
 
 export default async function EvaluatePage({ searchParams }: { searchParams: Promise<{ all?: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
+  // An evaluator's day is in the new layout now; this list stays for the owner.
+  const viewer = await getCurrentProfile();
+  if (viewer && visitBackHref(v2RolesOf(viewer)) !== "/evaluate") redirect(EVALUATOR_HOME);
   await requireTab("evaluations", "/my-day");
   const { all } = await searchParams;
   const data = await getEvaluatorDay({ everyone: all === "1" });

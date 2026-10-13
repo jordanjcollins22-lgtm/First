@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,8 @@ export function DaysOffEditor({ daysOff, today }: { daysOff: MyDayOff[]; today: 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  // Saved from a page the action doesn't refresh (the new layout): show it.
+  const router = useRouter();
 
   function add() {
     setError(null);
@@ -53,6 +56,7 @@ export function DaysOffEditor({ daysOff, today }: { daysOff: MyDayOff[]; today: 
         setDate("");
         setReason("");
         setPartDay(false);
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't save that day.");
       } finally {
@@ -66,6 +70,7 @@ export function DaysOffEditor({ daysOff, today }: { daysOff: MyDayOff[]; today: 
     startTransition(async () => {
       try {
         await removeDayOff(day);
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't remove that day.");
       } finally {

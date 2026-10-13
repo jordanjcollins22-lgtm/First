@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react";
 
@@ -57,6 +58,8 @@ export function SiteMapSetup({
   preview = false,
   demoLot = null,
   grounds = false,
+  doneHref,
+  doneLabel = "Back to my day",
 }: {
   jobId: string;
   initialPlan: PlanItem[];
@@ -73,6 +76,9 @@ export function SiteMapSetup({
   demoLot?: LotData | null;
   /** An HOA's or a business's grounds: their common areas to pick from, and no single county lot. */
   grounds?: boolean;
+  /** Where to go once it is submitted: the evaluator's day. */
+  doneHref?: string;
+  doneLabel?: string;
 }) {
   const [plan, setPlan] = useState<PlanItem[]>(() => walkPlan(initialPlan));
   const planRef = useRef(plan);
@@ -283,6 +289,11 @@ export function SiteMapSetup({
         </Button>
         <p className="text-center text-xs text-muted-foreground">Goes to the account manager to price. Nothing goes to the client yet.</p>
         {sendNote && <p className="text-center text-sm text-muted-foreground">{sendNote}</p>}
+        {done && doneHref && !preview && (
+          <Link href={doneHref} className="inline-flex h-14 items-center justify-center rounded-md border-2 border-primary bg-background text-base font-semibold text-primary">
+            {doneLabel}
+          </Link>
+        )}
       </div>
 
       <AddArea open={adding} services={services} grounds={grounds} onAdd={add} onClose={() => setAdding(false)} />
