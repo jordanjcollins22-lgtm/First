@@ -1307,7 +1307,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
   ],
   sales: [
     { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-autopilot"], rolePanels: { "account-manager": ["am-sales"] } },
-    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Booking visits, the visits themselves, and the people who do them.", ids: ["booking", "myevals", "evaluators"], panels: ["evaluator-scorecard", "territories"], rolePanels: { evaluator: ["evaluator-home"] } },
+    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Visits, the proposals that come from them, and the people who do them.", ids: ["booking", "myevals", "evaluators"], panels: ["evaluator-scorecard", "territories"], rolePanels: { evaluator: ["evaluator-home"] } },
     { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.", ids: ["messages"], panels: ["client-messages", "email-approval-policy"] },
   ],
   operations: [

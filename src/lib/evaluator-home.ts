@@ -6,7 +6,7 @@
 import type { V2Role } from "@/lib/data/v2";
 
 /** Where the evaluator's own day lives in the new layout. */
-export const EVALUATOR_HOME = "/v2/sales";
+export const EVALUATOR_HOME = "/v2/sales?choice=evaluations";
 
 /**
  * Where the visit flow sends somebody back to. An evaluator (and anybody
@@ -31,7 +31,7 @@ export function backLabel(href: string): string {
  */
 export function safeBack(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return /^\/(v2\/[a-z-]+|evaluate\/[\w-]+)$/.test(raw) ? raw : null;
+  return /^\/(v2\/[a-z-]+(\?choice=[a-z-]+)?|evaluate\/[\w-]+)$/.test(raw) ? raw : null;
 }
 
 export type OutcomeTone = "sent" | "waiting" | "held" | "won" | "lost";

@@ -4,8 +4,8 @@ import { backLabel, latestChecks, proposalOutcome, readReasons, safeBack, visitB
 
 describe("visitBackHref", () => {
   it("sends an evaluator back to the new layout", () => {
-    expect(visitBackHref(["evaluator"])).toBe("/v2/sales");
-    expect(visitBackHref(["evaluator", "project-technician"])).toBe("/v2/sales");
+    expect(visitBackHref(["evaluator"])).toBe("/v2/sales?choice=evaluations");
+    expect(visitBackHref(["evaluator", "project-technician"])).toBe("/v2/sales?choice=evaluations");
   });
   it("keeps the owner on the old list of everybody's visits", () => {
     expect(visitBackHref(["owner"])).toBe("/evaluate");
@@ -16,6 +16,8 @@ describe("visitBackHref", () => {
 describe("safeBack", () => {
   it("allows the new layout and a visit", () => {
     expect(safeBack("/v2/sales")).toBe("/v2/sales");
+    expect(safeBack("/v2/sales?choice=evaluations")).toBe("/v2/sales?choice=evaluations");
+    expect(safeBack("/v2/sales?choice=x&next=//evil")).toBeNull();
     expect(safeBack("/evaluate/0b6f-12")).toBe("/evaluate/0b6f-12");
   });
   it("refuses anything else", () => {
