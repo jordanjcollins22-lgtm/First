@@ -1,5 +1,6 @@
 "use server";
 
+import { approveCommissionBatch } from "@/lib/actions/back-office-actions";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -83,6 +84,11 @@ async function approve(type: QueueType, id: string, organizationId: string): Pro
       const done = await acknowledgeException(id);
       return done.ok ? { ok: true, message: "Picked up. It's yours now." } : { ok: false, message: done.error };
     }
+    case "back_office": {
+      // Only a weekly payout has a one-tap approve; everything else opens.
+      const done = await approveCommissionBatch(id);
+      return done.ok ? { ok: true, message: "Payout approved and recorded." } : { ok: false, message: "error" in done ? String(done.error) : "Couldn't approve it." };
+    }
   }
 }
 
@@ -144,6 +150,8 @@ async function decline(type: Exclude<QueueType, "email">, id: string, reason: De
       const done = await dismissException(id, words);
       return done.ok ? { ok: true, message: "Dismissed." } : { ok: false, message: done.error };
     }
+    case "back_office":
+      return { ok: false, message: "Open it to deal with it; back-office items aren't declined here." };
   }
 }
 

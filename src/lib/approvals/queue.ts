@@ -10,7 +10,7 @@
  * Pure: no reads, no writes.
  */
 
-export const QUEUE_TYPES = ["email", "price", "play", "social", "pm_draft", "exception"] as const;
+export const QUEUE_TYPES = ["email", "price", "play", "social", "pm_draft", "exception", "back_office"] as const;
 export type QueueType = (typeof QUEUE_TYPES)[number];
 
 export function isQueueType(value: string): value is QueueType {
@@ -24,6 +24,7 @@ export const QUEUE_TYPE_LABEL: Record<QueueType, string> = {
   social: "Social post",
   pm_draft: "Property-manager email",
   exception: "Exception",
+  back_office: "Back office",
 };
 
 export interface QueueItem {

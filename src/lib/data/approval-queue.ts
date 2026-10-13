@@ -7,6 +7,7 @@ import { exceptionNeedsOwner, sortQueue, type QueueItem, type QueueType } from "
 import { topDeclineReasons, type DeclineReason, type ReasonCount } from "@/lib/approvals/declines";
 import { KIND_LABEL as PLAY_LABEL, shortAddress, type PlayKind } from "@/lib/marketing-plays";
 import { KIND_LABEL as EXCEPTION_LABEL, isExceptionKind } from "@/lib/exceptions";
+import { backOfficeQueueItems } from "@/lib/data/back-office-queue";
 
 /**
  * Everything waiting on the owner, read from where each thing already
@@ -43,8 +44,31 @@ export async function loadApprovalQueue(client: unknown, organizationId: string,
     safely("social", () => postsToSend(db, organizationId, now)),
     safely("pm_draft", () => pmDrafts(db, organizationId)),
     safely("exception", () => escalatedExceptions(db, organizationId, now)),
+    safely("back_office", () => backOfficeItems(organizationId, now)),
   ]);
   return sortQueue(lists.flat());
+}
+
+/**
+ * Payouts to approve, licenses and filings coming due, new-hire items late,
+ * people with no role: read live from the back office each time, since they
+ * disappear by themselves once dealt with.
+ */
+async function backOfficeItems(organizationId: string, now: Date): Promise<QueueItem[]> {
+  const items = await backOfficeQueueItems(organizationId, now);
+  return items.map((i) => ({
+    type: "back_office" as const,
+    id: i.action?.arg ?? i.key,
+    title: i.title,
+    detail: i.detail,
+    kind: i.kind,
+    since: i.at ?? now.toISOString(),
+    dueAt: null,
+    href: i.href,
+    canApprove: Boolean(i.action),
+    approveLabel: i.amount != null ? `Approve ${money(i.amount)}` : "Approve",
+    canDecline: false,
+  }));
 }
 
 async function heldEmails(db: Db, organizationId: string): Promise<QueueItem[]> {

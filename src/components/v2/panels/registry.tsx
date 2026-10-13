@@ -10,6 +10,11 @@ import { JobCostingPanel } from "@/components/v2/panels/job-costing";
 import { ProjectsAutopilotPanel } from "@/components/v2/panels/projects-autopilot";
 import { PurchasingPanel } from "@/components/v2/panels/purchasing-panel";
 import { TaskListPanel } from "@/components/v2/panels/task-list";
+import { WeatherPanel } from "@/components/v2/panels/weather-panel";
+import { SnowOpsPanel } from "@/components/v2/panels/snow-ops-panel";
+import { CompliancePanel } from "@/components/v2/panels/compliance-panel";
+import { CommissionsPanel } from "@/components/v2/panels/commissions-panel";
+import { PeoplePanel } from "@/components/v2/panels/people-panel";
 
 /**
  * The working screens the new layout's choices can show, by key. Each is an
@@ -27,4 +32,9 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   "projects-autopilot": ProjectsAutopilotPanel,
   purchasing: PurchasingPanel,
   "task-list": TaskListPanel,
+  weather: WeatherPanel,
+  "snow-ops": SnowOpsPanel,
+  compliance: CompliancePanel,
+  commissions: CommissionsPanel,
+  people: PeoplePanel,
 };
