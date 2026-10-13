@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Check, Copy, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { makePhaseOne } from "@/lib/actions/win-back-actions";
 import { winBackText, type WinBackRow } from "@/lib/win-back";
 
@@ -14,7 +13,7 @@ const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-
 
 /**
  * Every proposal a client said no to, biggest first, each with a way back:
- * tick the areas that matter most, type the Phase 1 price, and it goes to the
+ * tick the areas that matter most, the Phase 1 prices itself, and it goes to the
  * price approvals to be previewed and sent like any proposal.
  */
 export function WinBack({ rows, sender }: { rows: WinBackRow[]; sender: string }) {
@@ -39,12 +38,18 @@ export function WinBack({ rows, sender }: { rows: WinBackRow[]; sender: string }
 function WinBackCard({ row, sender }: { row: WinBackRow; sender: string }) {
   const [open, setOpen] = useState(false);
   const [keep, setKeep] = useState<string[]>([]);
-  const [price, setPrice] = useState("");
   const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();
   const first = row.client.split(/\s+/)[0] ?? row.client;
-  const text = winBackText({ first, sender, price: Number(price) > 0 ? Number(price) : null });
+  // Priced from the areas themselves, with the same share of the discount
+  // the full proposal had. The server works it out the same way on save.
+  const ratio = row.total > 0 ? row.owed / row.total : 1;
+  const keptAreas = row.areas.filter((a) => keep.includes(a.zoneName));
+  const priceCents = keptAreas.reduce((sum, a) => sum + (a.priceCents ?? 0), 0) * ratio;
+  const price = Math.round(priceCents) / 100;
+  const estimated = keptAreas.some((a) => a.estimated);
+  const text = winBackText({ first, sender, price: price > 0 ? price : null });
 
   async function copy() {
     try {
@@ -90,19 +95,27 @@ function WinBackCard({ row, sender }: { row: WinBackRow; sender: string }) {
                       checked={on}
                       onChange={() => setKeep(on ? keep.filter((k) => k !== a.zoneName) : [...keep, a.zoneName])}
                     />
-                    <span className="min-w-0 truncate">
+                    <span className="min-w-0 flex-1 truncate">
                       <span className="font-medium">{a.zoneName}</span> · {a.serviceLabel}
                     </span>
+                    {a.priceCents != null && (
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{money((a.priceCents * ratio) / 100)}</span>
+                    )}
                   </label>
                 );
               })}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">The rest is written on the job as Phase 2, for later.</p>
           </div>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
-            Phase 1 price
-            <Input inputMode="decimal" placeholder="e.g. 4500" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} className="max-w-40" />
-          </label>
+          <div className="text-xs">
+            <p className="font-semibold">Phase 1 price</p>
+            <p className="text-lg font-bold tabular-nums">{price > 0 ? money(price) : "Tick an area"}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {estimated
+                ? "Some of these areas were never priced on their own, so their share of the total is used."
+                : "Each area's own price on the proposal, with the same discount."}
+            </p>
+          </div>
           <div className="rounded-lg bg-muted/50 p-2.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-semibold">Text it first, from your phone</p>
@@ -118,7 +131,7 @@ function WinBackCard({ row, sender }: { row: WinBackRow; sender: string }) {
               disabled={pending}
               onClick={() =>
                 start(async () => {
-                  setResult(await makePhaseOne({ jobId: row.jobId, keep, price: Number(price) }));
+                  setResult(await makePhaseOne({ jobId: row.jobId, keep }));
                 })
               }
             >

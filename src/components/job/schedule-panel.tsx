@@ -233,6 +233,7 @@ export function SchedulePanel({
             (confirming === "estimate" ? (
               <Confirm
                 label="Cancel this estimate visit?"
+                quickReasons={["No-show", "Client cancelled", "Duplicate booking"]}
                 reason={reason}
                 onReason={setReason}
                 onCancel={() => setConfirming(null)}
@@ -431,6 +432,7 @@ function Confirm({
   onCancel,
   onConfirm,
   pending,
+  quickReasons,
 }: {
   label: string;
   reason: string;
@@ -438,10 +440,26 @@ function Confirm({
   onCancel: () => void;
   onConfirm: () => void;
   pending: boolean;
+  /** One-tap reasons. The no-show rebook text reads these words to know who called it off. */
+  quickReasons?: string[];
 }) {
   return (
     <div className="mt-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
       <p className="mb-2 text-xs font-semibold">{label}</p>
+      {quickReasons && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {quickReasons.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => onReason(q)}
+              className={`min-h-9 rounded-full border px-3 text-xs ${reason === q ? "border-foreground bg-muted font-semibold" : "text-muted-foreground"}`}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
       <Input
         value={reason}
         onChange={(e) => onReason(e.target.value)}
