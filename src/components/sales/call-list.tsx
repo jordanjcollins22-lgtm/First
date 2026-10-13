@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { recordProposalCall } from "@/lib/actions/proposal-call-actions";
+import { useOpenEntity } from "@/components/v2/entity-drawer";
 import { callListHeadline, OUTCOME_LABEL, OUTCOMES, type CallList, type CallOutcome, type RankedCall } from "@/lib/call-list";
 
 /**
@@ -65,6 +66,9 @@ export function CallListPanel({ list, callerFirstName }: { list: CallList; calle
 
 function CallCard({ call, callerFirstName, later = false }: { call: RankedCall; callerFirstName: string; later?: boolean }) {
   const router = useRouter();
+  // Inside the new layout the proposal opens in the drawer, and the old
+  // screens the suggestions link to are not reachable from there.
+  const openEntity = useOpenEntity();
   const [open, setOpen] = useState(false);
   const [outcome, setOutcome] = useState<CallOutcome | null>(null);
   const [note, setNote] = useState("");
@@ -135,9 +139,19 @@ function CallCard({ call, callerFirstName, later = false }: { call: RankedCall; 
             ) : (
               <span className="text-sm text-muted-foreground">No phone number on file.</span>
             )}
-            <Link href={`/jobs/${call.jobId}`} className="text-sm text-primary underline underline-offset-2">
-              Open the job
-            </Link>
+            {openEntity ? (
+              <button
+                type="button"
+                onClick={() => openEntity({ kind: "sales.proposal", id: call.proposalId })}
+                className="inline-flex min-h-10 items-center rounded-lg border px-3 text-sm font-medium hover:bg-muted"
+              >
+                Open the proposal
+              </button>
+            ) : (
+              <Link href={`/jobs/${call.jobId}`} className="text-sm text-primary underline underline-offset-2">
+                Open the job
+              </Link>
+            )}
           </div>
 
           {call.responseNote && (
@@ -155,7 +169,7 @@ function CallCard({ call, callerFirstName, later = false }: { call: RankedCall; 
                 {rec.say && (
                   <p className="mt-0.5 text-sm text-muted-foreground">“{rec.say.replace(/\{you\}/g, callerFirstName)}”</p>
                 )}
-                {rec.action && (
+                {rec.action && !openEntity && (
                   <Link href={rec.action.href} className="mt-1 inline-block text-xs text-primary underline underline-offset-2">
                     {rec.action.label}
                   </Link>
