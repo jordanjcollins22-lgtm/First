@@ -41,5 +41,6 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
       .map((t) => ({ label: t.label, href: t.href }));
   }
 
-  return <V2Shell section={data} unplaced={unplaced} />;
+  // Keyed by page, so the chosen pillar and role start fresh on each one.
+  return <V2Shell key={section} section={data} unplaced={unplaced} />;
 }

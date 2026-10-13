@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
@@ -13,12 +12,6 @@ import { WebsiteStudio } from "@/components/v2/website-studio";
  * replaces it, so every screen it needs gets built into one of the four pages.
  */
 
-const PAGES = [
-  { key: "marketing", label: "Marketing" },
-  { key: "sales", label: "Sales" },
-  { key: "operations", label: "Operations" },
-  { key: "admin", label: "Admin" },
-] as const;
 
 const TAG: Record<V2Kind, { text: string; cls: string }> = {
   "": { text: "", cls: "" },
@@ -42,23 +35,8 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-5">
-      <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border bg-card/80 p-2 shadow-sm">
-        <nav aria-label="New app pages" className="flex flex-1 flex-wrap gap-1">
-          {PAGES.map((p) => (
-            <Link
-              key={p.key}
-              href={`/v2/${p.key}`}
-              aria-current={p.key === section.key ? "page" : undefined}
-              className={
-                "inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-semibold " +
-                (p.key === section.key ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted")
-              }
-            >
-              {p.label}
-            </Link>
-          ))}
-        </nav>
+    <div className="w-full pb-5">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
         <div role="group" aria-label="Preview as role" className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">Preview as</span>
           <div className="flex flex-wrap rounded-lg bg-muted p-1">
