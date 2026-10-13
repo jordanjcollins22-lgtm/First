@@ -32,7 +32,7 @@ describe("sortQueue", () => {
 describe("countByType and queueLine", () => {
   it("counts every type, zero included", () => {
     const counts = countByType([item({ type: "email" }), item({ type: "play" }), item({ type: "play" })]);
-    expect(counts).toEqual({ email: 1, price: 0, play: 2, social: 0, pm_draft: 0, exception: 0 });
+    expect(counts).toEqual({ email: 1, price: 0, play: 2, social: 0, pm_draft: 0, exception: 0, back_office: 0 });
   });
   it("reads naturally", () => {
     expect(queueLine(0)).toBe("Nothing is waiting for you");
