@@ -5,6 +5,7 @@ import { isApproved, KIND_LABEL, playTitle, REASON_LABEL, shortAddress } from "@
 import { isStale } from "@/lib/marketing/play-closure";
 
 import { AutomationSwitches, ExpireBacklogButton, NumberSettings, PlayActions, WalkTracker } from "./marketing-autopilot-controls";
+import { OpenInDrawer } from "./marketing-open";
 import { Kpi, NeedsYou, pct, Section, type NeedsYouItem } from "./marketing-panel-parts";
 
 /**
@@ -34,6 +35,9 @@ function PlayLine({ play, people, owned }: { play: PlayRow; people: { id: string
           {play.customerName ? ` (${play.customerName})` : ""}
         </span>
         <span className="ml-auto text-xs text-muted-foreground">made {new Date(play.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+        <OpenInDrawer entity={{ kind: "mkt.play", id: play.id }} className="inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-semibold hover:bg-muted">
+          Details
+        </OpenInDrawer>
       </div>
       {!open && (
         <p className="text-xs text-muted-foreground">
@@ -64,8 +68,22 @@ export async function PhysicalMarketingPanel() {
   const hangers = d.byKind.find((k) => k.kind === "door_hangers");
 
   const needs: NeedsYouItem[] = [];
-  if (d.unassigned.length > 0) needs.push({ key: "unassigned", text: `${d.unassigned.length} approved play${d.unassigned.length === 1 ? " has" : "s have"} had nobody assigned for more than 3 days.` });
-  if (pending.length > 0) needs.push({ key: "pending", text: `${pending.length} play${pending.length === 1 ? "" : "s"} waiting for approval (the app approves a kind on its own after 3 untouched approvals).`, href: "/attractors", action: "Review" });
+  if (d.unassigned.length > 0) {
+    needs.push({
+      key: "unassigned",
+      text: `${d.unassigned.length} approved play${d.unassigned.length === 1 ? " has" : "s have"} had nobody assigned for more than 3 days.`,
+      open: { kind: "mkt.play_list", id: "unassigned" },
+      action: "Assign",
+    });
+  }
+  if (pending.length > 0) {
+    needs.push({
+      key: "pending",
+      text: `${pending.length} play${pending.length === 1 ? "" : "s"} waiting for approval (the app approves a kind on its own after 3 untouched approvals).`,
+      open: { kind: "mkt.play_list", id: "pending" },
+      action: "Review",
+    });
+  }
 
   return (
     <div className="grid gap-4">
@@ -127,7 +145,7 @@ export async function PhysicalMarketingPanel() {
       </Section>
 
       {pending.length > 0 && (
-        <Section title={`Waiting for approval (${pending.length})`} hint="Approve or edit the doors on the map (Attractors); assigning or tapping Done here approves it too.">
+        <Section title={`Waiting for approval (${pending.length})`} hint="Open one to approve it; assigning or tapping Done here approves it too.">
           <ul className="grid gap-2">
             {pending.slice(0, 20).map((p) => (
               <PlayLine key={p.id} play={p} people={d.people} owned={false} />
