@@ -23,12 +23,19 @@ describe("learning from decisions", () => {
     expect(learnedReach(trims)).toBe(275);
     expect(learnedReach([...trims.slice(0, 2), review({ decision: "edit", removedCount: 2, keptMaxM: 300, removedMinM: 50 })])).toBeNull();
   });
-  it("asks until ten untouched, then approves plays that match what it learned", () => {
+  it("asks until three untouched, then approves plays that match what it learned", () => {
     const ten = Array.from({ length: 10 }, () => review({}));
-    expect(playPolicy(play, ten.slice(0, 9)).decision).toBe("ask");
+    expect(playPolicy(play, ten.slice(0, 2)).decision).toBe("ask");
+    expect(playPolicy(play, ten.slice(0, 3)).decision).toBe("auto");
     expect(playPolicy(play, ten)).toEqual({ decision: "auto", why: "like the door hangers plays already approved" });
     expect(playPolicy({ ...play, quantity: 60 }, ten).why).toMatch(/60 where 100 is usual/);
     expect(describePlayTrust(ten)).toMatch(/door hangers: approved on their own now/);
     expect(describePlayTrust([review({ quantityAfter: 80 }), review({ quantityAfter: 80 }), review({ quantityAfter: 80 })])).toMatch(/Learned: 80 hangers a play/);
+  });
+  it("approves door hangers round a running job by default, when that is on", () => {
+    expect(playPolicy(play, [], { jobActive: true, hangersDefaultApprove: true }).decision).toBe("auto");
+    expect(playPolicy(play, [], { jobActive: true, hangersDefaultApprove: false }).decision).toBe("ask");
+    expect(playPolicy(play, [], { jobActive: false, hangersDefaultApprove: true }).decision).toBe("ask");
+    expect(playPolicy({ ...play, kind: "flyers" } as MarketingPlay, [], { jobActive: true, hangersDefaultApprove: true }).decision).toBe("ask");
   });
 });

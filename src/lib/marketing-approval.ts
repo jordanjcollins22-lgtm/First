@@ -6,8 +6,12 @@
  * what changed, and from those the app learns two things about door
  * hangers -- how many the business actually wants, and how far from the
  * house a hanger is worth carrying -- and makes the next plays that way.
- * After ten plays of a kind approved in a row without a change it
- * approves that kind on its own; one change and it asks again.
+ * After three plays of a kind approved in a row without a change it
+ * approves that kind on its own; one change and it asks again. (It was ten,
+ * and at ten the list filled faster than anybody approved it: 42 plays open,
+ * none done.) Door hangers round a job that is actually running are approved
+ * from the start: the truck is on the street, which is the whole reason a
+ * hanger works.
  *
  * Pure: the decisions in, what to make and whether to ask out.
  */
@@ -41,7 +45,7 @@ export interface LearnedDefault {
 export const RECIPE_QUANTITY: Record<PlayKind, number> = { yard_sign: 1, knocks: 5, door_hangers: 100, flyers: 1000 };
 
 /** Approvals of a kind in a row, untouched, before the app approves that kind itself. */
-export const ASK_UNTIL = 10;
+export const ASK_UNTIL = 3;
 /** Decisions looked at when learning a count or a reach. */
 const LEARN_FROM = 10;
 
@@ -103,11 +107,20 @@ export interface PlayPolicy {
 
 /**
  * Whether to ask a person about a play or approve it as the app: only
- * once ten of its kind went through untouched, and only when it is what
+ * once three of its kind went through untouched, and only when it is what
  * the business has taught the app to make (the learned count, within a
  * tenth).
  */
-export function playPolicy(play: MarketingPlay, reviews: PlayReview[]): PlayPolicy {
+export function playPolicy(
+  play: MarketingPlay,
+  reviews: PlayReview[],
+  context: { jobActive?: boolean; hangersDefaultApprove?: boolean } = {}
+): PlayPolicy {
+  // Hangers round a job that is running go out by default: the neighbours
+  // can see the crew, and waiting for a person means the crew has gone.
+  if (play.kind === "door_hangers" && context.jobActive && context.hangersDefaultApprove) {
+    return { decision: "auto", why: "door hangers round a job that is running are approved by default" };
+  }
   const streak = playStreak(reviews, play.kind);
   if (streak < ASK_UNTIL) return { decision: "ask", why: `${streak} of ${ASK_UNTIL} ${play.kind.replace("_", " ")} plays approved untouched so far` };
   const want = learnedQuantity(reviews, play.kind);

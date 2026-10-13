@@ -8,6 +8,8 @@ import { designsAvailable } from "@/lib/actions/house-coverage-actions";
 import { createEddmMailing } from "@/lib/actions/eddm-mailing-actions";
 import { flyerRoutesOf, shortAddress, type MarketingPlay, type PlayStatus } from "@/lib/marketing-plays";
 import { learnedDefaults, type PlayReview } from "@/lib/marketing-approval";
+import { loadAutopilot } from "@/lib/data/marketing-autopilot";
+import { stampClosed } from "@/lib/data/marketing-plays-run";
 
 /**
  * Ticking marketing off.
@@ -43,7 +45,11 @@ export async function setMarketingPlayStatus(playId: string, status: PlayStatus)
   return guard("setMarketingPlayStatus", async () => {
     const profile = await requireUser();
     const supabase = await createClient();
-    const { data: play, error: readError } = await supabase.from("marketing_plays").select("organization_id").eq("id", playId).maybeSingle();
+    const { data: play, error: readError } = await supabase
+      .from("marketing_plays")
+      .select("organization_id, kind, quantity, assigned_to")
+      .eq("id", playId)
+      .maybeSingle();
     if (readError) throw readError;
     if (!play || play.organization_id !== profile.organization_id) throw new Error("No such play.");
     const { data, error } = await supabase.rpc("marketing_play_set", {
@@ -55,6 +61,19 @@ export async function setMarketingPlayStatus(playId: string, status: PlayStatus)
     if (error) throw error;
     const result = (data ?? {}) as { ok?: boolean; recorded?: number };
     if (!result.ok) throw new Error("The play could not be updated.");
+    // Who closed it and what it cost, so door hangers get a cost per lead.
+    if (status === "done") {
+      const { settings } = await loadAutopilot(supabase, profile.organization_id);
+      const assigned = (play as { assigned_to?: string | null }).assigned_to ?? null;
+      await stampClosed(
+        supabase,
+        { id: playId, kind: play.kind as "yard_sign" | "knocks" | "door_hangers" | "flyers", quantity: play.quantity as number },
+        assigned && assigned === profile.id
+          ? { reason: "assignee", note: "Tapped done by the person it was given to." }
+          : { reason: "owner", note: "Ticked off by hand." },
+        settings
+      ).catch((err) => console.error("[marketing] could not stamp the close:", err));
+    }
     for (const page of PAGES) revalidatePath(page);
     return { recorded: result.recorded ?? 0 };
   });

@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_WEBSITE, MAX_SERVICES, normalizeWebsite, websiteLinks, websiteRewrite } from "@/lib/website";
+import {
+  areaBySlug,
+  areaHref,
+  areaSlug,
+  DEFAULT_WEBSITE,
+  localBusinessJsonLd,
+  MAX_SERVICES,
+  normalizeWebsite,
+  robotsTxt,
+  sitemapXml,
+  siteUrls,
+  websiteLinks,
+  websiteRewrite,
+} from "@/lib/website";
 
 describe("normalizeWebsite", () => {
   it("starts from the defaults, under the business's own name", () => {
@@ -52,6 +65,51 @@ describe("websiteRewrite", () => {
   it("leaves the app's own domain and every other page alone", () => {
     expect(websiteRewrite("app.jslandscapingmd.com", "/")).toBeNull();
     expect(websiteRewrite("jslandscapingmd.com", "/book")).toBeNull();
+    expect(websiteRewrite("app.jslandscapingmd.com", "/areas/bel-air")).toBeNull();
     expect(websiteRewrite(null, "/")).toBeNull();
+  });
+});
+
+describe("town pages", () => {
+  it("has the ten Harford towns by default, each with a page", () => {
+    expect(DEFAULT_WEBSITE.areas.map((a) => a.town)).toContain("Havre de Grace");
+    expect(DEFAULT_WEBSITE.areas).toHaveLength(10);
+    expect(areaSlug("Havre de Grace")).toBe("havre-de-grace");
+    expect(areaHref("js", "Bel Air")).toBe("/site/areas/bel-air?org=js");
+    expect(areaBySlug(DEFAULT_WEBSITE, "joppa")?.town).toBe("Joppa");
+    expect(areaBySlug(DEFAULT_WEBSITE, "baltimore")).toBeNull();
+  });
+
+  it("keeps edited towns, drops blanks and duplicates, and reads older rows", () => {
+    const site = normalizeWebsite({ areas: [{ town: "Bel Air", intro: "Hi" }, { town: "bel  air" }, { town: "" }, "x"] });
+    expect(site.areas).toEqual([{ town: "Bel Air", intro: "Hi" }]);
+    expect(normalizeWebsite({}).areas).toHaveLength(10);
+    expect(normalizeWebsite({}).showReviews).toBe(true);
+  });
+
+  it("serves town pages, robots and the sitemap at the root of the business's domain", () => {
+    expect(websiteRewrite("jslandscapingmd.com", "/areas/bel-air")).toBe("/site/areas/bel-air");
+    expect(websiteRewrite("jslandscapingmd.com", "/areas/bel-air/")).toBe("/site/areas/bel-air");
+    expect(websiteRewrite("jslandscapingmd.com", "/robots.txt")).toBe("/site/robots.txt");
+    expect(websiteRewrite("jslandscapingmd.com", "/sitemap.xml")).toBe("/site/sitemap.xml");
+    expect(websiteRewrite("jslandscapingmd.com", "/areas/../admin")).toBeNull();
+  });
+
+  it("describes the business for search engines, town by town", () => {
+    const ld = localBusinessJsonLd(DEFAULT_WEBSITE, "https://jslandscapingmd.com/areas/fallston", "Fallston");
+    expect(ld["@type"]).toBe("LocalBusiness");
+    expect(ld.areaServed).toEqual([{ "@type": "City", name: "Fallston, MD" }]);
+    expect((localBusinessJsonLd(DEFAULT_WEBSITE, "https://x/").areaServed as unknown[]).length).toBe(10);
+  });
+
+  it("lists every page in the sitemap, on either domain", () => {
+    const own = siteUrls("https://jslandscapingmd.com", true, DEFAULT_WEBSITE, "js");
+    expect(own[0]).toBe("https://jslandscapingmd.com/");
+    expect(own).toContain("https://jslandscapingmd.com/areas/havre-de-grace");
+    const app = siteUrls("https://app.jslandscapingmd.com", false, DEFAULT_WEBSITE, "js");
+    expect(app[0]).toBe("https://app.jslandscapingmd.com/site?org=js");
+    const xml = sitemapXml(own.map((loc) => ({ loc, lastmod: "2026-10-13T00:00:00Z" })));
+    expect(xml).toContain("<loc>https://jslandscapingmd.com/areas/bel-air</loc><lastmod>2026-10-13</lastmod>");
+    expect(robotsTxt("https://jslandscapingmd.com/sitemap.xml")).toContain("Sitemap: https://jslandscapingmd.com/sitemap.xml");
   });
 });

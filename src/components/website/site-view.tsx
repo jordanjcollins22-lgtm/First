@@ -1,6 +1,6 @@
-import { CheckCircle2, Mail, MapPin, Phone } from "lucide-react";
+import { CheckCircle2, Mail, MapPin, Phone, Star } from "lucide-react";
 
-import { websiteLinks, type WebsiteContent } from "@/lib/website";
+import { areaHref, websiteLinks, type SiteReview, type WebsiteContent } from "@/lib/website";
 
 /**
  * The business's website, drawn from its content.
@@ -14,11 +14,14 @@ export function SiteView({
   content: c,
   orgSlug,
   newTab = false,
+  reviews = [],
 }: {
   content: WebsiteContent;
   orgSlug: string | null;
   /** In the editor's preview the buttons open the real pages in a new tab. */
   newTab?: boolean;
+  /** Live Google reviews, when the Business Profile is connected. */
+  reviews?: SiteReview[];
 }) {
   const links = websiteLinks(orgSlug);
   const target = newTab ? { target: "_blank", rel: "noreferrer" } : {};
@@ -102,12 +105,29 @@ export function SiteView({
         </section>
       )}
 
-      {c.serviceArea && (
+      {c.showReviews && reviews.length > 0 && <SiteReviews reviews={reviews} />}
+
+      {(c.serviceArea || c.areas.length > 0) && (
         <section className="px-5 py-12 @3xl:px-12">
           <h2 className="flex items-center gap-2 text-2xl font-extrabold">
             <MapPin className="h-6 w-6 text-[#2f6d3c]" /> Where we work
           </h2>
-          <p className="mt-3 max-w-3xl text-stone-700">{c.serviceArea}</p>
+          {c.serviceArea && <p className="mt-3 max-w-3xl text-stone-700">{c.serviceArea}</p>}
+          {c.areas.length > 0 && (
+            <ul className="mt-5 flex flex-wrap gap-2">
+              {c.areas.map((a) => (
+                <li key={a.town}>
+                  <a
+                    href={areaHref(orgSlug, a.town)}
+                    {...target}
+                    className="inline-flex min-h-10 items-center rounded-full border border-stone-300 px-4 text-sm font-semibold text-stone-800 hover:border-[#2f6d3c] hover:text-[#2f6d3c]"
+                  >
+                    {a.town}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 
@@ -135,5 +155,27 @@ export function SiteView({
         </span>
       </footer>
     </div>
+  );
+}
+
+/** Google reviews, word for word, with their stars. */
+export function SiteReviews({ reviews }: { reviews: SiteReview[] }) {
+  return (
+    <section className="px-5 py-12 @3xl:px-12">
+      <h2 className="text-2xl font-extrabold">What neighbors say on Google</h2>
+      <div className="mt-6 grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3">
+        {reviews.map((r, i) => (
+          <figure key={i} className="rounded-xl border border-stone-200 p-4">
+            <div className="flex gap-0.5 text-amber-500" aria-label={`${r.stars} out of 5 stars`}>
+              {Array.from({ length: r.stars }, (_, j) => (
+                <Star key={j} className="h-4 w-4 fill-current" />
+              ))}
+            </div>
+            <blockquote className="mt-2 text-sm text-stone-700">&ldquo;{r.body}&rdquo;</blockquote>
+            <figcaption className="mt-2 text-sm font-semibold">{r.author}</figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
   );
 }
