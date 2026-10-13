@@ -158,6 +158,8 @@ export interface SendEmailInput {
   replyTo?: string | null;
   /** Extra headers, for threading a sequence under its first message. */
   headers?: Record<string, string>;
+  /** Base64 file contents with a name, as Resend takes them. */
+  attachments?: { filename: string; content: string }[];
 }
 
 /** Send one message. Returns the provider's id for it. */
@@ -174,6 +176,7 @@ export async function sendProviderEmail(input: SendEmailInput): Promise<ResendRe
       // reply can reach the office's own inbox and the app's at once.
       reply_to: replyAddresses(input.replyTo),
       headers: input.headers,
+      attachments: input.attachments?.length ? input.attachments : undefined,
     },
   });
 }
