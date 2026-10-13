@@ -43,3 +43,7 @@ next-env.d.ts
 
 # the extension download, packed from extension/ on every build
 /public/downloads/js-post-finder.zip
+
+# Research notes and reports from Claude sessions, not app code.
+research_notes/
+reports/
