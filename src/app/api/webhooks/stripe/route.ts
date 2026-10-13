@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -49,9 +50,12 @@ export async function POST(request: NextRequest) {
       .from("invoices")
       .update({ status: "paid", paid_at: new Date().toISOString() })
       .eq("stripe_invoice_id", invoice.id);
+    // A snow event's bill keeps its own row, one per client per storm.
+    await snowInvoices(admin).update({ status: "paid", paid_at: new Date().toISOString() }).eq("stripe_invoice_id", invoice.id);
   } else if (event.type === "invoice.voided") {
     const invoice = event.data.object as Stripe.Invoice;
     await admin.from("invoices").update({ status: "void" }).eq("stripe_invoice_id", invoice.id);
+    await snowInvoices(admin).update({ status: "void" }).eq("stripe_invoice_id", invoice.id);
   } else if (event.type === "invoice.marked_uncollectible") {
     const invoice = event.data.object as Stripe.Invoice;
     await admin.from("invoices").update({ status: "uncollectible" }).eq("stripe_invoice_id", invoice.id);
@@ -103,7 +107,10 @@ async function recordInvoicePayment(invoice: Stripe.Invoice): Promise<void> {
       .select("id, job_id, organization_id")
       .eq("stripe_invoice_id", invoice.id)
       .maybeSingle();
-    if (!jobInvoice) return;
+    if (!jobInvoice) {
+      await recordSnowInvoicePayment(invoice, customerId);
+      return;
+    }
     await recordStripePayment({
       organizationId: jobInvoice.organization_id,
       customerId,
@@ -146,4 +153,27 @@ async function orgForPlan(planId: string): Promise<string | null> {
     .eq("id", planId)
     .maybeSingle();
   return data?.organization_id ?? null;
+}
+
+/** snow_event_invoices is newer than the generated types. */
+function snowInvoices(admin: ReturnType<typeof createAdminClient>) {
+  return (admin as unknown as SupabaseClient).from("snow_event_invoices");
+}
+
+/** A snow event's invoice, paid: recorded against the client and the salt job, like any other payment. */
+async function recordSnowInvoicePayment(invoice: Stripe.Invoice, customerId: string | null): Promise<void> {
+  const admin = createAdminClient();
+  const { data } = await snowInvoices(admin).select("id, organization_id, job_id").eq("stripe_invoice_id", invoice.id).maybeSingle();
+  const row = data as { id: string; organization_id: string; job_id: string | null } | null;
+  if (!row) return;
+  await recordStripePayment({
+    organizationId: row.organization_id,
+    customerId,
+    jobId: row.job_id,
+    planId: null,
+    instalmentId: null,
+    amountCents: invoice.amount_paid ?? 0,
+    paymentIntentId: invoice.id ?? null,
+    invoiceId: invoice.id ?? null,
+  });
 }
