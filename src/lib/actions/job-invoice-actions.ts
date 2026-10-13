@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isStripeConfigured } from "@/lib/env";
 import { createAndSendInvoice, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
-import { isOwnerLevel } from "@/lib/roles";
+import { canSell, isOwnerLevel } from "@/lib/roles";
 import { agreedTotal } from "@/lib/agreed-total";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { reportStripeFailure } from "@/lib/data/payments-health";
@@ -88,14 +88,14 @@ export async function raiseInvoiceForJob(jobId: string): Promise<RaiseResult> {
  * proposal can: a discount taken off after the bill went, a trim, a
  * correction. The old bill is voided, on Stripe and here, and a fresh one
  * goes for the agreed total, with the client texted the new link the way
- * they were texted the first. Owner or admin only, and only while the old
- * one is unpaid.
+ * they were texted the first. Owner, admin or account manager (whoever
+ * may set the price may bill it), and only while the old one is unpaid.
  */
 export async function reissueInvoiceForJob(jobId: string): Promise<RaiseResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, message: "Not signed in." };
-  if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin")) {
-    return { ok: false, message: "Only an owner or admin can reissue an invoice." };
+  if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin") && !canSell(profile.roles)) {
+    return { ok: false, message: "Only an owner, admin or account manager can reissue an invoice." };
   }
   if (!isStripeConfigured) return { ok: false, message: "Stripe isn't connected." };
 

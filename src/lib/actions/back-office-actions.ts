@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRealProfile } from "@/lib/data/team";
-import { isOwnerLevel } from "@/lib/roles";
+import { canSell, isOwnerLevel } from "@/lib/roles";
 import { log } from "@/lib/log";
 import { rollForward, type Recurrence } from "@/lib/compliance/calendar";
 import { checklistFor } from "@/lib/hr/onboarding";
@@ -33,6 +33,17 @@ const admin = () => createAdminClient() as unknown as SupabaseClient;
 async function owner(): Promise<{ id: string; organizationId: string } | null> {
   const profile = await getRealProfile();
   if (!profile || !isOwnerLevel(profile.roles)) return null;
+  return { id: profile.id, organizationId: profile.organization_id };
+}
+
+/**
+ * Certificates of insurance for a client: the owner, or the account manager
+ * who looks after the client. The policies on them are the business's, set
+ * by the owner in Compliance; making and sending one is client service.
+ */
+async function clientDesk(): Promise<{ id: string; organizationId: string } | null> {
+  const profile = await getRealProfile();
+  if (!profile || !(isOwnerLevel(profile.roles) || canSell(profile.roles))) return null;
   return { id: profile.id, organizationId: profile.organization_id };
 }
 
@@ -263,8 +274,8 @@ export async function openDoc(input: { area: DocArea; id: string }): Promise<{ o
 
 /** Make a certificate of insurance for a client who asked, and store it. */
 export async function generateClientCoi(input: { customerId: string; holderName: string; holderAddress?: string | null; additionalInsured?: boolean }): Promise<{ ok: true; id: string; url: string | null } | { ok: false; error: string }> {
-  const who = await owner();
-  if (!who) return { ok: false, error: "Only the owner can issue a certificate." };
+  const who = await clientDesk();
+  if (!who) return { ok: false, error: "Only the owner or an account manager can do that." };
   const holderName = clean(input.holderName, 160);
   if (!holderName) return { ok: false, error: "Who is the certificate holder?" };
   const sb = admin();
@@ -299,8 +310,8 @@ export async function generateClientCoi(input: { customerId: string; holderName:
 
 /** A link to look at a certificate already made. */
 export async function openClientCoi(coiId: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const who = await owner();
-  if (!who) return { ok: false, error: "Only the owner can open this." };
+  const who = await clientDesk();
+  if (!who) return { ok: false, error: "Only the owner or an account manager can do that." };
   const { data } = await admin().from("client_cois").select("file_path").eq("id", coiId).eq("organization_id", who.organizationId).maybeSingle();
   const path = (data as { file_path: string } | null)?.file_path;
   const url = path ? await signedComplianceUrl(path) : null;
@@ -310,12 +321,12 @@ export async function openClientCoi(coiId: string): Promise<{ ok: true; url: str
 /**
  * Email a certificate to the client. Goes through the one door every
  * client message uses, so consent, do-not-contact and the log all apply.
- * The owner pressing Send is the approval. The email carries a link, valid
+ * Whoever presses Send is the approval. The email carries a link, valid
  * for 30 days, rather than an attachment.
  */
 export async function sendClientCoi(coiId: string): Promise<Result> {
-  const who = await owner();
-  if (!who) return NOT_OWNER;
+  const who = await clientDesk();
+  if (!who) return { ok: false, error: "Only the owner or an account manager can send a certificate." };
   const sb = admin();
   const { data } = await sb.from("client_cois").select("id, customer_id, holder_name, file_path").eq("id", coiId).eq("organization_id", who.organizationId).maybeSingle();
   const coi = data as { id: string; customer_id: string; holder_name: string; file_path: string } | null;
