@@ -7,6 +7,8 @@ import { firstAcceptable } from "@/lib/geocode-guard";
 import { searchAddress } from "@/lib/mapbox-geocoding";
 import { getContact, isGhlConfigured, listAppointments } from "@/lib/ghl/client";
 import { planChanges, type GhlEvent, type KnownJob } from "@/lib/ghl/plan";
+import { routeEvaluation } from "@/lib/data/evaluator-routing";
+import { zipOf } from "@/lib/material-suppliers";
 
 /**
  * Bookings made in GoHighLevel, brought into the app.
@@ -162,14 +164,23 @@ async function makeBookingFromGhl(input: GhlBookingInput): Promise<GhlBookingRes
     return { ok: true, jobId: clash.id, customerId, propertyId };
   }
 
-  // Jace is the only person who does evaluations, so a booking made in
-  // GoHighLevel is his. When several people do, nobody is guessed.
-  const { data: evaluators } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("organization_id", input.organizationId)
-    .eq("does_evaluations", true);
-  const assignedTo = evaluators && evaluators.length === 1 ? evaluators[0].id : null;
+  // Routed as /book routes: the only evaluator gets it; with several, the
+  // free one whose territory it is, then whoever is already going that
+  // way or has the lighter day. Best effort: a routing failure leaves the
+  // job unassigned, as it always was, rather than losing the booking.
+  const routed = await routeEvaluation(admin, {
+    organizationId: input.organizationId,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+    lat,
+    lng,
+    zip: zipOf(fullAddress),
+  }).catch((err: unknown) => {
+    log.warn("ghl.routing_failed", { error: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
+  const assignedTo = routed?.evaluatorId ?? null;
+  if (routed) log.info("ghl.routed", { evaluatorId: routed.evaluatorId, why: routed.why });
 
   const { data: job, error: jobError } = await admin
     .from("jobs")

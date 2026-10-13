@@ -40,6 +40,8 @@ import { displayLabel } from "@/lib/zone-scope";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import { readOptions } from "@/lib/proposal-options";
 import { OptionCards } from "@/components/proposal/option-cards";
+import { MhicContractBlock } from "@/components/proposal/mhic-contract-block";
+import type { MhicBlock } from "@/lib/data/mhic-contract";
 import { LotPicker } from "@/components/intake/lot-picker";
 import type { LotData } from "@/lib/lot-map";
 import type { JobMessage, ProposalStatus } from "@/types/domain";
@@ -77,6 +79,8 @@ export function ProposalView(props: {
   preview?: boolean;
   /** Their lot from the county, shown when nobody drew a site map. */
   lot?: LotData | null;
+  /** The Maryland home-improvement contract wording, for work that needs it. */
+  mhic?: MhicBlock | null;
 }) {
   return (
     <AttentionProvider token={props.token} preview={props.preview}>
@@ -91,12 +95,14 @@ function ProposalBody({
   messages,
   preview = false,
   lot = null,
+  mhic = null,
 }: {
   data: PublicProposal;
   token: string;
   messages: JobMessage[];
   preview?: boolean;
   lot?: LotData | null;
+  mhic?: MhicBlock | null;
 }) {
   const { click } = useAttention();
   const { proposal, propertyAddress, customerName, organizationName, serviceNames } = data;
@@ -432,6 +438,8 @@ function ProposalBody({
           </ul>
         </Watched>
       )}
+
+      {mhic && <MhicContractBlock block={mhic} />}
 
       {/* Between the price and the buttons deliberately. These terms exist
           because work gets added on the day, and a clause a client scrolls

@@ -7,7 +7,13 @@
  * order came out of a database read, so in practice one person collected the
  * bookings and everybody else waited.
  *
- * Three things decide it, in order.
+ * Three things decide it, in order, after one optional filter.
+ *
+ * **Whose territory it is.** When evaluators have territories (zip codes or
+ * an area drawn on the map) and one or more of the free ones covers this
+ * address, only they are considered. Nobody with the territory free means
+ * everybody free is considered, so a territory never takes a time away from
+ * a client. See `@/lib/sales/territories`.
  *
  * **Who is already going that way.** An evaluator with a visit four streets
  * over at eleven should take the twelve o'clock, and it does not matter what
@@ -26,6 +32,7 @@
  */
 
 import { metresBetween } from "@/lib/navigation";
+import { inTerritory, type Place, type Territory } from "@/lib/sales/territories";
 
 /** Near enough that a second visit is the same trip out. */
 export const SAME_TRIP_MILES = 5;
@@ -56,11 +63,23 @@ export interface Choice {
 export function chooseEvaluator(
   candidateIds: string[],
   days: EvaluatorDay[],
-  where: { lat: number | null; lng: number | null }
+  where: { lat: number | null; lng: number | null; zip?: string | null },
+  territories: Territory[] = []
 ): Choice | null {
   if (candidateIds.length === 0) return null;
   if (candidateIds.length === 1) {
     return { evaluatorId: candidateIds[0], why: "The only one free at that time." };
+  }
+
+  // Their patch first, when it is somebody's and they are free.
+  const place: Place = { lat: where.lat, lng: where.lng, zip: where.zip ?? null };
+  const local = territories.length > 0 ? inTerritory(candidateIds, territories, place) : [];
+  if (local.length === 1) {
+    return { evaluatorId: local[0], why: "Their territory, and free at that time." };
+  }
+  if (local.length > 1 && local.length < candidateIds.length) {
+    const choice = chooseEvaluator(local, days, where);
+    return choice ? { ...choice, why: `In their territory. ${choice.why}` } : null;
   }
 
   const byId = new Map(days.map((day) => [day.evaluatorId, day]));
