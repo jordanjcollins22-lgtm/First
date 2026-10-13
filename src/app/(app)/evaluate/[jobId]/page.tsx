@@ -15,6 +15,8 @@ import { mergePlan, readPlan, seedPlan, visitStage } from "@/lib/evaluation-visi
 import type { EvaluationStatus } from "@/types/domain";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { VisitHeader } from "@/components/evaluations/visit-header";
+import { backLabel, visitBackHref } from "@/lib/evaluator-home";
+import { v2RolesOf } from "@/lib/v2-roles";
 import { SiteMapSetup } from "@/components/evaluations/site-map-setup";
 import { PreEvalFirst } from "@/components/evaluations/pre-eval-first";
 import { StartEvaluation } from "@/components/evaluations/start-evaluation";
@@ -82,6 +84,8 @@ export default async function EvaluationVisitPage({
   // The map opens on Start, or straight away once it has been started.
   const showMap = start === "1" || mapStarted || stage === "submitted";
   const visitHref = `/evaluate/${jobId}`;
+  // Back to wherever this person's day is: the new layout for an evaluator.
+  const backHref = viewer ? visitBackHref(v2RolesOf(viewer)) : "/evaluate";
 
   const client = job.property?.customer?.name || "Client";
   const phone = job.property?.customer?.phone ?? null;
@@ -91,8 +95,8 @@ export default async function EvaluationVisitPage({
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6">
-      <Link href="/evaluate" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary">
-        <ChevronLeft className="h-4 w-4" /> Your evaluations
+      <Link href={backHref} className="flex min-h-11 items-center gap-1 self-start text-sm font-medium text-muted-foreground hover:text-primary">
+        <ChevronLeft className="h-4 w-4" /> {backLabel(backHref)}
       </Link>
 
       <VisitHeader
@@ -132,6 +136,8 @@ export default async function EvaluationVisitPage({
           evaluationStatus={job.evaluation_status}
           evaluatorName={viewer?.full_name || viewer?.email || null}
           grounds={intake ? isGrounds(intake.answers) : false}
+          doneHref={backHref}
+          doneLabel={backLabel(backHref)}
         />
       )}
     </div>

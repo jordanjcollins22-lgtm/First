@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,8 @@ export function WeeklyAvailabilityEditor({ myAvailability }: { myAvailability: W
   const [drafts, setDrafts] = useState<DayDraft[]>(() => buildDrafts(myAvailability));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Saved from a page the action doesn't refresh (the new layout): show it.
+  const router = useRouter();
 
   function startEditing() {
     setDrafts(buildDrafts(myAvailability));
@@ -67,6 +70,7 @@ export function WeeklyAvailabilityEditor({ myAvailability }: { myAvailability: W
       try {
         await saveWeeklyAvailability(days);
         setEditing(false);
+        router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't save your availability.");
       }

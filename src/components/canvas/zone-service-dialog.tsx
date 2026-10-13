@@ -1173,7 +1173,8 @@ export function ZoneServiceDialog({
           </p>
         )}
 
-        {typeId && selectedServiceRow?.status === "active" && (
+        {/* Prices are the office's: not a link to hand the evaluator on site. */}
+        {typeId && selectedServiceRow?.status === "active" && !walkthrough && (
           <p className="mt-2 text-xs text-muted-foreground">
             Need to add or fix a price?{" "}
             <Link href="/admin/service-pricing" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-primary hover:underline">
