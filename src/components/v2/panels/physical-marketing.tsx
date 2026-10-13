@@ -168,11 +168,11 @@ export async function PhysicalMarketingPanel() {
         <AutomationSwitches keys={["plays_auto_approve", "hangers_default_approve", "plays_auto_close", "plays_expire"]} settings={settings} started={started} />
         <NumberSettings
           fields={[
-            { key: "hanger", label: "Door hanger, each", value: settings.unitCostCents.door_hangers / 100, suffix: "$", toSave: (v) => ({ unitCostCents: { ...settings.unitCostCents, door_hangers: Math.round(v * 100) } }) },
-            { key: "flyer", label: "Flyer by mail, each", value: settings.unitCostCents.flyers / 100, suffix: "$", toSave: (v) => ({ unitCostCents: { ...settings.unitCostCents, flyers: Math.round(v * 100) } }) },
-            { key: "sign", label: "Yard sign", value: settings.unitCostCents.yard_sign / 100, suffix: "$", toSave: (v) => ({ unitCostCents: { ...settings.unitCostCents, yard_sign: Math.round(v * 100) } }) },
-            { key: "expiry", label: "Expire after", value: settings.playExpiryDays, suffix: "days", toSave: (v) => ({ playExpiryDays: v }) },
-            { key: "coverage", label: "Walk must pass", value: Math.round(settings.gpsCoverage * 100), suffix: "% of doors", toSave: (v) => ({ gpsCoverage: v / 100 }) },
+            { key: "hanger", label: "Door hanger, each", value: settings.unitCostCents.door_hangers / 100, suffix: "$", setting: "unitCostCents.door_hangers", scale: 100, whole: true },
+            { key: "flyer", label: "Flyer by mail, each", value: settings.unitCostCents.flyers / 100, suffix: "$", setting: "unitCostCents.flyers", scale: 100, whole: true },
+            { key: "sign", label: "Yard sign", value: settings.unitCostCents.yard_sign / 100, suffix: "$", setting: "unitCostCents.yard_sign", scale: 100, whole: true },
+            { key: "expiry", label: "Expire after", value: settings.playExpiryDays, suffix: "days", setting: "playExpiryDays" },
+            { key: "coverage", label: "Walk must pass", value: Math.round(settings.gpsCoverage * 100), suffix: "% of doors", setting: "gpsCoverage", scale: 0.01 },
           ]}
         />
         <ExpireBacklogButton days={settings.playExpiryDays} count={stale.length} />

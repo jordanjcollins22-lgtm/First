@@ -52,4 +52,55 @@ describe("server and client code", () => {
     }
     expect(problems).toEqual([]);
   });
+
+  // A server component can't hand a client component a function either: the
+  // page renders, then fails as the props are sent ("Functions cannot be
+  // passed directly to Client Components"). Server actions are fine; an
+  // arrow function in the props of a component from a "use client" file is not.
+  it("never passes a plain function to a client component", () => {
+    const all = files(SRC);
+    const clientFiles = new Set(all.filter((f) => isClient(readFileSync(f, "utf8"))).map((f) => f.replace(/\.(ts|tsx)$/, "")));
+    const problems: string[] = [];
+    for (const file of all) {
+      if (!file.endsWith(".tsx")) continue;
+      const source = readFileSync(file, "utf8");
+      if (isClient(source)) continue;
+      const clientComponents = new Set<string>();
+      for (const m of source.matchAll(/import \{([^}]*)\} from ["']([^"']+)["']/g)) {
+        const spec = m[2];
+        const target = spec.startsWith("@/") ? join(SRC, spec.slice(2)) : spec.startsWith(".") ? normalize(join(dirname(file), spec)) : null;
+        if (!target || !clientFiles.has(target)) continue;
+        for (const raw of m[1].split(",")) {
+          const name = raw.trim().split(/\s+as\s+/).pop()?.trim();
+          if (name && /^[A-Z]/.test(name)) clientComponents.add(name);
+        }
+      }
+      for (const name of clientComponents) {
+        for (const m of source.matchAll(new RegExp(`<${name}[\\s>/]`, "g"))) {
+          // The opening tag: up to the first ">" outside braces.
+          let depth = 0;
+          let end = m.index! + name.length + 1;
+          for (; end < source.length; end++) {
+            const c = source[end];
+            if (c === "{") depth++;
+            else if (c === "}") depth--;
+            else if (c === ">" && depth === 0 && source[end - 1] !== "=") break;
+          }
+          const tag = source.slice(m.index!, end)
+            // Functions run here on the server to build data are fine.
+            .replace(/\.(map|filter|flatMap|find|some|every|reduce|sort|forEach)\(\s*(\([^)]*\)(\s*:\s*[\w.<>[\]]+)?|\w+)\s*=>/g, "");
+          for (const arrow of tag.matchAll(/=>/g)) {
+            // An arrow inside a server component nested in the props (a tab's
+            // content, say) runs on the server; only the client one's own count.
+            const owner = [...tag.slice(0, arrow.index).matchAll(/<([A-Z][\w.]*)/g)].pop()?.[1];
+            if (owner === name || (owner && clientComponents.has(owner))) {
+              problems.push(`${relative(SRC, file)} passes a function to <${owner}>`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
 });

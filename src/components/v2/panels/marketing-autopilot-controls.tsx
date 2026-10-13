@@ -75,7 +75,21 @@ export function AutomationSwitches({ keys, settings, started }: { keys: Automati
   );
 }
 
-type NumberField = { key: string; label: string; value: number; step?: number; suffix?: string; toSave: (v: number) => Partial<AutopilotSettings> };
+/**
+ * One number setting. Described as data, not a function: these are drawn on
+ * the server and handed to the browser, which can't be given a function.
+ * `setting` is the settings key, or "unitCostCents.<item>" for a unit cost;
+ * what is typed is multiplied by `scale` before it is saved.
+ */
+type NumberField = { key: string; label: string; value: number; step?: number; suffix?: string; setting: string; scale?: number; whole?: boolean };
+
+function patchFor(f: NumberField, typed: number): Partial<AutopilotSettings> {
+  const raw = Number((typed * (f.scale ?? 1)).toFixed(6));
+  const v = f.whole ? Math.round(raw) : raw;
+  const [head, item] = f.setting.split(".");
+  if (head === "unitCostCents" && item) return { unitCostCents: { [item]: v } } as Partial<AutopilotSettings>;
+  return { [head]: v } as Partial<AutopilotSettings>;
+}
 
 export function NumberSettings({ fields }: { fields: NumberField[] }) {
   const [values, setValues] = useState(() => Object.fromEntries(fields.map((f) => [f.key, String(f.value)])));
@@ -87,7 +101,7 @@ export function NumberSettings({ fields }: { fields: NumberField[] }) {
     for (const f of fields) {
       const n = Number(values[f.key]);
       if (!Number.isFinite(n)) return setNote({ text: `${f.label} isn't a number.`, error: true });
-      const part = f.toSave(n);
+      const part = patchFor(f, n);
       Object.assign(patch, part, part.unitCostCents ? { unitCostCents: { ...(patch.unitCostCents ?? {}), ...part.unitCostCents } } : {});
     }
     start(async () => {

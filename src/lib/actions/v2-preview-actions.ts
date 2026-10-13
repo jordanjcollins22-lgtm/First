@@ -21,8 +21,9 @@ export async function previewV2As(formData: FormData) {
   } else {
     const supabase = await createClient();
     const { data } = await supabase.from("profiles").select("id, organization_id").eq("id", target).maybeSingle();
-    if (!data || data.organization_id !== real.organization_id) throw new Error("That account isn't in your organization.");
-    await setViewAsProfileId(target);
+    // Somebody from another business, or gone: stay as yourself rather than break the page.
+    if (!data || data.organization_id !== real.organization_id) await clearViewAsProfileId();
+    else await setViewAsProfileId(target);
   }
   redirect("/v2");
 }

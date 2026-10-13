@@ -166,10 +166,10 @@ export async function MarketingAutopilotPanel() {
         </p>
         <NumberSettings
           fields={[
-            { key: "posts", label: "Facebook posts a week from crew photos", value: settings.socialPostsPerWeek, toSave: (v) => ({ socialPostsPerWeek: v }) },
-            { key: "rank", label: "Rank phrases checked a week", value: settings.rankPerWeek, toSave: (v) => ({ rankPerWeek: v }) },
-            { key: "low", label: "Spend target, low", value: settings.spendTargetLow * 100, suffix: "% of revenue", toSave: (v) => ({ spendTargetLow: v / 100 }) },
-            { key: "high", label: "Spend target, high", value: settings.spendTargetHigh * 100, suffix: "% of revenue", toSave: (v) => ({ spendTargetHigh: v / 100 }) },
+            { key: "posts", label: "Facebook posts a week from crew photos", value: settings.socialPostsPerWeek, setting: "socialPostsPerWeek" },
+            { key: "rank", label: "Rank phrases checked a week", value: settings.rankPerWeek, setting: "rankPerWeek" },
+            { key: "low", label: "Spend target, low", value: settings.spendTargetLow * 100, suffix: "% of revenue", setting: "spendTargetLow", scale: 0.01 },
+            { key: "high", label: "Spend target, high", value: settings.spendTargetHigh * 100, suffix: "% of revenue", setting: "spendTargetHigh", scale: 0.01 },
           ]}
         />
         <ListSettings towns={settings.rankTowns} services={settings.rankServices} />

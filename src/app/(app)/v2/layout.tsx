@@ -37,7 +37,8 @@ export default async function V2Layout({ children }: { children: React.ReactNode
       }
     }
     if (me && isOwnerLevel(me.roles) && me.roles.includes("admin")) {
-      const team = await listProfiles().catch(() => []);
+      // Only this business's people: a superadmin can read other businesses' too.
+      const team = (await listProfiles().catch(() => [])).filter((p) => p.organization_id === me.organization_id);
       picker = (
         <PreviewAs
           meId={me.id}
