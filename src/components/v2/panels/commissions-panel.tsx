@@ -6,6 +6,7 @@ import { commissionItems } from "@/lib/data/back-office-queue";
 import { approveCommissionBatch, setCommissionRate } from "@/lib/actions/back-office-actions";
 import { AutomationCard, Kpi, KpiRow, NeedsYouStrip, NotReady, SectionHeading, usd } from "./back-office-parts";
 import { ActionButton, SettingNumber, SettingSwitch } from "./back-office-controls";
+import { OpenButton, OpenEntity } from "./admin-open";
 
 /**
  * Admin › Finance: commissions that accrue themselves.
@@ -100,7 +101,9 @@ export async function CommissionsPanel() {
         <ul className="grid gap-1">
           {people.map((p) => (
             <li key={p.profileId} className="grid gap-0.5 rounded-lg bg-muted px-3 py-2 text-sm sm:grid-cols-[minmax(0,12rem)_auto_minmax(0,1fr)] sm:gap-3">
-              <span className="font-semibold">{p.name}</span>
+              <OpenEntity kind="admin.profile" id={p.profileId} className="font-semibold">
+                {p.name}
+              </OpenEntity>
               <span>
                 {usd(p.payable)} payable{p.waiting > 0 ? ` · ${usd(p.waiting)} waiting` : ""}
               </span>
@@ -130,15 +133,15 @@ export async function CommissionsPanel() {
                 <div className="grid gap-2 border-t px-4 pb-3 pt-2">
                   {b.statements.map((s) => (
                     <div key={s.profileId}>
-                      <p className="text-sm font-semibold">
+                      <OpenEntity kind="admin.commission_statement" id={`${b.id}:${s.profileId}`} className="text-sm font-semibold">
                         {s.name}: {usd(s.total)}
-                      </p>
+                      </OpenEntity>
                       <ul className="text-sm text-muted-foreground">
                         {s.lines.map((l) => (
                           <li key={l.jobId}>
-                            <a href={`/jobs/${l.jobId}`} className="hover:underline">
+                            <OpenEntity kind="admin.job" id={l.jobId}>
                               {l.customer ?? "Job"}
-                            </a>{" "}
+                            </OpenEntity>{" "}
                             {usd(l.amount)}
                             {l.offset > 0 ? ` (${usd(l.offset)} already paid by hand)` : ""}
                           </li>
@@ -146,6 +149,9 @@ export async function CommissionsPanel() {
                       </ul>
                     </div>
                   ))}
+                  <div>
+                    <OpenButton kind="admin.commission_batch" id={b.id} label="Open the week" />
+                  </div>
                   {b.status === "awaiting_approval" && (
                     <ActionButton run={approveCommissionBatch.bind(null, b.id)} variant="default" confirm={`Approve ${usd(b.total)} and record it as paid?`}>
                       Approve {usd(b.total)}

@@ -8,6 +8,11 @@ import { loadAutomations } from "@/lib/data/automations";
 import type { Automation } from "@/lib/automations";
 import type { ListRow } from "@/lib/entities/types";
 import { CHANNEL_LABEL } from "@/lib/attribution";
+// Admin: rows that open in the drawer, the alerts it opens, and every connection.
+import { row as entityRow } from "@/lib/entities/types";
+import { ALERT_KEYS, alertLine, type AlertKey } from "@/lib/entities/handlers/admin-format";
+import { allProviders } from "@/lib/integrations/catalog";
+import { listAppConnections, type AppConnection } from "@/lib/data/app-connections";
 
 /**
  * The live numbers behind the new four-page layout at /v2.
@@ -807,28 +812,32 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
 /* Admin                                                               */
 /* ------------------------------------------------------------------ */
 
+/** The name on a joined row, e.g. a payment's customers(name). */
+const joined = (r: Row, key: string) => str((r[key] as Row | null | undefined)?.name);
+
 export async function loadAdmin(): Promise<V2Section> {
   const sb = await db();
   const orgId = await getCurrentOrganizationId().catch(() => null);
   const [payments, profiles, roles, ghl, health, domains, locations, services, recent, proposals, jobs, issues, materials, fleet, posts, sessions, pending, advances,
-    customers, cust30, sourced, msgs, jobMsgs, bankTx, bankAcc, recurring, perms, roleEdits, finder, designs, notifPrefs, notifLog] = await Promise.all([
+    customers, cust30, sourced, msgs, jobMsgs, bankTx, bankAcc, recurring, perms, roleEdits, finder, designs, notifPrefs, notifLog,
+    recentPayments, openInvoices, openUploads, recentBank, batches, unsourced, recentMsgs, editLog, permRows, applicants, obligations, finders, connections] = await Promise.all([
     rows(sb, "payments", "amount_cents,received_at"),
     rows(sb, "profiles", "id,full_name,email,commission_pct"),
     rows(sb, "profile_roles", "profile_id,role_name"),
     rows(sb, "ghl_sync_state", "organization_id,last_pulled_at,last_result"),
     rows(sb, "payments_health", "organization_id,state,checked_at"),
     rows(sb, "email_domains", "hostname,status"),
-    rows(sb, "business_locations", "name,address"),
-    rows(sb, "services", "name,status"),
-    rows(sb, "customers", "name,created_at,source", (q) => q.order("created_at", { ascending: false }).limit(5)),
-    rows(sb, "job_proposals", "status,total_cost"),
-    rows(sb, "jobs", "status,evaluation_status,evaluation_date,assigned_to"),
-    rows(sb, "job_issues", "status"),
-    rows(sb, "materials", "quantity_on_hand,reorder_threshold"),
-    rows(sb, "fleet_assets", "condition,retired_on"),
-    rows(sb, "social_posts", "status,scheduled_for"),
-    rows(sb, "job_work_sessions", "status,starts_on"),
-    rows(sb, "team_payments", "amount", (q) => q.eq("status", "pending")),
+    rows(sb, "business_locations", "id,name,address"),
+    rows(sb, "services", "service_type_id,name,status"),
+    rows(sb, "customers", "id,name,created_at,source", (q) => q.order("created_at", { ascending: false }).limit(25)),
+    rows(sb, "job_proposals", "job_id,status,total_cost,sent_at"),
+    rows(sb, "jobs", "id,name,status,evaluation_status,evaluation_date,assigned_to"),
+    rows(sb, "job_issues", "id,title,status,created_at"),
+    rows(sb, "materials", "id,name,unit,quantity_on_hand,reorder_threshold"),
+    rows(sb, "fleet_assets", "id,name,condition,retired_on"),
+    rows(sb, "social_posts", "id,hook,caption,status,scheduled_for"),
+    rows(sb, "job_work_sessions", "id,job_id,status,starts_on"),
+    rows(sb, "team_payments", "id,profile_id,amount,period_end", (q) => q.eq("status", "pending")),
     rows(sb, "commission_advances", "amount,status"),
     count(sb, "customers"),
     count(sb, "customers", (q) => q.gte("created_at", since(30))),
@@ -844,6 +853,19 @@ export async function loadAdmin(): Promise<V2Section> {
     count(sb, "canvas_designs"),
     count(sb, "notification_preferences"),
     count(sb, "notification_log"),
+    rows(sb, "payments", "id,amount_cents,method,received_at,payer_name,customers(name)", (q) => q.order("received_at", { ascending: false }).limit(25)),
+    rows(sb, "invoices", "id,amount,created_at,jobs(name)", (q) => q.eq("status", "open").order("created_at", { ascending: true }).limit(25)),
+    rows(sb, "client_invoices", "id,amount,issued_on,title,customers(name)", (q) => q.is("paid_on", null).not("amount", "is", null).order("issued_on", { ascending: true }).limit(25)),
+    rows(sb, "bank_transactions", "id,name,merchant,amount,posted_on", (q) => q.order("posted_on", { ascending: false }).limit(25)),
+    rows(sb, "commission_payout_batches", "id,week_start,week_end,total,status", (q) => q.order("week_start", { ascending: false }).limit(12)),
+    rows(sb, "customers", "id,name,created_at", (q) => q.is("source", null).order("created_at", { ascending: false }).limit(25)),
+    rows(sb, "client_message_log", "id,channel,kind,status,created_at,customers(name)", (q) => q.order("created_at", { ascending: false }).limit(25)),
+    rows(sb, "role_edit_log", "id,at,action,role_name,actor_name", (q) => q.order("at", { ascending: false }).limit(25)),
+    rows(sb, "role_permissions", "role_name,granted"),
+    rows(sb, "job_applicants", "id,name,position,stage,created_at", (q) => q.order("created_at", { ascending: false }).limit(25)),
+    rows(sb, "compliance_obligations", "id,title,due_on,active,date_confirmed", (q) => q.eq("active", true).order("due_on", { ascending: true, nullsFirst: false })),
+    rows(sb, "finder_computers", "id,label,last_seen_at", (q) => q.order("last_seen_at", { ascending: false }).limit(25)),
+    orgId ? listAppConnections(orgId).catch(() => [] as AppConnection[]) : Promise.resolve([] as AppConnection[]),
   ]);
 
   const nowIso = new Date().toISOString();
@@ -864,33 +886,57 @@ export async function loadAdmin(): Promise<V2Section> {
     const p = profiles.find((x) => x.id === id);
     return p ? str(p.full_name) || str(p.email) : "Unknown";
   };
+  const jobName = (id: unknown) => str(jobs.find((j) => j.id === id)?.name) || "Job";
   const ams = roles.filter((r) => r.role_name === "account manager").map((r) => r.profile_id);
   const sync = ghl.find((g) => g.organization_id === orgId) ?? ghl[0];
   const pay = health.find((g) => g.organization_id === orgId) ?? health[0];
   const svc = tally(services, "status");
   const dupes = [...tally(services.map((s) => ({ k: str(s.name).toLowerCase() })), "k").entries()].filter(([, v]) => v > 1);
-  const acc = recent;
   const accepted = proposals.filter((p) => p.status === "accepted").length;
   const declined = proposals.filter((p) => p.status === "declined").length;
   const approval = proposals.filter((p) => p.status === "needs_approval");
   const approvalSum = approval.reduce((s, p) => s + num(p.total_cost), 0);
-  const waiting = proposals.filter((p) => p.status === "sent").reduce((s, p) => s + num(p.total_cost), 0);
+  const sent = proposals.filter((p) => p.status === "sent");
+  const waiting = sent.reduce((s, p) => s + num(p.total_cost), 0);
   const staleEvals = jobs.filter((j) => j.evaluation_status === "scheduled" && str(j.evaluation_date) < nowIso).length;
   const staleDays = sessions.filter((s) => s.status === "scheduled" && str(s.starts_on) < today).length;
   const latePosts = posts.filter((p) => p.status === "scheduled" && p.scheduled_for && str(p.scheduled_for) < nowIso).length;
   const low = materials.filter((m) => m.quantity_on_hand != null && m.reorder_threshold != null && num(m.quantity_on_hand) < num(m.reorder_threshold)).length;
   const failing = fleet.filter((f) => !f.retired_on && f.condition === "failing").length;
-  const openIssues = issues.filter((i) => i.status === "open").length;
-  const alerts = [
-    approval.length ? `${approval.length} proposals need your approval (${usd(approvalSum)})` : "",
-    staleEvals ? `${staleEvals} evaluations past date still “scheduled”` : "",
-    staleDays ? `${staleDays} work days past date still “scheduled”` : "",
-    latePosts ? `${latePosts} social posts past date, never posted` : "",
-    low ? `${low} materials below reorder` : "",
-    failing ? `${failing} vehicles/trailers marked failing` : "",
-    openIssues ? `${openIssues} open job issues` : "",
-  ].filter(Boolean);
-  const approvedNotDone = jobs.filter((j) => j.status === "approved").length;
+  const openIssues = issues.filter((i) => i.status === "open");
+  // Each alert opens to the things in it.
+  const alertCounts: Record<AlertKey, number> = {
+    approvals: approval.length,
+    stale_evals: staleEvals,
+    stale_days: staleDays,
+    late_posts: latePosts,
+    low_materials: low,
+    failing_fleet: failing,
+    open_issues: openIssues.length,
+  };
+  const alerts: ListRow[] = ALERT_KEYS.filter((k) => alertCounts[k] > 0).map((k) =>
+    entityRow(alertLine(k, alertCounts[k], k === "approvals" ? approvalSum : undefined), "admin.alert", k)
+  );
+  const approvedJobs = jobs.filter((j) => j.status === "approved");
+  const approvedNotDone = approvedJobs.length;
+  const customerRow = (c: Row) => entityRow(`${str(c.name) || "Customer"} · ${day(c.created_at)}${c.source ? ` · ${str(c.source)}` : ""}`, "admin.customer", c.id);
+  const newCustomers = recent.filter((c) => str(c.created_at) >= since(30));
+  const pendingPay = pending.reduce((s, p) => s + num(p.amount), 0);
+  const roleRows = (counts: Map<string, number>, suffix: string) =>
+    [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => entityRow(`${k} · ${v}${suffix}`, "admin.role", k));
+  const pageRules = tally(permRows.filter((r) => r.granted !== false), "role_name");
+  const providers = allProviders();
+  const connection = (id: string) => connections.find((c) => c.id === id);
+  const integrationRows: ListRow[] = [
+    ...providers.map((p) => entityRow(`${p.name} · ${p.area}`, "admin.integration", p.id)),
+    ...connections.map((c) => entityRow(`${c.name} · ${c.status === "configured" ? "set" : c.status === "partial" ? "partly set" : "missing"}`, "admin.integration", c.id)),
+  ];
+  const openInvoiceRows: ListRow[] = [
+    ...openInvoices.map((i) => entityRow(`${joined(i, "jobs") || "Job"} · ${usd(num(i.amount))} · sent ${day(i.created_at)}`, "admin.invoice", i.id)),
+    ...openUploads.map((i) => entityRow(`${joined(i, "customers") || str(i.title) || "Client"} · ${usd(num(i.amount))} · issued ${day(i.issued_on)}`, "admin.invoice", i.id)),
+  ].slice(0, 25);
+  const awaitingBatches = batches.filter((b) => b.status === "awaiting_approval");
+  const sentRows = [...sent].sort((a, b) => str(a.sent_at).localeCompare(str(b.sent_at))).slice(0, 25).map((p) => entityRow(`${jobName(p.job_id)} · ${usd(num(p.total_cost))} · sent ${day(p.sent_at)}`, "admin.job", p.job_id));
 
   const pillars: V2Pillar[] = [
     {
@@ -898,9 +944,12 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: `${alerts.length} things flagged across the three departments`,
       title: "Departments", sub: "One place to keep Marketing, Sales and Operations on track.",
       blocks: [
-        { t: "Marketing", v: n(cust30), d: "New contacts in 30 days" },
-        { t: "Sales", v: pct(accepted, accepted + declined), d: `Close rate on answered proposals · ${usd(waiting)} waiting on clients` },
-        { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished" },
+        { t: "Marketing", v: n(cust30), d: "New contacts in 30 days", rows: newCustomers.map(customerRow) },
+        {
+          t: "Sales", v: pct(accepted, accepted + declined), d: `Close rate on answered proposals · ${usd(waiting)} waiting on clients`,
+          rows: sentRows,
+        },
+        { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished", rows: approvedJobs.slice(0, 25).map((j) => entityRow(str(j.name) || "Job", "admin.job", j.id)) },
         { t: "Alerts", v: n(alerts.length), d: "Flagged right now", rows: alerts },
       ],
       links: [{ label: "Dashboard", href: "/dashboard" }, { label: "Alerts", href: "/notifications" }],
@@ -910,10 +959,16 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: `${n(customers)} customers · ${n(cust30)} new in 30 days`,
       title: "Customer accounts", sub: "Every customer across every department.",
       blocks: [
-        { t: "Account list", v: n(customers), d: `Customers · ${n(cust30)} added in 30 days`, rows: acc.map((c) => `${str(c.name)} · ${day(c.created_at)}${c.source ? ` · ${str(c.source)}` : ""}`) },
-        { t: "Lead source on file", v: n(sourced), d: `${n((customers ?? 0) - (sourced ?? 0))} customers have no source` },
-        { t: "Communication", v: n(msgs), d: `Client emails and texts logged · ${n(jobMsgs)} job messages` },
-        { t: "Issues & callbacks", v: n(issues.length), d: `${n(openIssues)} open` },
+        { t: "Account list", v: n(customers), d: `Customers · ${n(cust30)} added in 30 days · newest first`, rows: recent.map(customerRow) },
+        { t: "Lead source on file", v: n(sourced), d: `${n((customers ?? 0) - (sourced ?? 0))} customers have no source`, rows: unsourced.map(customerRow) },
+        {
+          t: "Communication", v: n(msgs), d: `Client emails and texts logged · ${n(jobMsgs)} job messages`,
+          rows: recentMsgs.map((m) => entityRow(`${day(m.created_at)} · ${joined(m, "customers") || "Client"} · ${str(m.channel).toUpperCase()} · ${str(m.kind).replace(/_/g, " ")} · ${str(m.status)}`, "admin.message", m.id)),
+        },
+        {
+          t: "Issues & callbacks", v: n(issues.length), d: `${n(openIssues.length)} open`,
+          rows: [...openIssues].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at))).slice(0, 25).map((i) => entityRow(`${str(i.title) || "Issue"} · ${day(i.created_at)}`, "admin.job_issue", i.id)),
+        },
       ],
       links: [{ label: "Contacts", href: "/contacts" }, { label: "Conversations", href: "/conversations" }],
     },
@@ -926,10 +981,24 @@ export async function loadAdmin(): Promise<V2Section> {
           t: "Payments received", v: usd(total), d: `${n(payments.length)} payments`,
           rows: [...months.slice(-3).map(([m, v]) => `${monthLabel(m)} · ${usd(v)}`), ...(best ? [`Best month: ${monthLabel(best[0])} · ${usd(best[1])}`] : [])],
         },
+        {
+          t: "Latest payments", v: n(recentPayments.length), d: "Newest first",
+          rows: recentPayments.map((p) => entityRow(`${day(p.received_at)} · ${joined(p, "customers") || str(p.payer_name) || "Unfiled"} · ${usd(num(p.amount_cents) / 100)} · ${str(p.method)}`, "admin.payment", p.id)),
+        },
+        { t: "Open invoices", v: n(openInvoiceRows.length), d: "Unpaid, oldest first", rows: openInvoiceRows },
         { t: "Last month", v: usd(byMonth.get(lastMonthKey) ?? 0), d: monthLabel(lastMonthKey) },
-        { t: "Payroll", v: usd(pending.reduce((s, p) => s + num(p.amount), 0)), d: `${pending.length} pay periods pending` },
-        { t: "Commissions", v: usd(advances.filter((a) => a.status === "paid").reduce((s, a) => s + num(a.amount), 0)), d: "Advances paid" },
-        { t: "Bookkeeping", v: n(bankTx), d: `Bank transactions across ${n(bankAcc)} accounts · ${n(recurring)} recurring charges reviewed` },
+        {
+          t: "Payroll", v: usd(pendingPay), d: `${pending.length} pay periods pending`,
+          rows: pending.slice(0, 25).map((p) => entityRow(`${name(p.profile_id)} · ${usd(num(p.amount))}${p.period_end ? ` · to ${day(p.period_end)}` : ""}`, "admin.team_payment", p.id)),
+        },
+        {
+          t: "Commissions", v: usd(advances.filter((a) => a.status === "paid").reduce((s, a) => s + num(a.amount), 0)), d: `Advances paid · ${awaitingBatches.length} weekly statements waiting`,
+          rows: batches.map((b) => entityRow(`Week of ${day(b.week_start)} · ${usd(num(b.total))} · ${b.status === "awaiting_approval" ? "waiting for approval" : str(b.status)}`, "admin.commission_batch", b.id)),
+        },
+        {
+          t: "Bookkeeping", v: n(bankTx), d: `Bank transactions across ${n(bankAcc)} accounts · ${n(recurring)} recurring charges reviewed`,
+          rows: recentBank.map((t) => entityRow(`${day(t.posted_on)} · ${str(t.merchant) || str(t.name)} · ${num(t.amount) > 0 ? "-" : "+"}${usd(Math.abs(num(t.amount)))}`, "admin.bank_tx", t.id)),
+        },
       ],
       links: [{ label: "Money", href: "/admin/payments" }, { label: "Transactions", href: "/admin/transactions" }],
     },
@@ -938,10 +1007,19 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: `${n(profiles.length)} users · ${n(roleCounts.size)} roles in use`,
       title: "Users & permissions", sub: "Who can log in and what they can see.",
       blocks: [
-        { t: "Users", v: n(profiles.length), d: `${n(profiles.filter((p) => !p.full_name).length)} have no name filled in` },
-        { t: "Roles in use", v: n(roleCounts.size), d: "To map onto the new roles", rows: [...roleCounts.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} · ${v}`) },
-        { t: "Page access rules", v: n(perms), d: "Role permissions defined today" },
-        { t: "Activity log", v: n(roleEdits), d: "Role edits logged" },
+        {
+          t: "Users", v: n(profiles.length), d: `${n(profiles.filter((p) => !p.full_name).length)} have no name filled in`,
+          rows: [...profiles].sort((a, b) => name(a.id).localeCompare(name(b.id))).map((p) => {
+            const held = roles.filter((r) => r.profile_id === p.id).map((r) => str(r.role_name));
+            return entityRow(`${name(p.id)} · ${held.join(", ") || "no role"}`, "admin.profile", p.id);
+          }),
+        },
+        { t: "Roles in use", v: n(roleCounts.size), d: "To map onto the new roles", rows: roleRows(roleCounts, "") },
+        { t: "Page access rules", v: n(perms), d: "Role permissions defined today", rows: roleRows(pageRules, " pages") },
+        {
+          t: "Activity log", v: n(roleEdits), d: "Role edits logged",
+          rows: editLog.map((e) => (e.role_name ? entityRow(`${day(e.at)} · ${str(e.actor_name) || "Somebody"} · ${str(e.action).replace(/_/g, " ")} · ${str(e.role_name)}`, "admin.role", e.role_name) : `${day(e.at)} · ${str(e.action)}`)),
+        },
       ],
       links: [{ label: "Settings & permissions", href: "/admin/settings" }, { label: "View as", href: "/admin/view-as" }],
     },
@@ -950,11 +1028,18 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: "GoHighLevel, Stripe, email, banks",
       title: "Integrations", sub: "The connections the automations run on.",
       blocks: [
-        { t: "GoHighLevel", v: sync ? (/[1-9]\d* failed/.test(str(sync.last_result)) ? "Errors" : "OK") : "—", d: sync ? `Last pull ${day(sync.last_pulled_at)} · ${str(sync.last_result)}` : "No sync on record" },
-        { t: "Stripe payments", v: pay ? str(pay.state).toUpperCase() : "—", d: pay ? `Checked ${day(pay.checked_at)}` : "No check on record" },
-        { t: "Email sending", v: n(domains.length), d: "Sending domains", rows: domains.map((d) => `${str(d.hostname)} · ${str(d.status)}`) },
-        { t: "Banks", v: n(bankAcc), d: "Bank accounts connected" },
-        { t: "Post finder extension", v: n(finder), d: "Computers running it" },
+        {
+          t: "GoHighLevel", v: sync ? (/[1-9]\d* failed/.test(str(sync.last_result)) ? "Errors" : "OK") : "—", d: sync ? `Last pull ${day(sync.last_pulled_at)} · ${str(sync.last_result)}` : "No sync on record",
+          rows: [entityRow(`GoHighLevel · ${connection("gohighlevel")?.status ?? "open"}`, "admin.integration", "gohighlevel")],
+        },
+        {
+          t: "Stripe payments", v: pay ? str(pay.state).toUpperCase() : "—", d: pay ? `Checked ${day(pay.checked_at)}` : "No check on record",
+          rows: [entityRow(`Stripe · ${connection("stripe")?.status ?? "open"}`, "admin.integration", "stripe")],
+        },
+        { t: "Email sending", v: n(domains.length), d: "Sending domains", rows: domains.map((d) => entityRow(`${str(d.hostname)} · ${str(d.status)}`, "admin.integration", "resend")) },
+        { t: "Banks", v: n(bankAcc), d: "Bank accounts connected", rows: [entityRow(`Plaid · ${connection("plaid")?.status ?? "open"}`, "admin.integration", "plaid")] },
+        { t: "Post finder extension", v: n(finder), d: "Computers running it", rows: finders.map((f) => `${str(f.label) || "Computer"} · last seen ${day(f.last_seen_at)}`) },
+        { t: "Every connection", v: n(integrationRows.length), d: "Open one to see what is saved and test it", rows: integrationRows },
       ],
       links: [{ label: "Settings", href: "/admin/settings" }],
     },
@@ -963,7 +1048,12 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: `${n(locations.length)} locations · ${n(designs)} design files`,
       title: "Company & compliance", sub: "The paperwork that keeps the business running.",
       blocks: [
-        { t: "Locations", v: n(locations.length), d: "On file", rows: locations.map((l) => `${str(l.name).slice(0, 40)} · ${str(l.address).split(",").slice(1, 2).join("").trim()}`) },
+        { t: "The business", v: "1", d: "Name, phone, email and address on every document", rows: orgId ? [entityRow("Business details", "admin.organization", orgId)] : [] },
+        { t: "Locations", v: n(locations.length), d: "On file", rows: locations.map((l) => entityRow(`${str(l.name).slice(0, 40)} · ${str(l.address).split(",").slice(1, 2).join("").trim()}`, "admin.location", l.id)) },
+        {
+          t: "Compliance calendar", v: n(obligations.length), d: `${n(obligations.filter((o) => o.due_on && str(o.due_on) < today).length)} overdue · soonest first`,
+          rows: obligations.slice(0, 25).map((o) => entityRow(`${str(o.title)} · ${o.due_on ? `due ${day(o.due_on)}` : "no date"}${o.due_on && !o.date_confirmed ? " (confirm)" : ""}`, "admin.obligation", o.id)),
+        },
         { t: "Contracts & legal wording", v: "0", d: "Not in the current app yet" },
         { t: "Documents & designs", v: n(designs), d: "Flyer and design files" },
       ],
@@ -975,8 +1065,10 @@ export async function loadAdmin(): Promise<V2Section> {
       title: "Settings", sub: "How the whole app is set up.",
       blocks: [
         {
-          t: "Services", v: n(services.length), d: "On file",
-          rows: [...[...svc.entries()].map(([k, v]) => `${k} · ${v}`), ...(dupes.length ? [`Duplicates: ${dupes.map(([k, v]) => `${k} ×${v}`).join(", ")}`] : [])],
+          t: "Services", v: n(services.length), d: [...svc.entries()].map(([k, v]) => `${v} ${k}`).join(" · ") + (dupes.length ? ` · duplicates: ${dupes.map(([k, v]) => `${k} ×${v}`).join(", ")}` : ""),
+          rows: [...services]
+            .sort((a, b) => (a.status === "pending" ? 0 : 1) - (b.status === "pending" ? 0 : 1) || str(a.name).localeCompare(str(b.name)))
+            .map((s) => entityRow(`${str(s.name) || str(s.service_type_id)} · ${str(s.status)}`, "admin.service", s.service_type_id)),
         },
         { t: "Service area", v: "1", d: "Harford County" },
         { t: "Your notifications", v: n(notifLog), d: notifPrefs ? "Sent to you · your preferences are set" : "Sent to you · no preferences set yet" },
@@ -988,15 +1080,21 @@ export async function loadAdmin(): Promise<V2Section> {
       blurb: `${n(ams.length)} account managers`,
       title: "Account managers", sub: "The people who oversee everything.",
       blocks: [
-        { t: "Roster", v: n(ams.length), d: "People with the account manager role", rows: ams.map((id) => `${name(id)} · ${n(jobs.filter((j) => j.assigned_to === id).length)} jobs assigned`) },
+        { t: "Roster", v: n(ams.length), d: "People with the account manager role", rows: ams.map((id) => entityRow(`${name(id)} · ${n(jobs.filter((j) => j.assigned_to === id).length)} jobs assigned`, "admin.account_manager", id)) },
       ],
       links: [{ label: "Team & services", href: "/admin/team" }],
     },
     {
       id: "hiring", label: "Hiring", kind: "people", who: ["owner"], group: "b",
-      blurb: "Account manager hiring",
+      blurb: `Account manager hiring · ${n(applicants.length)} recent applicants`,
       title: "Hiring", sub: "Hire account managers.",
-      blocks: [{ t: "Open positions", v: "0", d: "No account manager posting yet" }],
+      blocks: [
+        { t: "Open positions", v: "0", d: "No account manager posting yet" },
+        {
+          t: "Applicants", v: n(applicants.length), d: "Newest first",
+          rows: applicants.map((a) => entityRow(`${str(a.name)} · ${str(a.position).replace(/-/g, " ")} · ${str(a.stage).replace(/_/g, " ")} · ${day(a.created_at)}`, "admin.applicant", a.id)),
+        },
+      ],
       links: [{ label: "Hiring", href: "/admin/hiring" }],
     },
     {
@@ -1018,9 +1116,10 @@ export async function loadAdmin(): Promise<V2Section> {
     },
     pillars: [
       overview("Admin overview", "Oversee every department, run the back office, and hire the managers.", [
-        { t: "Marketing", v: n(cust30), d: "New contacts in 30 days" },
-        { t: "Sales", v: pct(accepted, accepted + declined), d: "Close rate on answered proposals" },
-        { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished" },
+        { t: "Marketing", v: n(cust30), d: "New contacts in 30 days", rows: newCustomers.map(customerRow) },
+        { t: "Sales", v: pct(accepted, accepted + declined), d: `Close rate on answered proposals · ${usd(waiting)} waiting on clients`, rows: sentRows },
+        { t: "Operations", v: n(approvedNotDone), d: "Approved jobs not finished", rows: approvedJobs.slice(0, 25).map((j) => entityRow(str(j.name) || "Job", "admin.job", j.id)) },
+        { t: "Alerts", v: n(alerts.length), d: "Flagged right now", rows: alerts },
       ], [{ label: "Current admin page", href: "/admin" }]),
       ...pillars,
     ],

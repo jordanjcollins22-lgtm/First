@@ -11,6 +11,7 @@ import {
   type TaskRow,
   type TaskStatus,
 } from "@/lib/owner-tasks";
+import { OpenButton } from "@/components/v2/panels/admin-open";
 
 const STATUS_CLS: Record<TaskStatus, string> = {
   todo: "bg-muted text-foreground",
@@ -131,6 +132,7 @@ export function TaskListEditor({ tasks }: { tasks: TaskRow[] }) {
                         <option key={st} value={st}>{TASK_STATUS_LABEL[st]}</option>
                       ))}
                     </select>
+                    <OpenButton kind="admin.owner_task" id={t.id} />
                   </li>
                 );
               })}

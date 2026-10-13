@@ -12,6 +12,7 @@ import { confirmObligationDate, markObligationDone, seedComplianceDefaults } fro
 import { AutomationCard, Kpi, KpiRow, NeedsYouStrip, NotReady, SectionHeading } from "./back-office-parts";
 import { ActionButton, DocUpload, OpenDoc, SettingSwitch } from "./back-office-controls";
 import { ObligationEditor } from "./obligation-editor";
+import { OpenEntity } from "./admin-open";
 
 /**
  * Admin › Settings: the Maryland compliance calendar.
@@ -110,7 +111,9 @@ export async function CompliancePanel() {
             return (
               <li key={o.id} className={`rounded-xl border bg-card p-3 ${o.active ? "" : "opacity-60"}`}>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{o.title}</span>
+                  <OpenEntity kind="admin.obligation" id={o.id} className="font-semibold">
+                    {o.title}
+                  </OpenEntity>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATE_CHIP[o.state]}`}>
                     {o.state === "inactive"
                       ? "Not held"
@@ -172,7 +175,7 @@ export async function CompliancePanel() {
 
       <SectionHeading>Certificates of insurance sent to clients</SectionHeading>
       <p className="text-sm text-muted-foreground">
-        A commercial client who asks gets one from their client page: Certificate of insurance › Make and send. It prints the policies above with the client as certificate holder.
+        A commercial client who asks gets one from their account: open the client under Oversight › Customer accounts, then Make a certificate of insurance. It prints the policies above with the client as certificate holder.
       </p>
       {recentCois.length === 0 ? (
         <p className="text-sm text-muted-foreground">None issued yet.</p>
@@ -180,9 +183,9 @@ export async function CompliancePanel() {
         <ul className="grid gap-1">
           {recentCois.map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
-              <a href={c.customer ? `/clients/${c.customer.id}` : "#"} className="font-medium hover:underline">
+              <OpenEntity kind="admin.coi" id={c.id} className="font-medium">
                 {c.customer?.name ?? "Client"} · {c.holder_name}
-              </a>
+              </OpenEntity>
               <span className="text-muted-foreground">
                 {c.sent_at ? `Sent ${new Date(c.sent_at).toLocaleDateString("en-US")} to ${c.sent_to}` : `Made ${new Date(c.created_at).toLocaleDateString("en-US")}, not sent`}
               </span>

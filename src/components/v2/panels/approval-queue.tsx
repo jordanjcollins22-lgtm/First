@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadApprovalQueue, declineReport } from "@/lib/data/approval-queue";
@@ -112,9 +110,7 @@ export async function ApprovalQueuePanel() {
               ? `Per-kind policy since ${new Date(policy.policyStartedAt).toLocaleDateString("en-US", { dateStyle: "medium" })}.`
               : "Turn the master hold off once the top decline reasons are fixed; transactional emails then send on their own."}
           </p>
-          <Link href="/admin/reminders" className="inline-flex min-h-11 items-center text-sm font-semibold text-primary">
-            Email settings
-          </Link>
+          <p className="text-xs text-muted-foreground">Each kind&apos;s setting is under Sales › Automated messages.</p>
         </div>
         <div className="grid content-start gap-2 rounded-xl border p-3">
           <h3 className="font-bold">Monday digest</h3>

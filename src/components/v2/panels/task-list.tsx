@@ -37,7 +37,8 @@ export async function TaskListPanel() {
           No tasks yet. Once migration 0356b has run the 33 build tasks appear here; anything added below is saved straight away.
         </p>
       ) : null}
-      <TaskListEditor tasks={tasks} />
+      {/* Keyed on what the tasks say, so a change made in the drawer shows here too. */}
+      <TaskListEditor key={tasks.map((t) => `${t.id}:${t.status}:${t.title}:${t.note ?? ""}`).join("|")} tasks={tasks} />
     </section>
   );
 }

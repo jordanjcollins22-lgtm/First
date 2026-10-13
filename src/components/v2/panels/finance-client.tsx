@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions/finance-actions";
 import type { PayrollWeekView } from "@/lib/data/payroll";
 import type { AutopayClient } from "@/lib/finance/autopay";
+import { OpenEntity } from "@/components/v2/panels/admin-open";
 
 type Result = { ok: true; message: string } | { ok: false; error: string };
 
@@ -166,7 +167,9 @@ export function AutopayList({ clients, autopayOn }: { clients: AutopayClient[]; 
             {clients.map((c) => (
               <li key={c.customerId} className="space-y-2 py-3">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 font-medium">{c.name}</span>
+                  <OpenEntity kind="admin.customer" id={c.customerId} className="min-h-11 min-w-0 flex-1 font-medium">
+                    {c.name}
+                  </OpenEntity>
                   <span className="text-xs text-muted-foreground">
                     {c.confirmedAt ? `${c.methodType === "us_bank_account" ? "Bank" : "Card"} ••${c.last4 ?? ""}` : c.setupRequestedAt ? "Waiting for them to save a method" : "No method saved"}
                   </span>

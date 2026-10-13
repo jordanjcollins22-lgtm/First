@@ -7,6 +7,7 @@ import { peopleItems } from "@/lib/data/back-office-queue";
 import { AutomationCard, Kpi, KpiRow, NeedsYouStrip, NotReady, SectionHeading } from "./back-office-parts";
 import { DocUpload, OpenDoc, SettingSwitch } from "./back-office-controls";
 import { ChecklistSettings, ItemToggle, RoleFixButton } from "./people-controls";
+import { OpenButton, OpenEntity } from "./admin-open";
 
 /**
  * Admin › Team & access: new-hire checklists and the old-to-new role map.
@@ -81,12 +82,17 @@ export async function PeoplePanel() {
                   )}
                 </summary>
                 <div className="grid gap-2 border-t px-4 pb-3 pt-2">
+                  <div>
+                    <OpenButton kind="admin.onboarding" id={c.id} label="Open the checklist" />
+                  </div>
                   <ChecklistSettings checklistId={c.id} startDate={c.startDate} handlesPesticides={c.handlesPesticides} />
                   <ul className="grid gap-1">
                     {c.items.map((i) => (
                       <li key={i.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-sm">
                         <span className={`min-w-0 flex-1 ${i.doneAt || i.waived ? "text-muted-foreground line-through" : ""}`}>
-                          {i.label}
+                          <OpenEntity kind="admin.onboarding_item" id={i.id}>
+                            {i.label}
+                          </OpenEntity>
                           <span className={`ml-2 text-xs ${i.overdue ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
                             {i.waived ? "doesn't apply" : i.doneAt ? `done ${new Date(i.doneAt).toLocaleDateString("en-US")}` : `due ${i.dueOn}`}
                           </span>
@@ -115,7 +121,9 @@ export async function PeoplePanel() {
           {problems.map((p) => (
             <li key={`${p.profileId}:${p.problem}`} className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3">
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">{p.name}</p>
+                <OpenEntity kind="admin.profile" id={p.profileId} className="font-semibold">
+                  {p.name}
+                </OpenEntity>
                 <p className="text-sm text-muted-foreground">{p.detail}</p>
               </div>
               <RoleFixButton profileId={p.profileId} fix={p.fix} choose={p.problem === "unmapped"} />
