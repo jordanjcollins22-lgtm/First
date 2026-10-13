@@ -1,5 +1,9 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
+import type { EntityRef } from "@/lib/entities/types";
+
+import { OpenInDrawer } from "./marketing-open";
+
 /**
  * The three layers every marketing panel shares: what needs a person, the
  * numbers against target, and the machinery underneath. Server components.
@@ -8,8 +12,10 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 export interface NeedsYouItem {
   key: string;
   text: string;
-  /** Where to go to deal with it, when it is somewhere else. */
+  /** Where to go to deal with it, when it is somewhere else in the new layout. */
   href?: string;
+  /** Or what to open in the drawer to deal with it there. */
+  open?: EntityRef;
   action?: string;
 }
 
@@ -27,7 +33,9 @@ export function NeedsYou({ items }: { items: NeedsYouItem[] }) {
         <li key={i.key} className="flex min-h-11 flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm dark:border-amber-800 dark:bg-amber-950/40">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
           <span className="flex-1">{i.text}</span>
-          {i.href && (
+          {i.open ? (
+            <OpenInDrawer entity={i.open}>{i.action ?? "Open"}</OpenInDrawer>
+          ) : i.href && (
             <a href={i.href} className="inline-flex min-h-9 items-center rounded-lg border bg-card px-3 text-sm font-semibold hover:bg-muted">
               {i.action ?? "Open"}
             </a>

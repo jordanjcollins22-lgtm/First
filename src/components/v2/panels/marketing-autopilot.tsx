@@ -53,12 +53,19 @@ export async function MarketingAutopilotPanel() {
   const gbp = d.google.find((g) => g.provider === "google_business");
 
   const needs: NeedsYouItem[] = [];
-  if (d.reviews.held > 0) needs.push({ key: "reviews", text: `${d.reviews.held} Google review${d.reviews.held === 1 ? "" : "s"} of 3 stars or fewer waiting for your reply.` });
+  if (d.reviews.held > 0) {
+    needs.push({
+      key: "reviews",
+      text: `${d.reviews.held} Google review${d.reviews.held === 1 ? "" : "s"} of 3 stars or fewer waiting for your reply.`,
+      open: { kind: "mkt.review_list", id: "held" },
+      action: "Answer",
+    });
+  }
   for (const g of d.google.filter((x) => x.status === "error")) {
     needs.push({ key: `int-${g.provider}`, text: `${PROVIDER_LABEL[g.provider]} has a problem: ${g.lastError ?? "unknown"}.`, href: INTEGRATIONS_HREF, action: "Settings" });
   }
   if (d.social.scheduled > 0 && !d.social.facebookReady) {
-    needs.push({ key: "fb", text: `${d.social.scheduled} post${d.social.scheduled === 1 ? "" : "s"} scheduled but no Facebook page is connected and ticked Posting.`, href: "/admin/meta", action: "Connect" });
+    needs.push({ key: "fb", text: `${d.social.scheduled} post${d.social.scheduled === 1 ? "" : "s"} scheduled but no Facebook page is connected and ticked Posting.`, href: INTEGRATIONS_HREF, action: "Settings" });
   }
   for (const s of d.seasons) {
     if (s.open && !s.run && settings.seasonalMode === "owner") needs.push({ key: `season-${s.season}`, text: `The ${SEASON_INFO[s.season].label.toLowerCase()} window is open: preview and start the email below.` });
@@ -71,10 +78,10 @@ export async function MarketingAutopilotPanel() {
   }
   // The two outbound machines that were built and never started (hotspot #10).
   if (!d.outbound.pmSending) {
-    needs.push({ key: "pm", text: `Property-manager outreach is switched off (${d.outbound.pmCompanies} companies found). HOA and commercial snow is sold outbound: switch it on with its ramp.`, href: "/marketing", action: "Open" });
+    needs.push({ key: "pm", text: `Property-manager outreach is switched off (${d.outbound.pmCompanies} companies found). HOA and commercial snow is sold outbound: switch it on with its ramp.`, open: { kind: "mkt.pm_list", id: "all" }, action: "Open" });
   }
   if (d.outbound.campaignsRunning === 0 && d.outbound.campaignsDraft > 0) {
-    needs.push({ key: "campaigns", text: `${d.outbound.campaignsDraft} email campaign${d.outbound.campaignsDraft === 1 ? " is" : "s are"} still a draft and none is running.`, href: "/admin/campaigns", action: "Open" });
+    needs.push({ key: "campaigns", text: `${d.outbound.campaignsDraft} email campaign${d.outbound.campaignsDraft === 1 ? " is" : "s are"} still a draft and none is running.`, open: { kind: "mkt.campaign_list", id: "draft" }, action: "Open" });
   }
   if (quarter?.band === "over") needs.push({ key: "band", text: `Marketing spend is ${pct(quarter.spendShare, 1)} of revenue over 90 days, above the ${pct(settings.spendTargetHigh)} ceiling.` });
 

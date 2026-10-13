@@ -3,6 +3,7 @@ import { Star } from "lucide-react";
 import { loadReviewsPanel } from "@/lib/data/marketing-panels";
 
 import { AutomationSwitches, DraftReplyButton, GoogleRunButton, HeldReplyCard } from "./marketing-autopilot-controls";
+import { OpenInDrawer } from "./marketing-open";
 import { Kpi, NeedsYou, NotConnected, pct, Section, type NeedsYouItem } from "./marketing-panel-parts";
 
 /**
@@ -83,6 +84,9 @@ export async function ReviewsPanel() {
                   <span className="font-semibold">{r.author ?? "A Google user"}</span>
                   <Stars n={r.stars} />
                   <span className="ml-auto text-xs text-muted-foreground">{STATUS_LABEL[r.replyStatus] ?? r.replyStatus}</span>
+                  <OpenInDrawer entity={{ kind: "mkt.review", id: r.id }} className="inline-flex min-h-8 items-center gap-0.5 rounded-lg px-2 text-xs font-semibold hover:bg-muted">
+                    Open
+                  </OpenInDrawer>
                 </div>
                 {r.body && <p className="text-muted-foreground">{r.body}</p>}
                 {r.replyBody && <p className="border-l-2 pl-2 text-xs">Reply: {r.replyBody}</p>}

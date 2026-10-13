@@ -6,8 +6,9 @@ import { attributionReport } from "@/lib/data/attribution";
 import { loadWebsiteForEditor, type WebsiteState } from "@/lib/data/website";
 import { loadAutomations } from "@/lib/data/automations";
 import type { Automation } from "@/lib/automations";
-import type { ListRow } from "@/lib/entities/types";
+import { row, type ListRow } from "@/lib/entities/types";
 import { CHANNEL_LABEL } from "@/lib/attribution";
+import { areaSlug } from "@/lib/website";
 
 /**
  * The live numbers behind the new four-page layout at /v2.
@@ -137,6 +138,9 @@ const stamp = () =>
 
 const PROSPECT_STATUSES = ["new", "queued", "contacted", "converted", "rejected"] as const;
 const PLAY_LABEL: Record<string, string> = { yard_sign: "Yard signs", knocks: "Door knocks", door_hangers: "Door hangers", flyers: "Flyers" };
+/** How many things a Marketing list shows; the drawer's own lists go further. */
+const MKT_ROWS = 25;
+const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 export async function loadMarketing(viewerId: string | null = null): Promise<V2Section> {
   const sb = await db();
@@ -145,11 +149,12 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
     newContacts, seen, answers, finder, bookVisits, booked, located, salt, mow,
     reviews, proof, rank, adClicks, plays, prospectCounts, campaigns, advances,
     mailings, flyerRuns, pmCompanies, pmSent, groups, attribution, openPlays, website,
+    saltOrders, mowOrders, googleReviews,
   ] = await Promise.all([
-    rows(sb, "outreach_links", "platform,kind,click_count,profile_id,created_at,posted_comment,comment"),
+    rows(sb, "outreach_links", "id,platform,kind,click_count,profile_id,created_at,posted_comment,comment"),
     rows(sb, "social_posts", "status,channel,scheduled_for,hook,caption"),
     rows(sb, "profiles", "id,full_name,email,is_affiliate,affiliate_slug,commission_pct"),
-    rows(sb, "jobs", "referred_by_profile_id", (q) => q.not("referred_by_profile_id", "is", null)),
+    rows(sb, "jobs", "id,name,status,created_at,referred_by_profile_id", (q) => q.not("referred_by_profile_id", "is", null).order("created_at", { ascending: false })),
     count(sb, "customers", (q) => q.gte("created_at", since(30))),
     count(sb, "outreach_seen_posts"),
     count(sb, "outreach_post_answers"),
@@ -165,18 +170,21 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
     count(sb, "job_ad_clicks"),
     count(sb, "marketing_plays"),
     Promise.all(PROSPECT_STATUSES.map((st) => count(sb, "lead_prospects", (q) => q.eq("status", st)))),
-    rows(sb, "email_campaigns", "name,status,service_label,started_at"),
+    rows(sb, "email_campaigns", "id,name,status,service_label,started_at", (q) => q.order("created_at", { ascending: false })),
     rows(sb, "commission_advances", "amount,status"),
-    rows(sb, "eddm_mailings", "name,pieces,status,mailed_on", (q) => q.order("created_at", { ascending: false })),
-    rows(sb, "flyer_runs", "name,mails_on,flyer_count,status", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "eddm_mailings", "id,name,pieces,status,mailed_on", (q) => q.order("created_at", { ascending: false })),
+    rows(sb, "flyer_runs", "id,name,mails_on,flyer_count,status", (q) => q.order("created_at", { ascending: false })),
     rows(sb, "pm_companies", "status"),
     count(sb, "pm_emails", (q) => q.eq("status", "sent")),
-    rows(sb, "community_groups", "name,platform,member_count,archived_at"),
+    rows(sb, "community_groups", "id,name,platform,member_count,archived_at"),
     attributionReport(365).catch(() => null),
-    rows(sb, "marketing_plays", "kind", (q) => q.eq("status", "open")),
+    rows(sb, "marketing_plays", "kind,approval", (q) => q.eq("status", "open")),
     getCurrentOrganizationId()
       .then((id) => loadWebsiteForEditor(id))
       .catch(() => null),
+    rows(sb, "salt_orders", "id,name,address,status,treatments,created_at", (q) => q.order("created_at", { ascending: false }).limit(MKT_ROWS)),
+    rows(sb, "mow_orders", "id,name,address,status,called_at,created_at", (q) => q.order("created_at", { ascending: false }).limit(MKT_ROWS)),
+    rows(sb, "google_reviews", "id,author,stars,body,reply_status,reviewed_at", (q) => q.order("reviewed_at", { ascending: false }).limit(200)),
   ]);
 
   const name = (id: unknown) => {
@@ -196,6 +204,22 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
   const latest = [...comments].sort((a, b) => str(b.created_at).localeCompare(str(a.created_at))).slice(0, 4);
   const prospectTotal = prospectCounts.reduce<number>((a, c) => a + (c ?? 0), 0);
   const liveGroups = groups.filter((g) => !g.archived_at);
+  const pendingPlays = openPlays.filter((p) => !p.approval || p.approval === "pending").length;
+  const heldReviews = googleReviews.filter((r) => r.reply_status === "held" || r.reply_status === "failed");
+  const reviewRow = (r: Row) =>
+    row(
+      `${"★".repeat(num(r.stars))} ${str(r.author) || "A Google user"} · ${str(r.reply_status) === "held" ? "reply waiting for you" : str(r.reply_status)}${r.body ? ` — ${str(r.body).slice(0, 60)}` : ""}`,
+      "mkt.review",
+      r.id
+    );
+  const pageRows: ListRow[] = website
+    ? [
+        row("Home page", "mkt.web_page", "home"),
+        ...website.content.areas.map((a) => row(`${a.town} page`, "mkt.web_page", `area:${areaSlug(a.town)}`)),
+        row(`Quick mow page${website.content.showQuickMow ? "" : " (hidden)"}`, "mkt.web_page", "quick-mow"),
+        row(`Salt pre-book page${website.content.showSalt ? "" : " (hidden)"}`, "mkt.web_page", "salt"),
+      ]
+    : [];
   const channels: [string, string][] = [
     ["facebook", "Facebook"], ["nextdoor", "Nextdoor"], ["instagram", "Instagram"],
     ["google", "Google Business posts"], ["tiktok", "TikTok"], ["youtube", "YouTube"],
@@ -220,8 +244,15 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       view: "website",
       blocks: [
         { t: "Booking page", v: n(bookVisits), d: `Visits in 30 days · ${n(booked)} booked · ${pct(booked ?? 0, bookVisits ?? 0)}` },
-        { t: "Salt pre-book", v: n(salt), d: "Prepaid ice melt orders" },
-        { t: "Quick mow page", v: n(mow), d: "Orders" },
+        ...(pageRows.length ? [{ t: "Pages", v: n(pageRows.length), d: "Every page on the site. Open one to change it or take it down.", rows: pageRows }] : []),
+        {
+          t: "Salt pre-book", v: n(salt), d: "Prepaid ice melt orders, newest first",
+          rows: saltOrders.map((o) => row(`${str(o.name)} · ${place(o.address)} · ${n(num(o.treatments))} treatments · ${str(o.status)} · ${day(o.created_at)}`, "mkt.salt_order", o.id)),
+        },
+        {
+          t: "Quick mow page", v: n(mow), d: "Orders, newest first",
+          rows: mowOrders.map((o) => row(`${str(o.name)} · ${place(o.address)} · ${str(o.status)}${o.called_at ? " · called" : " · not called"} · ${day(o.created_at)}`, "mkt.mow_order", o.id)),
+        },
         { t: "Instant address booking", v: n(located), d: "Locate-me taps on the booking page" },
       ],
       links: [
@@ -237,16 +268,19 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blocks: [
         {
           t: "Open plays", v: n(openPlays.length), d: "Set off by an evaluation or a client, waiting to go out",
-          rows: [...tally(openPlays, "kind")].map(([k, c]) => `${PLAY_LABEL[k] ?? k} · ${n(c)}`),
+          rows: [
+            ...(pendingPlays ? [row(`Waiting for approval · ${n(pendingPlays)}`, "mkt.play_list", "pending")] : []),
+            ...[...tally(openPlays, "kind")].map(([k, c]) => row(`${PLAY_LABEL[k] ?? k} · ${n(c)}`, "mkt.play_list", k)),
+          ],
         },
         { t: "Plays in total", v: n(plays), d: "Every hanger run, sign, knock and flyer drop on file" },
         {
           t: "EDDM mailings", v: n(mailings.length), d: `${n(mailings.reduce((a, m) => a + num(m.pieces), 0))} pieces planned or mailed`,
-          rows: mailings.slice(0, 5).map((m) => `${str(m.name)} · ${n(num(m.pieces))} pieces · ${str(m.status)}${m.mailed_on ? ` · ${day(m.mailed_on)}` : ""}`),
+          rows: mailings.slice(0, MKT_ROWS).map((m) => row(`${str(m.name)} · ${n(num(m.pieces))} pieces · ${str(m.status)}${m.mailed_on ? ` · ${day(m.mailed_on)}` : ""}`, "mkt.mailing", m.id)),
         },
         {
           t: "Shared flyer runs", v: n(flyerRuns.length), d: "Flyers with paid ad squares from other local businesses",
-          rows: flyerRuns.slice(0, 5).map((f) => `${str(f.name)} · ${n(num(f.flyer_count))} flyers · ${str(f.status)}${f.mails_on ? ` · ${day(f.mails_on)}` : ""}`),
+          rows: flyerRuns.slice(0, MKT_ROWS).map((f) => row(`${str(f.name)} · ${n(num(f.flyer_count))} flyers · ${str(f.status)}${f.mails_on ? ` · ${day(f.mails_on)}` : ""}`, "mkt.flyer_run", f.id)),
         },
       ],
       links: [],
@@ -258,7 +292,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blocks: [
         {
           t: "Prospects", v: n(prospectTotal), d: "Owners and addresses on file",
-          rows: PROSPECT_STATUSES.map((st, i) => `${st[0].toUpperCase() + st.slice(1)} · ${n(prospectCounts[i])}`),
+          rows: PROSPECT_STATUSES.map((st, i) => row(`${cap(st)} · ${n(prospectCounts[i])}`, "mkt.prospect_list", st)),
         },
       ],
       links: [],
@@ -270,7 +304,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blocks: [
         {
           t: "Campaigns", v: n(campaigns.length), d: "Draft, running, paused and done",
-          rows: campaigns.map((c) => `${str(c.name)} · ${str(c.service_label)} · ${str(c.status)}${c.started_at ? ` · started ${day(c.started_at)}` : ""}`),
+          rows: campaigns.slice(0, MKT_ROWS).map((c) => row(`${str(c.name)} · ${str(c.service_label)} · ${str(c.status)}${c.started_at ? ` · started ${day(c.started_at)}` : ""}`, "mkt.campaign", c.id)),
         },
       ],
       links: [],
@@ -280,7 +314,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blurb: `${n(pmCompanies.length)} companies · ${n(pmSent)} emails sent`,
       title: "Property managers", sub: "Cold email to local property management companies, in your words, a few each weekday.",
       blocks: [
-        { t: "Companies", v: n(pmCompanies.length), d: "Found and on the list", rows: [...tally(pmCompanies, "status")].map(([k, c]) => `${k.replace(/_/g, " ")} · ${n(c)}`) },
+        { t: "Companies", v: n(pmCompanies.length), d: "Found and on the list", rows: [...tally(pmCompanies, "status")].map(([k, c]) => row(`${k.replace(/_/g, " ")} · ${n(c)}`, "mkt.pm_list", k)) },
         { t: "Emails sent", v: n(pmSent), d: `${n(pmCompanies.filter((c) => c.status === "replied" || c.status === "interested").length)} replied or interested` },
       ],
       links: [],
@@ -292,7 +326,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blocks: [
         {
           t: "Groups we run", v: n(liveGroups.length), d: "Members as last counted",
-          rows: liveGroups.map((g) => `${str(g.name)} · ${str(g.platform)}${g.member_count == null ? "" : ` · ${n(num(g.member_count))} members`}`),
+          rows: liveGroups.map((g) => row(`${str(g.name)} · ${str(g.platform)}${g.member_count == null ? "" : ` · ${n(num(g.member_count))} members`}`, "mkt.group", g.id)),
         },
       ],
       links: [],
@@ -319,6 +353,10 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       blurb: `${n(reviews)} reviews`,
       title: "SEO", sub: "Local search visibility and reviews.",
       blocks: [
+        {
+          t: "Google reviews", v: n(googleReviews.length), d: heldReviews.length ? `${n(heldReviews.length)} replies waiting for you` : "Newest first",
+          rows: [...heldReviews, ...googleReviews.filter((r) => !heldReviews.includes(r))].slice(0, MKT_ROWS).map(reviewRow),
+        },
         { t: "Client reviews approved", v: n(reviews), d: `${n(proof)} shown as proof on the booking page` },
         { t: "Keyword tracking", v: n(rank), d: rank ? "Keywords tracked" : "Rank tracker built but empty" },
       ],
@@ -333,16 +371,17 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
           t: "Channels", v: n(links.length), d: "Tracked links shared, by channel",
           rows: channels.map(([k, label]) => {
             const l = byPlatform(k);
-            return `${label} · ${n(l.length)} links · ${n(clicks(l))} clicks`;
+            return row(`${label} · ${n(l.length)} links · ${n(clicks(l))} clicks`, "mkt.link_list", k);
           }),
         },
         {
           t: "Post queue", v: n(posts.length), d: "Before-and-after posts",
           rows: [
-            `Scheduled · ${n(postStatus.get("scheduled") ?? 0)}${dueLate ? ` (${dueLate} past date, not posted)` : ""}`,
-            `Drafts · ${n(postStatus.get("draft") ?? 0)}`,
-            `Posted · ${n(postStatus.get("posted") ?? 0)}`,
-            `Skipped · ${n(postStatus.get("skipped") ?? 0)}`,
+            row(`Scheduled · ${n(postStatus.get("scheduled") ?? 0)}`, "mkt.post_list", "scheduled"),
+            ...(dueLate ? [row(`Past their time, not posted · ${n(dueLate)}`, "mkt.post_list", "late")] : []),
+            row(`Drafts · ${n(postStatus.get("draft") ?? 0)}`, "mkt.post_list", "draft"),
+            row(`Posted · ${n(postStatus.get("posted") ?? 0)}`, "mkt.post_list", "posted"),
+            row(`Skipped · ${n(postStatus.get("skipped") ?? 0)}`, "mkt.post_list", "skipped"),
           ],
         },
         { t: "Local groups", v: "", d: "Facebook group rules and paid business posts" },
@@ -358,14 +397,18 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
       title: "Auto comment responder", sub: "Finds local posts asking for help and replies with a tracked link.",
       blocks: [
         { t: "Posts scanned", v: n(seen), d: `Post finder running on ${n(finder)} computers` },
-        { t: "Replies posted", v: n(comments.length), d: `${n(clicks(comments))} link clicks · ${n(answers)} drafted answers` },
+        {
+          t: "Replies posted", v: n(comments.length), d: `${n(clicks(comments))} link clicks · ${n(answers)} drafted answers`,
+          rows: viewerId ? [] : [row("Every reply, newest first", "mkt.link_list", "replies")],
+        },
         {
           t: "Latest replies", v: n(latest.length), d: "Newest first",
-          rows: latest.map(
-            (l) =>
-              `${day(l.created_at)} · ${name(l.profile_id)} · ${str(l.platform)} · ${n(num(l.click_count))} clicks — ${(
-                str(l.posted_comment) || str(l.comment)
-              ).slice(0, 90)}…`
+          rows: latest.map((l) =>
+            row(
+              `${day(l.created_at)} · ${name(l.profile_id)} · ${str(l.platform)} · ${n(num(l.click_count))} clicks — ${(str(l.posted_comment) || str(l.comment)).slice(0, 90)}…`,
+              "mkt.outreach_link",
+              l.id
+            )
           ),
         },
       ],
@@ -384,12 +427,19 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
           t: "Roster", v: n(affiliates.length), d: "Commission rate is what each person has on file",
           rows: affiliates.map((a) => {
             const mine = links.filter((l) => l.profile_id === a.id);
-            return `${str(a.full_name) || "[no name]"} · code ${str(a.affiliate_slug) || "—"} · ${n(mine.length)} links · ${n(
-              clicks(mine)
-            )} clicks · ${n(refBy.get(str(a.id)) ?? 0)} projects · ${a.commission_pct == null ? "rate not set" : a.commission_pct + "%"}`;
+            return row(
+              `${str(a.full_name) || "[no name]"} · code ${str(a.affiliate_slug) || "—"} · ${n(mine.length)} links · ${n(clicks(mine))} clicks · ${n(
+                refBy.get(str(a.id)) ?? 0
+              )} projects · ${a.commission_pct == null ? "rate not set" : a.commission_pct + "%"}`,
+              "mkt.affiliate",
+              a.id
+            );
           }),
         },
-        { t: "Projects referred", v: n(referredJobs.length), d: "Jobs with an affiliate attached" },
+        {
+          t: "Projects referred", v: n(referredJobs.length), d: "Jobs with an affiliate attached, newest first",
+          rows: referredJobs.slice(0, MKT_ROWS).map((j) => row(`${place(j.name)} · ${name(j.referred_by_profile_id)} · ${str(j.status)} · ${day(j.created_at)}`, "mkt.referred_job", j.id)),
+        },
         { t: "Commission advanced", v: usd(advanced), d: "Paid out ahead of a job closing" },
       ],
       links: [{ label: "Team & services", href: "/admin/team" }],
