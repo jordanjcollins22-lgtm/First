@@ -101,18 +101,50 @@ export function V2Shell({ section, unplaced }: { section: V2Section; unplaced?: 
           : "Only the tools this role can use are shown."}
       </p>
 
-      {current && current.id === "overview" && <Overview section={section} pillar={current} role={role} open={setPillarId} />}
-      {current && current.id === "tasks" && <TaskList unplaced={unplaced ?? []} />}
-      {current && current.view === "website" && section.website && (
-        <div className="grid gap-5">
-          <Blocks pillar={current} />
-          <WebsiteStudio website={section.website} />
-        </div>
-      )}
-      {current && current.id !== "overview" && current.id !== "tasks" && !(current.view === "website" && section.website) && <Detail pillar={current} />}
+      {current &&
+        (current.parts ?? [current])
+          .filter((p) => p.who.includes(role))
+          .map((p, i, shown) => (
+            <div key={p.id} className={i ? "mt-8" : ""}>
+              {shown.length > 1 && (
+                <div className="mb-3">
+                  <h2 className="text-xl font-extrabold">{p.label}</h2>
+                  {p.sub && <p className="text-sm text-muted-foreground">{p.sub}</p>}
+                </div>
+              )}
+              <PillarBody pillar={p} section={section} role={role} open={setPillarId} unplaced={unplaced} />
+            </div>
+          ))}
 
     </div>
   );
+}
+
+/** One job's screen: its numbers, or the website studio, or the task list. */
+function PillarBody({
+  pillar,
+  section,
+  role,
+  open,
+  unplaced,
+}: {
+  pillar: V2Pillar;
+  section: V2Section;
+  role: V2Role;
+  open: (id: string) => void;
+  unplaced?: { label: string; href: string }[];
+}) {
+  if (pillar.id === "tasks") return <TaskList unplaced={unplaced ?? []} />;
+  if (pillar.id === "overview" && !pillar.parts) return <Overview section={section} pillar={pillar} role={role} open={open} />;
+  if (pillar.view === "website" && section.website) {
+    return (
+      <div className="grid gap-5">
+        <Blocks pillar={pillar} />
+        <WebsiteStudio website={section.website} />
+      </div>
+    );
+  }
+  return <Detail pillar={pillar} />;
 }
 
 function Blocks({ pillar }: { pillar: V2Pillar }) {
@@ -193,7 +225,6 @@ function Overview({ section, pillar, role, open }: { section: V2Section; pillar:
 type Status = "Not built" | "Partly built";
 const TASKS: [string, [string, Status, string][]][] = [
   ["Marketing", [
-    ["Overview", "Partly built", "Shell is live here. Numbers come from the tabs below."],
     ["Google Ads", "Not built", "No account connected. Bookings already record ad click IDs."],
     ["Website", "Partly built", "Website editor and live previews are here. Still to do: point the business's own domain at /site, and add photos and reviews to it."],
     ["Door hangers & mail", "Partly built", "Numbers are here. Planning a run or a mailing is still only in the current app."],
@@ -209,7 +240,6 @@ const TASKS: [string, [string, Status, string][]][] = [
     ["Affiliate-only view", "Not built", "An affiliate signing in should land on the comment responder only."],
   ]],
   ["Sales", [
-    ["Overview", "Partly built", "Shell is live here."],
     ["Evaluation booking", "Partly built", "Booking and availability work. Routing by area and workload not built."],
     ["Proposals › Pricing formulas", "Partly built", "Most active services have no rate set."],
     ["Automated follow-up", "Partly built", "Proposal and invoice follow-ups work. No-show rebook and seasonal re-engage not built."],
@@ -217,7 +247,6 @@ const TASKS: [string, [string, Status, string][]][] = [
     ["Evaluators", "Partly built", "Roster and pay are on profiles. No performance view."],
   ]],
   ["Operations", [
-    ["Overview", "Partly built", "Shell is live here."],
     ["Scheduling", "Partly built", "Work days exist. Auto-placement and weather reschedule not built; past work days don't close."],
     ["Materials & ordering", "Partly built", "Materials and suppliers work. Purchase orders and delivery tracking not built."],
     ["Completion & close-out", "Partly built", "Walkthroughs and reviews work. Job costing is rarely filled in."],
@@ -226,7 +255,6 @@ const TASKS: [string, [string, Status, string][]][] = [
     ["Project team", "Partly built", "Roster and pay exist. Performance view not built."],
   ]],
   ["Admin", [
-    ["Overview", "Partly built", "Shell is live here."],
     ["Departments", "Partly built", "Alerts are computed here; goals per department not built."],
     ["Customer accounts", "Partly built", "Contacts and messages exist. One timeline per customer not built."],
     ["Users & permissions", "Partly built", "Map the old roles onto the new ones and per-tab access."],

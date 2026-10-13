@@ -43,6 +43,8 @@ export interface V2Pillar {
   links: { label: string; href: string }[];
   /** A pillar with a screen of its own rather than blocks of numbers. */
   view?: "website";
+  /** A combined pillar: the pillars it gathers, shown one under another. */
+  parts?: V2Pillar[];
 }
 
 export interface V2Section {
@@ -1030,9 +1032,71 @@ function overview(title: string, sub: string, blocks: V2Block[], links: V2Pillar
   return { id: "overview", label: "Overview", kind: "", who: ["owner", "account-manager"], title, sub, blocks, links };
 }
 
+/* ------------------------------------------------------------------ */
+/* The few choices on each page                                        */
+/* ------------------------------------------------------------------ */
+
+type Group = { id: string; label: string; title: string; sub: string; ids: string[] };
+
+/**
+ * Each page offers a handful of choices, not a dozen. The loaders still build
+ * one pillar per job; these gather them, and a choice shows every job in it
+ * one under another. A job left out of every group is never shown, so a test
+ * checks that each one is placed.
+ */
+export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
+  marketing: [
+    {
+      id: "digital", label: "Digital marketing", title: "Digital marketing",
+      sub: "The website, search, ads, social, email and the people sharing links.",
+      ids: ["website", "ads", "seo", "social", "comments", "groups", "email", "pm", "affiliates"],
+    },
+    {
+      id: "physical", label: "Physical marketing", title: "Physical marketing",
+      sub: "Door hangers, signs, flyers and mail, the lists they go to, and what paid off.",
+      ids: ["print", "lists", "worked"],
+    },
+  ],
+  sales: [
+    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"] },
+    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Booking visits, the visits themselves, and the people who do them.", ids: ["booking", "myevals", "evaluators"] },
+    { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every reminder and follow-up that goes out on its own.", ids: ["reminders", "followup"] },
+  ],
+  operations: [
+    { id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"] },
+    { id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"] },
+    { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"] },
+  ],
+  admin: [
+    { id: "oversight", label: "Oversight", title: "Oversight", sub: "Every department at a glance, and every customer account.", ids: ["overview", "departments", "customers"] },
+    { id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out.", ids: ["finance"] },
+    { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"] },
+    { id: "settings", label: "Settings", title: "Settings", sub: "Integrations, the company's details and how the app is set up.", ids: ["integrations", "company", "settings"] },
+    { id: "tasks", label: "Task list", title: "Task list", sub: "Everything left to build before the new layout takes over.", ids: ["tasks"] },
+  ],
+};
+
+export function condense(section: V2Section): V2Section {
+  const byId = new Map(section.pillars.map((p) => [p.id, p]));
+  const pillars = V2_GROUPS[section.key].flatMap((g): V2Pillar[] => {
+    const parts = g.ids.map((id) => byId.get(id)).filter((p): p is V2Pillar => Boolean(p));
+    if (!parts.length) return [];
+    return [{
+      id: g.id, label: g.label, title: g.title, sub: g.sub,
+      kind: parts.find((p) => p.kind)?.kind ?? "",
+      who: [...new Set(parts.flatMap((p) => p.who))],
+      blurb: parts.map((p) => p.label).join(" · "),
+      blocks: [], links: [], parts,
+    }];
+  });
+  return { ...section, pillars };
+}
+
+const condensed = (load: () => Promise<V2Section>) => async () => condense(await load());
+
 export const V2_LOADERS = {
-  marketing: loadMarketing,
-  sales: loadSales,
-  operations: loadOperations,
-  admin: loadAdmin,
+  marketing: condensed(loadMarketing),
+  sales: condensed(loadSales),
+  operations: condensed(loadOperations),
+  admin: condensed(loadAdmin),
 } as const;

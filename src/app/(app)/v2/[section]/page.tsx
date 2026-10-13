@@ -34,7 +34,7 @@ export default async function V2SectionPage({ params }: { params: Promise<{ sect
     const rest = await Promise.all(
       (Object.keys(V2_LOADERS) as SectionKey[]).filter((k) => k !== "admin").map((k) => V2_LOADERS[k]())
     );
-    const linked = new Set([data, ...rest].flatMap((s) => s.pillars.flatMap((p) => p.links.map((l) => l.href))));
+    const linked = new Set([data, ...rest].flatMap((s) => s.pillars.flatMap((p) => [p, ...(p.parts ?? [])]).flatMap((p) => p.links.map((l) => l.href))));
     const seen = new Set<string>();
     unplaced = TABS.filter((t) => !t.href.includes("[") && t.href !== "/" && !linked.has(t.href))
       .filter((t) => (seen.has(t.href) ? false : (seen.add(t.href), true)))
