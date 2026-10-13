@@ -31,6 +31,11 @@ export interface CheckoutRequest {
    * it on the right instalment rather than as a loose amount. */
   planId?: string | null;
   instalmentId?: string | null;
+  /**
+   * A Maryland home-improvement deposit (a third at most), not the whole
+   * price: the webhook must not mark the proposal paid in full on it.
+   */
+  deposit?: boolean;
 }
 
 export interface CheckoutStarted {
@@ -120,6 +125,7 @@ export async function startProposalCheckout(
       surcharge_cents: String(fee),
       ...(input.planId ? { plan_id: input.planId } : {}),
       ...(input.instalmentId ? { instalment_id: input.instalmentId } : {}),
+      ...(input.deposit ? { deposit: "1" } : {}),
     },
   });
 

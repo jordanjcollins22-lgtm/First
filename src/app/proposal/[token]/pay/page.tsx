@@ -8,6 +8,7 @@ import { PayView } from "@/components/proposal/pay-view";
 import { isPreview, proposalPath, schedulePath } from "@/lib/proposal-flow";
 import { LinkNotValid } from "@/components/proposal/link-not-valid";
 import { confirmationFor } from "@/lib/booking-confirmation";
+import { atSigningForSnapshot } from "@/lib/sales/mhic";
 
 /**
  * How they are paying, on a page of its own.
@@ -81,7 +82,10 @@ export default async function ProposalPayPage({
       organizationName={data.organizationName}
       context={{
         discountCents,
-        totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+        // What is taken now: the whole price, or on Maryland home-improvement
+        // work a deposit of at most a third (MHIC), the same figure the
+        // payment action charges.
+        totalCents: atSigningForSnapshot(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), proposal.scope_snapshot).dueNowCents,
       }}
     />
   );

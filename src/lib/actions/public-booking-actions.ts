@@ -20,6 +20,8 @@ import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
+import { loadTerritories } from "@/lib/data/territories";
+import { zipOf } from "@/lib/material-suppliers";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
 import { recordBookingAdClick } from "@/lib/data/meta-report";
@@ -206,10 +208,15 @@ async function makePublicBooking(
   // That used to decide it, so one person collected the bookings and the rest
   // waited. Now it goes to whoever is already going that way, and failing
   // that to whoever has the lightest day.
-  const choice = chooseEvaluator(stillFree, await daysFor(admin, stillFree, input.date), {
-    lat: input.lat,
-    lng: input.lng,
-  });
+  // Their territory first, when evaluators have one (zip codes or an area
+  // drawn on the map) and somebody whose patch it is is free.
+  const { territories } = await loadTerritories(admin, input.organizationId).catch(() => ({ territories: [] }));
+  const choice = chooseEvaluator(
+    stillFree,
+    await daysFor(admin, stillFree, input.date),
+    { lat: input.lat, lng: input.lng, zip: zipOf(address) },
+    territories
+  );
   if (!choice) throw new Error("That time was just booked, please pick another.");
   const evaluatorId = choice.evaluatorId;
 

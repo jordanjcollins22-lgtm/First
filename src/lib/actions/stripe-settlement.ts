@@ -99,7 +99,9 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;
-  if (proposalId) {
+  // A Maryland home-improvement deposit is a third of the job at most: the
+  // money is recorded below like any payment, but the proposal is not paid.
+  if (proposalId && session.metadata?.deposit !== "1") {
     await admin
       .from("job_proposals")
       .update({ paid_at: new Date().toISOString() })

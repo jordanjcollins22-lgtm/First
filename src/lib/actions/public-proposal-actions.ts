@@ -26,6 +26,7 @@ import { isSameSitting } from "@/lib/proposal-views";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 import { applyOption, readOptions } from "@/lib/proposal-options";
+import { atSigningForSnapshot } from "@/lib/sales/mhic";
 import type { Json } from "@/lib/supabase/database.types";
 
 /**
@@ -109,7 +110,12 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     // signs at half past eight and closes the phone has a bill with a pay
     // link in their thread, not a promise waiting on a second decision.
     const owed = Math.max(0, (proposal.total_cost ?? 0) - (proposal.discount_amount ?? 0));
-    await createAndSendInvoice(proposal.job_id, proposal.id, owed).catch((err) => {
+    // Maryland home-improvement work (planting, beds, grading, stone) is
+    // billed a deposit of at most a third at signing, never the whole
+    // price; the rest is billed as the work is done. Exempt work is billed
+    // in full, as before.
+    const signing = atSigningForSnapshot(Math.round(owed * 100), chosen ? chosen.snapshot : proposal.scope_snapshot);
+    await createAndSendInvoice(proposal.job_id, proposal.id, signing.dueNowCents / 100).catch((err) => {
       console.error("invoice at signing failed:", err);
     });
 
@@ -367,7 +373,7 @@ export async function chooseOfflinePayment(input: {
     const admin = createAdminClient();
     const { data: proposal } = await admin
       .from("job_proposals")
-      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path, scope_snapshot")
       .eq("token", input.token)
       .maybeSingle();
     if (!proposal) return { ok: false, message: "This proposal link isn't valid." };
@@ -375,7 +381,8 @@ export async function chooseOfflinePayment(input: {
     if (proposal.payment_path) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
 
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
-    const amountCents = Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents);
+    // A deposit of at most a third on home-improvement work (Maryland MHIC).
+    const amountCents = atSigningForSnapshot(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), proposal.scope_snapshot).dueNowCents;
     if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
 
     const { data: claimed } = await admin
@@ -513,7 +520,7 @@ export async function choosePaymentPath(input: {
 
     const { data: proposal } = await admin
       .from("job_proposals")
-      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path, paid_at")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path, paid_at, scope_snapshot")
       .eq("token", input.token)
       .maybeSingle();
 
@@ -537,8 +544,18 @@ export async function choosePaymentPath(input: {
     const option = optionById(context, input.pathId);
     if (!option) return { ok: false, message: "Pick one of the options." };
 
-    const amountCents = amountForPath(context, option);
+    // Paying now on Maryland home-improvement work is a deposit of at most
+    // a third (MHIC); the rest is billed as the work is done.
+    const signing = option.id === "full" ? atSigningForSnapshot(amountForPath(context, option), proposal.scope_snapshot) : null;
+    const amountCents = signing ? signing.dueNowCents : amountForPath(context, option);
     if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
+    // A deposit already in is not taken twice: paid_at stays empty after a
+    // deposit, because the job is not paid for, so retrying would otherwise
+    // raise a second one.
+    if (signing?.isDeposit && retrying) {
+      const { data: paid } = await admin.from("invoices").select("id").eq("job_id", proposal.job_id).eq("status", "paid").limit(1);
+      if ((paid ?? []).length > 0) return { ok: false, message: "Your deposit is in. We'll bill the rest as the work is done." };
+    }
 
     // Claim the choice before doing the work. Two taps on a slow connection
     // otherwise both get past the check above and raise two of everything.
@@ -557,7 +574,7 @@ export async function choosePaymentPath(input: {
     // in full is the whole amount; a plan is its first payment, because a
     // plan whose first payment is left for later is a promise, not a sale.
     let dueNowCents = amountCents;
-    let description = "Landscaping services";
+    let description = signing?.isDeposit ? "Deposit (up to one-third of the contract, Maryland home improvement)" : "Landscaping services";
     let planId: string | null = null;
     let instalmentId: string | null = null;
 
@@ -615,6 +632,7 @@ export async function choosePaymentPath(input: {
         description,
         planId,
         instalmentId,
+        deposit: Boolean(signing?.isDeposit),
       });
       if (started) {
         checkoutUrl = started.url;
@@ -676,7 +694,9 @@ export async function choosePaymentPath(input: {
       proposal.job_id,
       "proposal_responses",
       option.id === "full"
-        ? "A client accepted and is paying in full."
+        ? signing?.isDeposit
+          ? "A client accepted and is paying the deposit (a third at most, Maryland home improvement). Bill the rest as the work is done."
+          : "A client accepted and is paying in full."
         : "A client accepted and set up a payment plan.",
       { dedupeKey: `${proposal.id}:path` }
     ).catch(() => {});
@@ -976,7 +996,7 @@ export async function startProposalPayment(input: {
     const admin = createAdminClient();
     const { data: proposal } = await admin
       .from("job_proposals")
-      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path")
+      .select("id, job_id, organization_id, status, total_cost, discount_amount, payment_path, scope_snapshot")
       .eq("token", input.token)
       .maybeSingle();
 
@@ -991,8 +1011,14 @@ export async function startProposalPayment(input: {
     const option = optionById(context, input.pathId);
     if (!option) return { ok: false, message: "Pick one of the options." };
 
-    const amountCents = amountForPath(context, option);
+    // Home-improvement work takes a deposit of at most a third now (MHIC).
+    const signing = option.id === "full" ? atSigningForSnapshot(amountForPath(context, option), proposal.scope_snapshot) : null;
+    const amountCents = signing ? signing.dueNowCents : amountForPath(context, option);
     if (!(amountCents > 0)) return { ok: false, message: "There is nothing to pay on this one." };
+    if (signing?.isDeposit) {
+      const { data: paid } = await admin.from("invoices").select("id").eq("job_id", proposal.job_id).eq("status", "paid").limit(1);
+      if ((paid ?? []).length > 0) return { ok: false, message: "Your deposit is in. We'll bill the rest as the work is done." };
+    }
 
     // Claimed before any money is raised, exactly as the redirect path does,
     // so two taps cannot produce two plans.
@@ -1034,6 +1060,7 @@ export async function startProposalPayment(input: {
         proposal_id: proposal.id,
         organization_id: proposal.organization_id,
         job_id: proposal.job_id,
+        ...(signing?.isDeposit ? { deposit: "1" } : {}),
       },
     });
 

@@ -8,6 +8,11 @@ import { shortWhen } from "@/lib/time-zone";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import { runAutopilotForJob } from "@/lib/data/sales-autopilot";
 
 import { marketingContext, recordMarketingEvent } from "@/lib/data/marketing-events";
 import type { MarketingEventKind } from "@/lib/marketing-events";
@@ -74,6 +79,19 @@ export async function updateEvaluationStatus(
     // photographed properly cannot end up with nothing to show for it. Still
     // best-effort: a photo that fails to adopt must not lose the submission.
     await adoptEvaluationPhotosAsBefores(jobId).catch(() => {});
+
+    // Speed to proposal: a draft inside the owner's price guardrails is
+    // approved and sent now rather than waiting for somebody to look. After
+    // the response, so the evaluator's Submit is not held up by the drive
+    // times and the email; the cron catches anything this misses.
+    if (outcome?.ok) {
+      const organizationId = await getCurrentOrganizationId();
+      after(() =>
+        runAutopilotForJob(createAdminClient(), organizationId, jobId).catch((err: unknown) => {
+          console.error("[autopilot] after submit failed:", jobId, err);
+        })
+      );
+    }
   }
 
   revalidateJobViews(jobId);
