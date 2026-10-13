@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+
 import { revalidateJobViews } from "@/lib/revalidate-job";
 
 import { createClient } from "@/lib/supabase/server";
@@ -134,6 +136,11 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
     );
   }
 
+  // What the areas were before this save, to tell a new or changed area
+  // from a zone being nudged on the map.
+  const { data: before } = await supabase.from("canvas_designs").select("zones").eq("job_id", jobId).maybeSingle();
+  const pricedBefore = pricingShape(before?.zones);
+
   const { error } = await supabase.from("canvas_designs").upsert(
     {
       job_id: jobId,
@@ -158,4 +165,45 @@ export async function saveCanvasDesign(jobId: string, input: SaveCanvasDesignInp
   );
   if (error) throw error;
   revalidateJobViews(jobId);
+
+  // An area added or changed while the evaluation is still going on goes
+  // straight into a draft proposal, so the office can watch it come in and
+  // price it before the evaluator has finished.
+  if (pricingShape(input.zones) !== pricedBefore) after(() => draftWhileEvaluating(jobId));
+}
+
+/** The areas as far as a price is concerned: their service, answers, size and photos, not where they sit on the map. */
+function pricingShape(zones: unknown): string {
+  const list = Array.isArray(zones) ? (zones as Record<string, unknown>[]) : [];
+  return JSON.stringify(
+    list
+      .filter((z) => z && (z as { service?: unknown }).service)
+      .map((z) => {
+        const service = z.service as { typeId?: string; values?: unknown; photos?: unknown[] };
+        return [z.name, service.typeId, service.values, z.areaSqFt, z.perimeterFt, z.lengthFt, z.widthFt, Array.isArray(service.photos) ? service.photos.length : 0];
+      })
+  );
+}
+
+/**
+ * The draft proposal brought up to date with the areas so far, while the
+ * evaluator is still on site. Only before the evaluation is submitted and
+ * while the proposal is a draft nobody has approved: once it is done, the
+ * submission builds it in full, and once it is approved it is not touched.
+ */
+async function draftWhileEvaluating(jobId: string): Promise<void> {
+  try {
+    const supabase = await createClient();
+    const [{ data: job }, { data: proposal }] = await Promise.all([
+      supabase.from("jobs").select("status, evaluation_status, evaluation_date").eq("id", jobId).maybeSingle(),
+      supabase.from("job_proposals").select("status, sent_at").eq("job_id", jobId).maybeSingle(),
+    ]);
+    // Only a booked evaluation that is still going on.
+    if (!job?.evaluation_date || job.status === "cancelled" || job.evaluation_status === "completed" || job.evaluation_status === "cancelled") return;
+    if (proposal && (proposal.status !== "needs_approval" || proposal.sent_at)) return;
+    const { generateProposal } = await import("@/lib/actions/proposal-actions");
+    await generateProposal(jobId, { live: true });
+  } catch (err) {
+    console.error("[proposal] live draft failed:", jobId, err);
+  }
 }

@@ -46,6 +46,10 @@ export interface PriceApproval {
   submittedAt: string | null;
   /** Price it: accept or decline. Send: priced, not sent to the client yet. */
   stage: "price" | "send";
+  /** The evaluator is still on site: areas are still coming in, and it can be priced but not accepted yet. */
+  evaluating: boolean;
+  /** How many areas the draft has, so a card opened on fewer starts again when another comes in. */
+  areaCount: number;
   /**
    * Areas whose recommended wording nobody has approved or declined yet. The
    * price cannot be accepted until there are none; it is done on the site map.
@@ -155,7 +159,7 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
   let query = supabase
     .from("job_proposals")
     .select(
-      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_submitted_at, referral_code, referred_by_profile_id, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, lat, lng, customer:customers(name, email, account_manager_id)))"
+      "job_id, status, total_cost, discount_amount, sent_at, token, generated_at, site_image_path, site_image_transform, scope_snapshot, job:jobs!inner(id, status, evaluation_status, evaluation_date, evaluation_submitted_at, referral_code, referred_by_profile_id, assignee:profiles!jobs_assigned_to_fkey(full_name, email), property:properties(address, lat, lng, customer:customers(name, email, account_manager_id)))"
     )
     .in("status", ["needs_approval", "sent"]);
   // One job, for its own pricing page.
@@ -177,6 +181,8 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
     job: {
       id: string;
       status: string;
+      evaluation_status: string | null;
+      evaluation_date: string | null;
       evaluation_submitted_at: string | null;
       referral_code: string | null;
       referred_by_profile_id: string | null;
@@ -262,6 +268,8 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
       evaluator: r.job.assignee?.full_name || r.job.assignee?.email || null,
       submittedAt: r.job.evaluation_submitted_at ?? r.generated_at,
       stage: r.status === "needs_approval" || oldPrice ? ("price" as const) : ("send" as const),
+      evaluating: r.status === "needs_approval" && r.job.evaluation_date != null && r.job.evaluation_status !== "completed" && r.job.evaluation_status !== "cancelled",
+      areaCount: (r.scope_snapshot ?? []).length,
       wordingToApprove: toApprove.get(r.job_id) ?? [],
       reviewHref: `/jobs/${r.job_id}?open=proposal`,
       totalCents: Math.round((Number(r.total_cost ?? 0) - Number(r.discount_amount ?? 0)) * 100),

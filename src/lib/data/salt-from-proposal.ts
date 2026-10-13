@@ -1,7 +1,7 @@
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { readOptions } from "@/lib/proposal-options";
 import { quoteOrder, saltSettingsFrom } from "@/lib/salt";
-import { isSalting, saltingOrder } from "@/lib/salting";
+import { combinedSaltingValues, isSalting, saltingOrder } from "@/lib/salting";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -47,9 +47,17 @@ export async function saltOrdersForPaidProposal(admin: Admin, proposalId: string
     } | null)?.property;
     const now = new Date().toISOString();
 
+    // Every salting area sold as one line is one order: the line's area, its
+    // price, and the surface and treatments of all of them together.
+    const onProposal = zones.filter((z) => snapshot.some((s) => s.zoneName === z.name));
+    const orders =
+      onProposal.length === 1 && zones.length > 1
+        ? [{ zone: onProposal[0], values: combinedSaltingValues(zones.map((z) => z.service?.values ?? {})) }]
+        : zones.map((zone) => ({ zone, values: zone.service?.values }));
+
     const { error } = await admin.from("salt_orders").insert(
-      zones.map((zone) => {
-        const order = saltingOrder(zone.service?.values);
+      orders.map(({ zone, values }) => {
+        const order = saltingOrder(values);
         const quote = quoteOrder(order, settings);
         // What the client paid for it on the proposal, when the proposal
         // priced it over the salt page (travel, whole hours, the floor).

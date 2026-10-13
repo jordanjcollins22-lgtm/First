@@ -98,6 +98,8 @@ export default async function AccountManagerJourneyPage() {
     evaluator: "Jace",
     submittedAt: new Date().toISOString(),
     stage: "price",
+        evaluating: false,
+        areaCount: 0,
     wordingToApprove: [],
     reviewHref: "/practice/proposal",
     totalCents: PRACTICE_ZONES.reduce((sum, z) => sum + practicePriceCents(z), 0),

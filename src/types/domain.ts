@@ -663,6 +663,10 @@ export interface ProposalZoneSnapshot {
   photoPaths: string[];
   /** Outline in the same fixed canvas coordinate space as site_image_transform. */
   points: { x: number; y: number }[];
+  /** What the area was priced from (service and answers), so a rebuild keeps a price set on it while nothing about it changed. */
+  facts?: string;
+  /** More outlines that are part of this one line: the other salting areas at the house. */
+  shapes?: { x: number; y: number }[][];
   color: string;
   /**
    * What this area cost at the moment the proposal was generated, in cents.

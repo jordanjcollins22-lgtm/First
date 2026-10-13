@@ -45,7 +45,7 @@ export function PriceApprovals({ items, preview = false }: { items: PriceApprova
         </p>
       </div>
       {items.map((item) => (
-        <PriceCard key={item.jobId} item={item} preview={preview} />
+        <PriceCard key={`${item.jobId}-${item.areaCount}`} item={item} preview={preview} />
       ))}
     </section>
   );
@@ -174,6 +174,13 @@ export function PriceCard({
         </div>
       </div>
 
+      {item.evaluating && (
+        <p className="rounded-xl border border-amber-400 bg-amber-50/70 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <span className="font-semibold">{item.evaluator ?? "The evaluator"} is still on site.</span> Areas show up here as they are added, every 20
+          seconds. Price them now; what you set stays on each area. Accept unlocks when the evaluation is submitted.
+        </p>
+      )}
+
       {(stage === "price" || stage === "decline") && lines && <ForwardBreakdown item={item} lines={lines} onChange={setLines} locked={stage === "decline" || pending} checked={checked} onCheck={check} />}
       {stage === "price" && lines && draft && (
         <p className={cn("text-xs", draft === "saved" || draft === "saving" ? "text-muted-foreground" : "text-destructive")}>
@@ -224,11 +231,11 @@ export function PriceCard({
 
       {stage === "price" && (
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" className="h-14 text-base font-semibold" disabled={pending || !wordingDone || unpriced.length > 0 || gapsOpen.length > 0} onClick={accept}>
+          <Button type="button" className="h-14 text-base font-semibold" disabled={item.evaluating || pending || !wordingDone || unpriced.length > 0 || gapsOpen.length > 0} onClick={accept}>
             {pending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Check className="mr-2 h-5 w-5" />}
             Accept price
           </Button>
-          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={pending || !wordingDone} onClick={() => setStage("decline")}>
+          <Button type="button" variant="outline" className="h-14 text-base font-semibold" disabled={item.evaluating || pending || !wordingDone} onClick={() => setStage("decline")}>
             <X className="mr-2 h-5 w-5" /> Decline price
           </Button>
         </div>

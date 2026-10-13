@@ -6,7 +6,7 @@ import { SiteMapImage } from "@/components/proposal/site-map-image";
 import { focusFrame } from "@/lib/zone-focus";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
-type MapZone = Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points"> & { number?: number };
+type MapZone = Pick<ProposalZoneSnapshot, "zoneName" | "color" | "points" | "shapes"> & { number?: number };
 
 /**
  * The site map with one work area picked out.
@@ -62,7 +62,7 @@ export function FocusableSiteMap({
   const active = focused != null ? zones[focused] : null;
   const shown = active ? [active] : zones;
   const frame = active
-    ? focusFrame(active.points, transform.canvasWidth, transform.canvasHeight)
+    ? focusFrame([...active.points, ...(active.shapes ?? []).flat()], transform.canvasWidth, transform.canvasHeight)
     : defaultFrame;
 
   function toggle(index: number) {
