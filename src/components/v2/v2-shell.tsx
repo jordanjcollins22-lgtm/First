@@ -2,27 +2,36 @@
 
 import { useState } from "react";
 
-import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
+import type { V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
 import { AutomationList } from "@/components/v2/automation-list";
 import { PANEL_LABEL } from "@/components/v2/panels/labels";
 import { EntityDrawerProvider, RowItem } from "@/components/v2/entity-drawer";
 
 /**
- * The new four-page layout: one page per department, a bar of pillars across
- * the top. Shown as whoever the owner picked in Preview as, so it is exactly
- * what that person sees. Nothing here links back into the current app: this layout
- * replaces it, so every screen it needs gets built into one of the four pages.
+ * The four-page layout: one page per department, a row of choices across the
+ * top, and inside a choice a row of sections. Shown as whoever the owner
+ * picked in Preview as, so it is exactly what that person sees. Nothing here
+ * links back into the old app: every screen it needs lives on one of the
+ * four pages.
+ *
+ * Kept plain on purpose: no internal tags, no build words, one section on
+ * screen at a time.
  */
 
-
-const TAG: Record<V2Kind, { text: string; cls: string }> = {
-  "": { text: "", cls: "" },
-  auto: { text: "AUTO", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200" },
-  project: { text: "PROJECT", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200" },
-  admin: { text: "ADMIN", cls: "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200" },
-  people: { text: "PEOPLE", cls: "bg-orange-100 text-orange-900 dark:bg-orange-900/40 dark:text-orange-200" },
+/**
+ * What a working screen is called on its button, where the shared name is
+ * an internal word ("autopilot"). Plain names only; the screen is the same.
+ * Belongs in panels/labels.ts once that file is free to change.
+ */
+const PLAIN_LABEL: Record<string, string> = {
+  "marketing-autopilot": "Needs you & channels",
+  "pipeline-autopilot": "Needs you",
+  "projects-autopilot": "Needs you",
+  finance: "Money dashboard",
+  "task-list": "To-do list",
 };
+const labelFor = (key: string) => PLAIN_LABEL[key] ?? PANEL_LABEL[key] ?? key;
 
 export function V2Shell({
   section,
@@ -50,11 +59,12 @@ export function V2Shell({
   // rather than everything stacked into one long scroll. Working screens
   // first (they hold what needs doing), then the numbers. The pick is kept
   // per choice, so coming back to a choice lands where you left it.
-  const parts = current ? (current.parts ?? [current]).filter(sees) : [];
+  // A section with nothing in it is left off rather than shown empty.
+  const parts = current ? (current.parts ?? [current]).filter(sees).filter((p) => p.id !== "tasks" || (unplaced?.length ?? 0) > 0) : [];
   const shownPanels = current ? panelKeysFor(current).filter((k) => panels[k]) : [];
   const sections = [
-    ...shownPanels.map((k) => ({ key: `panel:${k}`, label: PANEL_LABEL[k] ?? k })),
-    ...parts.map((p) => ({ key: `part:${p.id}`, label: p.label })),
+    ...shownPanels.map((k) => ({ key: `panel:${k}`, label: labelFor(k), records: false })),
+    ...parts.map((p) => ({ key: `part:${p.id}`, label: p.label, records: true })),
   ];
   const [picked, setPicked] = useState<Record<string, string>>({});
   const activeKey = (current && sections.find((x) => x.key === picked[current.id])?.key) ?? sections[0]?.key;
@@ -66,8 +76,8 @@ export function V2Shell({
     <div className="w-full pb-5">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            {section.name} · new layout preview · live data as of {section.loadedAt}
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {section.name} · updated {section.loadedAt}
           </p>
           <h1 className="text-3xl font-extrabold tracking-tight">{current?.title}</h1>
         </div>
@@ -75,7 +85,7 @@ export function V2Shell({
       </div>
 
       <div className="mb-2 rounded-xl border bg-card p-2">
-        <div data-tour="choices" role="tablist" aria-label={`${section.name} pillars`} className="flex gap-1.5 overflow-x-auto pb-0.5">
+        <div data-tour="choices" role="tablist" aria-label={`${section.name} choices`} className="flex gap-1.5 overflow-x-auto pb-0.5">
           {visible.map((p) => {
             const on = p.id === current?.id;
             return (
@@ -91,11 +101,6 @@ export function V2Shell({
                 }
               >
                 {p.label}
-                {TAG[p.kind].text && (
-                  <span className={"rounded-full px-2 py-0.5 font-mono text-[11px] font-medium " + (on ? "bg-primary text-primary-foreground" : TAG[p.kind].cls)}>
-                    {TAG[p.kind].text}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -103,9 +108,9 @@ export function V2Shell({
       </div>
       {sections.length > 1 && current && (
         <div data-tour="sections" role="tablist" aria-label={`${current.label} sections`} className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-          {sections.map((x) => {
+          {sections.flatMap((x, i) => {
             const on = x.key === activeKey;
-            return (
+            const tab = (
               <button
                 key={x.key}
                 type="button"
@@ -120,6 +125,9 @@ export function V2Shell({
                 {x.label}
               </button>
             );
+            // A thin rule between the screens you act on and the records behind them.
+            const divide = i > 0 && x.records && !sections[i - 1].records;
+            return divide ? [<span key={`rule:${x.key}`} role="presentation" className="mx-1 w-px shrink-0 self-stretch bg-border" />, tab] : [tab];
           })}
         </div>
       )}
@@ -130,7 +138,7 @@ export function V2Shell({
       {activePart && (
         <div key={activePart.id}>
           {parts.length > 1 && activePart.sub && <p className="mb-3 text-sm text-muted-foreground">{activePart.sub}</p>}
-          <PillarBody pillar={activePart} section={section} roles={roles} open={setPillarId} unplaced={unplaced} />
+          <PillarBody pillar={activePart} section={section} unplaced={unplaced} />
         </div>
       )}
     </div>
@@ -142,20 +150,15 @@ export function V2Shell({
 function PillarBody({
   pillar,
   section,
-  roles,
-  open,
   unplaced,
 }: {
   pillar: V2Pillar;
   section: V2Section;
-  roles: V2Role[];
-  open: (id: string) => void;
   unplaced?: { label: string; href: string }[];
 }) {
   // The task list itself is TaskListPanel (owner_tasks); this keeps only the
   // screens of the old app that no choice reaches yet, worked out live.
   if (pillar.id === "tasks") return <UnplacedScreens unplaced={unplaced ?? []} />;
-  if (pillar.id === "overview" && !pillar.parts) return <Overview section={section} pillar={pillar} roles={roles} open={open} />;
   if (pillar.view === "website" && section.website) {
     return (
       <div className="grid gap-5">
@@ -207,52 +210,15 @@ function Detail({ pillar }: { pillar: V2Pillar }) {
   );
 }
 
-function Overview({ section, pillar, roles, open }: { section: V2Section; pillar: V2Pillar; roles: V2Role[]; open: (id: string) => void }) {
-  const list = (g: "a" | "b") => section.pillars.filter((p) => p.group === g && p.who.some((r) => roles.includes(r)));
-  return (
-    <div className="grid gap-5">
-      {pillar.blocks.length > 0 && <Blocks pillar={pillar} />}
-      <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-        {(["a", "b"] as const).map((g) =>
-          list(g).length ? (
-            <section key={g} className="self-start rounded-2xl border bg-card p-5">
-              <h2 className="text-xl font-extrabold">{section.groups[g].title}</h2>
-              <p className="mb-4 mt-1 text-sm text-muted-foreground">{section.groups[g].note}</p>
-              <div className="grid gap-2.5">
-                {list(g).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => open(p.id)}
-                    className="flex min-h-14 items-center justify-between gap-3 rounded-lg border bg-muted/50 px-4 py-3 text-left hover:bg-muted"
-                  >
-                    <span>
-                      <span className="block font-bold">{p.label}</span>
-                      {p.blurb && <span className="text-sm text-muted-foreground">{p.blurb}</span>}
-                    </span>
-                    {TAG[p.kind].text && (
-                      <span className={"whitespace-nowrap rounded-full px-2 py-0.5 font-mono text-[11px] " + TAG[p.kind].cls}>{TAG[p.kind].text}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null
-        )}
-      </div>
-    </div>
-  );
-}
-
 function UnplacedScreens({ unplaced }: { unplaced: { label: string; href: string }[] }) {
   if (!unplaced.length) return null;
   return (
     <section className="rounded-2xl border bg-card p-5">
       <h3 className="mb-1 text-base font-extrabold">
-        Current screens with no tab in the new layout yet{" "}
+        Old screens not moved over yet{" "}
         <span className="font-mono text-xs font-normal text-muted-foreground">{unplaced.length}</span>
       </h3>
-      <p className="mb-2 text-sm text-muted-foreground">Each one needs a home on one of the four pages.</p>
+      <p className="mb-2 text-sm text-muted-foreground">Each still works in the old app until it has a place on one of the four pages.</p>
       <ul className="flex flex-wrap gap-2">
         {unplaced.map((u) => (
           <li key={u.href} className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm">
