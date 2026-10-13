@@ -116,13 +116,13 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
   }
 
   const weeklyByPerson = new Map<string, { weekday: number; hours: number }[]>();
-  for (const row of weekly as unknown as { profile_id: string; weekday: number; start_time: string | null; end_time: string | null }[]) {
+  for (const row of weekly as unknown as { profile_id: string; day_of_week: number; start_time: string | null; end_time: string | null }[]) {
     const list = weeklyByPerson.get(row.profile_id) ?? [];
     const hours =
       row.start_time && row.end_time
         ? Math.max(0, (Date.parse(`1970-01-01T${row.end_time}`) - Date.parse(`1970-01-01T${row.start_time}`)) / 3_600_000)
         : 0;
-    list.push({ weekday: row.weekday, hours });
+    list.push({ weekday: row.day_of_week, hours });
     weeklyByPerson.set(row.profile_id, list);
   }
 
