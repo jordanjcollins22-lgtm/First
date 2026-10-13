@@ -17,6 +17,7 @@ import { RecentAnswers } from "@/components/marketing/recent-answers";
 import { AffiliateTutorial } from "@/components/tutorial/affiliate-tutorial";
 import { AFFILIATE_TUTORIAL_KEY } from "@/lib/affiliate-tutorial";
 import { createClient } from "@/lib/supabase/server";
+import { privateBoard } from "@/lib/affiliate-home";
 
 /**
  * Posts to answer.
@@ -46,7 +47,7 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   const tutorialSeen = Boolean(auth.user?.user_metadata?.[AFFILIATE_TUTORIAL_KEY]);
 
   const now = new Date();
-  const [posts, today, settings, leaderboard, answered] = await Promise.all([
+  const [board, today, settings, leaderboard, answered] = await Promise.all([
     getCurrentOrganization()
       .then((org) => getPostBoard(profile.organization_id, profile.id, now, { roles: profile.roles, businessName: org.name }))
       .catch((err) => {
@@ -71,6 +72,10 @@ export default async function PostsToAnswerPage({ searchParams }: { searchParams
   // it now, after this page is sent, so it is in the box on the next look.
   // And anything the finder brought in that is not sorted yet is sorted, so
   // it is here on the next look without anybody pressing a button.
+  // Somebody else on a post shows as a name and whether they answered it:
+  // their comment, tracked code and clicks are theirs, and only the owner's
+  // to see. Stripped here, because the board goes to the browser whole.
+  const posts = owner ? board : privateBoard(board);
   after(() => sweepPosts(profile.organization_id).then(() => undefined));
   const whose = whoId === profile.id ? null : leaderboard?.find((s) => s.profileId === whoId)?.name ?? "Their";
 
