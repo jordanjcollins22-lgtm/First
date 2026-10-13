@@ -6,6 +6,7 @@ import { getJobCustomerContact } from "@/lib/job-customer";
 import { stripeCustomerFor } from "@/lib/stripe-customer";
 import { sendSms, toE164 } from "@/lib/sms";
 import { stripeOptions } from "@/lib/stripe-options";
+import { invoicePaymentSettings } from "@/lib/finance/autopay";
 
 function getStripeClient(): Stripe {
   return new Stripe(env.stripeSecretKey, stripeOptions());
@@ -67,12 +68,20 @@ export async function createAndSendInvoice(
   // "exclude", so the invoice was created without the line, finalized at zero
   // and sent. The item stayed pending on the customer, unbilled. Naming the
   // behaviour as well, because it is a default that has already changed once.
-  const draft = await stripe.invoices.create({
+  // Card and, when the business offers it, US bank (ACH): 0.8% capped at $5
+  // against 2.9% + 30¢ for a card. If Stripe refuses the bank option (ACH
+  // not switched on for the account), the invoice goes out card-only rather
+  // than not at all.
+  const invoiceParams: Stripe.InvoiceCreateParams = {
     customer: stripeCustomer.id,
     collection_method: "send_invoice",
     days_until_due: 30,
     pending_invoice_items_behavior: "exclude",
-  });
+  };
+  const paymentSettings = await invoicePaymentSettings(contact.organizationId);
+  const draft = paymentSettings
+    ? await stripe.invoices.create({ ...invoiceParams, payment_settings: paymentSettings }).catch(() => stripe.invoices.create(invoiceParams))
+    : await stripe.invoices.create(invoiceParams);
   const draftId = draft.id;
   if (!draftId) throw new Error("Stripe did not return an invoice to bill against.");
 

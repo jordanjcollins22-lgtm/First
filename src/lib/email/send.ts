@@ -30,6 +30,8 @@ export interface SendInput {
   fromAddress?: string | null;
   /** Where replies go, instead of the sender's usual reply-to. */
   replyTo?: string | null;
+  /** Files to attach, content base64-encoded (a payroll CSV). */
+  attachments?: { filename: string; content: string }[];
 }
 
 /**
@@ -128,6 +130,7 @@ export async function sendEmail(input: SendInput, attempt = 0): Promise<SendResu
     // Replies go to a mailbox somebody reads. The sending subdomain exists to
     // protect reputation, not to be somewhere anybody looks.
     replyTo: input.replyTo ?? sender.reply_to,
+    attachments: input.attachments,
   });
 
   if (!result.ok) {
