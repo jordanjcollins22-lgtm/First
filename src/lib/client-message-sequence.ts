@@ -14,6 +14,8 @@ import { describeOffset, KIND_LABEL, type ReminderKind, type ReminderRule } from
 import { proposalReadyEmail } from "@/lib/proposal-ready-email";
 import { beforeAfterEmail } from "@/lib/project-closeout";
 import { SYSTEM_FLOW } from "@/lib/system-flow";
+import { HOW_TO_REPLY } from "@/lib/message-via";
+import { invoiceReminderMessage } from "@/lib/client-automations/invoices";
 
 export interface SequenceMessage {
   key: string;
@@ -49,6 +51,11 @@ export interface SequenceInput {
   remindersOn: boolean;
   /** Emails wait for the owner's OK. */
   approvalRequired: boolean;
+  /**
+   * The Invoice reminders switch in Sales > Automated messages. The rule alone
+   * sends nothing: the reminder run gathers invoices only once this is on.
+   */
+  invoiceRemindersOn?: boolean;
   /** The filling for the evaluation emails' braces. */
   vars: Record<string, string>;
   sample: { clientName: string; address: string; evaluator: string; manager: string; baseUrl: string };
@@ -60,7 +67,7 @@ const ANCHOR: Record<ReminderKind, { thing: string; zero: string }> = {
   evaluation_reminder: { thing: "the visit", zero: "At the time of the visit" },
   proposal_follow_up: { thing: "the proposal is sent, if they haven't answered", zero: "When the proposal is sent" },
   job_start_reminder: { thing: "the job starts", zero: "When the job starts" },
-  invoice_reminder: { thing: "the invoice goes, if it's unpaid", zero: "When the invoice goes" },
+  invoice_reminder: { thing: "the invoice is due, if it's unpaid", zero: "The day the invoice is due" },
 };
 
 const STAGE_OF: Record<ReminderKind, SequenceMessage["stage"]> = {
@@ -184,7 +191,7 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
       else if (kind === "evaluation_reminder") moment = at(`${kind}-${hours}`, sayWhen(kind, hours), 1000 + hours);
       else if (kind === "proposal_follow_up") moment = at(`${kind}-${hours}`, `Proposal not answered: ${describeOffset(hours).replace(/ after$/, "")}`, 3000 + hours);
       else if (kind === "job_start_reminder") moment = at(`${kind}-${hours}`, hours === -18 ? "The evening before the job" : sayWhen(kind, hours), 5000 + hours);
-      else moment = at(`${kind}-${hours}`, `Invoice unpaid: ${describeOffset(hours).replace(/ after$/, "")}`, 7000 + hours);
+      else moment = at(`${kind}-${hours}`, hours < 0 ? `Invoice due in ${describeOffset(hours).replace(/ before$/, "")}` : hours === 0 ? "Invoice due today" : `Invoice unpaid: ${describeOffset(hours).replace(/ after$/, "")} late`, 7000 + hours);
 
       for (const channel of ["sms", "email"] as const) {
         // Where the evaluation email already says it, the reminder rule's
@@ -192,14 +199,31 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
         // skips it. Only its text is its own.
         const superseded = channel === "email" && moment.items.some((item) => item.key.startsWith("evaluation-"));
         if (superseded) continue;
-        const composed = composeReminder(kind, channel, facts(kind), {
-          includeOptOut: channel === "sms",
-          unsubscribeUrl: `${sample.baseUrl}/u/sample`,
-        });
+        // Invoice nudges are worded by where they fall (before, on, after the
+        // due date) and carry the pay link, as the sender writes them.
+        const composed =
+          kind === "invoice_reminder"
+            ? invoiceReminderMessage({
+                offsetHours: hours,
+                channel,
+                businessName,
+                clientName: sample.clientName,
+                amount: 1850,
+                dueAt: new Date("2026-11-02T13:00:00Z"),
+                timeZone: "America/New_York",
+                payLink: "https://invoice.stripe.com/i/sample",
+                includeOptOut: channel === "sms",
+                unsubscribeUrl: `${sample.baseUrl}/u/sample`,
+                howToReply: HOW_TO_REPLY,
+              })
+            : composeReminder(kind, channel, facts(kind), {
+                includeOptOut: channel === "sms",
+                unsubscribeUrl: `${sample.baseUrl}/u/sample`,
+              });
         const switchedOn = input.remindersOn && rule.enabled && rule.channels.includes(channel);
-        // The reminder run gathers appointments, proposals and job starts;
-        // nothing in it looks at invoices yet, so this rule sends nothing.
-        const unsent = kind === "invoice_reminder";
+        // The reminder run gathers invoices only once the Invoice reminders
+        // switch is on; until then this rule sends nothing.
+        const unsent = kind === "invoice_reminder" && !input.invoiceRemindersOn;
         moment.items.push({
           key: `${kind}-${hours}-${channel}`,
           stage: STAGE_OF[kind],
@@ -207,7 +231,7 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
           when: sayWhen(kind, hours),
           channel,
           on: switchedOn && !unsent,
-          note: unsent && switchedOn ? "Switched on, but nothing sends invoice reminders yet." : null,
+          note: unsent && switchedOn ? "Switched on here, but nothing sends until Invoice reminders is switched on in Sales › Automated messages." : null,
           byHand: false,
           heldForOk: channel === "email" && input.approvalRequired,
           subject: composed.subject,

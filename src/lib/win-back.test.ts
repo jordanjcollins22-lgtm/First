@@ -44,7 +44,7 @@ describe("phaseOneSnapshot", () => {
 
 describe("phaseOnePriceProblem", () => {
   it("wants a price under what was declined", () => {
-    expect(phaseOnePriceProblem(0, 5000)).toBe("Type the Phase 1 price.");
+    expect(phaseOnePriceProblem(0, 5000)).toBe("The areas ticked have no price on them.");
     expect(phaseOnePriceProblem(5000, 5000)).toMatch(/less than/);
     expect(phaseOnePriceProblem(4200, 5000)).toBeNull();
   });

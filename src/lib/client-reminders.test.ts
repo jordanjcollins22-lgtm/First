@@ -42,9 +42,13 @@ describe("the reminders a business gets before it changes anything", () => {
     ]);
   });
 
-  it("is quiet: no rule fires more than twice", () => {
+  it("is quiet: no rule fires more than twice, except money owed", () => {
     // Two touches is a business on top of things. Five is one somebody mutes.
-    for (const rule of DEFAULT_RULES) expect(rule.offsetsHours.length).toBeLessThanOrEqual(2);
+    // An unpaid invoice is the exception the owner asked for (before, on,
+    // +7, +21), and it sends nothing until its own switch is on.
+    for (const rule of DEFAULT_RULES) {
+      expect(rule.offsetsHours.length).toBeLessThanOrEqual(rule.kind === "invoice_reminder" ? 4 : 2);
+    }
   });
 
   it("names and explains every one of them", () => {

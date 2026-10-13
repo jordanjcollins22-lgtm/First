@@ -9,6 +9,7 @@ import { getContact, isGhlConfigured, listAppointments } from "@/lib/ghl/client"
 import { planChanges, type GhlEvent, type KnownJob } from "@/lib/ghl/plan";
 import { routeEvaluation } from "@/lib/data/evaluator-routing";
 import { zipOf } from "@/lib/material-suppliers";
+import { GHL_NO_SHOW_REASON } from "@/lib/client-automations/no-show";
 
 /**
  * Bookings made in GoHighLevel, brought into the app.
@@ -311,7 +312,14 @@ export async function pullGhlCalendar(organizationId: string): Promise<{ ok: boo
         await admin.from("jobs").update({ evaluation_date: change.startTime, evaluation_end_date: change.endTime }).eq("id", change.jobId);
         counts.moved += 1;
       } else if (change.kind === "cancel") {
-        await admin.from("jobs").update({ evaluation_status: "cancelled", cancellation_reason: "Cancelled in GoHighLevel." }).eq("id", change.jobId);
+        // A no-show is said as one, so the rebook text knows the client
+        // missed it rather than called it off (client-automations/no-show).
+        const appointmentId = jobs.find((j) => j.id === change.jobId)?.ghlAppointmentId;
+        const noShow = events.find((e) => e.id === appointmentId)?.appointmentStatus === "noshow";
+        await admin
+          .from("jobs")
+          .update({ evaluation_status: "cancelled", cancellation_reason: noShow ? GHL_NO_SHOW_REASON : "Cancelled in GoHighLevel." })
+          .eq("id", change.jobId);
         counts.cancelled += 1;
       } else if (change.kind === "reinstate") {
         await admin

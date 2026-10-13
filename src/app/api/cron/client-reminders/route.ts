@@ -9,20 +9,37 @@ import { ensureSendingReady } from "@/lib/email/ready";
 import { bookedSequenceKey } from "@/lib/data/evaluation-sequence-send";
 import { expireStaleApprovals, notifyApprovers } from "@/lib/data/outbound-approvals";
 import {
+  dedupeKeyFor,
   dueNow,
   mergeRules,
+  type DueReminder,
   type ReminderKind,
   type ReminderRule,
   type ReminderSubject,
 } from "@/lib/client-reminders";
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
 import { BUSINESS_TIME_ZONE, zonedToUtc } from "@/lib/time-zone";
+import { HOW_TO_REPLY } from "@/lib/message-via";
 import {
   alreadySent,
   contactsFor,
   quietWindowFor,
   sendClientMessage,
 } from "@/lib/data/client-messaging";
+import { lastClientContact, loadSequenceSettings } from "@/lib/data/client-automations";
+import { isLiveFor, type SequenceKey, type SequenceSetting } from "@/lib/client-automations/settings";
+import {
+  invoiceDueAt,
+  invoiceReminderMessage,
+  invoiceSettled,
+  invoiceTakesReminders,
+} from "@/lib/client-automations/invoices";
+import {
+  followUpMessage,
+  followUpPlan,
+  followUpsDue,
+  LEGACY_OFFSETS_HOURS,
+} from "@/lib/client-automations/proposal-follow-ups";
 
 /**
  * The automated reminders and follow-ups clients get.
@@ -96,13 +113,17 @@ export async function GET(request: NextRequest) {
       }))
     );
 
-    const subjects = await subjectsFor(admin, org.id, now);
-    if (subjects.length === 0) continue;
+    const sequences = await loadSequenceSettings(admin, org.id);
+    const { subjects, proposals } = await subjectsFor(admin, org.id, now, sequences);
+    if (subjects.length === 0 && proposals.length === 0) continue;
 
     // Everything the rules say is due, then everything of that we have
     // already sent taken out of it. Two steps rather than one query per
     // reminder: a run reminding forty people is a handful of queries.
-    const candidates = dueNow(subjects.map((s) => s.subject), rules, new Set(), now, LATE_WINDOW_HOURS);
+    const candidates = [
+      ...dueNow(subjects.map((s) => s.subject), rules, new Set(), now, LATE_WINDOW_HOURS),
+      ...(await proposalFollowUpsDue(admin, proposals, rules, sequences.proposal_follow_ups, now)),
+    ];
     if (candidates.length === 0) continue;
     // The evaluation email sequence sends its own "you are booked". A
     // confirmation on top of that is the same email twice, a day apart.
@@ -122,29 +143,61 @@ export async function GET(request: NextRequest) {
     const window = quietWindowFor(org);
     let parked = 0;
     const byReference = new Map(subjects.map((s) => [`${s.subject.kind}:${s.subject.referenceId}`, s]));
+    for (const p of proposals) byReference.set(`proposal_follow_up:${p.id}`, p.facts);
 
     for (const reminder of due) {
       const contact = contacts.get(reminder.customerId);
       const facts = byReference.get(`${reminder.kind}:${reminder.referenceId}`);
       if (!contact || !facts) continue;
 
-      const message = composeReminder(
-        reminder.kind,
-        reminder.channel,
-        {
+      // Required on the first text to a number, and tiresome after that.
+      const includeOptOut = reminder.channel === "sms" && !contact.textedBefore;
+      const unsubscribeUrl = contact.unsubscribeToken ? `${origin}/u/${contact.unsubscribeToken}` : null;
+      // A Stripe pay link is already absolute; the app's own links are not.
+      const link = facts.link ? (/^https?:\/\//.test(facts.link) ? facts.link : `${origin}${facts.link}`) : null;
+
+      let message: { subject: string; body: string };
+      if (reminder.kind === "invoice_reminder" && facts.when) {
+        message = invoiceReminderMessage({
+          offsetHours: reminder.offsetHours,
+          channel: reminder.channel,
           businessName: org.name,
           clientName: contact.name,
-          when: facts.when ? sayWhen(facts.when, window.timeZone, now, { dayOnly: facts.dayOnly }) : null,
+          amount: Number(facts.amount ?? 0),
+          dueAt: facts.when,
+          timeZone: window.timeZone,
+          payLink: link,
+          includeOptOut,
+          unsubscribeUrl,
+          howToReply: HOW_TO_REPLY,
+        });
+      } else if (reminder.kind === "proposal_follow_up" && link && facts.touchIndex) {
+        message = followUpMessage({
+          index: facts.touchIndex.get(reminder.offsetHours) ?? 0,
+          channel: reminder.channel,
+          businessName: org.name,
+          clientName: contact.name,
           address: facts.address,
-          link: facts.link ? `${origin}${facts.link}` : null,
-          amount: facts.amount,
-        },
-        {
-          // Required on the first text to a number, and tiresome after that.
-          includeOptOut: reminder.channel === "sms" && !contact.textedBefore,
-          unsubscribeUrl: contact.unsubscribeToken ? `${origin}/u/${contact.unsubscribeToken}` : null,
-        }
-      );
+          link,
+          includeOptOut,
+          unsubscribeUrl,
+          howToReply: HOW_TO_REPLY,
+        });
+      } else {
+        message = composeReminder(
+          reminder.kind,
+          reminder.channel,
+          {
+            businessName: org.name,
+            clientName: contact.name,
+            when: facts.when ? sayWhen(facts.when, window.timeZone, now, { dayOnly: facts.dayOnly }) : null,
+            address: facts.address,
+            link,
+            amount: facts.amount,
+          },
+          { includeOptOut, unsubscribeUrl }
+        );
+      }
 
       const outcome = await sendClientMessage(
         {
@@ -195,6 +248,67 @@ interface SubjectWithFacts {
   address: string | null;
   link: string | null;
   amount: string | null;
+  /** Proposal follow-ups: which touch each offset is, for its wording. */
+  touchIndex?: Map<number, number>;
+}
+
+/** A sent proposal the follow-up sequence may still be working. */
+interface ProposalInPlay {
+  id: string;
+  customerId: string;
+  status: string;
+  sentAt: Date;
+  expiresAt: Date | null;
+  facts: SubjectWithFacts;
+}
+
+/**
+ * The proposal follow-ups due now.
+ *
+ * Proposals sent since "Proposal follow-ups (5 touches)" was switched on get
+ * the five-touch plan, email and text in turn. Everything else keeps the
+ * original two touches on the rule's own channels, so switching the plan on
+ * never reaches back to a proposal from three weeks ago. Either way the
+ * sequence stops on accept, decline, expiry, or a reply on any channel. The
+ * rule's own switch still turns all of it off.
+ */
+async function proposalFollowUpsDue(
+  admin: ReturnType<typeof createAdminClient>,
+  proposals: ProposalInPlay[],
+  rules: ReminderRule[],
+  setting: SequenceSetting,
+  now: Date
+): Promise<DueReminder[]> {
+  const rule = rules.find((r) => r.kind === "proposal_follow_up");
+  if (!rule?.enabled || proposals.length === 0) return [];
+  const replied = await lastClientContact(admin, proposals.map((p) => p.customerId));
+  const extended = followUpPlan(setting.config.followUpDays);
+  const legacy = LEGACY_OFFSETS_HOURS.flatMap((offsetHours) => rule.channels.map((channel) => ({ offsetHours, channel })));
+
+  const out: DueReminder[] = [];
+  for (const p of proposals) {
+    const plan = isLiveFor(setting, p.sentAt) ? extended : legacy;
+    p.facts.touchIndex = new Map([...new Set(plan.map((t) => t.offsetHours))].sort((a, b) => a - b).map((h, i) => [h, i]));
+    const due = followUpsDue({
+      facts: { status: p.status, sentAt: p.sentAt, expiresAt: p.expiresAt, lastClientContactAt: replied.get(p.customerId) ?? null },
+      plan,
+      now,
+      lateWindowHours: LATE_WINDOW_HOURS,
+    });
+    for (const touch of due) {
+      out.push({
+        kind: "proposal_follow_up",
+        referenceId: p.id,
+        customerId: p.customerId,
+        channel: touch.channel,
+        offsetHours: touch.offsetHours,
+        // The same key the two-touch sequence always used, so the day-3 email
+        // is one message whichever plan a proposal is on.
+        dedupeKey: dedupeKeyFor("proposal_follow_up", p.id, touch.offsetHours, touch.channel),
+      });
+    }
+  }
+  return out;
 }
 
 /**
@@ -207,9 +321,11 @@ interface SubjectWithFacts {
 async function subjectsFor(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
-  now: Date
-): Promise<SubjectWithFacts[]> {
+  now: Date,
+  sequences: Record<SequenceKey, SequenceSetting>
+): Promise<{ subjects: SubjectWithFacts[]; proposals: ProposalInPlay[] }> {
   const out: SubjectWithFacts[] = [];
+  const inPlay: ProposalInPlay[] = [];
   const recently = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
   // Filtered on the join rather than by a list of ids. This used to read
@@ -228,7 +344,7 @@ async function subjectsFor(
     .limit(1000);
   if (jobsError) {
     log.error("cron.client_reminders.jobs", jobsError, { organizationId });
-    return out;
+    return { subjects: out, proposals: inPlay };
   }
 
   type JobRow = {
@@ -309,7 +425,7 @@ async function subjectsFor(
   // Proposals carry the business directly, so no list of job ids is needed.
   const { data: proposals, error: proposalsError } = await admin
     .from("job_proposals")
-    .select("id, token, status, created_at, sent_at, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
+    .select("id, token, status, created_at, sent_at, expires_at, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
     .eq("organization_id", organizationId)
     .eq("status", "sent")
     .not("sent_at", "is", null)
@@ -317,7 +433,7 @@ async function subjectsFor(
     .limit(500);
   if (proposalsError) {
     log.error("cron.client_reminders.proposals", proposalsError, { organizationId });
-    return out;
+    return { subjects: out, proposals: inPlay };
   }
 
   type ProposalRow = {
@@ -326,26 +442,73 @@ async function subjectsFor(
     status: string;
     created_at: string;
     sent_at: string | null;
+    expires_at: string | null;
     job: { id: string; cancelled_at: string | null; property: { address: string; customer_id: string | null } | null } | null;
   };
   for (const proposal of (proposals ?? []) as unknown as ProposalRow[]) {
     const property = proposal.job?.property;
     if (!property?.customer_id || proposal.job?.cancelled_at) continue;
-    out.push({
-      subject: {
-        kind: "proposal_follow_up",
-        referenceId: proposal.id,
-        customerId: property.customer_id,
-        // From the day the client got it, not the day it was written.
-        anchor: new Date(proposal.sent_at ?? proposal.created_at),
-        settled: proposal.status !== "sent",
-      },
-      when: null,
-      address: property.address,
-      link: `/proposal/${proposal.token}`,
-      amount: null,
+    // Worked out in proposalFollowUpsDue, which knows about replies and
+    // the five-touch plan, rather than by the plain rule arithmetic.
+    inPlay.push({
+      id: proposal.id,
+      customerId: property.customer_id,
+      status: proposal.status,
+      // From the day the client got it, not the day it was written.
+      sentAt: new Date(proposal.sent_at ?? proposal.created_at),
+      expiresAt: proposal.expires_at ? new Date(proposal.expires_at) : null,
+      facts: { subject: { kind: "proposal_follow_up", referenceId: proposal.id, customerId: property.customer_id, anchor: new Date(proposal.sent_at ?? proposal.created_at), settled: false }, when: null, address: property.address, link: `/proposal/${proposal.token}`, amount: null },
     });
   }
 
-  return out;
+  // Invoices, once "Invoice reminders" is switched on, and only those raised
+  // since: switching it on never chases last year's bills. Counted from the
+  // due date, with the Stripe pay link in every one.
+  const invoiceSetting = sequences.invoice_reminders;
+  if (invoiceSetting.enabled && invoiceSetting.startedAt) {
+    const { data: invoices, error: invoicesError } = await admin
+      .from("invoices")
+      .select("id, status, amount, sent_at, created_at, paid_at, hosted_invoice_url, pay_by, job:jobs!inner(id, cancelled_at, property:properties!inner(address, customer_id))")
+      .eq("organization_id", organizationId)
+      .eq("status", "open")
+      .gte("created_at", invoiceSetting.startedAt.toISOString())
+      .limit(500);
+    if (invoicesError) {
+      log.error("cron.client_reminders.invoices", invoicesError, { organizationId });
+    }
+    type InvoiceRow = {
+      id: string;
+      status: string;
+      amount: number;
+      sent_at: string | null;
+      created_at: string;
+      paid_at: string | null;
+      hosted_invoice_url: string | null;
+      pay_by: string | null;
+      job: { id: string; cancelled_at: string | null; property: { address: string; customer_id: string | null } | null } | null;
+    };
+    for (const invoice of (invoices ?? []) as unknown as InvoiceRow[]) {
+      const property = invoice.job?.property;
+      if (!property?.customer_id || invoice.job?.cancelled_at) continue;
+      if (!isLiveFor(invoiceSetting, invoice.created_at)) continue;
+      const facts = { id: invoice.id, status: invoice.status, amount: Number(invoice.amount), sentAt: invoice.sent_at, createdAt: invoice.created_at, paidAt: invoice.paid_at, hostedInvoiceUrl: invoice.hosted_invoice_url, payBy: invoice.pay_by };
+      if (!invoiceTakesReminders(facts)) continue;
+      const dueAt = invoiceDueAt(facts);
+      out.push({
+        subject: {
+          kind: "invoice_reminder",
+          referenceId: invoice.id,
+          customerId: property.customer_id,
+          anchor: dueAt,
+          settled: invoiceSettled(facts),
+        },
+        when: dueAt,
+        address: property.address,
+        link: invoice.hosted_invoice_url,
+        amount: String(invoice.amount),
+      });
+    }
+  }
+
+  return { subjects: out, proposals: inPlay };
 }

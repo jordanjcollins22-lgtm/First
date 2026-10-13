@@ -68,6 +68,15 @@ describe("the client's messages, in order", () => {
     expect(invoice.note).toMatch(/nothing sends/);
   });
 
+  it("shows invoice reminders as sending once their switch is on, with the pay link", () => {
+    const on = buildMessageSequence({ ...input, invoiceRemindersOn: true });
+    const before = on.find((m) => m.key === "invoice_reminder--72-email")!;
+    expect(before.on).toBe(true);
+    expect(before.note).toBeNull();
+    expect(before.when).toBe("3 days before the invoice is due, if it's unpaid");
+    expect(before.body).toContain("https://invoice.stripe.com/");
+  });
+
   it("holds the proposal for the owner's OK", () => {
     expect(all.find((m) => m.key === "proposal-ready")?.heldForOk).toBe(true);
   });

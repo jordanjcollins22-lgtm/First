@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { isAccountManager } from "@/lib/affiliate-roles";
-import { winBackRows, type WinBackRow } from "@/lib/win-back";
+import { winBackRows, zonePrices, type WinBackRow } from "@/lib/win-back";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 
 /** How far back a decline is still worth a second try. */
@@ -62,7 +62,8 @@ export async function getWinBack(now: Date = new Date()): Promise<WinBackRow[] |
         note: r.client_response_note,
         officeDeclined: Boolean(r.office_declined_by),
         jobStatus: r.jobs?.status ?? "",
-        areas: (r.scope_snapshot ?? []).map((z) => ({ zoneName: z.zoneName, serviceLabel: z.serviceLabel })),
+        // Each area with its own price, so Phase 1 prices itself (hotspot 12).
+        areas: zonePrices(r.scope_snapshot ?? [], Math.round(Number(r.total_cost ?? 0) * 100)),
       };
     })
   );

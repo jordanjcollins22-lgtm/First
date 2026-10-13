@@ -50,7 +50,11 @@ export const DEFAULT_RULES: ReminderRule[] = [
   { kind: "evaluation_reminder", enabled: true, channels: ["sms"], offsetsHours: [-18] },
   { kind: "proposal_follow_up", enabled: true, channels: ["email"], offsetsHours: [72, 168] },
   { kind: "job_start_reminder", enabled: true, channels: ["sms"], offsetsHours: [-18] },
-  { kind: "invoice_reminder", enabled: true, channels: ["email"], offsetsHours: [168, 504] },
+  // Counted from the due date (30 days after the invoice goes): a nudge 3
+  // days before, one on the day, then 7 and 21 days late. Gathered by the
+  // client-reminders run only once "Invoice reminders" is switched on in
+  // Sales › Automated messages, and only for invoices raised after that.
+  { kind: "invoice_reminder", enabled: true, channels: ["email", "sms"], offsetsHours: [-72, 0, 168, 504] },
 ];
 
 export const KIND_LABEL: Record<ReminderKind, string> = {
@@ -66,7 +70,7 @@ export const KIND_WHY: Record<ReminderKind, string> = {
   evaluation_reminder: "Before we drive out to a house with nobody home.",
   proposal_follow_up: "A proposal nobody answered is not a no, it is a proposal nobody opened.",
   job_start_reminder: "So the gate is unlocked and the dog is in.",
-  invoice_reminder: "Before it is old enough to be awkward.",
+  invoice_reminder: "Before it is old enough to be awkward. Each one carries the link to pay.",
 };
 
 /** The thing a reminder is about: an appointment, a proposal, an invoice. */
