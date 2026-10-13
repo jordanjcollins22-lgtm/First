@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { V2Kind, V2Pillar, V2Role, V2Section } from "@/lib/data/v2";
 import { WebsiteStudio } from "@/components/v2/website-studio";
 import { AutomationList } from "@/components/v2/automation-list";
+import { PANEL_LABEL } from "@/components/v2/panels/labels";
 
 /**
  * The new four-page layout: one page per department, a bar of pillars across
@@ -39,6 +40,21 @@ export function V2Shell({
   const visible = section.pillars.filter(sees);
   const [pillarId, setPillarId] = useState<string>(visible[0]?.id ?? "overview");
   const current = visible.find((p) => p.id === pillarId) ?? visible[0];
+
+  // Inside a choice, one section at a time, picked from a row of buttons,
+  // rather than everything stacked into one long scroll. Working screens
+  // first (they hold what needs doing), then the numbers. The pick is kept
+  // per choice, so coming back to a choice lands where you left it.
+  const parts = current ? (current.parts ?? [current]).filter(sees) : [];
+  const shownPanels = current && roles.includes("owner") ? (current.panels ?? []).filter((k) => panels[k]) : [];
+  const sections = [
+    ...shownPanels.map((k) => ({ key: `panel:${k}`, label: PANEL_LABEL[k] ?? k })),
+    ...parts.map((p) => ({ key: `part:${p.id}`, label: p.label })),
+  ];
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const activeKey = (current && sections.find((x) => x.key === picked[current.id])?.key) ?? sections[0]?.key;
+  const activePart = activeKey?.startsWith("part:") ? parts.find((p) => `part:${p.id}` === activeKey) : undefined;
+  const activePanel = activeKey?.startsWith("panel:") ? activeKey.slice(6) : undefined;
 
   return (
     <div className="w-full pb-5">
@@ -79,29 +95,38 @@ export function V2Shell({
           })}
         </div>
       </div>
-      <div className="mb-5" />
-
-      {current && roles.includes("owner") && (current.panels ?? []).some((k) => panels[k]) && (
-        <div className="mb-8 grid gap-6">
-          {(current.panels ?? []).map((k) => (panels[k] ? <div key={k}>{panels[k]}</div> : null))}
+      {sections.length > 1 && current && (
+        <div role="tablist" aria-label={`${current.label} sections`} className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+          {sections.map((x) => {
+            const on = x.key === activeKey;
+            return (
+              <button
+                key={x.key}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setPicked((m) => ({ ...m, [current.id]: x.key }))}
+                className={
+                  "inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full border px-4 text-sm font-semibold " +
+                  (on ? "border-primary bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted hover:text-foreground")
+                }
+              >
+                {x.label}
+              </button>
+            );
+          })}
         </div>
       )}
+      <div className="mb-5" />
 
-      {current &&
-        (current.parts ?? [current])
-          .filter(sees)
-          .map((p, i, shown) => (
-            <div key={p.id} className={i ? "mt-8" : ""}>
-              {shown.length > 1 && (
-                <div className="mb-3">
-                  <h2 className="text-xl font-extrabold">{p.label}</h2>
-                  {p.sub && <p className="text-sm text-muted-foreground">{p.sub}</p>}
-                </div>
-              )}
-              <PillarBody pillar={p} section={section} roles={roles} open={setPillarId} unplaced={unplaced} />
-            </div>
-          ))}
+      {activePanel && <div key={activePanel}>{panels[activePanel]}</div>}
 
+      {activePart && (
+        <div key={activePart.id}>
+          {parts.length > 1 && activePart.sub && <p className="mb-3 text-sm text-muted-foreground">{activePart.sub}</p>}
+          <PillarBody pillar={activePart} section={section} roles={roles} open={setPillarId} unplaced={unplaced} />
+        </div>
+      )}
     </div>
   );
 }
