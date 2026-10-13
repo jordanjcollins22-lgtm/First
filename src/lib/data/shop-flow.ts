@@ -1,5 +1,6 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getKitPhotos } from "@/lib/data/kit-photos";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { buildLoadout, type Loadout, type LoadoutCheck, type LoadoutContainer, type LoadoutSession, type LoadoutTool } from "@/lib/loadout";
@@ -137,12 +138,20 @@ export async function getSiteMaps(jobIds: string[]): Promise<SiteMapCard[]> {
   return cards.filter((c): c is SiteMapCard => c !== null);
 }
 
-/** Who has tapped "I'm at the shop" today, by first name. */
+/**
+ * Who has tapped "I'm at the shop" today, by first name.
+ *
+ * Read past row security, inside the caller's own business: a crew member
+ * may only read their own day's taps, so on their phone this list only ever
+ * held themselves, and the screen meant to say who is here said nobody else
+ * was. First names and nothing more leave this function.
+ */
 export async function whoIsAtTheShop(day: string): Promise<{ profileId: string; name: string }[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
+  const organizationId = await getCurrentOrganizationId();
+  const { data } = await createAdminClient()
     .from("crew_day_events")
     .select("profile_id, profiles:profile_id(full_name, email)")
+    .eq("organization_id", organizationId)
     .eq("day", day)
     .eq("kind", "arrived_shop");
   const seen = new Map<string, string>();

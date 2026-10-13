@@ -8,6 +8,7 @@ import { Check, ChevronRight, Loader2, MapPin, Navigation, RotateCcw, Truck } fr
 import { Button } from "@/components/ui/button";
 import { recordCrewEvent, undoLastCrewEvent } from "@/lib/actions/crew-day-actions";
 import { directionsUrl, readDay, type CrewEvent, type Stop } from "@/lib/crew-day";
+import { externalNavUrl } from "@/lib/directions";
 import { departureLine } from "@/lib/spoken-directions";
 import { speak, voiceWanted } from "@/lib/speech";
 
@@ -29,6 +30,7 @@ export function TodayBoard({
   personName,
   leaveBlockedBy = null,
   actions,
+  inline = false,
 }: {
   stops: Stop[];
   events: CrewEvent[];
@@ -37,6 +39,12 @@ export function TodayBoard({
   leaveBlockedBy?: string | null;
   /** For a demo: the buttons run these instead, nothing is saved and nothing opens. */
   actions?: { record: typeof recordCrewEvent; undo: typeof undoLastCrewEvent };
+  /**
+   * Drawn on the new layout's home screen: the job sheet is further down the
+   * same screen, and directions open the phone's maps app, so nothing here
+   * sends them off to another page.
+   */
+  inline?: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -59,6 +67,8 @@ export function TodayBoard({
     // here, on the tap, because a phone will only speak on a tap.
     const heading = kind === "travelling" && jobId ? (stops.find((s) => s.jobId === jobId) ?? null) : null;
     if (heading && voiceWanted()) speak(departureLine(heading));
+    // Opened on the tap itself: a phone only lets a tap open another app.
+    if (heading && inline && !actions) window.open(externalNavUrl(heading), "_blank", "noopener");
     startTransition(async () => {
       const position = actions ? null : await currentPosition();
       const result = await (actions?.record ?? recordCrewEvent)(kind, jobId, position);
@@ -66,7 +76,7 @@ export function TodayBoard({
         setError(result.message);
         return;
       }
-      if (heading && !actions) router.push(directionsUrl(heading));
+      if (heading && !actions && !inline) router.push(directionsUrl(heading));
     });
   }
 
@@ -87,7 +97,7 @@ export function TodayBoard({
         </p>
 
         {!hideWhere && (day.currentStop ?? day.nextStop) && (
-          <StopCallout stop={(day.currentStop ?? day.nextStop)!} phase={day.phase} directionsInButton={day.action?.kind === "travelling"} />
+          <StopCallout stop={(day.currentStop ?? day.nextStop)!} phase={day.phase} directionsInButton={day.action?.kind === "travelling"} inline={inline} />
         )}
 
         {day.action && (
@@ -148,6 +158,7 @@ export function TodayBoard({
                 index={i + 1}
                 done={done.has(stop.jobId)}
                 current={day.currentStop?.jobId === stop.jobId || day.nextStop?.jobId === stop.jobId}
+                inline={inline}
               />
             ))}
           </ol>
@@ -159,7 +170,7 @@ export function TodayBoard({
 }
 
 /** The address, big, with the two things you do with an address. */
-function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; phase: string; directionsInButton?: boolean }) {
+function StopCallout({ stop, phase, directionsInButton = false, inline = false }: { stop: Stop; phase: string; directionsInButton?: boolean; inline?: boolean }) {
   return (
     <div className="mt-3 rounded-xl border border-border bg-background/70 p-3">
       <p className="text-xs font-medium text-muted-foreground">
@@ -173,15 +184,15 @@ function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; 
           is "On my way" it opens the directions, so this leaves them out. */}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium text-primary">
         {!directionsInButton && (
-          <Link href={directionsUrl(stop)} className="inline-flex min-h-9 items-center gap-1">
+          <Go href={inline ? externalNavUrl(stop) : directionsUrl(stop)} external={inline} className="inline-flex min-h-9 items-center gap-1">
             <Navigation className="h-4 w-4" />
             Directions
-          </Link>
+          </Go>
         )}
-        <Link href={`/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
+        <Go href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`} className="inline-flex min-h-9 items-center gap-1">
           <MapPin className="h-4 w-4" />
-          Crew sheet
-        </Link>
+          {inline ? "Job sheet" : "Crew sheet"}
+        </Go>
       </div>
     </div>
   );
@@ -192,11 +203,13 @@ function StopRow({
   index,
   done,
   current,
+  inline = false,
 }: {
   stop: Stop;
   index: number;
   done: boolean;
   current: boolean;
+  inline?: boolean;
 }) {
   return (
     <li
@@ -230,22 +243,30 @@ function StopRow({
       {/* Always tappable, even when it isn't the current stop — "show me which
           house that was" and "what am I doing there" are fair questions about
           any of them. The job opens as the crew sheet: site map, scope, photos. */}
-      <Link
-        href={`/jobs/${stop.jobId}`}
+      <Go
+        href={inline ? `#sheet-${stop.jobId}` : `/jobs/${stop.jobId}`}
         aria-label={`Site map and sheet for ${stop.address}`}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
       >
         <MapPin className="h-4 w-4" />
-      </Link>
-      <Link
-        href={directionsUrl(stop)}
+      </Go>
+      <Go
+        href={inline ? externalNavUrl(stop) : directionsUrl(stop)}
+        external={inline}
         aria-label={`Directions to ${stop.address}`}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border"
       >
         <ChevronRight className="h-4 w-4" />
-      </Link>
+      </Go>
     </li>
   );
+}
+
+/** A page in the app, a spot further down this screen, or the phone's maps app. */
+function Go({ href, external = false, ...rest }: { href: string; external?: boolean; className?: string; "aria-label"?: string; children: React.ReactNode }) {
+  if (external) return <a href={href} target="_blank" rel="noreferrer" {...rest} />;
+  if (href.startsWith("#")) return <a href={href} {...rest} />;
+  return <Link href={href} {...rest} />;
 }
 
 function IconFor({ kind }: { kind: CrewEvent["kind"] }) {

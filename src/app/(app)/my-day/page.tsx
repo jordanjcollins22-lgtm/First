@@ -10,12 +10,8 @@ import { EvaluatorDayView } from "@/components/evaluations/evaluator-day-view";
 import { getPriceApprovals } from "@/lib/data/price-approvals";
 import { PriceApprovals } from "@/components/proposal/price-approvals";
 import { getCrewDay } from "@/lib/data/crew-day";
+import { CrewDay as SharedCrewDay } from "@/components/crew/crew-day";
 import { owedToProfile } from "@/lib/data/owed-to-me";
-import { getLoadout } from "@/lib/data/loadout";
-import { leaveBlockedBy } from "@/lib/loadout";
-import { readDay } from "@/lib/crew-day";
-import { LoadoutPanel } from "@/components/crew/loadout-panel";
-import { LocationBeacon } from "@/components/crew/location-beacon";
 import { AutoRefresh } from "@/components/crew/auto-refresh";
 import { CrewLeaderboard } from "@/components/crew/crew-leaderboard";
 import { getCrewBoards } from "@/lib/data/crew-leaderboard";
@@ -27,18 +23,9 @@ import { personOpenTime, sellingTeam, type PersonOpenTime } from "@/lib/data/ope
 import { OpenTimePanel, TeamOpenTimePanel } from "@/components/team/open-time-panel";
 import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn, dateShort } from "@/lib/time-zone";
-import { NextUpCard } from "@/components/crew/next-up-card";
 import { EarlyStartQueue } from "@/components/crew/early-start-queue";
 import { pendingEarlyStarts } from "@/lib/data/early-start";
 import { TodayBoard } from "@/components/crew/today-board";
-import { CrewBudgetRemaining } from "@/components/crew/crew-budget-remaining";
-import { CrewEquipmentLog } from "@/components/equipment/crew-equipment-log";
-import { ShopFlow } from "@/components/crew/shop-flow";
-import { ShopFlowLive } from "@/components/crew/shop-flow-live";
-import { getDayLoadout, getShopDay, getShopInfo, getSiteMaps, whoIsAtTheShop } from "@/lib/data/shop-flow";
-import { canLead } from "@/lib/shop-flow";
-import { ClockControl } from "@/components/crew/clock-control";
-import { myOpenEntry } from "@/lib/data/time-clock";
 import type { Profile, WeeklyAvailability } from "@/types/domain";
 import { WeeklyAvailabilityEditor } from "@/components/evaluations/weekly-availability";
 import { DaysOffEditor } from "@/components/team/days-off-editor";
@@ -1080,150 +1067,42 @@ function Tile({
  *
  * Was its own page at /today. It is the same question this page answers —
  * what is on me — asked by somebody whose answer is a list of stops rather
- * than a list of jobs, so it lives here and /today redirects in.
+ * than a list of jobs, so it lives here and /today redirects in. The day
+ * itself is components/crew/crew-day, shared with the new layout's crew
+ * home; what follows it here is this page's own.
  */
-/** Whether this person is marked lead on any of today's jobs. */
-async function leadsAnyStopToday(profileId: string, jobIds: string[]): Promise<boolean> {
-  const supabase = await createClient();
-  const { data } = await supabase.from("job_crew").select("job_id").eq("profile_id", profileId).eq("is_lead", true).in("job_id", jobIds).limit(1);
-  return (data ?? []).length > 0;
+function CrewDay({ profile }: { profile: Profile }) {
+  return (
+    <SharedCrewDay
+      profile={profile}
+      after={({ day }) => (
+        <>
+          <div className="mt-4">
+            <Suspense fallback={null}>
+              <CommentsBlock />
+            </Suspense>
+          </div>
+          {/* What they brought in, and the two ways to bring in more: a lead
+              typed in on the spot, and their own link. */}
+          <div className="mt-4">
+            <Suspense fallback={<BlockLoading lines={2} />}>
+              <BroughtInBlock profile={profile} stops={day.stops.map((s) => ({ jobId: s.jobId, name: s.customerName }))} />
+            </Suspense>
+          </div>
+          <CrewBoardsBlock profileId={profile.id} />
+        </>
+      )}
+    />
+  );
 }
 
-async function CrewDay({ profile }: { profile: Profile }) {
-  const day = await getCrewDay().catch(() => null);
-
-  if (!day) {
-    return (
-      <div className="mx-auto max-w-md px-4 py-6">
-        <h1 className="mb-1 text-2xl font-bold">Today</h1>
-        <p className="rounded-lg border border-white/60 bg-card/60 px-3 py-3 text-sm text-muted-foreground backdrop-blur-md">
-          Couldn&apos;t load your day. If this is a fresh setup, run{" "}
-          <code>supabase/migrations/0082_crew_day.sql</code> and reload.
-        </p>
-      </div>
-    );
-  }
-
-  // Without somewhere to press start, every hours figure in the business is
-  // somebody's recollection.
-  const open = await myOpenEntry(profile.id).catch(() => null);
-
-  // The shop list: everything every stop needs, added up, ticked before the
-  // truck leaves. It sits above the board until they have left the shop and
-  // folds up after, because by then it is either on the truck or it is not.
-  const loadout = await getLoadout(profile.id, day.day).catch(() => null);
-  // Where they stand against the rest of the crew: jobs finished, on time,
-  // and what came back. Nothing money on it, so it is theirs to see.
+/** Where they stand against the rest of the crew: jobs finished, on time, and what came back. Nothing money on it, so it is theirs to see. */
+async function CrewBoardsBlock({ profileId }: { profileId: string }) {
   const boards = await getCrewBoards().catch(() => null);
-  const phase = readDay(day.events, day.stops).phase;
-  const loading = phase === "before_shop" || phase === "at_shop";
-
-  // The morning at the shop, run from the tablet and followed on every
-  // phone: clock in, one kit at a time, the maps, out the door. Shown until
-  // this person has left the shop; after that the day board takes over.
-  const shopDay = loading ? await getShopDay(day.day).catch(() => null) : null;
-  const [dayLoadout, siteMaps, present, shopInfo] = loading
-    ? await Promise.all([
-        getDayLoadout(day.day, shopDay?.checks ?? []).catch(() => null),
-        shopDay && shopDay.stage !== "loadout" ? getSiteMaps(shopDay.shownJobIds).catch(() => []) : Promise.resolve([]),
-        whoIsAtTheShop(day.day).catch(() => []),
-        getShopInfo().catch(() => null),
-      ])
-    : [null, [], [], null];
-  const leadsAStop = day.stops.length > 0 && (await leadsAnyStopToday(profile.id, day.stops.map((s) => s.jobId)));
-
+  if (!boards || (boards.recent.length === 0 && boards.allTime.length === 0)) return null;
   return (
-    <div className="mx-auto max-w-md px-4 py-4 sm:py-6">
-      {/* Tells the office where this phone is from the shop until the day
-          is over, while the app is open. */}
-      <LocationBeacon active={phase !== "before_shop" && phase !== "day_over"} />
-      {loading && dayLoadout && (
-        <div className="mb-4">
-          <ShopFlowLive shopDayId={shopDay?.id ?? null} />
-          <ShopFlow
-            me={{ profileId: profile.id, name: profile.full_name || profile.email, canLead: canLead({ roles: profile.roles, leadsAStop }), arrived: phase !== "before_shop" }}
-            shopDay={shopDay}
-            loadout={dayLoadout}
-            stops={day.stops}
-            siteMaps={siteMaps}
-            present={present}
-            shop={shopInfo}
-          />
-        </div>
-      )}
-      {loadout && loading && !dayLoadout && (
-        <div className="mb-4">
-          <LoadoutPanel day={day.day} loadout={loadout} />
-        </div>
-      )}
-      <ClockControl
-        open={open}
-        stops={day.stops.map((stop) => ({
-          jobId: stop.jobId,
-          sessionId: stop.sessionId,
-          name: stop.customerName,
-        }))}
-      />
-      {/* One thing at a time: while the shop's load-out is up, it is the
-          only box. Its last step heads out, for everybody at the shop, and
-          then the day board takes over with I've arrived. */}
-      {(!loading || (phase === "at_shop" && !dayLoadout)) && (
-        <TodayBoard
-          stops={day.stops}
-          events={day.events}
-          personName={profile.full_name || profile.email}
-          leaveBlockedBy={loading && dayLoadout ? leaveBlockedBy(dayLoadout) : loadout ? leaveBlockedBy(loadout) : null}
-        />
-      )}
-      {loadout && !loading && phase !== "day_over" && (
-        <div className="mt-4">
-          <LoadoutPanel day={day.day} loadout={loadout} compact />
-        </div>
-      )}
-      {/* The lead's hours left against the job's budget, once they're out. */}
-      {!loading && phase !== "day_over" && leadsAStop && (
-        <div className="mt-4">
-          <Suspense fallback={null}>
-            <CrewBudgetRemaining profileId={profile.id} organizationId={profile.organization_id} />
-          </Suspense>
-        </div>
-      )}
-      {/* End of the day: hours and miles on the machines, for their upkeep. */}
-      {(phase === "stops_done" || phase === "day_over") && (
-        <div className="mt-4">
-          <Suspense fallback={null}>
-            <CrewEquipmentLog />
-          </Suspense>
-        </div>
-      )}
-      {/* Below the board, not above it: this is what to do with the hours
-          left over once the board says the day is done. */}
-      <div className="mt-4">
-        <NextUpCard
-          today={day.day}
-          visit={day.nextProject}
-          existing={day.earlyStart}
-          stops={day.stops}
-          events={day.events}
-        />
-      </div>
-      <div className="mt-4">
-        <Suspense fallback={null}>
-          <CommentsBlock />
-        </Suspense>
-      </div>
-      {/* What they brought in, and the two ways to bring in more: a lead
-          typed in on the spot, and their own link. */}
-      <div className="mt-4">
-        <Suspense fallback={<BlockLoading lines={2} />}>
-          <BroughtInBlock profile={profile} stops={day.stops.map((s) => ({ jobId: s.jobId, name: s.customerName }))} />
-        </Suspense>
-      </div>
-      {boards && (boards.recent.length > 0 || boards.allTime.length > 0) && (
-        <div className="mt-4">
-          <CrewLeaderboard boards={boards} meId={profile.id} compact />
-        </div>
-      )}
+    <div className="mt-4">
+      <CrewLeaderboard boards={boards} meId={profileId} compact />
     </div>
   );
 }
