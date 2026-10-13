@@ -10,6 +10,7 @@ import { getCrewDay } from "@/lib/data/crew-day";
 import { getLoadout } from "@/lib/data/loadout";
 import { leaveBlockedBy } from "@/lib/loadout";
 import { canRecord, type CrewEventKind } from "@/lib/crew-day";
+import { closeSessionsOnFinish } from "@/lib/data/ops-sessions";
 
 export type CrewDayResult = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -56,6 +57,13 @@ export async function recordCrewEvent(
       lng: position?.lng ?? null,
     });
     if (error) return { ok: false, message: describeDbError(error) };
+
+    // "Finished here" is what closes the work day, so nobody has to come back
+    // and tick it. Best-effort: the tap is recorded either way, and the
+    // ops-loops sweep closes anything this misses.
+    if (kind === "finished_job" && jobId) {
+      await closeSessionsOnFinish(organizationId, jobId, day.day);
+    }
 
     // The tap is a position too, and a better one than the phone's last
     // report: "arrived at the job" with no GPS fix still means they are at

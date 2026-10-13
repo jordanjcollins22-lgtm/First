@@ -74,7 +74,7 @@ export async function acceptSuggestion(input: {
         job_id: input.jobId,
         starts_on: input.date,
         ends_on: input.date,
-        status: "planned",
+        status: "scheduled",
         created_by: profile.id as string,
       })
       .select("id")
