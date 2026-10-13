@@ -114,21 +114,31 @@ function toCanvasPoint(clientX: number, clientY: number, canvas: HTMLCanvasEleme
   };
 }
 
-/** Where each part of the yard goes on the board when the county has no lot, as fractions across and down. */
+/**
+ * Where each part of the yard goes when the county has no lot, as fractions
+ * across and down of the property line the evaluator drew, or, before they
+ * have, of the stretch of photo around the house. The photo is fetched
+ * centred on the address with the street at the bottom, so the house is in
+ * the middle and the front is below it. Spots out at the board's edges put
+ * the front lawn on the house across the street.
+ */
 const FALLBACK_SPOT: Record<string, [number, number]> = {
-  front: [0.5, 0.78],
-  back: [0.5, 0.22],
-  sides: [0.16, 0.5],
+  front: [0.5, 0.82],
+  back: [0.5, 0.18],
+  sides: [0.15, 0.5],
   foundation: [0.5, 0.5],
-  whole: [0.84, 0.5],
+  whole: [0.5, 0.5],
   // An HOA's or a business's grounds: spread out, to be dragged where they are.
-  entrance: [0.5, 0.8],
-  streetside: [0.18, 0.8],
-  medians: [0.82, 0.8],
+  entrance: [0.5, 0.85],
+  streetside: [0.2, 0.85],
+  medians: [0.8, 0.85],
   common: [0.3, 0.3],
   ponds: [0.7, 0.3],
   amenities: [0.5, 0.5],
 };
+
+/** With no property line yet: the house and its yard, around the middle of the photo, in board units. */
+const AROUND_THE_HOUSE = { x: CANVAS_WIDTH / 2 - 90, y: CANVAS_HEIGHT / 2 - 150, width: 180, height: 300 };
 
 type BoardPlacement = { x: number; y: number; scale: number; rotation: number; elementWidth: number };
 
@@ -136,7 +146,8 @@ type BoardPlacement = { x: number; y: number; scale: number; rotation: number; e
  * Where a piece of work from the pre-eval sits on the board: over the part
  * of the yard it is in, when the county has the lot, shrunk a step for
  * each one before it in that part so they nest and each can be seen; with
- * no lot, a square near the middle, to be redrawn.
+ * no lot, inside the property line the evaluator drew, or close around the
+ * house until they have, to be redrawn.
  */
 function seedPoints(
   area: string,
@@ -144,7 +155,8 @@ function seedPoints(
   slot: number,
   regions: ReturnType<typeof groundRegions> | null,
   imageGeo: ImageGeo | null,
-  onBoard: BoardPlacement
+  onBoard: BoardPlacement,
+  drawnLot: Point[] = []
 ): Point[] {
   const shrink = Math.max(0.4, 1 - nth * 0.15);
   const rings = regions?.[area as keyof typeof regions];
@@ -155,18 +167,28 @@ function seedPoints(
     const cy = raw.reduce((sum, p) => sum + p.y, 0) / raw.length;
     return raw.map((p) => ({ x: cx + (p.x - cx) * shrink, y: cy + (p.y - cy) * shrink }));
   }
-  // No lot to go by: each part of the yard in a spot of its own, the front
-  // at the bottom of the board where the front is marked, so they don't
-  // pile up in the middle.
-  const half = 60 * shrink;
+  // No lot from the county: within the lot the evaluator drew, else around
+  // the house, each part of the yard where it is, front at the bottom.
+  const box =
+    drawnLot.length >= 3
+      ? (() => {
+          const xs = drawnLot.map((p) => p.x);
+          const ys = drawnLot.map((p) => p.y);
+          return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+        })()
+      : AROUND_THE_HOUSE;
   const spot = FALLBACK_SPOT[area];
-  const cx = spot ? CANVAS_WIDTH * spot[0] : CANVAS_WIDTH / 2 + (slot % 4) * 40 - 60;
-  const cy = spot ? CANVAS_HEIGHT * spot[1] : CANVAS_HEIGHT / 2 + Math.floor(slot / 4) * 40 - 40;
+  const cx = box.x + box.width * (spot ? spot[0] : 0.5) + (spot ? 0 : ((slot % 3) - 1) * 12);
+  const cy = box.y + box.height * (spot ? spot[1] : 0.5);
+  // A quarter of the lot each way for one part of it; the whole of it for
+  // work across the whole property.
+  const halfW = (area === "whole" ? box.width * 0.45 : area === "sides" ? box.width * 0.12 : box.width * 0.4) * shrink;
+  const halfH = (area === "whole" ? box.height * 0.45 : area === "sides" ? box.height * 0.3 : box.height * 0.15) * shrink;
   return [
-    { x: cx - half, y: cy - half },
-    { x: cx + half, y: cy - half },
-    { x: cx + half, y: cy + half },
-    { x: cx - half, y: cy + half },
+    { x: cx - halfW, y: cy - halfH },
+    { x: cx + halfW, y: cy - halfH },
+    { x: cx + halfW, y: cy + halfH },
+    { x: cx - halfW, y: cy + halfH },
   ];
 }
 
@@ -1025,6 +1047,35 @@ export function ImageCanvasBoard({
   // An area placed before the lot and the photo were both here sat in a
   // stand-in spot, which is not on the property. Once they are, each one
   // still exactly where it was put goes over the part of the yard it is in.
+  // With no county lot, the property line the evaluator draws does the same:
+  // the areas still in their stand-in spots move inside it.
+  useEffect(() => {
+    if (standInRef.current.size === 0 || countyLot || propertyLine.length < 3) return;
+    const onBoard = image
+      ? { x: image.x, y: image.y, scale: image.scale, rotation: image.rotation, elementWidth: image.element.width }
+      : { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2, scale: 1, rotation: 0, elementWidth: CANVAS_WIDTH };
+    const same = (a: Point[], b: Point[]) => a.length === b.length && a.every((p, i) => p.x === b[i].x && p.y === b[i].y);
+    const timer = setTimeout(() => {
+      let changed = false;
+      const next = zones.map((zone) => {
+        const stood = standInRef.current.get(zone.id);
+        if (!stood) return zone;
+        if (!same(zone.points, stood.points)) {
+          standInRef.current.delete(zone.id);
+          return zone;
+        }
+        const points = seedPoints(stood.area, stood.nth, stood.slot, null, null, onBoard, propertyLine);
+        if (same(points, zone.points)) return zone;
+        changed = true;
+        // Still a stand-in until the evaluator moves it: a better property line can move it again.
+        standInRef.current.set(zone.id, { ...stood, points });
+        return { ...zone, points, lengthFt: null, widthFt: null, areaSqFt: null, perimeterFt: null };
+      });
+      if (changed) setZones(next);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [countyLot, image, propertyLine, zones]);
+
   useEffect(() => {
     if (standInRef.current.size === 0 || !countyLot || !imageGeo || !image) return;
     const regions = groundRegions(countyLot);
@@ -1076,7 +1127,7 @@ export function ImageCanvasBoard({
           const shown = suggestionShapesRef.current.find((shape) => shape.seed.id === seed.id);
           const nth = inArea.get(seed.area) ?? kept.filter((zone) => zone.location === seed.location).length;
           inArea.set(seed.area, nth + 1);
-          const points = shown ? shown.points : seedPoints(seed.area, nth, prev.length + i, regions, imageGeo, onBoard);
+          const points = shown ? shown.points : seedPoints(seed.area, nth, prev.length + i, regions, imageGeo, onBoard, propertyLine);
           // Placed in a stand-in spot: moved onto the lot when it arrives, unless somebody moves it first.
           if (!shown && !regions) standInRef.current.set(seed.id, { area: seed.area, nth, slot: prev.length + i, points });
           return {
@@ -1097,6 +1148,9 @@ export function ImageCanvasBoard({
       0
     );
     return () => clearTimeout(timer);
+    // The property line is read when the areas are placed, not watched: it
+    // has its own effect below that moves the untouched ones into it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, practice, seedZones, image, countyChecked, countyLot, imageGeo, orientConfirmed, walkthrough, designLoaded]);
 
   // The walkthrough's list follows the areas on the map.
