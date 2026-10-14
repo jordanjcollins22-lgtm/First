@@ -2,7 +2,6 @@ import { billedHours, priceForTarget } from "@/lib/gross-profit";
 import {
   DEFAULT_SALT_SETTINGS,
   MINIMUM_TREATMENTS,
-  money,
   ON_SITE_MINUTES,
   poundsFor,
   priceTreatment,
@@ -185,15 +184,17 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
 }
 
 /**
- * A salting area's words brought to a new price, when the account manager
- * sets the job's price by hand: "3 applications included in this quote,
- * $120 in all" becomes the new total. The client is told the total, never a
- * price a visit. Words that are not salting's are returned as they were.
+ * Salting's words with no price in them. The wording on a proposal never
+ * states a price: the price is the proposal's, shown once, where it can be
+ * changed. Words written when salting did carry one ("3 applications
+ * included in this quote, $264 in all") are cleaned of it. The total is
+ * taken and ignored, so every caller that reprices still compiles.
  */
-export function repriceSaltingScope(text: string, totalCents: number): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function repriceSaltingScope(text: string, _totalCents?: number): string {
   return text.replace(
     /^Pre-paid salting: (\d+) (?:treatments at \$[\d,.]+ each|applications included in this quote(?:, at \$[\d,.]+ each)?), \$[\d,.]+ in all/,
-    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote, ${money(totalCents)} in all`
+    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote`
   );
 }
 
@@ -201,16 +202,16 @@ export function repriceSaltingScope(text: string, totalCents: number): string {
 export function saltingScope(
   values: Record<string, string | undefined>,
   settings: SaltSettings = DEFAULT_SALT_SETTINGS,
-  perTreatmentCents?: number,
+  /** No longer said: the wording carries no price. Kept so callers need not change. */
+  _perTreatmentCents?: number,
   /** Where it goes, in the client's words, when it is more than one area: "the driveway and the back deck". */
   areas?: string
 ): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
   const where = areas ?? `the ${order.surfaceLabel.toLowerCase()}`;
-  const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, on ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
       ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`
