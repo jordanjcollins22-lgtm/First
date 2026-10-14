@@ -69,7 +69,9 @@ export function PriceCard({
     const start = item.forward.map((a) => a.lines);
     return item.stage === "price" ? priceFromSuppliers(start, item.pricing.services, item.suppliers ?? [], item.site ?? null).lines : start;
   });
-  const forwardCents = lines ? priceLines(item, lines).rCents : null;
+  // Nothing priced (no rates for the work) is no price, not a $0 one.
+  const priced = lines ? priceLines(item, lines).rCents : null;
+  const forwardCents = priced != null && priced > 0 ? priced : null;
   // Wording still to approve, approved here on the card; Accept waits for it.
   const needsWording = item.wordingToApprove.length > 0;
   const [wordingDone, setWordingDone] = useState(!needsWording);
@@ -108,7 +110,7 @@ export function PriceCard({
       return setStage("send");
     }
     start(async () => {
-      const result = lines ? await acceptPrice(item.jobId, lines) : await acceptPrice(item.jobId);
+      const result = lines && forwardCents != null ? await acceptPrice(item.jobId, lines) : await acceptPrice(item.jobId);
       if (!result.ok) return setError(result.error);
       if (forwardCents != null) setTotal(forwardCents);
       setSendTo(result.sendTo);
