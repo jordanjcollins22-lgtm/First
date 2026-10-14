@@ -211,11 +211,16 @@ export const EXPECTATIONS: Expectation[] = [
  *
  * Order follows the list rather than the order the areas were drawn in, so
  * two proposals covering the same work read the same way.
+ *
+ * Salting is left out. Its wording is ours and about ice ("never rock salt",
+ * "snow removal"), so matching it brought mulch and removal notes onto a
+ * proposal for nothing but salt.
  */
 export function expectationsFor(
   areas: readonly { serviceLabel: string; scopeText?: string | null }[]
 ): Expectation[] {
   const text = areas
+    .filter((area) => !/salt/i.test(area.serviceLabel))
     .map((area) => `${area.serviceLabel} ${area.scopeText ?? ""}`)
     .join(" \n ");
   if (!text.trim()) return [];
