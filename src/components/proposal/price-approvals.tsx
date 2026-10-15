@@ -446,7 +446,7 @@ function ProfitTable({
     ...c.labour.map((l) => ({ label: l.label, detail: `${l.detail}, at ${dollars(item.crewRateCents)}/hr`, cents: l.cents })),
     {
       label: "Materials",
-      detail: b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
+      detail: c.materialsNote ? c.materialsNote : b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
       cents: m.materialsCents,
     },
     { label: feeLabel(item.fee), detail: item.fee.shares ? item.fee.shares.join(" · ") : "of the price", cents: m.feeCents },

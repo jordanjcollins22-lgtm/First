@@ -44,4 +44,14 @@ describe("a site map priced the one way", () => {
     expect(costs.labour[0].label).toBe("Salting visits");
     expect(margin(priced.totalCents, costs.labourCents, costs.materialsCents, 15).grossPct).toBeGreaterThanOrEqual(0.5);
   });
+
+  it("shows a measured salting visit's time: spreading by size, then the drive", () => {
+    const priced = priceSiteMap({ zones: [z("Drive", "salting", 380, { surface: "Driveway", treatments: "3", petSafe: "Yes" })], catalog, travel: { ...travel, toSiteMinutes: 12, fromSiteMinutes: 12 }, feePct: 15 });
+    const costs = jobCosts(priced);
+    expect(costs.labour.map((l) => l.label)).toEqual(["Salting on site", "Salting drive"]);
+    expect(costs.labour[0].detail).toMatch(/3 visits × 8\.8 min: 5 min setup \+ 3\.8 min spreading 380 sq ft/);
+    expect(costs.labour[1].detail).toMatch(/3 visits × 24 min/);
+    expect(costs.materialsNote).toMatch(/380 sq ft/);
+    expect(margin(priced.totalCents, costs.labourCents, costs.materialsCents, 15).grossPct).toBeGreaterThanOrEqual(0.5);
+  });
 });

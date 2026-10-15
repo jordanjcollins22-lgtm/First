@@ -124,6 +124,10 @@ export interface SaltingVisits {
   totalCents: number;
   /** Raised over the salt page's price to reach the floor. */
   lifted: boolean;
+  /** The square feet the visit was timed by; null when it was not measured. */
+  areaSqFt?: number | null;
+  /** The rate it was timed at, when it was. */
+  rate?: SaltingRate | null;
 }
 
 type SaltingTrip = {
@@ -219,6 +223,8 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
       perVisitCents,
       totalCents: perVisitCents * quote.treatments,
       lifted: perVisitCents > quote.perTreatmentCents,
+      areaSqFt: sized,
+      rate: sized != null ? rate : null,
     };
   });
 }
