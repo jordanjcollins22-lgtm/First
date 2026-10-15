@@ -126,7 +126,37 @@ export interface SaltingVisits {
   lifted: boolean;
 }
 
-type SaltingTrip = { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number };
+type SaltingTrip = {
+  toSiteMinutes: number | null;
+  fromSiteMinutes: number | null;
+  crewCostPerHourCents: number;
+  feePct: number;
+  fallbackDriveMinutes?: number;
+  /**
+   * The square feet salted at the house, all its areas together. With it, a
+   * visit is timed and billed by its size: the production rate's minutes on
+   * site and the drive, as they are, not rounded to an hour. Without it (an
+   * area nobody measured) the old fixed minutes and whole hours stand.
+   */
+  areaSqFt?: number | null;
+  /** The salting production rate: square feet a person spreads in an hour, and melt per square foot. */
+  rate?: SaltingRate;
+};
+
+export interface SaltingRate {
+  sqFtPerHour: number;
+  materialCentsPerSqFt: number;
+  /** Parking, loading the spreader and the photo, each visit. */
+  setupMinutes: number;
+}
+
+/** Matches the "salting" production unit. */
+export const SALTING_RATE: SaltingRate = { sqFtPerHour: 6000, materialCentsPerSqFt: 0.75, setupMinutes: 5 };
+
+/** The minutes on site a visit takes for this many square feet. */
+export function saltingMinutes(areaSqFt: number, rate: SaltingRate = SALTING_RATE): number {
+  return rate.setupMinutes + (Math.max(0, areaSqFt) / Math.max(1, rate.sqFtPerHour)) * 60;
+}
 
 /**
  * Salting a visit at a time, held to the same rules as every service: the
@@ -149,14 +179,24 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
   const fallback = trip.fallbackDriveMinutes ?? 30;
   const to = trip.toSiteMinutes ?? fallback;
   const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
+  // Timed by size when the house is measured and priced as one area.
+  const sized = areas.length === 1 && trip.areaSqFt != null && trip.areaSqFt > 0 ? trip.areaSqFt : null;
+  const rate = trip.rate ?? SALTING_RATE;
   const each = areas.map((values) => {
     const order = saltingOrder(values);
     const treatment = priceTreatment(order.surface, order.petFriendly, settings);
+    if (sized != null) {
+      return {
+        quote: quoteOrder(order, settings),
+        one: { ...treatment, minutes: saltingMinutes(sized, rate), materialCents: Math.round(sized * rate.materialCentsPerSqFt) },
+      };
+    }
     // On the ground only: the drive is added once below, for the whole house.
     return { quote: quoteOrder(order, settings), one: { ...treatment, minutes: ON_SITE_MINUTES[order.surface] } };
   });
   const onSite = each.reduce((sum, a) => sum + a.one.minutes, 0);
-  const hours = billedHours((onSite + to + back) / 60);
+  // Measured: the time it takes. Not measured: whole hours, an hour at the least.
+  const hours = sized != null ? (onSite + to + back) / 60 : billedHours((onSite + to + back) / 60);
   const visitLabourCents = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
   let labourLeft = visitLabourCents;
   return each.map(({ quote, one }, index) => {
@@ -168,7 +208,7 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
     const perVisitCents = Math.max(quote.perTreatmentCents, floor);
     return {
       treatments: quote.treatments,
-      onSiteMinutes: one.minutes,
+      onSiteMinutes: Math.round(one.minutes * 10) / 10,
       travelMinutes: Math.round(to + back),
       billedHours: hours * share,
       visitBilledHours: hours,

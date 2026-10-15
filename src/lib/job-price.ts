@@ -59,6 +59,9 @@ export function priceSiteMap(input: {
           fromSiteMinutes: input.travel.fromSiteMinutes,
           crewCostPerHourCents: catalog.crewCostPerHourCents,
           feePct: input.feePct,
+          areaSqFt: saltIndexes.every((index) => (zoneMeasurements(zones[index])?.areaSqFt ?? 0) > 0)
+            ? saltIndexes.reduce((sum, index) => sum + (zoneMeasurements(zones[index])?.areaSqFt ?? 0), 0)
+            : null,
         })[0]
       : null;
   const salting: (SaltingVisits | null)[] = zones.map((_, index) => {
