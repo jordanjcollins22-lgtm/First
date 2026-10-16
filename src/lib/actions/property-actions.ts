@@ -18,6 +18,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { describeDbError } from "@/lib/setup-errors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { cleanHeardAbout } from "@/lib/heard-about";
 
 /** Best-effort — a property-data miss shouldn't block adding the property. */
 async function attachPropertyDetails(
@@ -312,6 +313,9 @@ export interface ManualEvaluationInput {
   /** Who is going. Optional: the office books first and assigns second often. */
   evaluatorId?: string | null;
   notes?: string | null;
+  /** What the caller said to "How did you hear about us?", and Other's few words. */
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
 }
 
 export type BookedEvaluation =
@@ -400,6 +404,7 @@ async function makeEvaluationBooking(input: ManualEvaluationInput): Promise<Book
         evaluation_status: "scheduled",
         evaluation_mode: modeForAddress(input.lat ?? null, input.lng ?? null, address).mode,
         client_notes: input.notes?.trim() || null,
+        ...cleanHeardAbout(input.heardAbout, input.heardAboutDetail),
       })
       .select("id")
       .single();

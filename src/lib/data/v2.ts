@@ -13,6 +13,7 @@ import { areaSlug } from "@/lib/website";
 import { row as entityRow } from "@/lib/entities/types";
 import { ALERT_KEYS, alertLine, type AlertKey } from "@/lib/entities/handlers/admin-format";
 import { listAppConnections, type AppConnection } from "@/lib/data/app-connections";
+import { heardAboutSummary } from "@/lib/heard-about";
 
 /**
  * The live numbers behind the new four-page layout at /v2.
@@ -155,7 +156,7 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
     newContacts, seen, answers, finder, bookVisits, booked, located, salt, mow,
     reviews, proof, rank, adClicks, plays, prospectCounts, campaigns, advances,
     mailings, flyerRuns, pmCompanies, pmSent, groups, attribution, openPlays, website,
-    saltOrders, mowOrders, googleReviews,
+    saltOrders, mowOrders, googleReviews, heardJobs,
   ] = await Promise.all([
     rows(sb, "outreach_links", "id,platform,kind,click_count,profile_id,created_at,posted_comment,comment"),
     rows(sb, "social_posts", "status,channel,scheduled_for,hook,caption"),
@@ -191,7 +192,12 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
     rows(sb, "salt_orders", "id,name,address,status,treatments,created_at", (q) => q.order("created_at", { ascending: false }).limit(MKT_ROWS)),
     rows(sb, "mow_orders", "id,name,address,status,called_at,created_at", (q) => q.order("created_at", { ascending: false }).limit(MKT_ROWS)),
     rows(sb, "google_reviews", "id,author,stars,body,reply_status,reviewed_at", (q) => q.order("reviewed_at", { ascending: false }).limit(200)),
+    rows(sb, "jobs", "heard_about,status", (q) => q.gte("created_at", since(365))),
   ]);
+
+  // "How did you hear about us?", from the booking forms.
+  const heardLines = heardAboutSummary(heardJobs as { heard_about: string | null; status: string | null }[]);
+  const heardKnown = heardLines.filter((l) => l.value !== "none").reduce((sum, l) => sum + l.booked, 0);
 
   const name = (id: unknown) => {
     const p = profiles.find((x) => x.id === id);
@@ -399,6 +405,18 @@ export async function loadMarketing(viewerId: string | null = null): Promise<V2S
         { label: "Posts to answer", href: "/admin/outreach/posts" },
         { label: "Where posts come from", href: "/admin/outreach/agent" },
       ],
+    },
+    {
+      id: "sources", label: "Where clients found us", kind: "", who: ["owner"], group: "a",
+      blurb: `${n(heardKnown)} of ${n(heardJobs.length)} visits said how they heard about us`,
+      title: "Where clients found us", sub: "What clients answered to \"How did you hear about us?\" when they booked, over the last year.",
+      blocks: [
+        {
+          t: "Visits booked, by answer", v: n(heardKnown), d: `Answered, out of ${n(heardJobs.length)} visits booked in the last year · tap one to see the clients`,
+          rows: heardLines.map((l) => row(`${l.label} · ${n(l.booked)} visits · ${n(l.signed)} signed`, "mkt.heard_about", l.value)),
+        },
+      ],
+      links: [],
     },
     {
       id: "affiliates", label: "Affiliates", kind: "people", who: ["owner"], group: "b",
@@ -1294,7 +1312,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     {
       id: "digital", label: "Digital marketing", title: "Digital marketing",
       sub: "The website, search, ads, social, email and the people sharing links.",
-      ids: ["website", "seo", "social", "email", "comments", "affiliates"],
+      ids: ["sources", "website", "seo", "social", "email", "comments", "affiliates"],
       panels: ["marketing-autopilot", "reviews"],
       rolePanels: { affiliate: ["affiliate-home"] },
     },

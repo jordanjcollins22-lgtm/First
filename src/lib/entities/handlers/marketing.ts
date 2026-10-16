@@ -49,6 +49,7 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import { RESPONSES, trackedLink, type OutreachResponse } from "@/lib/outreach-links";
 import { KIND_LABEL, REASON_LABEL, type PlayKind, type PlayReason } from "@/lib/marketing-plays";
 import { areaSlug, normalizeWebsite, type WebsiteContent } from "@/lib/website";
+import { HEARD_ABOUT_LABEL } from "@/lib/heard-about";
 
 /**
  * What can be opened and done from the Marketing page's lists: campaigns and
@@ -529,6 +530,33 @@ const referredJob: EntityHandler = {
       sections: j.referred_by_profile_id ? [{ title: "Affiliate", rows: [row(by, "mkt.affiliate", j.referred_by_profile_id)] }] : [],
       actions: [],
       note: "The project itself is run from Sales and Operations; the affiliate's commission is paid from Admin › Finance.",
+    };
+  },
+};
+
+/** Everybody who gave one answer to "How did you hear about us?" in the last year. */
+const heardAbout: EntityHandler = {
+  kind: "mkt.heard_about",
+  async load(ctx, id) {
+    if (id !== "none" && !HEARD_ABOUT_LABEL[id]) return null;
+    const since = new Date(Date.now() - 365 * 86_400_000).toISOString();
+    const jobs = await jobsOf(ctx, "id, name, status, created_at, heard_about, heard_about_detail", (q) =>
+      (id === "none" ? q.is("heard_about", null) : q.eq("heard_about", id)).gte("created_at", since).order("created_at", { ascending: false }).limit(200)
+    );
+    const signed = jobs.filter((j) => ["approved", "in_progress", "completed"].includes(s(j.status))).length;
+    return {
+      title: id === "none" ? "Not asked" : HEARD_ABOUT_LABEL[id],
+      subtitle: id === "none" ? "Booked without an answer to How did you hear about us?" : "Clients who said they heard about us this way",
+      fields: [f("Visits booked", String(jobs.length)), f("Signed", String(signed))],
+      sections: [
+        {
+          title: "Clients",
+          rows: jobs.map((j) => row(`${s(j.name)}${j.heard_about_detail ? ` · "${s(j.heard_about_detail)}"` : ""} · ${statusLabel(s(j.status))} · ${dateText(s(j.created_at))}`, "sales.job", s(j.id))),
+          empty: "Nobody in the last year.",
+        },
+      ],
+      actions: [],
+      note: "Asked on the booking page and on the office's booking form. Only visits booked in the last year are counted.",
     };
   },
 };
@@ -1207,6 +1235,7 @@ export const MARKETING_HANDLERS: EntityHandler[] = [
   playList,
   affiliate,
   referredJob,
+  heardAbout,
   pmCompany,
   pmEmail,
   pmList,

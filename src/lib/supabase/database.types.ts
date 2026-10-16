@@ -1918,6 +1918,9 @@ export interface Database {
           client_notes: string | null;
           budget_range: string | null;
           referred_by_profile_id: string | null;
+          /** "How did you hear about us?", asked at booking. See lib/heard-about. */
+          heard_about: string | null;
+          heard_about_detail: string | null;
           /** Somebody said this second job at the address is more work, not a copy. */
           duplicate_cleared_at: string | null;
           cancelled_at: string | null;

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { SatelliteAddressSearch } from "@/components/canvas/satellite-address-search";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { bookEvaluation } from "@/lib/actions/property-actions";
+import { HEARD_ABOUT } from "@/lib/heard-about";
 
 /**
  * Booking an evaluation the way the office actually takes one: on the phone.
@@ -43,6 +44,8 @@ export function BookEvaluationPanel({
   const [minutes, setMinutes] = useState(60);
   const [evaluatorId, setEvaluatorId] = useState("");
   const [notes, setNotes] = useState("");
+  const [heardAbout, setHeardAbout] = useState("");
+  const [heardAboutDetail, setHeardAboutDetail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
@@ -66,6 +69,8 @@ export function BookEvaluationPanel({
         minutes,
         evaluatorId: evaluatorId || null,
         notes: notes || null,
+        heardAbout: heardAbout || null,
+        heardAboutDetail: heardAboutDetail || null,
       });
 
       if (!result.ok) {
@@ -79,6 +84,8 @@ export function BookEvaluationPanel({
       setPicked(null);
       setStartsAt("");
       setNotes("");
+      setHeardAbout("");
+      setHeardAboutDetail("");
       router.refresh();
     });
   }
@@ -174,6 +181,34 @@ export function BookEvaluationPanel({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="book-heard" className="text-xs font-medium">
+              How did they hear about us?
+            </label>
+            <select
+              id="book-heard"
+              value={heardAbout}
+              onChange={(event) => setHeardAbout(event.target.value)}
+              className="min-h-10 rounded-md border border-border bg-background px-2 text-sm"
+            >
+              <option value="">Didn&apos;t ask</option>
+              {HEARD_ABOUT.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {heardAbout === "other" && (
+              <input
+                value={heardAboutDetail}
+                onChange={(event) => setHeardAboutDetail(event.target.value)}
+                maxLength={80}
+                placeholder="Where was it?"
+                className="min-h-10 rounded-md border border-border bg-background px-2 text-sm"
+              />
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

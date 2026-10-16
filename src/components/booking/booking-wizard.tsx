@@ -19,6 +19,7 @@ import { RecommendedTimes } from "@/components/booking/recommended-times";
 import { LandingCard } from "@/components/booking/landing-card";
 import { BOOKING_PAGES, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
 import { modeForAddress } from "@/lib/evaluation-mode";
+import { HEARD_ABOUT, type HeardAbout } from "@/lib/heard-about";
 import {
   MEMORY_KEY,
   readRemembered,
@@ -224,6 +225,9 @@ export function BookingWizard({
   // The ad they came from, if any. Kept for the tab, because a landing page
   // can send them here without the click id on the address.
   const adClickRef = useRef<AdClick | null>(null);
+  // "How did you hear about us?": one tap, optional, so it never costs a booking.
+  const [heardAbout, setHeardAbout] = useState<HeardAbout | null>(null);
+  const [heardAboutDetail, setHeardAboutDetail] = useState("");
   useEffect(() => {
     adClickRef.current = rememberedAdClick();
   }, []);
@@ -472,6 +476,8 @@ export function BookingWizard({
           notes: service ? `Asked about ${service} in the post we answered.` : "",
           // Not asked any more: the pre-evaluation form covers what they want.
           budgetRange: "Not sure yet",
+          heardAbout,
+          heardAboutDetail,
         });
         // Kept in their own browser so a second booking is a tap rather than
         // the same four fields typed again on a phone.
@@ -830,6 +836,36 @@ export function BookingWizard({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="phone">Phone</Label>
             <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" autoComplete="tel" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium">
+              How did you hear about us? <span className="font-normal text-muted-foreground">(optional)</span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {HEARD_ABOUT.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={heardAbout === o.value}
+                  onClick={() => setHeardAbout((v) => (v === o.value ? null : o.value))}
+                  className={cn(
+                    "min-h-10 rounded-full border px-3 text-sm transition-colors",
+                    heardAbout === o.value ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {heardAbout === "other" && (
+              <Input
+                value={heardAboutDetail}
+                onChange={(e) => setHeardAboutDetail(e.target.value)}
+                placeholder="Where was it?"
+                maxLength={80}
+                className="h-11 text-base"
+              />
+            )}
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">

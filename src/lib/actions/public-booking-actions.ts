@@ -25,6 +25,7 @@ import { zipOf } from "@/lib/material-suppliers";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
 import { recordBookingAdClick } from "@/lib/data/meta-report";
+import { cleanHeardAbout } from "@/lib/heard-about";
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -52,6 +53,9 @@ export interface SubmitPublicBookingInput {
   visitId?: string | null;
   /** The ad they tapped to get here, read off the page's address in their browser. */
   adClick?: AdClick | null;
+  /** Their answer to "How did you hear about us?", and Other's few words. Optional. */
+  heardAbout?: string | null;
+  heardAboutDetail?: string | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -328,6 +332,7 @@ async function makePublicBooking(
       client_notes: input.notes.trim() || null,
       budget_range: budgetRange || null,
       referred_by_profile_id: input.referredByProfileId,
+      ...cleanHeardAbout(input.heardAbout, input.heardAboutDetail),
     })
     .select()
     .single();
