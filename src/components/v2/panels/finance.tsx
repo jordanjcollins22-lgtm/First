@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadFinanceDashboard, type FinanceDashboard, type Kpi } from "@/lib/data/finance";
 import { loadPayrollWeek, type PayrollWeekView } from "@/lib/data/payroll";
@@ -10,44 +12,45 @@ import { AutopayList, FinanceSettingsForm, PayrollCard, QboSyncCard } from "@/co
 import { OpenEntity } from "@/components/v2/panels/admin-open";
 
 /**
- * Admin › Finance: the owner's money in one screen. What needs a person
- * first, then revenue, cash and the ratios against the report's planning
- * bands, the weekly scorecard, receivables, and under them the automations
- * (autopay, QuickBooks sync, payroll file) with their switches.
+ * Admin › Finance: the owner's money, one screen per button. What needs a
+ * person; revenue, cash and the ratios against the report's planning
+ * bands; the weekly scorecard; receivables; the payroll file; and the
+ * automations (autopay, QuickBooks sync) with their switches. Every screen
+ * reads one load for the request.
  */
-export async function FinancePanel() {
+
+const loadFinance = cache(async (): Promise<{ organizationId: string; data: FinanceDashboard | null }> => {
   const organizationId = await getCurrentOrganizationId();
-  let data: FinanceDashboard;
   try {
-    data = await loadFinanceDashboard(organizationId);
+    return { organizationId, data: await loadFinanceDashboard(organizationId) };
   } catch (err) {
     log.error("finance.panel.failed", err);
-    return (
-      <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
-        Finance couldn&apos;t load. If migration 0363 hasn&apos;t been applied yet, that is why; everything else in the app is unaffected.
-      </section>
-    );
+    return { organizationId, data: null };
   }
-  const lastWeek = addDays(mondayOf(data.today), -7);
-  const [payroll, profiles] = await Promise.all([
-    loadPayrollWeek(organizationId, lastWeek).catch(() => null as PayrollWeekView | null),
-    listProfiles().catch(() => []),
-  ]);
-  const people = profiles
-    .filter((p) => p.organization_id === organizationId)
-    .map((p) => ({ id: p.id, name: p.full_name || p.email, payrollId: data.settings.payrollIds[p.id] ?? "" }));
+});
+
+function Failed() {
+  return (
+    <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+      Finance couldn&apos;t load. If migration 0363 hasn&apos;t been applied yet, that is why; everything else in the app is unaffected.
+    </section>
+  );
+}
+
+function Bands() {
+  return <p className="text-sm text-muted-foreground">Targets are planning bands from the playbook (mostly vendor sources), not industry standards. Green is on target, yellow is close, red needs a look.</p>;
+}
+
+export async function FinanceNeedsPanel() {
+  const { data } = await loadFinance();
+  if (!data) return <Failed />;
 
   return (
-    <section className="space-y-6" aria-labelledby="finance-heading">
-      <header className="space-y-1">
-        <h2 id="finance-heading" className="text-xl font-bold">
-          Finance
-        </h2>
-        <p className="text-sm text-muted-foreground">Targets are planning bands from the playbook (mostly vendor sources), not industry standards. Green is on target, yellow is close, red needs a look.</p>
-      </header>
-
-      {/* Needs you */}
-      {data.needsYou.length > 0 && (
+    <div className="grid gap-2">
+      <h3 className="font-semibold">Money</h3>
+      {data.needsYou.length === 0 ? (
+        <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Nothing about money needs you.</p>
+      ) : (
         <ul className="space-y-2" aria-label="Needs you">
           {data.needsYou.map((n) => (
             <li
@@ -63,6 +66,23 @@ export async function FinancePanel() {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/** Revenue & cash: money in, cash in the bank, the three ratios and gross margin by division. */
+export async function FinanceRevenuePanel() {
+  const { data } = await loadFinance();
+  if (!data) return <Failed />;
+
+  return (
+    <section className="space-y-6" aria-labelledby="finance-heading">
+      <header className="space-y-1">
+        <h2 id="finance-heading" className="text-xl font-bold">
+          Revenue &amp; cash
+        </h2>
+        <Bands />
+      </header>
 
       {/* Revenue and cash */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -117,86 +137,125 @@ export async function FinancePanel() {
           </div>
         )}
       </div>
+    </section>
+  );
+}
 
-      {/* Weekly scorecard */}
-      <div className="space-y-2">
-        <h3 className="font-semibold">Weekly scorecard</h3>
-        <p className="text-sm text-muted-foreground">Fifteen minutes on Monday: scan, note wins, find the cause of each red, give each fix one owner and a date.</p>
-        <div className="overflow-x-auto rounded-xl border bg-card">
-          <table className="w-full min-w-[36rem] text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="p-2 font-medium">Metric</th>
-                <th className="p-2 font-medium">Now</th>
-                <th className="p-2 font-medium">Target</th>
-                <th className="p-2 font-medium">Owner</th>
+export async function FinanceScorecardPanel() {
+  const { data } = await loadFinance();
+  if (!data) return <Failed />;
+
+  return (
+    <div className="space-y-2">
+      <h3 className="font-semibold">Weekly scorecard</h3>
+      <p className="text-sm text-muted-foreground">Fifteen minutes on Monday: scan, note wins, find the cause of each red, give each fix one owner and a date.</p>
+      <Bands />
+      <div className="overflow-x-auto rounded-xl border bg-card">
+        <table className="w-full min-w-[36rem] text-sm">
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="p-2 font-medium">Metric</th>
+              <th className="p-2 font-medium">Now</th>
+              <th className="p-2 font-medium">Target</th>
+              <th className="p-2 font-medium">Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.scorecard.map((m) => (
+              <tr key={m.key} className="border-t">
+                <td className="p-2">
+                  <span className="flex items-center gap-2">
+                    <Dot tone={m.tone} />
+                    {m.label}
+                  </span>
+                  {m.note && <span className="block pl-4 text-xs text-muted-foreground">{m.note}</span>}
+                </td>
+                <td className="p-2 font-mono">{m.value}</td>
+                <td className="p-2 text-muted-foreground">{m.target}</td>
+                <td className="p-2">{m.owner}</td>
               </tr>
-            </thead>
-            <tbody>
-              {data.scorecard.map((m) => (
-                <tr key={m.key} className="border-t">
-                  <td className="p-2">
-                    <span className="flex items-center gap-2">
-                      <Dot tone={m.tone} />
-                      {m.label}
-                    </span>
-                    {m.note && <span className="block pl-4 text-xs text-muted-foreground">{m.note}</span>}
-                  </td>
-                  <td className="p-2 font-mono">{m.value}</td>
-                  <td className="p-2 text-muted-foreground">{m.target}</td>
-                  <td className="p-2">{m.owner}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
+    </div>
+  );
+}
 
-      {/* AR aging */}
-      <div className="space-y-2">
-        <h3 className="font-semibold">Receivables</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
-          <div className="rounded-xl border bg-card p-3">
-            <div className="text-xs text-muted-foreground">Owed</div>
-            <div className="font-mono text-lg">{usd(data.aging.total)}</div>
+/** Owed to you: receivables by age, days sales outstanding, and the late invoices. */
+export async function FinanceOwedPanel() {
+  const { data } = await loadFinance();
+  if (!data) return <Failed />;
+
+  return (
+    <div className="space-y-2">
+      <h3 className="font-semibold">Receivables</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+        <div className="rounded-xl border bg-card p-3">
+          <div className="text-xs text-muted-foreground">Owed</div>
+          <div className="font-mono text-lg">{usd(data.aging.total)}</div>
+        </div>
+        {data.aging.buckets.map((b) => (
+          <div key={b.key} className={`rounded-xl border bg-card p-3 ${b.key === "current" ? "" : b.amount > 0 ? (b.key === "1-30" ? ring("warn") : ring("bad")) : ""}`}>
+            <div className="text-xs text-muted-foreground">{b.label}</div>
+            <div className="font-mono text-lg">{usd(b.amount)}</div>
+            <div className="text-xs text-muted-foreground">{b.count} invoice{b.count === 1 ? "" : "s"}</div>
           </div>
-          {data.aging.buckets.map((b) => (
-            <div key={b.key} className={`rounded-xl border bg-card p-3 ${b.key === "current" ? "" : b.amount > 0 ? (b.key === "1-30" ? ring("warn") : ring("bad")) : ""}`}>
-              <div className="text-xs text-muted-foreground">{b.label}</div>
-              <div className="font-mono text-lg">{usd(b.amount)}</div>
-              <div className="text-xs text-muted-foreground">{b.count} invoice{b.count === 1 ? "" : "s"}</div>
-            </div>
-          ))}
-        </div>
-        <p className="text-sm">
-          DSO <b className="font-mono">{data.dso === null ? "—" : `${data.dso} days`}</b> against a target of under {data.settings.dsoTargetDays} days.
-          {data.settings.lateFeeEnabled && data.aging.lateFees > 0 && <> Late fees that would apply now: <b className="font-mono">{usd(data.aging.lateFees)}</b>.</>}
-        </p>
-        {data.aging.rows.some((r) => r.daysLate > 0) && (
-          <ul className="divide-y rounded-xl border bg-card text-sm">
-            {data.aging.rows
-              .filter((r) => r.daysLate > 0)
-              .slice(0, 10)
-              .map((r) => (
-                <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
-                  <OpenEntity kind="admin.invoice" id={r.id} className="min-h-11 min-w-0 flex-1 font-medium">
-                    {r.customerName}
-                  </OpenEntity>
-                  <span className="font-mono">{usd(r.amount)}</span>
-                  <span className="text-muted-foreground">{r.daysLate} days late</span>
-                  {r.hostedUrl && (
-                    <a href={r.hostedUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
-                      Invoice
-                    </a>
-                  )}
-                </li>
-              ))}
-          </ul>
-        )}
-        <p className="text-xs text-muted-foreground">Reminders before and after the due date are sent by the invoice reminder automation (Sales › Automated messages).</p>
+        ))}
       </div>
+      <p className="text-sm">
+        DSO <b className="font-mono">{data.dso === null ? "—" : `${data.dso} days`}</b> against a target of under {data.settings.dsoTargetDays} days.
+        {data.settings.lateFeeEnabled && data.aging.lateFees > 0 && <> Late fees that would apply now: <b className="font-mono">{usd(data.aging.lateFees)}</b>.</>}
+      </p>
+      {data.aging.rows.some((r) => r.daysLate > 0) && (
+        <ul className="divide-y rounded-xl border bg-card text-sm">
+          {data.aging.rows
+            .filter((r) => r.daysLate > 0)
+            .slice(0, 10)
+            .map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
+                <OpenEntity kind="admin.invoice" id={r.id} className="min-h-11 min-w-0 flex-1 font-medium">
+                  {r.customerName}
+                </OpenEntity>
+                <span className="font-mono">{usd(r.amount)}</span>
+                <span className="text-muted-foreground">{r.daysLate} days late</span>
+                {r.hostedUrl && (
+                  <a href={r.hostedUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
+                    Invoice
+                  </a>
+                )}
+              </li>
+            ))}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">Reminders before and after the due date are sent by the invoice reminder automation (Sales › Automated messages).</p>
+    </div>
+  );
+}
 
-      {/* Automations and settings */}
+/** The payroll file for last week, with each person's payroll ID. */
+export async function FinancePayrollPanel() {
+  const { organizationId, data } = await loadFinance();
+  if (!data) return <Failed />;
+  const lastWeek = addDays(mondayOf(data.today), -7);
+  const [payroll, profiles] = await Promise.all([
+    loadPayrollWeek(organizationId, lastWeek).catch(() => null as PayrollWeekView | null),
+    listProfiles().catch(() => []),
+  ]);
+  const people = profiles
+    .filter((p) => p.organization_id === organizationId)
+    .map((p) => ({ id: p.id, name: p.full_name || p.email, payrollId: data.settings.payrollIds[p.id] ?? "" }));
+
+  return <PayrollCard initial={payroll} people={people} />;
+}
+
+/** Automatic: invoicing and collections, autopay, and the QuickBooks sync. */
+export async function FinanceAutoPanel() {
+  const { data } = await loadFinance();
+  if (!data) return <Failed />;
+
+  return (
+    <div className="space-y-6">
       <div className="space-y-3">
         <h3 className="font-semibold">Invoicing &amp; collections</h3>
         <FinanceSettingsForm
@@ -228,9 +287,7 @@ export async function FinancePanel() {
           errors: data.qbo.errors,
         }}
       />
-
-      <PayrollCard initial={payroll} people={people} />
-    </section>
+    </div>
   );
 }
 

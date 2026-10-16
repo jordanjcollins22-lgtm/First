@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadBackOfficeSettings } from "@/lib/data/back-office-settings";
@@ -16,6 +18,8 @@ import { OpenButton, OpenEntity } from "./admin-open";
  * tracked per person, with the forms stored privately. Anybody whose roles
  * the app does not recognise, or whose roles pull against each other, is
  * listed with one fix to tap.
+ *
+ * One screen per button (needs you, onboarding, roles, the switch), one load.
  */
 const POSITION: Record<string, string> = {
   "account-manager": "Account manager",
@@ -25,43 +29,35 @@ const POSITION: Record<string, string> = {
   "project-lead": "Project lead",
 };
 
-export async function PeoplePanel() {
+const loadPeople = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
-  const settings = await loadBackOfficeSettings(supabase, organizationId);
-
-  const [items, problems, { checklists, ready }] = await Promise.all([
+  const [settings, items, problems, { checklists, ready }] = await Promise.all([
+    loadBackOfficeSettings(supabase, organizationId),
     peopleItems(organizationId).catch(() => []),
     roleProblems(organizationId).catch(() => []),
     listChecklists(organizationId),
   ]);
+  return { settings, items, problems, checklists, ready };
+});
+
+export async function PeopleNeedsPanel() {
+  const { items } = await loadPeople();
+  return <NeedsYouStrip items={items} />;
+}
+
+/** Onboarding: who is still onboarding, what is overdue, and every hire's checklist. */
+export async function PeopleOnboardingPanel() {
+  const { checklists, ready } = await loadPeople();
   const open = checklists.filter((c) => !c.progress.complete);
   const overdue = checklists.reduce((s, c) => s + c.progress.overdue, 0);
-  const unmapped = problems.filter((p) => p.problem === "unmapped").length;
 
   return (
     <section className="grid gap-4">
-      <NeedsYouStrip items={items} />
-
       <KpiRow>
         <Kpi label="Onboarding items overdue" value={String(overdue)} target="0" tone={overdue ? "bad" : "good"} />
         <Kpi label="Hires still onboarding" value={String(open.length)} tone="plain" />
-        <Kpi label="People with no recognised role" value={String(unmapped)} target="0" tone={unmapped ? "warn" : "good"} />
-        <Kpi label="Role fixes waiting" value={String(problems.length)} target="0" tone={problems.length ? "warn" : "good"} />
       </KpiRow>
-
-      {settings.ready ? (
-        <AutomationCard
-          title="New-hire checklists"
-          how="When somebody is marked hired in Hiring, or added on the Team page, they get a checklist: I-9, W-4, MW507, the Maryland new-hire report within 20 days, handbook, safety training, and MDA pesticide training within 30 days if they'll handle chemicals. Overdue items go to the owner."
-          on={settings.onboardingOn}
-          since={settings.onboardingStartedAt}
-        >
-          <SettingSwitch setting="onboardingOn" on={settings.onboardingOn} label="Create checklists on hire" hint="Only for people hired after it's switched on." />
-        </AutomationCard>
-      ) : (
-        <NotReady what="New-hire checklists" />
-      )}
 
       <SectionHeading>Onboarding</SectionHeading>
       {!ready || checklists.length === 0 ? (
@@ -109,6 +105,21 @@ export async function PeoplePanel() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Roles: anybody who doesn't map to one of the five roles, with the fix. */
+export async function PeopleRolesPanel() {
+  const { problems } = await loadPeople();
+  const unmapped = problems.filter((p) => p.problem === "unmapped").length;
+
+  return (
+    <section className="grid gap-4">
+      <KpiRow>
+        <Kpi label="People with no recognised role" value={String(unmapped)} target="0" tone={unmapped ? "warn" : "good"} />
+        <Kpi label="Role fixes waiting" value={String(problems.length)} target="0" tone={problems.length ? "warn" : "good"} />
+      </KpiRow>
 
       <SectionHeading>Roles: old to new</SectionHeading>
       <p className="text-sm text-muted-foreground">
@@ -132,5 +143,21 @@ export async function PeoplePanel() {
         </ul>
       )}
     </section>
+  );
+}
+
+export async function PeopleAutoPanel() {
+  const { settings } = await loadPeople();
+  if (!settings.ready) return <NotReady what="New-hire checklists" />;
+
+  return (
+    <AutomationCard
+      title="New-hire checklists"
+      how="When somebody is marked hired in Hiring, or added on the Team page, they get a checklist: I-9, W-4, MW507, the Maryland new-hire report within 20 days, handbook, safety training, and MDA pesticide training within 30 days if they'll handle chemicals. Overdue items go to the owner."
+      on={settings.onboardingOn}
+      since={settings.onboardingStartedAt}
+    >
+      <SettingSwitch setting="onboardingOn" on={settings.onboardingOn} label="Create checklists on hire" hint="Only for people hired after it's switched on." />
+    </AutomationCard>
   );
 }

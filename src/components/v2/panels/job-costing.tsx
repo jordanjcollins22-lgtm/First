@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadJobCosting } from "@/lib/data/ops-panels";
 import { money, hours } from "@/lib/ops/kpis";
@@ -12,38 +14,48 @@ import { OpenButton, OpenEntity } from "@/components/v2/panels/admin-open";
  * (left shop, arrived, finished), each person's pay rate, receipts and the
  * accepted price. Jobs over their hours are first; completed jobs that never
  * got a snapshot (finished before the chain went live) are listed after.
+ * The jobs over their hours are also their own screen, under Needs you.
  */
+
+const loadCosts = cache(async () => loadJobCosting(await getCurrentOrganizationId()));
+
+export async function JobCostingNeedsPanel() {
+  const data = await loadCosts();
+  if (!data.ready) return <NotReady />;
+  const over = data.rows.filter((r) => r.overBudget);
+
+  return (
+    <div className="grid gap-3">
+      <SectionTitle sub="Jobs more than the threshold over their budgeted hours.">Job costs</SectionTitle>
+      {over.length === 0 ? (
+        <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No costed job is over its hours.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {over.map((r) => (
+            <li key={r.jobId} className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-300 bg-card p-3 dark:border-orange-800">
+              <span className="min-w-0 flex-1">
+                <span className="font-semibold">{r.name}</span>
+                <span className="block text-sm text-muted-foreground">
+                  {hours(r.actualHours)} worked against {hours(r.budgetHours)} budgeted ({Math.round(r.hoursVariancePct ?? 0)}% over).
+                </span>
+              </span>
+              <OpenButton kind="admin.job" id={r.jobId} label="Open job" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export async function JobCostingPanel() {
-  const organizationId = await getCurrentOrganizationId();
-  const data = await loadJobCosting(organizationId);
+  const data = await loadCosts();
   if (!data.ready) return <NotReady />;
 
-  const over = data.rows.filter((r) => r.overBudget);
   const margin = data.totals.revenueCents > 0 ? Math.round((data.totals.marginCents / data.totals.revenueCents) * 100) : null;
 
   return (
     <section className="grid gap-6">
-      <div className="grid gap-3">
-        <SectionTitle sub="Jobs more than the threshold over their budgeted hours.">Needs you</SectionTitle>
-        {over.length === 0 ? (
-          <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">No costed job is over its hours.</p>
-        ) : (
-          <ul className="grid gap-2">
-            {over.map((r) => (
-              <li key={r.jobId} className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-300 bg-card p-3 dark:border-orange-800">
-                <span className="min-w-0 flex-1">
-                  <span className="font-semibold">{r.name}</span>
-                  <span className="block text-sm text-muted-foreground">
-                    {hours(r.actualHours)} worked against {hours(r.budgetHours)} budgeted ({Math.round(r.hoursVariancePct ?? 0)}% over).
-                  </span>
-                </span>
-                <OpenButton kind="admin.job" id={r.jobId} label="Open job" />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Revenue (costed jobs)", value: money(data.totals.revenueCents) },

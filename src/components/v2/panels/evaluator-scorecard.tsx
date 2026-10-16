@@ -14,27 +14,36 @@ import { OpenEntityName } from "@/components/v2/panels/sales/open-entity-button"
  * Around it, the numbers that explain a close rate: visits and whether the
  * client was home, proposals out and how fast, the size of the ticket, the
  * money sold and the commission it earned.
+ *
+ * The proposals past the speed target are their own screen, under Needs you.
  */
+export async function EvaluatorNeedsPanel() {
+  const organizationId = await getCurrentOrganizationId();
+  const overdue = await loadOpenSalesExceptions(organizationId, ["proposal_overdue"]);
+
+  return (
+    <PanelSection title="Needs you" sub="Proposals past the speed target, with the evaluator they went to.">
+      <NeedsYouStrip
+        empty="No evaluation is waiting on its proposal."
+        items={overdue.map((item) => ({
+          id: item.id,
+          summary: item.summary,
+          who: item.assignee,
+          open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
+          actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
+        }))}
+      />
+    </PanelSection>
+  );
+}
+
 export async function EvaluatorScorecardPanel() {
   const organizationId = await getCurrentOrganizationId();
-  const [data, overdue] = await Promise.all([loadScorecard(organizationId), loadOpenSalesExceptions(organizationId, ["proposal_overdue"])]);
+  const data = await loadScorecard(organizationId);
   const team = data.team;
 
   return (
     <div className="grid gap-6">
-      <PanelSection title="Needs you" sub="Proposals past the speed target, with the evaluator they went to.">
-        <NeedsYouStrip
-          empty="No evaluation is waiting on its proposal."
-          items={overdue.map((item) => ({
-            id: item.id,
-            summary: item.summary,
-            who: item.assignee,
-            open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
-            actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
-          }))}
-        />
-      </PanelSection>
-
       <PanelSection
         title="The team against target"
         sub={`The last ${data.windowDays} days. Close rate target ${pct(CLOSE_RATE_BAND.high)} (band ${pct(CLOSE_RATE_BAND.low)}–${pct(CLOSE_RATE_BAND.high)}, Level CFO, labelled unverified; now ${pct(CLOSE_RATE_BAND.now)}).`}

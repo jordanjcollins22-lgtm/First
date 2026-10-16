@@ -1,4 +1,6 @@
-import { loadDigitalPanel, type IntegrationStatus } from "@/lib/data/marketing-panels";
+import { cache } from "react";
+
+import { loadDigitalPanel, type DigitalPanelData, type IntegrationStatus } from "@/lib/data/marketing-panels";
 import type { Automation } from "@/lib/marketing/autopilot-settings";
 import { money } from "@/lib/marketing/money";
 import { SEASON_INFO } from "@/lib/marketing/seasonal";
@@ -8,7 +10,6 @@ import {
   ChannelTable,
   GoogleRunButton,
   ListSettings,
-  
   NumberSettings,
   SeasonalModeForm,
   SeasonCard,
@@ -17,12 +18,12 @@ import {
 import { Kpi, NeedsYou, pct, Section, type NeedsYouItem, type Tone } from "./marketing-panel-parts";
 
 /**
- * Marketing › Digital marketing: what came from where and what it cost,
- * Google's state, and the switches for everything that runs on its own.
+ * Marketing › Digital marketing, one screen per button: what needs you, the
+ * leads and what they cost, spend not reported by an API, Google, the
+ * seasonal email, and the switches for everything that runs on its own.
  *
- * Needs-you first (a review to answer, Google broken, posts stuck, a season
- * waiting to start, spend out of band), then the numbers against target,
- * then the channel table, then the machinery.
+ * Every screen reads the same load (cached for the request), so splitting
+ * them costs no extra database work.
  */
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -39,18 +40,22 @@ const DIGITAL_SWITCHES: Automation[] = ["review_replies", "gbp_weekly_post", "so
 /** Search and LSA cost per lead above these is worth a look (report's planning bands). */
 const CPL_TARGET: Partial<Record<string, number>> = { google_lsa: 6500, google_ads: 9000 };
 
+/** One load for every Digital marketing screen on the request. */
+const loadDigital = cache(() => loadDigitalPanel());
+
 function statusText(s: IntegrationStatus): string {
   if (s.status === "connected") return "Connected";
   if (s.status === "error") return `Problem: ${s.lastError ?? "unknown"}`;
   return "Not connected";
 }
 
-export async function MarketingAutopilotPanel() {
-  const d = await loadDigitalPanel();
-  const { settings, started } = d.autopilot;
-  const month = d.attribution.periods[0];
-  const quarter = d.attribution.periods[1];
-  const gbp = d.google.find((g) => g.provider === "google_business");
+const periods = (d: DigitalPanelData) => ({ month: d.attribution.periods[0], quarter: d.attribution.periods[1] });
+
+/** Needs you: a review to answer, Google broken, posts stuck, a season waiting to start, spend out of band. */
+export async function MarketingNeedsPanel() {
+  const d = await loadDigital();
+  const { settings } = d.autopilot;
+  const { quarter } = periods(d);
 
   const needs: NeedsYouItem[] = [];
   if (d.reviews.held > 0) {
@@ -68,7 +73,7 @@ export async function MarketingAutopilotPanel() {
     needs.push({ key: "fb", text: `${d.social.scheduled} post${d.social.scheduled === 1 ? "" : "s"} scheduled but no Facebook page is connected and ticked Posting.`, href: INTEGRATIONS_HREF, action: "Settings" });
   }
   for (const s of d.seasons) {
-    if (s.open && !s.run && settings.seasonalMode === "owner") needs.push({ key: `season-${s.season}`, text: `The ${SEASON_INFO[s.season].label.toLowerCase()} window is open: preview and start the email below.` });
+    if (s.open && !s.run && settings.seasonalMode === "owner") needs.push({ key: `season-${s.season}`, text: `The ${SEASON_INFO[s.season].label.toLowerCase()} window is open: preview and start the email under Email.` });
   }
   for (const l of quarter?.lines ?? []) {
     const target = l.channel ? CPL_TARGET[l.channel] : undefined;
@@ -85,14 +90,20 @@ export async function MarketingAutopilotPanel() {
   }
   if (quarter?.band === "over") needs.push({ key: "band", text: `Marketing spend is ${pct(quarter.spendShare, 1)} of revenue over 90 days, above the ${pct(settings.spendTargetHigh)} ceiling.` });
 
+  return <NeedsYou items={needs} />;
+}
+
+/** Leads & cost: the leads, what each cost, spend against revenue, and the channel table behind them. */
+export async function MarketingLeadsPanel() {
+  const d = await loadDigital();
+  const { settings } = d.autopilot;
+  const { month, quarter } = periods(d);
   const bandTone: Tone = !quarter || quarter.band == null ? "none" : quarter.band === "on" ? "good" : quarter.band === "over" ? "bad" : "warn";
   const cpl = month && month.spendCents > 0 && month.leads > 0 ? Math.round(month.spendCents / month.leads) : null;
 
   return (
     <div className="grid gap-4">
-      <NeedsYou items={needs} />
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Kpi label="Leads, 30 days" value={String(month?.leads ?? 0)} />
         <Kpi label="Cost per lead, 30 days" value={money(cpl)} target="< $65 LSA, < $90 Search" />
         <Kpi
@@ -101,79 +112,95 @@ export async function MarketingAutopilotPanel() {
           target={`${pct(settings.spendTargetLow)}–${pct(settings.spendTargetHigh)}`}
           tone={bandTone}
         />
-        <Kpi label="New Google reviews, 30 days" value={String(d.reviews.last30)} target="4–10 / month" tone={gbp?.status !== "connected" ? "none" : d.reviews.last30 >= 4 ? "good" : "warn"} />
-        <Kpi
-          label="Google rating"
-          value={d.reviews.average != null ? d.reviews.average.toFixed(1) : "—"}
-          target="≥ 4.7"
-          tone={d.reviews.average == null ? "none" : d.reviews.average >= 4.7 ? "good" : "warn"}
-        />
-        <Kpi
-          label="Reviews answered"
-          value={pct(d.reviews.responseRate)}
-          target="100%"
-          tone={d.reviews.responseRate == null ? "none" : d.reviews.responseRate >= 0.99 ? "good" : "warn"}
-        />
       </div>
 
       <Section title="Where the work came from" hint="Leads, sales and revenue by channel, with spend where it is known. Hangers and flyers are costed as their plays close.">
         <ChannelTable periods={d.attribution.periods} hasSpend={d.attribution.hasSpend} />
       </Section>
-
-      <Section title="Google" hint="Business Profile reviews and insights, Search and Local Services ads, and the rank tracker. Pulled every morning.">
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {d.google.map((g) => (
-            <li key={g.provider} className="flex min-h-11 items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
-              <span className="font-semibold">{PROVIDER_LABEL[g.provider]}</span>
-              <span className={g.status === "connected" ? "text-green-700 dark:text-green-400" : g.status === "error" ? "text-destructive" : "text-muted-foreground"}>
-                {g.status === "not_connected" ? "Not connected — add it in Settings › Integrations" : statusText(g)}
-              </span>
-            </li>
-          ))}
-        </ul>
-        {gbp?.status === "connected" ? (
-          <div className="grid grid-cols-3 gap-2">
-            <Kpi label="Calls from the listing, 30 days" value={String(d.insights.calls)} />
-            <Kpi label="Direction requests" value={String(d.insights.directions)} />
-            <Kpi label="Website clicks" value={String(d.insights.websiteClicks)} />
-          </div>
-        ) : null}
-        <GoogleRunButton disabled={d.google.every((g) => g.status === "not_connected")} />
-      </Section>
-
-      <Section title="Spend not reported by an API" hint="Upload a CSV from Google Ads, LSA or Facebook Ads Manager, or add one amount. Reading the same day again replaces it.">
-        <SpendForms />
-      </Section>
-
-      <Section
-        title="Seasonal email to past clients"
-        hint="Spring cleanup (Jan 15–Mar 31), aeration (Aug–Sep), snow pre-sell (Sep–Nov 15). One email per client per season, only to those who agreed to marketing email."
-      >
-        <div className="grid gap-2 md:grid-cols-3">
-          {d.seasons.map((s) => (
-            <SeasonCard key={s.season} season={s.season} open={s.open} run={s.run} />
-          ))}
-        </div>
-        <SeasonalModeForm mode={settings.seasonalMode} goLive={settings.seasonalGoLive} />
-      </Section>
-
-      <Section title="What runs on its own" hint="Each switch remembers when it was first turned on and only acts on what came after.">
-        <AutomationSwitches keys={DIGITAL_SWITCHES} settings={settings} started={started} />
-        <p className="text-sm text-muted-foreground">
-          Facebook: {d.social.facebookReady ? "a page is connected for posting" : "no page connected for posting"} · {d.social.scheduled} scheduled
-          {d.social.autoMade ? ` (${d.social.autoMade} made from crew photos)` : ""}
-          {d.social.overdue ? ` · ${d.social.overdue} past their slot` : ""}. Rank tracker: {d.rank.keywords} phrases, {d.rank.scannedThisWeek} checked this week.
-        </p>
-        <NumberSettings
-          fields={[
-            { key: "posts", label: "Facebook posts a week from crew photos", value: settings.socialPostsPerWeek, setting: "socialPostsPerWeek" },
-            { key: "rank", label: "Rank phrases checked a week", value: settings.rankPerWeek, setting: "rankPerWeek" },
-            { key: "low", label: "Spend target, low", value: settings.spendTargetLow * 100, suffix: "% of revenue", setting: "spendTargetLow", scale: 0.01 },
-            { key: "high", label: "Spend target, high", value: settings.spendTargetHigh * 100, suffix: "% of revenue", setting: "spendTargetHigh", scale: 0.01 },
-          ]}
-        />
-        <ListSettings towns={settings.rankTowns} services={settings.rankServices} />
-      </Section>
     </div>
+  );
+}
+
+/** Spend: what Google Ads, LSA and Facebook cost when no API reports it. */
+export async function MarketingSpendPanel() {
+  return (
+    <Section title="Spend not reported by an API" hint="Upload a CSV from Google Ads, LSA or Facebook Ads Manager, or add one amount. Reading the same day again replaces it. It feeds the cost per lead under Leads & cost.">
+      <SpendForms />
+    </Section>
+  );
+}
+
+/** Google: each connection's state, the Business Profile's insights, and a run now. */
+export async function MarketingGooglePanel() {
+  const d = await loadDigital();
+  const gbp = d.google.find((g) => g.provider === "google_business");
+
+  return (
+    <Section title="Google" hint="Business Profile reviews and insights, Search and Local Services ads, and the rank tracker. Pulled every morning.">
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {d.google.map((g) => (
+          <li key={g.provider} className="flex min-h-11 items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+            <span className="font-semibold">{PROVIDER_LABEL[g.provider]}</span>
+            <span className={g.status === "connected" ? "text-green-700 dark:text-green-400" : g.status === "error" ? "text-destructive" : "text-muted-foreground"}>
+              {g.status === "not_connected" ? "Not connected — add it in Settings › Integrations" : statusText(g)}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {gbp?.status === "connected" ? (
+        <div className="grid grid-cols-3 gap-2">
+          <Kpi label="Calls from the listing, 30 days" value={String(d.insights.calls)} />
+          <Kpi label="Direction requests" value={String(d.insights.directions)} />
+          <Kpi label="Website clicks" value={String(d.insights.websiteClicks)} />
+        </div>
+      ) : null}
+      <GoogleRunButton disabled={d.google.every((g) => g.status === "not_connected")} />
+    </Section>
+  );
+}
+
+/** Email: the seasonal email to past clients, and whether it waits for you. */
+export async function MarketingEmailPanel() {
+  const d = await loadDigital();
+  const { settings } = d.autopilot;
+
+  return (
+    <Section
+      title="Seasonal email to past clients"
+      hint="Spring cleanup (Jan 15–Mar 31), aeration (Aug–Sep), snow pre-sell (Sep–Nov 15). One email per client per season, only to those who agreed to marketing email."
+    >
+      <div className="grid gap-2 md:grid-cols-3">
+        {d.seasons.map((s) => (
+          <SeasonCard key={s.season} season={s.season} open={s.open} run={s.run} />
+        ))}
+      </div>
+      <SeasonalModeForm mode={settings.seasonalMode} goLive={settings.seasonalGoLive} />
+    </Section>
+  );
+}
+
+/** Automatic: the switches and numbers for everything that runs on its own. */
+export async function MarketingAutoPanel() {
+  const d = await loadDigital();
+  const { settings, started } = d.autopilot;
+
+  return (
+    <Section title="What runs on its own" hint="Each switch remembers when it was first turned on and only acts on what came after. Review replies to 4–5 stars post themselves; 1–3 stars always wait for you.">
+      <AutomationSwitches keys={DIGITAL_SWITCHES} settings={settings} started={started} />
+      <p className="text-sm text-muted-foreground">
+        Facebook: {d.social.facebookReady ? "a page is connected for posting" : "no page connected for posting"} · {d.social.scheduled} scheduled
+        {d.social.autoMade ? ` (${d.social.autoMade} made from crew photos)` : ""}
+        {d.social.overdue ? ` · ${d.social.overdue} past their slot` : ""}. Rank tracker: {d.rank.keywords} phrases, {d.rank.scannedThisWeek} checked this week.
+      </p>
+      <NumberSettings
+        fields={[
+          { key: "posts", label: "Facebook posts a week from crew photos", value: settings.socialPostsPerWeek, setting: "socialPostsPerWeek" },
+          { key: "rank", label: "Rank phrases checked a week", value: settings.rankPerWeek, setting: "rankPerWeek" },
+          { key: "low", label: "Spend target, low", value: settings.spendTargetLow * 100, suffix: "% of revenue", setting: "spendTargetLow", scale: 0.01 },
+          { key: "high", label: "Spend target, high", value: settings.spendTargetHigh * 100, suffix: "% of revenue", setting: "spendTargetHigh", scale: 0.01 },
+        ]}
+      />
+      <ListSettings towns={settings.rankTowns} services={settings.rankServices} />
+    </Section>
   );
 }

@@ -1,4 +1,4 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 
 import { outboundBaseUrl } from "@/lib/base-url";
 import { listAppConnections, type AppConnection } from "@/lib/data/app-connections";
@@ -14,12 +14,12 @@ import { OpenButton } from "@/components/v2/panels/admin-open";
  * in one place. The owner pastes values here once; secret ones are never
  * shown again, only "saved". Below, the services the app was already wired
  * to (keys in Vercel or their own screens), read-only, with how to fix
- * whatever is missing.
+ * whatever is missing. What broke is its own screen, under Needs you.
  */
 
 const AREAS = ["Marketing", "Sales", "Operations", "Admin"] as const;
 
-export async function IntegrationsPanel() {
+const loadIntegrations = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
   const [saved, existing, base] = await Promise.all([
     listIntegrations(organizationId).catch(() => []),
@@ -57,9 +57,45 @@ export async function IntegrationsPanel() {
       everSaved: Boolean(s),
     };
   });
+  return { providers, existing, broken: providers.filter((p) => p.status === "error") };
+});
 
-  const broken = providers.filter((p) => p.status === "error");
+/** Logins that broke, and services the app was wired to that are missing a key. */
+export async function IntegrationsNeedsPanel() {
+  const { broken, existing } = await loadIntegrations();
   const missingExisting = existing.filter((c) => c.status !== "configured");
+
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Integrations</h3>
+      {broken.length === 0 && missingExisting.length === 0 ? (
+        <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Every login is working.</p>
+      ) : (
+        <ul className="space-y-2" aria-label="Needs you">
+          {broken.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">
+              <span className="min-w-0 flex-1">
+                <b>{p.name}</b> isn&apos;t working{p.lastError ? `: ${p.lastError}` : "."} Open it to test it, or press Connect on its card under Integrations.
+              </span>
+              <OpenButton kind="admin.integration" id={p.id} />
+            </li>
+          ))}
+          {missingExisting.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+              <span className="min-w-0 flex-1">
+                <b>{c.name}</b> is {c.status === "missing" ? "not set up" : "partly set up"}: missing {c.checks.filter((k) => !k.present && !k.optional).map((k) => k.name).join(", ")}.
+              </span>
+              <OpenButton kind="admin.integration" id={c.id} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+export async function IntegrationsPanel() {
+  const { providers, existing, broken } = await loadIntegrations();
   const connected = providers.filter((p) => p.status === "connected").length;
   const configured = existing.filter((c) => c.status === "configured").length;
 
@@ -75,28 +111,6 @@ export async function IntegrationsPanel() {
       <Suspense fallback={null}>
         <OAuthReturnNotice names={Object.fromEntries(providers.map((p) => [p.id, p.name]))} />
       </Suspense>
-
-      {/* Needs you */}
-      {(broken.length > 0 || missingExisting.length > 0) && (
-        <ul className="space-y-2" aria-label="Needs you">
-          {broken.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">
-              <span className="min-w-0 flex-1">
-                <b>{p.name}</b> isn&apos;t working{p.lastError ? `: ${p.lastError}` : "."} Open it to test it, or press Connect on its card below.
-              </span>
-              <OpenButton kind="admin.integration" id={p.id} />
-            </li>
-          ))}
-          {missingExisting.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-              <span className="min-w-0 flex-1">
-                <b>{c.name}</b> is {c.status === "missing" ? "not set up" : "partly set up"}: missing {c.checks.filter((k) => !k.present && !k.optional).map((k) => k.name).join(", ")}.
-              </span>
-              <OpenButton kind="admin.integration" id={c.id} />
-            </li>
-          ))}
-        </ul>
-      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

@@ -59,8 +59,23 @@ export interface V2Pillar {
   parts?: V2Pillar[];
   /** Working screens shown above the numbers: keys into the panel registry. */
   panels?: string[];
+  /** Sections that share one button rather than taking one each. See V2Together. */
+  together?: V2Together[];
   /** Each role's own home screen on this choice. */
   rolePanels?: Partial<Record<V2Role, string[]>>;
+}
+
+/**
+ * Sections shown on one button, one under another: the first key's button
+ * carries the rest, under `label` if given, and the others get no button of
+ * their own. Keys are "panel:<registry key>" or "part:<pillar id>". Used to
+ * keep a choice's row of buttons short enough to scan: a pure-number part
+ * goes with the screen that reads the same numbers, and the closest record
+ * parts share a button.
+ */
+export interface V2Together {
+  label?: string;
+  keys: string[];
 }
 
 export interface V2Section {
@@ -1297,6 +1312,8 @@ type Group = {
   id: string; label: string; title: string; sub: string; ids: string[];
   /** Working screens shown above the numbers: keys into the panel registry. Owner only. */
   panels?: string[];
+  /** Sections that share one button (V2Together). */
+  together?: V2Together[];
   /** A role's own home screen on this choice, for everybody who isn't the owner. */
   rolePanels?: Partial<Record<V2Role, string[]>>;
 };
@@ -1313,32 +1330,79 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
       id: "digital", label: "Digital marketing", title: "Digital marketing",
       sub: "The website, search, ads, social, email and the people sharing links.",
       ids: ["sources", "website", "seo", "social", "email", "comments", "affiliates"],
-      panels: ["marketing-autopilot", "reviews"],
+      panels: ["marketing-needs", "reviews-waiting", "marketing-leads", "marketing-spend", "marketing-google", "reviews", "marketing-email", "marketing-auto"],
+      together: [
+        { keys: ["panel:marketing-needs", "panel:reviews-waiting"] },
+        { keys: ["panel:marketing-leads", "part:sources", "part:affiliates"] },
+        { label: "Google & reviews", keys: ["panel:marketing-google", "panel:reviews", "part:seo"] },
+        { keys: ["panel:marketing-email", "part:email"] },
+        { keys: ["part:social", "part:comments"] },
+      ],
       rolePanels: { affiliate: ["affiliate-home"] },
     },
     {
       id: "physical", label: "Physical marketing", title: "Physical marketing",
       sub: "Door hangers, signs, flyers and mail, the lists they go to, and what paid off.",
       ids: ["print", "lists", "worked"],
-      panels: ["physical-marketing"],
+      panels: ["physical-needs", "physical-plays", "physical-results", "physical-auto"],
+      together: [{ keys: ["panel:physical-results", "part:worked"] }],
     },
   ],
   sales: [
-    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-autopilot"], rolePanels: { "account-manager": ["am-sales"] } },
-    { id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Visits, the proposals that come from them, and the people who do them.", ids: ["booking", "myevals", "evaluators"], panels: ["evaluator-scorecard", "territories"], rolePanels: { evaluator: ["evaluator-home"] } },
-    { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.", ids: ["messages"], panels: ["client-messages", "email-approval-policy"] },
+    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-needs", "pipeline-numbers", "pipeline-rates", "pipeline-auto"], rolePanels: { "account-manager": ["am-sales"] } },
+    {
+      id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Visits, the proposals that come from them, and the people who do them.", ids: ["booking", "myevals", "evaluators"],
+      panels: ["evaluator-needs", "territories-needs", "evaluator-scorecard", "territory-routing", "territories"],
+      together: [{ keys: ["panel:evaluator-needs", "panel:territories-needs"] }],
+      rolePanels: { evaluator: ["evaluator-home"] },
+    },
+    {
+      id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message that goes out on its own, and who is in each one right now.", ids: ["messages"],
+      panels: ["messages-needs", "email-approval-held", "messages-numbers", "messages-auto", "messages-campaigns", "email-approval-policy"],
+      together: [{ keys: ["panel:messages-needs", "panel:email-approval-held"] }],
+    },
   ],
   operations: [
-    { id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"], panels: ["projects-autopilot", "weather", "snow-ops"], rolePanels: { "project-lead": ["lead-home"], "project-technician": ["crew-home"] } },
-    { id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"], panels: ["purchasing", "equipment"] },
+    {
+      id: "projects", label: "Projects", title: "Projects", sub: "Scheduled, worked and closed out.", ids: ["scheduling", "projects", "closeout", "mylead", "mytech"],
+      panels: ["projects-needs", "weather-needs", "snow-needs", "projects-numbers", "weather", "snow-storms", "snow-billing", "projects-auto", "weather-auto", "snow-auto"],
+      together: [
+        { keys: ["panel:projects-needs", "panel:weather-needs", "panel:snow-needs"] },
+        { keys: ["panel:projects-auto", "panel:weather-auto", "panel:snow-auto"] },
+        { label: "Schedule & projects", keys: ["part:scheduling", "part:projects", "part:closeout"] },
+      ],
+      rolePanels: { "project-lead": ["lead-home"], "project-technician": ["crew-home"] },
+    },
+    {
+      id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"],
+      panels: ["purchasing-needs", "equipment-needs", "purchasing-orders", "purchasing-stock", "equipment", "equipment-machines", "purchasing-auto", "equipment-auto"],
+      together: [
+        { keys: ["panel:purchasing-needs", "panel:equipment-needs"] },
+        { keys: ["panel:equipment-machines", "part:equipment"] },
+        { keys: ["panel:purchasing-auto", "panel:equipment-auto"] },
+      ],
+    },
     { id: "messages", label: "Automated messages", title: "Automated messages", sub: "Every message about the work that goes out on its own, and who is in each one right now.", ids: ["opsmessages"] },
-    { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"], panels: ["crew-budget"] },
+    { id: "team", label: "Team", title: "Team", sub: "The project team, and hiring the next one.", ids: ["team", "hiring"], panels: ["crew-needs", "crew-budget", "crew-bonus", "crew-auto"] },
   ],
   admin: [
-    { id: "oversight", label: "Oversight", title: "Oversight", sub: "What's waiting on you, every department at a glance, and every customer.", ids: ["overview", "customers"], panels: ["approval-queue"], rolePanels: { "account-manager": ["am-accounts"] } },
-    { id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out, against target.", ids: ["finance"], panels: ["finance", "job-costing", "commissions"] },
-    { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people"] },
-    { id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, and your business details.", ids: ["integrations", "company"], panels: ["integrations", "compliance"] },
+    { id: "oversight", label: "Oversight", title: "Oversight", sub: "What's waiting on you, every department at a glance, and every customer.", ids: ["overview", "customers"], panels: ["approval-queue", "approval-numbers", "approval-auto"], rolePanels: { "account-manager": ["am-accounts"] } },
+    {
+      id: "finance", label: "Finance", title: "Finance", sub: "Money in and money out, against target.", ids: ["finance"],
+      panels: ["finance-needs", "job-costing-needs", "commissions-needs", "finance-revenue", "finance-scorecard", "finance-owed", "job-costing", "commissions", "finance-payroll", "finance-auto", "commissions-auto"],
+      together: [
+        { keys: ["panel:finance-needs", "panel:job-costing-needs", "panel:commissions-needs"] },
+        { keys: ["panel:finance-revenue", "part:finance"] },
+        { label: "Pay & commissions", keys: ["panel:commissions", "panel:finance-payroll"] },
+        { keys: ["panel:finance-auto", "panel:commissions-auto"] },
+      ],
+    },
+    { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people-needs", "people-onboarding", "people-roles", "people-auto"] },
+    {
+      id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, and your business details.", ids: ["integrations", "company"],
+      panels: ["integrations-needs", "compliance-needs", "integrations", "compliance", "compliance-auto"],
+      together: [{ keys: ["panel:integrations-needs", "panel:compliance-needs"] }],
+    },
     { id: "tasks", label: "Task list", title: "Task list", sub: "Your shared to-do list.", ids: ["tasks"], panels: ["task-list"] },
   ],
 };
@@ -1353,7 +1417,7 @@ export function condense(section: V2Section): V2Section {
       kind: parts.find((p) => p.kind)?.kind ?? "",
       who: [...new Set([...parts.flatMap((p) => p.who), ...(Object.keys(g.rolePanels ?? {}) as V2Role[])])],
       blurb: parts.map((p) => p.label).join(" · "),
-      blocks: [], links: [], parts, panels: g.panels, rolePanels: g.rolePanels,
+      blocks: [], links: [], parts, panels: g.panels, together: g.together, rolePanels: g.rolePanels,
     }];
   });
   return { ...section, pillars };

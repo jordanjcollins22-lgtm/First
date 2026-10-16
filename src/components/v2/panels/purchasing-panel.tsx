@@ -1,23 +1,41 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import { loadPurchasingPanel, untyped, type PoView } from "@/lib/data/purchasing";
+import { loadPurchasingPanel, untyped, type PoView, type PurchasingPanelData } from "@/lib/data/purchasing";
 import { PO_STATUS_LABEL, type PoStatus } from "@/lib/purchasing/takeoff";
 import { PoActions, PurchasingSettingsForm, RaiseReordersButton, SourcingEditor } from "@/components/v2/panels/purchasing-controls";
 import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
- * Operations › Materials & equipment: purchasing.
+ * Operations › Materials & equipment: purchasing, one screen per button.
  *
- * What needs a person first (orders to approve, orders with nowhere to go,
- * sends that failed, materials late for a job), then how purchasing is doing
- * against target, then every open order by status, what upcoming jobs need,
- * the shelf below its reorder points, and the switches.
+ * What needs a person (orders to approve, orders with nowhere to go, sends
+ * that failed, materials late for a job); the orders, against target and by
+ * status; what upcoming jobs need, the shelf below its reorder points and
+ * where things come from; and the switches. One load for all four.
  */
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 const qty = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, ""));
 
 const STATUS_ORDER: PoStatus[] = ["draft", "sent", "confirmed", "partial"];
+
+const loadPurchasing = cache(async () => loadPurchasingPanel(untyped(await createClient()), await getCurrentOrganizationId()));
+
+function orders(data: PurchasingPanelData) {
+  const open = data.orders.filter((o) => STATUS_ORDER.includes(o.status));
+  return { open, toApprove: open.filter((o) => o.status === "draft" && !o.approvedAt), failed: open.filter((o) => o.sendError) };
+}
+
+function NotSetUp() {
+  return (
+    <section className="rounded-xl border bg-card p-4">
+      <h2 className="text-lg font-bold">Purchasing</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Purchase orders aren&apos;t set up yet. The database change for them (migration 0360) hasn&apos;t been applied.</p>
+    </section>
+  );
+}
 
 function Kpi({ label, value, target, tone }: { label: string; value: string; target: string; tone: "good" | "warn" | "bad" | "none" }) {
   const toneClass =
@@ -73,24 +91,10 @@ function OrderCard({ order, suppliers }: { order: PoView; suppliers: { id: strin
   );
 }
 
-export async function PurchasingPanel() {
-  const organizationId = await getCurrentOrganizationId();
-  const sb = untyped(await createClient());
-  const data = await loadPurchasingPanel(sb, organizationId);
-
-  if (!data.settings.ready) {
-    return (
-      <section className="rounded-xl border bg-card p-4">
-        <h2 className="text-lg font-bold">Purchasing</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Purchase orders aren&apos;t set up yet. The database change for them (migration 0360) hasn&apos;t been applied.</p>
-      </section>
-    );
-  }
-
-  const open = data.orders.filter((o) => STATUS_ORDER.includes(o.status));
-  const toApprove = open.filter((o) => o.status === "draft" && !o.approvedAt);
-  const failed = open.filter((o) => o.sendError);
-  const lateNeeds = data.upcoming.filter((u) => u.late);
+export async function PurchasingNeedsPanel() {
+  const data = await loadPurchasing();
+  if (!data.settings.ready) return <NotSetUp />;
+  const { toApprove, failed } = orders(data);
   const needsYou = [
     ...data.openExceptions.map((e) => ({ key: `x-${e.id}`, text: `${e.jobName}: ${e.summary}`, detail: e.detail, open: { kind: "ops.exception", id: e.id } })),
     ...toApprove.map((o) => ({
@@ -102,6 +106,33 @@ export async function PurchasingPanel() {
     ...failed.map((o) => ({ key: `f-${o.id}`, text: `PO ${o.poNumber} didn't send`, detail: o.sendError, open: { kind: "ops.po", id: o.id } })),
   ];
 
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="font-semibold">Purchasing &amp; deliveries</h3>
+      {needsYou.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">Nothing. Orders are moving on their own.</p>
+      ) : (
+        <ul className="mt-2 grid gap-2">
+          {needsYou.map((n) => (
+            <li key={n.key} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
+              <OpenEntity kind={n.open.kind} id={n.open.id} className="font-medium">
+                {n.text}
+              </OpenEntity>
+              {n.detail && <span className="block text-muted-foreground">{n.detail}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Orders: purchasing against target, every open order by status, and the ones closed lately. */
+export async function PurchasingOrdersPanel() {
+  const data = await loadPurchasing();
+  if (!data.settings.ready) return <NotSetUp />;
+  const { open, toApprove } = orders(data);
+  const lateNeeds = data.upcoming.filter((u) => u.late);
   const onTimePct = data.onTime.started ? Math.round((data.onTime.inHand / data.onTime.started) * 100) : null;
   const unsentApproved = open.filter((o) => o.status === "draft" && o.approvedAt).length;
   const lowWithoutOrder = data.reorders.filter((r) => r.onOrder === 0 && !r.hasDraft).length;
@@ -111,25 +142,6 @@ export async function PurchasingPanel() {
       <h2 id="purchasing-title" className="text-lg font-bold">
         Purchasing &amp; deliveries
       </h2>
-
-      {/* Needs you */}
-      <div className="rounded-xl border bg-card p-4">
-        <h3 className="font-semibold">Needs you</h3>
-        {needsYou.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">Nothing. Orders are moving on their own.</p>
-        ) : (
-          <ul className="mt-2 grid gap-2">
-            {needsYou.map((n) => (
-              <li key={n.key} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                <OpenEntity kind={n.open.kind} id={n.open.id} className="font-medium">
-                  {n.text}
-                </OpenEntity>
-                {n.detail && <span className="block text-muted-foreground">{n.detail}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -186,7 +198,18 @@ export async function PurchasingPanel() {
           </details>
         )}
       </div>
+    </section>
+  );
+}
 
+/** Upcoming & stock: what the next jobs need, the shelf below its reorder points, and where things come from. */
+export async function PurchasingStockPanel() {
+  const data = await loadPurchasing();
+  if (!data.settings.ready) return <NotSetUp />;
+  const lowWithoutOrder = data.reorders.filter((r) => r.onOrder === 0 && !r.hasDraft).length;
+
+  return (
+    <section className="grid gap-4">
       {/* Upcoming needs */}
       <div className="rounded-xl border bg-card p-4">
         <h3 className="font-semibold">Upcoming needs</h3>
@@ -257,12 +280,18 @@ export async function PurchasingPanel() {
         <summary className="min-h-11 cursor-pointer py-2 font-semibold">Where things come from</summary>
         <SourcingEditor suppliers={data.suppliers} sourcing={data.sourcing} />
       </details>
-
-      {/* Automation */}
-      <div className="rounded-xl border bg-card p-4">
-        <h3 className="font-semibold">Automation</h3>
-        <PurchasingSettingsForm settings={data.settings} />
-      </div>
     </section>
+  );
+}
+
+export async function PurchasingAutoPanel() {
+  const data = await loadPurchasing();
+  if (!data.settings.ready) return <NotSetUp />;
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="font-semibold">Purchasing</h3>
+      <PurchasingSettingsForm settings={data.settings} />
+    </div>
   );
 }

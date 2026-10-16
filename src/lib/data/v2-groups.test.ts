@@ -33,6 +33,32 @@ describe("the few choices on each page", () => {
     expect(V2_GROUPS.marketing.map((g) => g.label)).toEqual(["Digital marketing", "Physical marketing"]);
   });
 
+  it("shares buttons only between sections the choice has, each section once", () => {
+    for (const groups of Object.values(V2_GROUPS)) {
+      for (const g of groups) {
+        const own = new Set([...(g.panels ?? []).map((k) => `panel:${k}`), ...g.ids.map((id) => `part:${id}`)]);
+        const keys = (g.together ?? []).flatMap((t) => t.keys);
+        expect(keys.filter((k) => !own.has(k)), g.id).toEqual([]);
+        expect(new Set(keys).size, g.id).toBe(keys.length);
+      }
+    }
+  });
+
+  it("names every working screen and keeps each choice's row of buttons short", async () => {
+    const { PANEL_LABEL } = await import("@/components/v2/panels/labels");
+    // Parts nobody sees as the owner (a role's own "my" view) never get a button.
+    const source = readFileSync(join(__dirname, "v2.ts"), "utf8");
+    const hidden = new Set([...source.matchAll(/id: "([a-z-]+)", label: "[^"]*", kind: "[^"]*", who: \[\]/g)].map((m) => m[1]));
+    for (const groups of Object.values(V2_GROUPS)) {
+      for (const g of groups) {
+        for (const k of g.panels ?? []) expect(PANEL_LABEL[k], k).toBeTruthy();
+        const carried = (g.together ?? []).flatMap((t) => t.keys.slice(1));
+        const buttons = [...(g.panels ?? []).map((k) => `panel:${k}`), ...g.ids.filter((id) => !hidden.has(id)).map((id) => `part:${id}`)].filter((k) => !carried.includes(k));
+        expect(buttons.length, g.id).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
   it("gives Sales and Operations each one Automated messages choice", () => {
     expect(V2_GROUPS.sales.find((g) => g.id === "messages")?.ids).toEqual(["messages"]);
     expect(V2_GROUPS.operations.find((g) => g.id === "messages")?.ids).toEqual(["opsmessages"]);

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { Snowflake } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -24,28 +25,83 @@ import { OpenEntity } from "@/components/v2/panels/ops-open";
  *
  * One tap starts a storm and lays out the route from the salt clients on
  * file. The crew logs each stop on their phone (time, photo, GPS, surface
- * temperature, what went down); this panel watches the route fill in, and
- * when the storm is closed, prepaid treatments are drawn down and contract
- * clients are billed by their contract with the photos attached.
+ * temperature, what went down); the storm screen watches the route fill in,
+ * and when the storm is closed, prepaid treatments are drawn down and
+ * contract clients are billed by their contract with the photos attached.
+ *
+ * Four screens, one load: what needs you, the storm and its history, the
+ * bills and contracts, and the switches.
  */
-export async function SnowOpsPanel() {
+
+const loadSnow = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
-  const [data, customers] = await Promise.all([
-    getSnowPanelData(organizationId).catch((err) => {
-      console.error("Snow panel failed to load:", err);
-      return null;
-    }),
-    customerOptions(),
-  ]);
+  return getSnowPanelData(organizationId).catch((err) => {
+    console.error("Snow panel failed to load:", err);
+    return null;
+  });
+});
 
-  if (!data) {
-    return <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Couldn&apos;t load snow operations just now. Reload the page.</section>;
-  }
+function Failed() {
+  return <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Couldn&apos;t load snow operations just now. Reload the page.</section>;
+}
 
-  const { settings, active } = data;
+function NotSetUp() {
+  return (
+    <p className="rounded-xl border border-amber-400/60 bg-amber-50/70 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+      The snow tables aren&apos;t set up yet (migration 0359). Nothing here will run until they are.
+    </p>
+  );
+}
+
+export async function SnowNeedsPanel() {
+  const data = await loadSnow();
+  if (!data) return <Failed />;
+  const { active } = data;
   const missingRates = data.clients.filter((c) => c.onRoute && c.missingRate);
   const unplaced = data.clients.filter((c) => c.onRoute && !c.customerId);
-  const contractClients = data.clients.filter((c) => c.status !== "cancelled");
+
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-semibold">Snow and salt</h3>
+      {data.suggestions.length === 0 && data.season.failedInvoices === 0 && missingRates.length === 0 && unplaced.length === 0 ? (
+        <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Nothing waiting.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {data.suggestions.map((s) => (
+            <li key={s.id} className="rounded-xl border border-sky-400/60 bg-card p-3">
+              <OpenEntity kind="ops.snow_event" id={s.id} className="text-sm font-semibold">
+                Forecast says go out {s.forecastDate ? weekdayDate(`${s.forecastDate}T12:00:00`) : "soon"}: {s.service === "plow" ? "plow and salt" : "salt"}
+              </OpenEntity>
+              {s.forecastNote && <p className="text-xs text-muted-foreground">{s.forecastNote}</p>}
+              <SuggestionActions id={s.id} service={s.service as "salt" | "plow" | "pretreat"} disabled={Boolean(active)} />
+            </li>
+          ))}
+          {data.season.failedInvoices > 0 && (
+            <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
+              {data.season.failedInvoices} snow invoice{data.season.failedInvoices === 1 ? "" : "s"} couldn&apos;t be sent. The reason is on each one under Snow billing; fix it and press &ldquo;Bill now&rdquo; on the event under Snow storms to retry.
+            </li>
+          )}
+          {missingRates.length > 0 && (
+            <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
+              {missingRates.length} contract client{missingRates.length === 1 ? " has" : "s have"} no rate set, so {missingRates.length === 1 ? "it" : "they"} won&apos;t be billed: {missingRates.map((c) => c.name).join(", ")}.
+            </li>
+          )}
+          {unplaced.length > 0 && (
+            <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
+              {unplaced.length} salt client{unplaced.length === 1 ? " has" : "s have"} no client record, so {unplaced.length === 1 ? "it" : "they"} can&apos;t be told or billed until each is matched to a client.
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The storm: winter so far, the live route or the button to start one, and every storm closed. */
+export async function SnowStormPanel() {
+  const data = await loadSnow();
+  if (!data) return <Failed />;
+  const { settings, active } = data;
 
   return (
     <section className="grid gap-4" aria-labelledby="snow-panel-title">
@@ -59,46 +115,7 @@ export async function SnowOpsPanel() {
         </div>
       </header>
 
-      {!data.ready && (
-        <p className="rounded-xl border border-amber-400/60 bg-amber-50/70 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
-          The snow tables aren&apos;t set up yet (migration 0359). Nothing here will run until they are.
-        </p>
-      )}
-
-      {/* Needs you */}
-      <div className="grid gap-2">
-        <h3 className="text-sm font-semibold">Needs you</h3>
-        {data.suggestions.length === 0 && data.season.failedInvoices === 0 && missingRates.length === 0 && unplaced.length === 0 ? (
-          <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Nothing waiting.</p>
-        ) : (
-          <ul className="grid gap-2">
-            {data.suggestions.map((s) => (
-              <li key={s.id} className="rounded-xl border border-sky-400/60 bg-card p-3">
-                <OpenEntity kind="ops.snow_event" id={s.id} className="text-sm font-semibold">
-                  Forecast says go out {s.forecastDate ? weekdayDate(`${s.forecastDate}T12:00:00`) : "soon"}: {s.service === "plow" ? "plow and salt" : "salt"}
-                </OpenEntity>
-                {s.forecastNote && <p className="text-xs text-muted-foreground">{s.forecastNote}</p>}
-                <SuggestionActions id={s.id} service={s.service as "salt" | "plow" | "pretreat"} disabled={Boolean(active)} />
-              </li>
-            ))}
-            {data.season.failedInvoices > 0 && (
-              <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
-                {data.season.failedInvoices} snow invoice{data.season.failedInvoices === 1 ? "" : "s"} couldn&apos;t be sent. The reason is on each one below; fix it and press &ldquo;Bill now&rdquo; on the event to retry.
-              </li>
-            )}
-            {missingRates.length > 0 && (
-              <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
-                {missingRates.length} contract client{missingRates.length === 1 ? " has" : "s have"} no rate set, so {missingRates.length === 1 ? "it" : "they"} won&apos;t be billed: {missingRates.map((c) => c.name).join(", ")}.
-              </li>
-            )}
-            {unplaced.length > 0 && (
-              <li className="rounded-xl border border-amber-400/60 bg-card p-3 text-sm">
-                {unplaced.length} salt client{unplaced.length === 1 ? " has" : "s have"} no client record, so {unplaced.length === 1 ? "it" : "they"} can&apos;t be told or billed until each is matched to a client.
-              </li>
-            )}
-          </ul>
-        )}
-      </div>
+      {!data.ready && <NotSetUp />}
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -200,6 +217,19 @@ export async function SnowOpsPanel() {
           </ul>
         )}
       </div>
+    </section>
+  );
+}
+
+/** Snow billing: this winter's invoices, and the contract each salt client is billed on. */
+export async function SnowBillingPanel() {
+  const [data, customers] = await Promise.all([loadSnow(), customerOptions()]);
+  if (!data) return <Failed />;
+  const contractClients = data.clients.filter((c) => c.status !== "cancelled");
+
+  return (
+    <section className="grid gap-4">
+      {!data.ready && <NotSetUp />}
 
       {/* Invoices */}
       <div className="rounded-xl border bg-card">
@@ -275,7 +305,19 @@ export async function SnowOpsPanel() {
           <AddContractClient customers={customers} />
         </div>
       </div>
+    </section>
+  );
+}
 
+/** The storm suggestions, client notices and invoicing switches. */
+export async function SnowAutoPanel() {
+  const data = await loadSnow();
+  if (!data) return <Failed />;
+  const { settings } = data;
+
+  return (
+    <div className="grid gap-3">
+      <h3 className="font-semibold">Snow and salt</h3>
       <SnowSettingsForm
         ready={data.ready}
         settings={{
@@ -285,7 +327,7 @@ export async function SnowOpsPanel() {
           snowInvoicingEnabled: settings.snowInvoicingEnabled,
         }}
       />
-    </section>
+    </div>
   );
 }
 

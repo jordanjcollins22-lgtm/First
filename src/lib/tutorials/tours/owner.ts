@@ -22,12 +22,12 @@ export const ownerTour: Tour = {
     },
     {
       title: "Sections, then tap any row",
-      body: "A choice opens into sections. The first show what needs you and the on/off switches; after the line come the records. Tap any row to open it and act on it.",
+      body: "A choice opens into sections, one screen each: Needs you first, then the numbers, then Automatic for the switches. After the line come the records. Tap any row to open it and act on it.",
       target: "sections",
     },
     {
       title: "Your approval queue",
-      body: "Admin › Oversight lists everything waiting on you, from every department, in one place. Turn on the Monday digest there and the list comes to you each week.",
+      body: "Admin › Oversight › Needs you lists everything waiting on you, from every department, in one place. Turn on the Monday digest under Automatic there and the list comes to you each week.",
     },
     {
       title: "Logins go in Integrations",

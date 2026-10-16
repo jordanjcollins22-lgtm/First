@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadBackOfficeSettings } from "@/lib/data/back-office-settings";
@@ -14,31 +16,36 @@ import { OpenButton, OpenEntity } from "./admin-open";
  * Money lands, each person who carried the job accrues their share at their
  * rate on file, and once a week the payable rows become one statement per
  * person and one total for the owner. Approving the total records every
- * payout in it. The strip also lists affiliates whose rate on file is not
- * the default, each with a one-tap fix.
+ * payout in it. The needs-you strip also lists affiliates whose rate on
+ * file is not the default, each with a one-tap fix.
+ *
+ * Three screens, one load: the strip (under Needs you), what is accrued and
+ * the weekly statements, and the two automations (under Automatic).
  */
-export async function CommissionsPanel() {
-  const organizationId = await getCurrentOrganizationId();
-  const supabase = await createClient();
-  const settings = await loadBackOfficeSettings(supabase, organizationId);
-  if (!settings.ready) return <NotReady what="Commission accrual" />;
 
+const loadCommissions = cache(async () => {
+  const organizationId = await getCurrentOrganizationId();
+  const settings = await loadBackOfficeSettings(await createClient(), organizationId);
+  if (!settings.ready) return null;
   const [items, mismatches, people, batches] = await Promise.all([
     commissionItems(organizationId).catch(() => []),
     rateMismatches(organizationId, settings).catch(() => []),
     accrualSummary(organizationId, settings).catch(() => []),
     listBatches(organizationId, 6).catch(() => []),
   ]);
-  const mismatchBy = new Map(mismatches.map((m) => [m.profileId, m]));
-  const payable = people.reduce((s, p) => s + p.payable, 0);
-  const waiting = people.reduce((s, p) => s + p.waiting, 0);
-  const awaiting = batches.filter((b) => b.status === "awaiting_approval");
-  const approved4 = batches.filter((b) => b.status === "approved").slice(0, 4).reduce((s, b) => s + b.total, 0);
+  return { settings, items, mismatches, people, batches };
+});
+
+export async function CommissionsNeedsPanel() {
+  const data = await loadCommissions();
+  if (!data) return <NotReady what="Commission accrual" />;
+  const mismatchBy = new Map(data.mismatches.map((m) => [m.profileId, m]));
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-2">
+      <SectionHeading>Commissions</SectionHeading>
       <NeedsYouStrip
-        items={items}
+        items={data.items}
         renderAction={(item) => {
           if (item.action?.name === "approveCommissionBatch") {
             return (
@@ -61,7 +68,22 @@ export async function CommissionsPanel() {
           );
         }}
       />
+    </section>
+  );
+}
 
+/** Commissions: what is waiting, payable and paid, by person, and each week's statement. */
+export async function CommissionsPanel() {
+  const data = await loadCommissions();
+  if (!data) return <NotReady what="Commission accrual" />;
+  const { settings, people, batches } = data;
+  const payable = people.reduce((s, p) => s + p.payable, 0);
+  const waiting = people.reduce((s, p) => s + p.waiting, 0);
+  const awaiting = batches.filter((b) => b.status === "awaiting_approval");
+  const approved4 = batches.filter((b) => b.status === "approved").slice(0, 4).reduce((s, b) => s + b.total, 0);
+
+  return (
+    <section className="grid gap-4">
       <KpiRow>
         <Kpi label="Waiting for approval" value={usd(awaiting.reduce((s, b) => s + b.total, 0))} target="approved weekly" tone={awaiting.length > 1 ? "bad" : awaiting.length === 1 ? "warn" : "good"} />
         <Kpi label="Payable, next statement" value={usd(payable)} tone="plain" />
@@ -69,34 +91,9 @@ export async function CommissionsPanel() {
         <Kpi label="Paid by statement, last 4 weeks" value={usd(approved4)} tone="plain" />
       </KpiRow>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <AutomationCard
-          title="Accrue commission on payments"
-          how="On every paid invoice (Stripe's invoice.paid) and every payment recorded on a job, each share accrues at the person's rate on file. A daily run catches anything missed and builds last week's statements after Sunday."
-          on={settings.commissionAccrualOn}
-          since={settings.commissionAccrualStartedAt}
-        >
-          <SettingSwitch setting="commissionAccrualOn" on={settings.commissionAccrualOn} label="Accrue and batch weekly" hint="Only money that arrives after it's switched on." />
-          <SettingNumber setting="defaultAccountManagerPct" value={settings.defaultAccountManagerPct} label="Account manager default" suffix="%" />
-          <SettingNumber setting="defaultEvaluatorPct" value={settings.defaultEvaluatorPct} label="Evaluator default" suffix="%" />
-          <SettingNumber setting="defaultAffiliatePct" value={settings.defaultAffiliatePct} label="Affiliate default" suffix="%" />
-        </AutomationCard>
-        <AutomationCard
-          title="Hold-back"
-          how={`Pays ${settings.holdbackCollectPct}% of the account manager's and evaluator's share on collection, and the rest once the job closes at ${settings.holdbackMarginPct}% gross margin or better. Affiliates are always paid on collection.`}
-          on={settings.holdbackOn}
-          since={null}
-        >
-          <SettingSwitch setting="holdbackOn" on={settings.holdbackOn} label="Hold back part until the job closes" hint="Applies to payments accrued after it's switched on." />
-          <SettingNumber setting="holdbackCollectPct" value={settings.holdbackCollectPct} label="Paid on collection" suffix="%" />
-          <SettingNumber setting="holdbackMarginPct" value={settings.holdbackMarginPct} label="Margin to release the rest" suffix="%" />
-          <SettingNumber setting="holdbackCrewCostPerHour" value={settings.holdbackCrewCostPerHour} label="Crew cost per hour, for margin" suffix="$" />
-        </AutomationCard>
-      </div>
-
       <SectionHeading>Accrued, by person</SectionHeading>
       {people.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{settings.commissionAccrualOn ? "Nothing accrued yet. It starts with the next payment." : "Switch accrual on to start."}</p>
+        <p className="text-sm text-muted-foreground">{settings.commissionAccrualOn ? "Nothing accrued yet. It starts with the next payment." : "Switch accrual on under Automatic to start."}</p>
       ) : (
         <ul className="grid gap-1">
           {people.map((p) => (
@@ -164,5 +161,39 @@ export async function CommissionsPanel() {
         </ul>
       )}
     </section>
+  );
+}
+
+/** How commission accrues, and the hold-back until a job closes. */
+export async function CommissionsAutoPanel() {
+  const data = await loadCommissions();
+  if (!data) return <NotReady what="Commission accrual" />;
+  const { settings } = data;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <AutomationCard
+        title="Accrue commission on payments"
+        how="On every paid invoice (Stripe's invoice.paid) and every payment recorded on a job, each share accrues at the person's rate on file. A daily run catches anything missed and builds last week's statements after Sunday."
+        on={settings.commissionAccrualOn}
+        since={settings.commissionAccrualStartedAt}
+      >
+        <SettingSwitch setting="commissionAccrualOn" on={settings.commissionAccrualOn} label="Accrue and batch weekly" hint="Only money that arrives after it's switched on." />
+        <SettingNumber setting="defaultAccountManagerPct" value={settings.defaultAccountManagerPct} label="Account manager default" suffix="%" />
+        <SettingNumber setting="defaultEvaluatorPct" value={settings.defaultEvaluatorPct} label="Evaluator default" suffix="%" />
+        <SettingNumber setting="defaultAffiliatePct" value={settings.defaultAffiliatePct} label="Affiliate default" suffix="%" />
+      </AutomationCard>
+      <AutomationCard
+        title="Hold-back"
+        how={`Pays ${settings.holdbackCollectPct}% of the account manager's and evaluator's share on collection, and the rest once the job closes at ${settings.holdbackMarginPct}% gross margin or better. Affiliates are always paid on collection.`}
+        on={settings.holdbackOn}
+        since={null}
+      >
+        <SettingSwitch setting="holdbackOn" on={settings.holdbackOn} label="Hold back part until the job closes" hint="Applies to payments accrued after it's switched on." />
+        <SettingNumber setting="holdbackCollectPct" value={settings.holdbackCollectPct} label="Paid on collection" suffix="%" />
+        <SettingNumber setting="holdbackMarginPct" value={settings.holdbackMarginPct} label="Margin to release the rest" suffix="%" />
+        <SettingNumber setting="holdbackCrewCostPerHour" value={settings.holdbackCrewCostPerHour} label="Crew cost per hour, for margin" suffix="$" />
+      </AutomationCard>
+    </div>
   );
 }

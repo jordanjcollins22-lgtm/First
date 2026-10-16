@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
@@ -19,9 +20,10 @@ import { OpenEntity } from "./admin-open";
  *
  * Licenses, certifications, insurance, registrations and filings, each with
  * its date, its document and a reminder to the owner at 60, 30 and 7 days.
- * Overdue items and anything due within 45 days sit on the needs-you strip.
- * The fertilizer blackout guard and the certificates of insurance sent to
- * clients live here too.
+ * Overdue items and anything due within 45 days sit on the needs-you strip
+ * (under Needs you); the reminders and the fertilizer blackout guard are
+ * under Automatic; the calendar and the certificates of insurance sent to
+ * clients are their own screen.
  */
 
 const STATE_CHIP: Record<string, string> = {
@@ -39,14 +41,14 @@ const WINDOW_TEXT = {
   blackout: "Fertilizer blackout until March 1: no nitrogen or phosphorus on lawns.",
 };
 
-export async function CompliancePanel() {
+/** One load for the three compliance screens on the request; null until the tables exist. */
+const loadCompliance = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
   const supabase = await createClient();
   const settings = await loadBackOfficeSettings(supabase, organizationId);
-  if (!settings.ready) return <NotReady what="The compliance calendar" />;
+  if (!settings.ready) return null;
 
   const now = new Date();
-  const today = businessToday(now);
   const [{ obligations }, items, cois] = await Promise.all([
     listObligations(organizationId, settings.reminderDays, now),
     complianceItems(organizationId, now).catch(() => []),
@@ -57,18 +59,64 @@ export async function CompliancePanel() {
       .order("created_at", { ascending: false })
       .limit(8),
   ]);
+  const recentCois = (cois.data ?? []) as unknown as { id: string; holder_name: string; created_at: string; sent_at: string | null; sent_to: string | null; customer: { id: string; name: string } | null }[];
+  return { settings, today: businessToday(now), obligations, items, recentCois };
+});
+
+export async function ComplianceNeedsPanel() {
+  const data = await loadCompliance();
+  if (!data) return <NotReady what="The compliance calendar" />;
+
+  return (
+    <section className="grid gap-2">
+      <SectionHeading>Compliance</SectionHeading>
+      <NeedsYouStrip items={data.items} />
+    </section>
+  );
+}
+
+/** The reminders and the fertilizer blackout guard. */
+export async function ComplianceAutoPanel() {
+  const data = await loadCompliance();
+  if (!data) return <NotReady what="The compliance calendar" />;
+  const { settings, today } = data;
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <AutomationCard
+        title="Compliance reminders"
+        how="Texts (or emails) the owner 60, 30 and 7 days before each date and again when it's overdue. Seeded dates stay quiet until confirmed."
+        on={settings.complianceRemindersOn}
+        since={settings.complianceRemindersStartedAt}
+      >
+        <SettingSwitch setting="complianceRemindersOn" on={settings.complianceRemindersOn} label="Send reminders" />
+      </AutomationCard>
+      <AutomationCard
+        title="Fertilizer blackout guard"
+        how="Refuses to book a fertilizer visit, or approve a proposal with fertilizer planned, from Nov 16 to Mar 1. Certified applicators may go to Dec 1 at 0.5 lb N per 1,000 sq ft."
+        on={settings.fertilizerGuardOn}
+        since={null}
+      >
+        <SettingSwitch setting="fertilizerGuardOn" on={settings.fertilizerGuardOn} label="Block fertilizer in the blackout" hint={WINDOW_TEXT[fertilizerWindowOn(today)]} />
+      </AutomationCard>
+    </div>
+  );
+}
+
+/** The compliance calendar: every date against target, each with its document, and the COIs sent. */
+export async function CompliancePanel() {
+  const data = await loadCompliance();
+  if (!data) return <NotReady what="The compliance calendar" />;
+  const { today, obligations, items, recentCois } = data;
 
   const active = obligations.filter((o) => o.active);
   const overdue = active.filter((o) => o.state === "overdue").length;
   const confirmed = active.filter((o) => o.dueOn && o.dateConfirmed).length;
   const insurance = active.filter((o) => isInsurance(o.kind));
   const insuranceWithCoi = insurance.filter((o) => o.documentPath && o.dueOn && o.dueOn >= today).length;
-  const recentCois = (cois.data ?? []) as unknown as { id: string; holder_name: string; created_at: string; sent_at: string | null; sent_to: string | null; customer: { id: string; name: string } | null }[];
 
   return (
     <section className="grid gap-4">
-      <NeedsYouStrip items={items} />
-
       <KpiRow>
         <Kpi label="Overdue" value={String(overdue)} target="0" tone={overdue ? "bad" : "good"} />
         <Kpi label="Due within 45 days" value={String(items.filter((i) => i.kind === "compliance_due_soon").length)} tone="plain" />
@@ -76,33 +124,16 @@ export async function CompliancePanel() {
         <Kpi label="Policies with a current COI" value={`${insuranceWithCoi}/${insurance.length}`} target="all" tone={insurance.length > 0 && insuranceWithCoi === insurance.length ? "good" : "warn"} />
       </KpiRow>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <AutomationCard
-          title="Compliance reminders"
-          how="Texts (or emails) the owner 60, 30 and 7 days before each date and again when it's overdue. Seeded dates stay quiet until confirmed."
-          on={settings.complianceRemindersOn}
-          since={settings.complianceRemindersStartedAt}
-        >
-          <SettingSwitch setting="complianceRemindersOn" on={settings.complianceRemindersOn} label="Send reminders" />
-          {obligations.length === 0 && (
-            <ActionButton run={seedComplianceDefaults} variant="default">
-              Add Maryland defaults
-            </ActionButton>
-          )}
-        </AutomationCard>
-        <AutomationCard
-          title="Fertilizer blackout guard"
-          how="Refuses to book a fertilizer visit, or approve a proposal with fertilizer planned, from Nov 16 to Mar 1. Certified applicators may go to Dec 1 at 0.5 lb N per 1,000 sq ft."
-          on={settings.fertilizerGuardOn}
-          since={null}
-        >
-          <SettingSwitch setting="fertilizerGuardOn" on={settings.fertilizerGuardOn} label="Block fertilizer in the blackout" hint={WINDOW_TEXT[fertilizerWindowOn(today)]} />
-        </AutomationCard>
-      </div>
-
       <SectionHeading>Calendar</SectionHeading>
+      {obligations.length === 0 && (
+        <div>
+          <ActionButton run={seedComplianceDefaults} variant="default">
+            Add Maryland defaults
+          </ActionButton>
+        </div>
+      )}
       {obligations.length === 0 ? (
-        <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Nothing on the calendar yet. Add the Maryland defaults above, then confirm each date.</p>
+        <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Nothing on the calendar yet. Add the Maryland defaults, then confirm each date.</p>
       ) : (
         <ul className="grid gap-2">
           {obligations.map((o) => {

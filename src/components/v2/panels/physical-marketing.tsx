@@ -1,4 +1,6 @@
-import { loadPhysicalPanel, type PlayRow } from "@/lib/data/marketing-panels";
+import { cache } from "react";
+
+import { loadPhysicalPanel, type PhysicalPanelData, type PlayRow } from "@/lib/data/marketing-panels";
 import { getRealProfile } from "@/lib/data/team";
 import { money } from "@/lib/marketing/money";
 import { isApproved, KIND_LABEL, playTitle, REASON_LABEL, shortAddress } from "@/lib/marketing-plays";
@@ -14,6 +16,9 @@ import { Kpi, NeedsYou, pct, Section, type NeedsYouItem } from "./marketing-pane
  * lead. Plays now close themselves (walked, finished, or tapped done by
  * whoever has them) and expire after a month of nothing; this is where a
  * person assigns, closes by hand, and sees whether hangers pay.
+ *
+ * One screen per button: what needs you, the plays, what paid off, and the
+ * switches. They share one load for the request.
  */
 
 const CLOSED_LABEL: Record<string, string> = {
@@ -23,6 +28,14 @@ const CLOSED_LABEL: Record<string, string> = {
   owner: "closed by hand",
   expired: "expired",
 };
+
+/** One load for every Physical marketing screen on the request. */
+const loadPhysical = cache(() => loadPhysicalPanel());
+
+function openPlays(d: PhysicalPanelData) {
+  const open = d.plays.filter((p) => p.status === "open");
+  return { open, pending: open.filter((p) => !isApproved(p.approval)), ready: open.filter((p) => isApproved(p.approval)) };
+}
 
 function PlayLine({ play, people, owned }: { play: PlayRow; people: { id: string; name: string; affiliate: boolean }[]; owned: boolean }) {
   const open = play.status === "open";
@@ -55,17 +68,10 @@ function PlayLine({ play, people, owned }: { play: PlayRow; people: { id: string
   );
 }
 
-export async function PhysicalMarketingPanel() {
-  const [d, me] = await Promise.all([loadPhysicalPanel(), getRealProfile()]);
-  const { settings, started } = d.autopilot;
-  const now = new Date();
-
-  const open = d.plays.filter((p) => p.status === "open");
-  const pending = open.filter((p) => !isApproved(p.approval));
-  const ready = open.filter((p) => isApproved(p.approval));
-  const closed = d.plays.filter((p) => p.status !== "open").slice(0, 30);
-  const stale = open.filter((p) => isStale({ ...p, approval: p.approval ?? null, approvedAt: p.approvedAt ?? null, assignedAt: p.assignedAt ?? null }, now, settings.playExpiryDays));
-  const hangers = d.byKind.find((k) => k.kind === "door_hangers");
+/** Needs you: plays nobody has, and plays waiting for approval. */
+export async function PhysicalNeedsPanel() {
+  const d = await loadPhysical();
+  const { pending } = openPlays(d);
 
   const needs: NeedsYouItem[] = [];
   if (d.unassigned.length > 0) {
@@ -85,10 +91,57 @@ export async function PhysicalMarketingPanel() {
     });
   }
 
+  return <NeedsYou items={needs} />;
+}
+
+/** Plays: ready to go, waiting for approval, and recently closed, each with its buttons. */
+export async function PhysicalPlaysPanel() {
+  const [d, me] = await Promise.all([loadPhysical(), getRealProfile()]);
+  const { pending, ready } = openPlays(d);
+  const closed = d.plays.filter((p) => p.status !== "open").slice(0, 30);
+
   return (
     <div className="grid gap-4">
-      <NeedsYou items={needs} />
+      <Section title={`Ready to go (${ready.length})`} hint="Approved. Give each to a walker or an affiliate; it closes itself when walked, when the crew finishes the job, or when they tap Done.">
+        {ready.length === 0 ? <p className="text-sm text-muted-foreground">Nothing approved and open.</p> : (
+          <ul className="grid gap-2">
+            {ready.map((p) => (
+              <PlayLine key={p.id} play={p} people={d.people} owned={Boolean(me && p.assignedTo === me.id)} />
+            ))}
+          </ul>
+        )}
+      </Section>
 
+      {pending.length > 0 && (
+        <Section title={`Waiting for approval (${pending.length})`} hint="Open one to approve it; assigning or tapping Done here approves it too.">
+          <ul className="grid gap-2">
+            {pending.slice(0, 20).map((p) => (
+              <PlayLine key={p.id} play={p} people={d.people} owned={false} />
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      <Section title="Recently closed">
+        {closed.length === 0 ? <p className="text-sm text-muted-foreground">None yet.</p> : (
+          <ul className="grid gap-2">
+            {closed.map((p) => (
+              <PlayLine key={p.id} play={p} people={d.people} owned={false} />
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+/** What paid off: plays against target, and cost per lead by kind. */
+export async function PhysicalResultsPanel() {
+  const d = await loadPhysical();
+  const hangers = d.byKind.find((k) => k.kind === "door_hangers");
+
+  return (
+    <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label="Open plays" value={String(d.totals.open)} />
         <Kpi
@@ -133,50 +186,30 @@ export async function PhysicalMarketingPanel() {
           </div>
         )}
       </Section>
-
-      <Section title={`Ready to go (${ready.length})`} hint="Approved. Give each to a walker or an affiliate; it closes itself when walked, when the crew finishes the job, or when they tap Done.">
-        {ready.length === 0 ? <p className="text-sm text-muted-foreground">Nothing approved and open.</p> : (
-          <ul className="grid gap-2">
-            {ready.map((p) => (
-              <PlayLine key={p.id} play={p} people={d.people} owned={Boolean(me && p.assignedTo === me.id)} />
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {pending.length > 0 && (
-        <Section title={`Waiting for approval (${pending.length})`} hint="Open one to approve it; assigning or tapping Done here approves it too.">
-          <ul className="grid gap-2">
-            {pending.slice(0, 20).map((p) => (
-              <PlayLine key={p.id} play={p} people={d.people} owned={false} />
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      <Section title="Recently closed">
-        {closed.length === 0 ? <p className="text-sm text-muted-foreground">None yet.</p> : (
-          <ul className="grid gap-2">
-            {closed.map((p) => (
-              <PlayLine key={p.id} play={p} people={d.people} owned={false} />
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="What runs on its own" hint="Each switch remembers when it was first turned on and only acts on plays made after that.">
-        <AutomationSwitches keys={["plays_auto_approve", "hangers_default_approve", "plays_auto_close", "plays_expire"]} settings={settings} started={started} />
-        <NumberSettings
-          fields={[
-            { key: "hanger", label: "Door hanger, each", value: settings.unitCostCents.door_hangers / 100, suffix: "$", setting: "unitCostCents.door_hangers", scale: 100, whole: true },
-            { key: "flyer", label: "Flyer by mail, each", value: settings.unitCostCents.flyers / 100, suffix: "$", setting: "unitCostCents.flyers", scale: 100, whole: true },
-            { key: "sign", label: "Yard sign", value: settings.unitCostCents.yard_sign / 100, suffix: "$", setting: "unitCostCents.yard_sign", scale: 100, whole: true },
-            { key: "expiry", label: "Expire after", value: settings.playExpiryDays, suffix: "days", setting: "playExpiryDays" },
-            { key: "coverage", label: "Walk must pass", value: Math.round(settings.gpsCoverage * 100), suffix: "% of doors", setting: "gpsCoverage", scale: 0.01 },
-          ]}
-        />
-        <ExpireBacklogButton days={settings.playExpiryDays} count={stale.length} />
-      </Section>
     </div>
+  );
+}
+
+/** Automatic: the switches, what each piece costs, and when a play expires. */
+export async function PhysicalAutoPanel() {
+  const d = await loadPhysical();
+  const { settings, started } = d.autopilot;
+  const now = new Date();
+  const stale = openPlays(d).open.filter((p) => isStale({ ...p, approval: p.approval ?? null, approvedAt: p.approvedAt ?? null, assignedAt: p.assignedAt ?? null }, now, settings.playExpiryDays));
+
+  return (
+    <Section title="What runs on its own" hint="Each switch remembers when it was first turned on and only acts on plays made after that.">
+      <AutomationSwitches keys={["plays_auto_approve", "hangers_default_approve", "plays_auto_close", "plays_expire"]} settings={settings} started={started} />
+      <NumberSettings
+        fields={[
+          { key: "hanger", label: "Door hanger, each", value: settings.unitCostCents.door_hangers / 100, suffix: "$", setting: "unitCostCents.door_hangers", scale: 100, whole: true },
+          { key: "flyer", label: "Flyer by mail, each", value: settings.unitCostCents.flyers / 100, suffix: "$", setting: "unitCostCents.flyers", scale: 100, whole: true },
+          { key: "sign", label: "Yard sign", value: settings.unitCostCents.yard_sign / 100, suffix: "$", setting: "unitCostCents.yard_sign", scale: 100, whole: true },
+          { key: "expiry", label: "Expire after", value: settings.playExpiryDays, suffix: "days", setting: "playExpiryDays" },
+          { key: "coverage", label: "Walk must pass", value: Math.round(settings.gpsCoverage * 100), suffix: "% of doors", setting: "gpsCoverage", scale: 0.01 },
+        ]}
+      />
+      <ExpireBacklogButton days={settings.playExpiryDays} count={stale.length} />
+    </Section>
   );
 }

@@ -1,6 +1,8 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
-import { loadEquipmentPanel } from "@/lib/data/equipment";
+import { loadEquipmentPanel, type EquipmentPanelData } from "@/lib/data/equipment";
 import { untyped } from "@/lib/data/purchasing";
 import { EQUIPMENT_TYPE_LABEL, typeOf, type DueState, type EquipmentType } from "@/lib/equipment/maintenance";
 import {
@@ -14,12 +16,13 @@ import {
 import { OpenEntity } from "@/components/v2/panels/ops-open";
 
 /**
- * Operations › Materials & equipment: equipment upkeep, kits and load-out.
+ * Operations › Materials & equipment: equipment upkeep, kits and load-out,
+ * one screen per button.
  *
- * Overdue service and missed load-outs first, then how the fleet is doing
- * against target, then every task that is due or soon due with a button to
- * log it, the machines and what their meters read, the intervals (seeded
- * defaults marked as such), and the switches.
+ * Overdue service and missed load-outs (under Needs you); the fleet against
+ * target with every task that is due or soon due and a button to log it;
+ * the machines and what their meters read, with the intervals (seeded
+ * defaults marked as such); and the switches. One load for all four.
  */
 
 const STATE_LABEL: Record<DueState, string> = {
@@ -36,6 +39,19 @@ const STATE_CLASS: Record<DueState, string> = {
   ok: "bg-muted",
 };
 
+const loadEquipment = cache(async () => loadEquipmentPanel(untyped(await createClient()), await getCurrentOrganizationId()));
+
+const meterOf = (data: EquipmentPanelData, assetId: string) => data.assets.find((a) => a.id === assetId)?.meter ?? "none";
+
+function NotSetUp() {
+  return (
+    <section className="rounded-xl border bg-card p-4">
+      <h2 className="text-lg font-bold">Equipment upkeep</h2>
+      <p className="mt-1 text-sm text-muted-foreground">Service intervals aren&apos;t set up yet. The database change for them (migration 0360) hasn&apos;t been applied.</p>
+    </section>
+  );
+}
+
 function Kpi({ label, value, target, tone }: { label: string; value: string; target: string; tone: "good" | "warn" | "bad" | "none" }) {
   const toneClass =
     tone === "good" ? "border-green-300 dark:border-green-800" : tone === "warn" ? "border-yellow-300 dark:border-yellow-800" : tone === "bad" ? "border-red-300 dark:border-red-800" : "";
@@ -48,19 +64,46 @@ function Kpi({ label, value, target, tone }: { label: string; value: string; tar
   );
 }
 
-export async function EquipmentPanel() {
-  const organizationId = await getCurrentOrganizationId();
-  const sb = untyped(await createClient());
-  const data = await loadEquipmentPanel(sb, organizationId);
+export async function EquipmentNeedsPanel() {
+  const data = await loadEquipment();
+  if (!data.settings.ready) return <NotSetUp />;
 
-  if (!data.settings.ready) {
-    return (
-      <section className="rounded-xl border bg-card p-4">
-        <h2 className="text-lg font-bold">Equipment upkeep</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Service intervals aren&apos;t set up yet. The database change for them (migration 0360) hasn&apos;t been applied.</p>
-      </section>
-    );
-  }
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="font-semibold">Equipment, kits &amp; load-out</h3>
+      {data.alerts.length === 0 && data.loadoutExceptions.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">Nothing overdue, nobody left without their load-out.</p>
+      ) : (
+        <ul className="mt-2 grid gap-2">
+          {data.alerts.map((a) => (
+            <li key={a.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
+              <OpenEntity kind="ops.asset" id={a.assetId} className="font-medium">
+                {a.summary}
+              </OpenEntity>
+              <span className="flex flex-wrap gap-2">
+                <MarkDone assetId={a.assetId} task={a.task} meter={meterOf(data, a.assetId)} />
+                <DismissAlert id={a.id} />
+              </span>
+            </li>
+          ))}
+          {data.loadoutExceptions.map((e) => (
+            <li key={e.id} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
+              <OpenEntity kind="ops.exception" id={e.id} className="font-medium">
+                {e.summary}
+              </OpenEntity>
+              {e.detail && <span className="block text-muted-foreground">{e.detail}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Service due: the fleet against target, and every task due, overdue or never logged. */
+export async function EquipmentPanel() {
+  const data = await loadEquipment();
+  if (!data.settings.ready) return <NotSetUp />;
 
   const assetById = new Map(data.assets.map((a) => [a.id, a]));
   const overdue = data.due.filter((d) => d.state === "overdue");
@@ -78,36 +121,6 @@ export async function EquipmentPanel() {
       <h2 id="equipment-title" className="text-lg font-bold">
         Equipment, kits &amp; load-out
       </h2>
-
-      {/* Needs you */}
-      <div className="rounded-xl border bg-card p-4">
-        <h3 className="font-semibold">Needs you</h3>
-        {data.alerts.length === 0 && data.loadoutExceptions.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">Nothing overdue, nobody left without their load-out.</p>
-        ) : (
-          <ul className="mt-2 grid gap-2">
-            {data.alerts.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                <OpenEntity kind="ops.asset" id={a.assetId} className="font-medium">
-                  {a.summary}
-                </OpenEntity>
-                <span className="flex flex-wrap gap-2">
-                  <MarkDone assetId={a.assetId} task={a.task} meter={assetById.get(a.assetId)?.meter ?? "none"} />
-                  <DismissAlert id={a.id} />
-                </span>
-              </li>
-            ))}
-            {data.loadoutExceptions.map((e) => (
-              <li key={e.id} className="rounded-lg bg-orange-50 px-3 py-2 text-sm dark:bg-orange-950/40">
-                <OpenEntity kind="ops.exception" id={e.id} className="font-medium">
-                  {e.summary}
-                </OpenEntity>
-                {e.detail && <span className="block text-muted-foreground">{e.detail}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -174,16 +187,26 @@ export async function EquipmentPanel() {
           </details>
         )}
       </div>
+    </section>
+  );
+}
 
+/** Machines: each machine and its meters, and the service intervals they are held to. */
+export async function EquipmentMachinesPanel() {
+  const data = await loadEquipment();
+  if (!data.settings.ready) return <NotSetUp />;
+
+  return (
+    <section className="grid gap-4">
       {/* Machines */}
-      <details className="rounded-xl border bg-card p-4">
-        <summary className="min-h-11 cursor-pointer py-2 font-semibold">Machines and meters · {data.assets.length}</summary>
+      <div className="rounded-xl border bg-card p-4">
+        <h3 className="font-semibold">Machines and meters · {data.assets.length}</h3>
         {data.assets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground">
             No machines yet. Trucks, trailers, mowers and the rest show here once they are on the fleet list.
           </p>
         ) : (
-          <ul className="grid gap-3">
+          <ul className="mt-2 grid gap-3">
             {data.assets.map((a) => (
               <li key={a.id} className="grid gap-1 rounded-lg bg-muted p-2">
                 <OpenEntity kind="ops.asset" id={a.id} className="text-sm font-semibold" chevron>
@@ -197,7 +220,7 @@ export async function EquipmentPanel() {
         <p className="mt-2 text-xs text-muted-foreground">
           {data.usageLoggedToday} end-of-day log{data.usageLoggedToday === 1 ? "" : "s"} today. The crew logs hours and miles from their day screen.
         </p>
-      </details>
+      </div>
 
       {/* Intervals */}
       <details className="rounded-xl border bg-card p-4">
@@ -226,15 +249,21 @@ export async function EquipmentPanel() {
           <p className="mt-2 text-xs text-muted-foreground">Machines typed &quot;Other&quot; get no default intervals. Set their type under Machines and meters.</p>
         )}
       </details>
-
-      {/* Automation */}
-      <div className="rounded-xl border bg-card p-4">
-        <h3 className="font-semibold">Automation</h3>
-        <EquipmentSettingsForm settings={data.settings} />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Kit containers and tools open from the Equipment &amp; tools lists below, one at a time.
-        </p>
-      </div>
     </section>
+  );
+}
+
+export async function EquipmentAutoPanel() {
+  const data = await loadEquipment();
+  if (!data.settings.ready) return <NotSetUp />;
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <h3 className="font-semibold">Equipment</h3>
+      <EquipmentSettingsForm settings={data.settings} />
+      <p className="mt-2 text-xs text-muted-foreground">
+        Kit containers and tools open from the Tools &amp; vehicles list, one at a time.
+      </p>
+    </div>
   );
 }

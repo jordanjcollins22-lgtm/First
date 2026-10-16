@@ -50,19 +50,30 @@ export function V2Shell({
 
   // Inside a choice, one section at a time, picked from a row of buttons,
   // rather than everything stacked into one long scroll. Working screens
-  // first (they hold what needs doing), then the numbers. The pick is kept
+  // first, one job each (Needs you, each set of numbers, Automatic), then
+  // the records. The pick is kept
   // per choice, so coming back to a choice lands where you left it.
   // A section with nothing in it is left off rather than shown empty.
   const parts = current ? (current.parts ?? [current]).filter(sees).filter((p) => p.id !== "tasks" || (unplaced?.length ?? 0) > 0) : [];
   const shownPanels = current ? panelKeysFor(current).filter((k) => panels[k]) : [];
-  const sections = [
+  const each = [
     ...shownPanels.map((k) => ({ key: `panel:${k}`, label: labelFor(k), records: false })),
     ...parts.map((p) => ({ key: `part:${p.id}`, label: p.label, records: true })),
   ];
+  // Some sections share a button (V2Together): the first one there carries
+  // the rest beneath it, so the row stays short enough to scan.
+  const shares = new Map<string, { label?: string; keys: string[] }>();
+  const carried = new Set<string>();
+  for (const t of current?.together ?? []) {
+    const here = t.keys.filter((k) => each.some((x) => x.key === k));
+    if (here.length < 2) continue;
+    shares.set(here[0], { label: t.label, keys: here });
+    here.slice(1).forEach((k) => carried.add(k));
+  }
+  const sections = each.filter((x) => !carried.has(x.key)).map((x) => ({ ...x, label: shares.get(x.key)?.label ?? x.label }));
   const [picked, setPicked] = useState<Record<string, string>>({});
   const activeKey = (current && sections.find((x) => x.key === picked[current.id])?.key) ?? sections[0]?.key;
-  const activePart = activeKey?.startsWith("part:") ? parts.find((p) => `part:${p.id}` === activeKey) : undefined;
-  const activePanel = activeKey?.startsWith("panel:") ? activeKey.slice(6) : undefined;
+  const shown = activeKey ? (shares.get(activeKey)?.keys ?? [activeKey]) : [];
 
   return (
     <EntityDrawerProvider>
@@ -126,14 +137,21 @@ export function V2Shell({
       )}
       <div className="mb-5" />
 
-      {activePanel && <div key={activePanel}>{panels[activePanel]}</div>}
-
-      {activePart && (
-        <div key={activePart.id}>
-          {parts.length > 1 && activePart.sub && <p className="mb-3 text-sm text-muted-foreground">{activePart.sub}</p>}
-          <PillarBody pillar={activePart} section={section} unplaced={unplaced} />
-        </div>
-      )}
+      <div key={activeKey} className="grid gap-6">
+        {shown.map((k, i) => {
+          if (k.startsWith("panel:")) return <div key={k}>{panels[k.slice(6)]}</div>;
+          const part = parts.find((p) => `part:${p.id}` === k);
+          if (!part) return null;
+          return (
+            <div key={k}>
+              {/* A part carried under another section's button says what it is. */}
+              {i > 0 && <h2 className="mb-1 text-lg font-extrabold">{part.title}</h2>}
+              {(i > 0 || parts.length > 1) && part.sub && <p className="mb-3 text-sm text-muted-foreground">{part.sub}</p>}
+              <PillarBody pillar={part} section={section} unplaced={unplaced} />
+            </div>
+          );
+        })}
+      </div>
     </div>
     </EntityDrawerProvider>
   );

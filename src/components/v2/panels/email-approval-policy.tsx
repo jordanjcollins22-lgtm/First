@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { loadPolicy, policyRows } from "@/lib/data/approval-policy";
@@ -10,9 +12,11 @@ import { RowItem } from "@/components/v2/entity-drawer";
  * setting per kind. Belongs on Sales › Automated messages (and Admin ›
  * Settings, "messaging policy per kind").
  *
- * Opens with what is held right now and why, then the settings.
+ * Two screens, one load: what is held right now and why (under Needs you),
+ * and the settings (Email approvals).
  */
-export async function EmailApprovalPolicyPanel() {
+
+const loadHeld = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
   const admin = createAdminClient();
   const [policy, { data: held }] = await Promise.all([
@@ -25,11 +29,51 @@ export async function EmailApprovalPolicyPanel() {
       .order("created_at", { ascending: false })
       .limit(200),
   ]);
+  return { policy, held: held ?? [] };
+});
+
+export async function EmailApprovalHeldPanel() {
+  const { held } = await loadHeld();
   const why = new Map<string, number>();
-  for (const row of held ?? []) {
+  for (const row of held) {
     const reason = ((row.payload ?? {}) as { held_because?: string }).held_because ?? "master";
     why.set(reason, (why.get(reason) ?? 0) + 1);
   }
+
+  return (
+    <section className="grid gap-3 rounded-xl border bg-card p-4">
+      <h3 className="font-bold">Emails waiting for you</h3>
+      {held.length === 0 ? (
+        <p className="text-sm text-muted-foreground">None held right now.</p>
+      ) : (
+        <>
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
+            {held.length} held now:{" "}
+            {[...why.entries()]
+              .map(([reason, n]) => `${n} ${(HOLD_REASON_LABEL[reason as keyof typeof HOLD_REASON_LABEL] ?? reason).toLowerCase()}`)
+              .join(", ")}
+            . Open one to send it or say why not.
+          </p>
+          <ul className="grid max-h-80 gap-1 overflow-y-auto">
+            {held.slice(0, 25).map((h) => (
+              <RowItem
+                key={h.id}
+                className="rounded-lg bg-muted px-3 py-2 text-sm"
+                row={{
+                  text: `${h.subject || "Held email"} · to ${h.to_name || h.to_email} · ${new Date(h.created_at).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}`,
+                  ref: { kind: "sales.approval", id: h.id },
+                }}
+              />
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
+export async function EmailApprovalPolicyPanel() {
+  const { policy } = await loadHeld();
   const rows = policyRows(policy).map((r) => ({
     ...r,
     lowRisk: isLowRisk(r.kind),
@@ -42,32 +86,9 @@ export async function EmailApprovalPolicyPanel() {
         <h2 className="text-lg font-extrabold">Which emails wait for you</h2>
         <p className="text-sm text-muted-foreground">
           Transactional emails can go on their own; new wording, AI-written text and team requests wait. A held low-risk email set to
-          &quot;waits, then sends&quot; goes on its own if you haven&apos;t stopped it in time.
+          &quot;waits, then sends&quot; goes on its own if you haven&apos;t stopped it in time. What is held now is under Needs you.
         </p>
       </header>
-      {(held ?? []).length > 0 && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-100">
-          {(held ?? []).length} held now:{" "}
-          {[...why.entries()]
-            .map(([reason, n]) => `${n} ${(HOLD_REASON_LABEL[reason as keyof typeof HOLD_REASON_LABEL] ?? reason).toLowerCase()}`)
-            .join(", ")}
-          . Open one to send it or say why not.
-        </p>
-      )}
-      {(held ?? []).length > 0 && (
-        <ul className="grid max-h-80 gap-1 overflow-y-auto">
-          {(held ?? []).slice(0, 25).map((h) => (
-            <RowItem
-              key={h.id}
-              className="rounded-lg bg-muted px-3 py-2 text-sm"
-              row={{
-                text: `${h.subject || "Held email"} · to ${h.to_name || h.to_email} · ${new Date(h.created_at).toLocaleDateString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric" })}`,
-                ref: { kind: "sales.approval", id: h.id },
-              }}
-            />
-          ))}
-        </ul>
-      )}
       <EmailApprovalPolicyEditor masterHold={policy.masterHold} rows={rows} />
     </section>
   );

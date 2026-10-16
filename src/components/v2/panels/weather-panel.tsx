@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { CloudRain } from "lucide-react";
 
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
@@ -12,21 +13,76 @@ import { OpenEntity } from "@/components/v2/panels/ops-open";
  *
  * What the forecast is about to do to the crews' week, what the cascade has
  * already moved, and the rules it moves by. A proposal that went over the
- * limits sits at the top for the owner or project lead to apply or dismiss;
- * everything inside the limits has already happened and only shows below.
+ * limits sits under Needs you for the owner or project lead to apply or
+ * dismiss; everything inside the limits has already happened and shows on
+ * the Weather screen. The rules are under Automatic. One load for all three.
  */
-export async function WeatherPanel() {
+
+const loadWeather = cache(async () => {
   const organizationId = await getCurrentOrganizationId();
-  const data = await getWeatherPanelData(organizationId).catch((err) => {
+  return getWeatherPanelData(organizationId).catch((err) => {
     console.error("Weather panel failed to load:", err);
     return null;
   });
+});
 
-  if (!data) {
-    return (
-      <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Couldn&apos;t load the weather just now. Reload the page.</section>
-    );
-  }
+function Failed() {
+  return <section className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">Couldn&apos;t load the weather just now. Reload the page.</section>;
+}
+
+function NotSetUp() {
+  return (
+    <p className="rounded-xl border border-amber-400/60 bg-amber-50/70 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+      The weather tables aren&apos;t set up yet (migration 0359). Nothing here will run until they are.
+    </p>
+  );
+}
+
+export async function WeatherNeedsPanel() {
+  const data = await loadWeather();
+  if (!data) return <Failed />;
+
+  return (
+    <div className="grid gap-2">
+      <h3 className="text-sm font-semibold">Weather</h3>
+      {data.proposals.length === 0 ? (
+        <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Nothing waiting. Moves inside the limits happen on their own.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {data.proposals.map((p) => (
+            <li key={p.key} className="rounded-xl border border-amber-400/60 bg-card p-3">
+              <OpenEntity kind="ops.weather_move" id={p.ids[0]} className="text-sm font-semibold">
+                Rain delay: {p.reason}
+              </OpenEntity>
+              {p.why && <p className="text-xs text-muted-foreground">{p.why}</p>}
+              <ul className="mt-2 grid gap-1 text-sm">
+                {p.moves.map((m, i) => (
+                  <li key={i} className="flex flex-wrap gap-x-2">
+                    <span className="font-medium">{m.label}</span>
+                    <span className="text-muted-foreground">
+                      {longDay(m.from)} → {longDay(m.to)}
+                      {m.cause === "chain" ? " (pushed along)" : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <ProposalActions ids={p.ids} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {data.openExceptions > data.proposals.length && (
+        <p className="text-xs text-muted-foreground">
+          {data.openExceptions} weather exception{data.openExceptions === 1 ? "" : "s"} open in all, including visits with no workable day in reach. They&apos;re on the jobs&apos; exception lists.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export async function WeatherPanel() {
+  const data = await loadWeather();
+  if (!data) return <Failed />;
 
   const { settings } = data;
   const toldPct = data.movedLast30 > 0 ? Math.round((data.toldLast30 / data.movedLast30) * 100) : null;
@@ -45,47 +101,7 @@ export async function WeatherPanel() {
         </div>
       </header>
 
-      {!settings.ready && (
-        <p className="rounded-xl border border-amber-400/60 bg-amber-50/70 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
-          The weather tables aren&apos;t set up yet (migration 0359). Nothing here will run until they are.
-        </p>
-      )}
-
-      {/* Needs you */}
-      <div className="grid gap-2">
-        <h3 className="text-sm font-semibold">Needs you</h3>
-        {data.proposals.length === 0 ? (
-          <p className="rounded-xl border bg-card p-3 text-sm text-muted-foreground">Nothing waiting. Moves inside the limits happen on their own.</p>
-        ) : (
-          <ul className="grid gap-2">
-            {data.proposals.map((p) => (
-              <li key={p.key} className="rounded-xl border border-amber-400/60 bg-card p-3">
-                <OpenEntity kind="ops.weather_move" id={p.ids[0]} className="text-sm font-semibold">
-                  Rain delay: {p.reason}
-                </OpenEntity>
-                {p.why && <p className="text-xs text-muted-foreground">{p.why}</p>}
-                <ul className="mt-2 grid gap-1 text-sm">
-                  {p.moves.map((m, i) => (
-                    <li key={i} className="flex flex-wrap gap-x-2">
-                      <span className="font-medium">{m.label}</span>
-                      <span className="text-muted-foreground">
-                        {longDay(m.from)} → {longDay(m.to)}
-                        {m.cause === "chain" ? " (pushed along)" : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <ProposalActions ids={p.ids} />
-              </li>
-            ))}
-          </ul>
-        )}
-        {data.openExceptions > data.proposals.length && (
-          <p className="text-xs text-muted-foreground">
-            {data.openExceptions} weather exception{data.openExceptions === 1 ? "" : "s"} open in all, including visits with no workable day in reach. They&apos;re on the jobs&apos; exception lists.
-          </p>
-        )}
-      </div>
+      {!settings.ready && <NotSetUp />}
 
       {/* KPIs against target */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -161,8 +177,20 @@ export async function WeatherPanel() {
           </ul>
         )}
       </div>
+    </section>
+  );
+}
 
-      {/* Status and settings */}
+/** The rain rules and the cascade's switches. */
+export async function WeatherAutoPanel() {
+  const data = await loadWeather();
+  if (!data) return <Failed />;
+  const { settings } = data;
+
+  return (
+    <div className="grid gap-3">
+      <h3 className="font-semibold">Weather cascade</h3>
+      {!settings.ready && <NotSetUp />}
       <WeatherSettingsForm
         settings={{
           ready: settings.ready,
@@ -184,7 +212,7 @@ export async function WeatherPanel() {
           lastRunSummary: summaryLine(settings.lastRunSummary),
         }}
       />
-    </section>
+    </div>
   );
 }
 
