@@ -1,19 +1,10 @@
-import { getCurrentProfile } from "@/lib/data/team";
-import { OperationsHome } from "@/components/v2/panels/role/operations-home";
+import { MyCalendarPanel } from "@/components/v2/panels/role/my-calendar";
 
 /**
- * The crew's home screen in the new layout: their whole working day on one
- * phone screen. Clock in, the shop's load-out, the one button for the next
- * step (at the shop, leaving, on my way, arrived, finished here, back at the
- * shop), the job sheet with its areas and photos, a way to report a problem,
- * the machines' hours at the end of the day, and what is next. A storm puts
- * the snow route on top; a day with nothing booked says so and shows the
- * next one.
- *
- * Drawn as whoever is being previewed, so the owner sees exactly this.
+ * The crew's home screen in the new layout: the clock, then their calendar,
+ * the day on top with its map and the month under it. Tapping a job zooms
+ * the map in on it, with Directions and the job sheet underneath.
  */
 export async function CrewHomePanel() {
-  const profile = await getCurrentProfile();
-  if (!profile) return <p className="rounded-2xl border bg-card p-5 text-sm text-muted-foreground">Sign in to see your day.</p>;
-  return <OperationsHome profile={profile} lead={false} />;
+  return <MyCalendarPanel mode="crew" />;
 }

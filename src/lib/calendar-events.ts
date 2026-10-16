@@ -45,6 +45,8 @@ export interface CalendarEvent {
   detail: string;
   /** A completed evaluation: when it was booked for, since it now sits on the day it was done. */
   scheduledFor?: string | null;
+  /** Evaluations only: where the visit has got to, which decides its buttons. */
+  evaluationStatus?: string;
 }
 
 function dateKey(d: Date): string {
@@ -97,6 +99,7 @@ export function evaluationEvents(jobs: JobWithLocation[]): CalendarEvent[] {
         assignedTo: j.assigned_to,
         detail: doneAt ? completedDetail(j.evaluation_date!, doneAt) : (EVALUATION_STATUS_LABELS[j.evaluation_status] ?? "Evaluation"),
         scheduledFor: doneAt ? j.evaluation_date : null,
+        evaluationStatus: j.evaluation_status,
       };
     });
 }

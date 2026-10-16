@@ -5,6 +5,7 @@ import { requireJobAccess } from "@/lib/data/access";
 import { getWorkOrderForJob } from "@/lib/data/work-order";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { WorkOrderView } from "@/components/job/work-order-view";
+import { safeBack } from "@/lib/evaluator-home";
 
 /**
  * The crew sheet, at its own address.
@@ -18,14 +19,16 @@ import { WorkOrderView } from "@/components/job/work-order-view";
  * Guarded by requireJobAccess rather than a tab: it is a view of one job, and
  * anybody who can open that job can see the work in it.
  */
-export default async function WorkOrderPage({ params }: { params: Promise<{ jobId: string }> }) {
+export default async function WorkOrderPage({ params, searchParams }: { params: Promise<{ jobId: string }>; searchParams: Promise<{ back?: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { jobId } = await params;
+  // Opened from the crew's calendar: back there, not to the job page.
+  const back = safeBack((await searchParams).back);
 
   await requireJobAccess(jobId, ["job-detail", "project-data", "evaluations", "pipeline"]);
 
   const data = await getWorkOrderForJob(jobId);
   if (!data) notFound();
 
-  return <WorkOrderView jobId={jobId} {...data} back={{ href: `/jobs/${jobId}`, label: "Back to the job" }} />;
+  return <WorkOrderView jobId={jobId} {...data} back={back ? { href: back, label: "Back to my calendar" } : { href: `/jobs/${jobId}`, label: "Back to the job" }} />;
 }

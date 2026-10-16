@@ -1,6 +1,7 @@
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { listJobsWithLocation, type JobWithLocation } from "@/lib/data/jobs";
 import { listDaysOff, listWeeklyAvailability } from "@/lib/data/availability";
+import { createClient } from "@/lib/supabase/server";
 import type { DayOff, Profile, WeeklyAvailability } from "@/types/domain";
 
 function dateKey(d: Date): string {
@@ -36,8 +37,15 @@ export async function getMyScheduleData(): Promise<MyScheduleData | null> {
   );
 
   // Same visibility rule as evaluations: admins see the whole crew's work,
-  // everyone else sees what's theirs.
-  const scheduledJobs = (isAdmin ? jobs : jobs.filter((j) => j.assigned_to === profile.id)).filter(
+  // everyone else sees what's theirs, which for the crew is the jobs they
+  // are on rather than the ones assigned to them.
+  let onCrew = new Set<string>();
+  if (!isAdmin) {
+    const supabase = await createClient();
+    const { data } = await supabase.from("job_crew").select("job_id").eq("profile_id", profile.id);
+    onCrew = new Set(((data ?? []) as { job_id: string }[]).map((r) => r.job_id));
+  }
+  const scheduledJobs = (isAdmin ? jobs : jobs.filter((j) => j.assigned_to === profile.id || onCrew.has(j.id))).filter(
     (j) => j.project_start_date || j.project_end_date
   );
 

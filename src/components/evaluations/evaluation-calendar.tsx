@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +18,7 @@ import {
   type CalendarLayer,
 } from "@/lib/calendar-events";
 import { CalendarMap } from "@/components/evaluations/calendar-map";
+import { AppointmentActions, type CalendarMode } from "@/components/evaluations/appointment-actions";
 import type { DayOff, WeeklyAvailability } from "@/types/domain";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -83,6 +83,7 @@ export function EvaluationCalendar({
   allDaysOff,
   rangeStart,
   rangeEnd,
+  mode = "office",
 }: {
   jobs: JobWithLocation[];
   /** Jobs with work days — the second layer on the same grid. */
@@ -94,6 +95,8 @@ export function EvaluationCalendar({
   allDaysOff: DayOff[];
   rangeStart: string;
   rangeEnd: string;
+  /** Who is looking: decides what a tapped appointment offers. */
+  mode?: CalendarMode;
 }) {
   const today = new Date();
   const rangeStartDate = parseDateKey(rangeStart);
@@ -106,6 +109,12 @@ export function EvaluationCalendar({
   const [viewMode, setViewMode] = useState<"month" | "week">("month");
   const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
   const [selectedDate, setSelectedDate] = useState(toDateKey(today));
+  // The appointment tapped in the day's list: the map zooms to it and its buttons show.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const pickDate = (key: string) => {
+    setSelectedDate(key);
+    setFocusedId(null);
+  };
   const [reasonDraft, setReasonDraft] = useState("");
   const [startTimeDraft, setStartTimeDraft] = useState("");
   const [endTimeDraft, setEndTimeDraft] = useState("");
@@ -212,11 +221,111 @@ export function EvaluationCalendar({
     });
   }
 
+  // The day first, with its map, then the month under it: the day is what
+  // somebody opens this for; the month is where they go to look ahead.
   return (
     <div className="flex flex-col gap-6">
-      <WeeklyAvailabilityEditor myAvailability={myAvailability} />
+      <div data-tour="cal-day" className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+        <p className="font-semibold">{formatDayHeader(selectedDate)}</p>
 
-      <div className="rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
+        <CalendarMap events={selectedEvents} dayLabel={formatDayHeader(selectedDate)} focusId={focusedId} />
+
+        {selectedEvents.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing scheduled this day.</p>
+        ) : null}
+        {selectedEvents.length > 0 && <p className="-mb-1 text-xs text-muted-foreground">Tap an appointment to zoom in on it.</p>}
+        {selectedEvents.length > 0 && (
+          <div data-tour="cal-appointments" className="flex flex-col gap-2">
+            {selectedEvents.map((event) => (
+              <div key={event.id} className={cn("rounded-lg border", focusedId === event.id ? "border-primary bg-primary/5" : "border-border")}>
+              <button
+                type="button"
+                aria-expanded={focusedId === event.id}
+                onClick={() => setFocusedId((id) => (id === event.id ? null : event.id))}
+                className="flex w-full items-center justify-between gap-3 rounded-lg p-2.5 text-left text-sm hover:bg-accent/50"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: LAYER_COLORS[event.layer] }}
+                    aria-hidden
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{event.address}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {event.customerName}
+                      {evaluatorNamesById?.[event.assignedTo ?? ""] &&
+                        ` · ${evaluatorNamesById[event.assignedTo ?? ""]}`}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 text-right text-xs text-muted-foreground",
+                    // Got there before it was booked for: worth seeing at a glance.
+                    event.scheduledFor && event.detail.includes("early") && "font-medium text-emerald-700 dark:text-emerald-400"
+                  )}
+                >
+                  {event.at ? `${formatTime(event.at)} · ` : ""}
+                  {event.detail}
+                </span>
+              </button>
+              {focusedId === event.id && (
+                <div className="border-t border-border p-2.5">
+                  <AppointmentActions event={event} mode={mode} currentProfileId={currentProfileId} />
+                </div>
+              )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mode !== "crew" && <div className="border-t border-border pt-3">
+          {myDayOff ? (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">
+                {myDayOff.start_time && myDayOff.end_time
+                  ? `You're off ${formatTimeOfDay(myDayOff.start_time)}–${formatTimeOfDay(myDayOff.end_time)} this day`
+                  : "You're off all day"}
+                {myDayOff.reason && `, ${myDayOff.reason}`}.
+              </p>
+              <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemoveOff}>
+                Remove
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={reasonDraft}
+                  onChange={(e) => setReasonDraft(e.target.value)}
+                  placeholder="Reason (optional)"
+                  className="h-9 w-40"
+                />
+                <Input
+                  type="time"
+                  value={startTimeDraft}
+                  onChange={(e) => setStartTimeDraft(e.target.value)}
+                  className="h-9 w-28"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <Input
+                  type="time"
+                  value={endTimeDraft}
+                  onChange={(e) => setEndTimeDraft(e.target.value)}
+                  className="h-9 w-28"
+                />
+                <Button type="button" size="sm" disabled={isPending || timesMismatched} onClick={handleMarkOff}>
+                  Mark off
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Leave both times blank to mark the whole day off.</p>
+              {timesMismatched && <p className="text-xs text-destructive">Set both a start and end time, or leave both blank.</p>}
+            </div>
+          )}
+        </div>}
+      </div>
+      <div data-tour="cal-month" className="rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
         <div className="mb-3 flex items-center justify-between gap-2">
           <button
             type="button"
@@ -299,7 +408,7 @@ export function EvaluationCalendar({
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setSelectedDate(key)}
+                    onClick={() => pickDate(key)}
                     className={cn(
                       "relative flex min-h-16 flex-col items-start gap-0.5 rounded-lg border p-1.5 text-left transition-colors",
                       isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
@@ -390,7 +499,7 @@ export function EvaluationCalendar({
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setSelectedDate(key)}
+                  onClick={() => pickDate(key)}
                   className={cn(
                     "flex min-h-14 flex-col items-stretch gap-1 rounded-lg border p-2 text-left align-top transition-colors sm:min-h-40 sm:p-1.5",
                     isSelected ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
@@ -436,96 +545,11 @@ export function EvaluationCalendar({
         )}
       </div>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-card/70 p-4 shadow-lg shadow-black/5 backdrop-blur-xl backdrop-saturate-150">
-        <p className="font-semibold">{formatDayHeader(selectedDate)}</p>
-
-        <CalendarMap events={selectedEvents} dayLabel={formatDayHeader(selectedDate)} />
-
-        {selectedEvents.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing scheduled this day.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {selectedEvents.map((event) => (
-              <Link
-                key={event.id}
-                href={`/jobs/${event.jobId}`}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border p-2.5 text-sm hover:bg-accent/50"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: LAYER_COLORS[event.layer] }}
-                    aria-hidden
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{event.address}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {event.customerName}
-                      {evaluatorNamesById?.[event.assignedTo ?? ""] &&
-                        ` · ${evaluatorNamesById[event.assignedTo ?? ""]}`}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    "shrink-0 text-right text-xs text-muted-foreground",
-                    // Got there before it was booked for: worth seeing at a glance.
-                    event.scheduledFor && event.detail.includes("early") && "font-medium text-emerald-700 dark:text-emerald-400"
-                  )}
-                >
-                  {event.at ? `${formatTime(event.at)} · ` : ""}
-                  {event.detail}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        <div className="border-t border-border pt-3">
-          {myDayOff ? (
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">
-                {myDayOff.start_time && myDayOff.end_time
-                  ? `You're off ${formatTimeOfDay(myDayOff.start_time)}–${formatTimeOfDay(myDayOff.end_time)} this day`
-                  : "You're off all day"}
-                {myDayOff.reason && `, ${myDayOff.reason}`}.
-              </p>
-              <Button type="button" variant="ghost" size="sm" disabled={isPending} onClick={handleRemoveOff}>
-                Remove
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  value={reasonDraft}
-                  onChange={(e) => setReasonDraft(e.target.value)}
-                  placeholder="Reason (optional)"
-                  className="h-9 w-40"
-                />
-                <Input
-                  type="time"
-                  value={startTimeDraft}
-                  onChange={(e) => setStartTimeDraft(e.target.value)}
-                  className="h-9 w-28"
-                />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input
-                  type="time"
-                  value={endTimeDraft}
-                  onChange={(e) => setEndTimeDraft(e.target.value)}
-                  className="h-9 w-28"
-                />
-                <Button type="button" size="sm" disabled={isPending || timesMismatched} onClick={handleMarkOff}>
-                  Mark off
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Leave both times blank to mark the whole day off.</p>
-              {timesMismatched && <p className="text-xs text-destructive">Set both a start and end time, or leave both blank.</p>}
-            </div>
-          )}
+      {mode !== "crew" && (
+        <div data-tour="cal-hours">
+          <WeeklyAvailabilityEditor myAvailability={myAvailability} />
         </div>
-      </div>
+      )}
     </div>
   );
 }

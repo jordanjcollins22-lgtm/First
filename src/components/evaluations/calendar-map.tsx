@@ -20,10 +20,20 @@ if (publicEnv.mapboxToken) {
  * Markers are rebuilt whenever the events change rather than diffed: a day
  * holds a handful of stops, and rebuilding is simpler than reconciling.
  */
-export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; dayLabel: string }) {
+export function CalendarMap({
+  events,
+  dayLabel,
+  focusId = null,
+}: {
+  events: CalendarEvent[];
+  dayLabel: string;
+  /** The appointment tapped in the day's list: the map zooms in on it and opens its label. */
+  focusId?: string | null;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const markerById = useRef(new Map<string, mapboxgl.Marker>());
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !publicEnv.mapboxToken) return;
@@ -47,6 +57,7 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
 
     for (const marker of markersRef.current) marker.remove();
     markersRef.current = [];
+    markerById.current.clear();
 
     if (events.length === 0) return;
 
@@ -69,6 +80,7 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
         )
         .addTo(map);
       markersRef.current.push(marker);
+      markerById.current.set(event.id, marker);
       bounds.extend([event.lng, event.lat]);
     }
 
@@ -78,6 +90,22 @@ export function CalendarMap({ events, dayLabel }: { events: CalendarEvent[]; day
       map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
     }
   }, [events]);
+
+  // Tapping an appointment zooms in on it; tapping it again shows the whole day.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const marker of markersRef.current) if (marker.getPopup()?.isOpen()) marker.togglePopup();
+    const event = focusId ? events.find((e) => e.id === focusId) : undefined;
+    if (event) {
+      map.flyTo({ center: [event.lng, event.lat], zoom: 16 });
+      markerById.current.get(event.id)?.togglePopup();
+    } else if (events.length > 1) {
+      const bounds = new mapboxgl.LngLatBounds();
+      for (const e of events) bounds.extend([e.lng, e.lat]);
+      map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
+    }
+  }, [focusId, events]);
 
   if (!publicEnv.mapboxToken) return null;
 
