@@ -94,6 +94,9 @@ create or replace trigger fixit_builds_number before insert on public.fixit_buil
 create or replace trigger fixit_tickets_number before insert on public.fixit_tickets
   for each row execute function public.fixit_next_number();
 
+-- Only ever run as a trigger.
+revoke execute on function public.fixit_next_number() from public, anon, authenticated;
+
 create or replace trigger set_updated_at before update on public.fixit_builds
   for each row execute function set_updated_at();
 create or replace trigger set_updated_at before update on public.fixit_tickets
