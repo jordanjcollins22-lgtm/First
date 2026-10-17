@@ -1399,8 +1399,8 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     },
     { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people-needs", "people-onboarding", "people-roles", "people-auto"] },
     {
-      id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, and your business details.", ids: ["integrations", "company"],
-      panels: ["integrations-needs", "compliance-needs", "integrations", "compliance", "compliance-auto"],
+      id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, your business details, and fix-it tickets for the app.", ids: ["integrations", "company"],
+      panels: ["integrations-needs", "compliance-needs", "integrations", "compliance", "compliance-auto", "fixit"],
       together: [{ keys: ["panel:integrations-needs", "panel:compliance-needs"] }],
     },
     { id: "tasks", label: "Task list", title: "Task list", sub: "Your shared to-do list.", ids: ["tasks"], panels: ["task-list"] },

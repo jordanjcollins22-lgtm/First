@@ -5,6 +5,7 @@ import { googleLsaProvider } from "@/lib/integrations/providers/google_lsa";
 import { googlePlacesProvider } from "@/lib/integrations/providers/google_places";
 import { quickbooksProvider } from "@/lib/integrations/providers/quickbooks";
 import { payrollProvider } from "@/lib/integrations/providers/payroll";
+import { discordProvider } from "@/lib/integrations/providers/discord";
 
 /**
  * Every integration the Integrations page lists, in the order it shows them.
@@ -17,6 +18,7 @@ export const PROVIDERS: IntegrationProvider[] = [
   googlePlacesProvider,
   quickbooksProvider,
   payrollProvider,
+  discordProvider,
 ];
 
 export function providerById(id: string): IntegrationProvider | undefined {

@@ -91,6 +91,7 @@ export const PANEL_LABEL: Record<string, string> = {
   integrations: "Integrations",
   compliance: "Compliance calendar",
   "compliance-auto": "Automatic",
+  fixit: "Fix-it tickets",
   // Admin › Task list
   "task-list": "To-do list",
   // Each role's own home screen

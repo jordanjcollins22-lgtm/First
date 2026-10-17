@@ -13,6 +13,7 @@ import {
   FinanceScorecardPanel,
 } from "@/components/v2/panels/finance";
 import { IntegrationsNeedsPanel, IntegrationsPanel } from "@/components/v2/panels/integrations";
+import { FixitPanel } from "@/components/v2/panels/fixit-panel";
 import { JobCostingNeedsPanel, JobCostingPanel } from "@/components/v2/panels/job-costing";
 import { ProjectsAutoPanel, ProjectsNeedsPanel, ProjectsNumbersPanel } from "@/components/v2/panels/projects-autopilot";
 import { PurchasingAutoPanel, PurchasingNeedsPanel, PurchasingOrdersPanel, PurchasingStockPanel } from "@/components/v2/panels/purchasing-panel";
@@ -142,6 +143,7 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   integrations: IntegrationsPanel,
   compliance: CompliancePanel,
   "compliance-auto": ComplianceAutoPanel,
+  fixit: FixitPanel,
   // Admin › Task list
   "task-list": TaskListPanel,
   // Each role's own home screen
