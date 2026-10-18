@@ -38,7 +38,9 @@ export async function recordCrewEvent(
 
     // Nobody leaves the shop with the load-out half ticked. The screen
     // greys the button; this is for the tap that got through anyway.
-    if (kind === "left_shop") {
+    // Somebody on trial is never shown the load-out, so it cannot hold them:
+    // a list they cannot see and cannot tick would leave them stuck at the shop.
+    if (kind === "left_shop" && !profile.trial_crew) {
       const blocked = leaveBlockedBy(await getLoadout(profile.id, day.day));
       if (blocked) return { ok: false, message: `${blocked} Tick the load-out first.` };
     }
