@@ -7,7 +7,7 @@ import { Check, ChevronRight, Loader2, MapPin, Navigation, RotateCcw, Truck } fr
 
 import { Button } from "@/components/ui/button";
 import { recordCrewEvent, undoLastCrewEvent } from "@/lib/actions/crew-day-actions";
-import { directionsUrl, readDay, type CrewEvent, type Stop } from "@/lib/crew-day";
+import { directionsUrl, noteBlocks, readDay, shortAddress, type CrewEvent, type Stop } from "@/lib/crew-day";
 import { departureLine } from "@/lib/spoken-directions";
 import { speak, voiceWanted } from "@/lib/speech";
 
@@ -165,9 +165,9 @@ function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; 
       <p className="text-xs font-medium text-muted-foreground">
         {phase === "on_site" ? "You're here" : "Heading to"}
       </p>
-      <p className="text-base font-semibold leading-snug">{stop.address}</p>
+      <p className="text-base font-semibold leading-snug">{shortAddress(stop.address)}</p>
       <p className="text-sm text-muted-foreground">{stop.customerName}</p>
-      {stop.purpose && <p className="mt-0.5 text-xs text-muted-foreground">{stop.purpose}</p>}
+      {stop.purpose && <StopNote note={stop.purpose} />}
 
       {/* Links, not buttons: the one button is the big one below. When it
           is "On my way" it opens the directions, so this leaves them out. */}
@@ -183,6 +183,44 @@ function StopCallout({ stop, phase, directionsInButton = false }: { stop: Stop; 
           Crew sheet
         </Link>
       </div>
+    </div>
+  );
+}
+
+/** The office's note for the stop: headings, points and lines, readable on a phone in the truck. */
+function StopNote({ note }: { note: string }) {
+  const blocks = noteBlocks(note);
+  const groups: { heading: string | null; items: string[]; lines: string[] }[] = [];
+  for (const block of blocks) {
+    // A sentence after a list starts its own block, so it stays below the list.
+    const afterList = block.kind === "line" && groups.length > 0 && groups[groups.length - 1].items.length > 0;
+    if (block.kind === "heading" || groups.length === 0 || afterList) groups.push({ heading: block.kind === "heading" ? block.text : null, items: [], lines: [] });
+    const group = groups[groups.length - 1];
+    if (block.kind === "item") group.items.push(block.text);
+    if (block.kind === "line") group.lines.push(block.text);
+  }
+  return (
+    <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3 text-sm leading-relaxed">
+      {groups.map((group, g) => (
+        <div key={g} className="flex flex-col gap-1">
+          {group.heading && <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.heading}</p>}
+          {group.lines.map((line, i) => (
+            <p key={`l${i}`} className="font-medium">
+              {line}
+            </p>
+          ))}
+          {group.items.length > 0 && (
+            <ul className="flex flex-col gap-1.5">
+              {group.items.map((item, i) => (
+                <li key={`i${i}`} className="flex gap-2">
+                  <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

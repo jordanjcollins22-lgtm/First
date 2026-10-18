@@ -76,7 +76,7 @@ export function NextUpCard({
         <Clock className="h-3.5 w-3.5 shrink-0" />
         Booked for {when(visit.startsOn)}
       </p>
-      {visit.purpose && <p className="mt-1 text-sm text-muted-foreground">{visit.purpose}</p>}
+      {visit.purpose && <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">{visit.purpose}</p>}
 
       {status ? (
         <p className="mt-3 flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium">

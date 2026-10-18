@@ -52,7 +52,7 @@ export function CrewsTodayPanel({ today, showTicks }: { today: CrewsToday; showT
                 {stop.customerName}
               </Link>
               <span className="text-muted-foreground"> · {stop.address}</span>
-              {stop.purpose && <span className="block text-xs text-muted-foreground">{stop.purpose}</span>}
+              {stop.purpose && <span className="block whitespace-pre-line text-xs text-muted-foreground">{stop.purpose}</span>}
               <span className="block text-xs">
                 <Users className="mr-1 inline h-3 w-3 text-muted-foreground" />
                 {stop.crewNames.length > 0 ? stop.crewNames.join(", ") : <span className="font-medium text-amber-800">Nobody on it yet</span>}
