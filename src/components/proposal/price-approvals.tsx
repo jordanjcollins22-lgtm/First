@@ -274,6 +274,21 @@ export function PriceCard({
 
       {/* The last step, still on the card: the proposal as the client will
           see it, then Send to client. */}
+      {/* What the accepted price is made of, still there at the send step:
+          the time, the labour, the materials and what it leaves. Read only. */}
+      {(stage === "send" || stage === "sent") && (
+        <details className="rounded-xl border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Breakdown: time, labour, materials and profit</summary>
+          <div className="flex flex-col gap-2 border-t border-border p-2">
+            {lines ? (
+              <ForwardBreakdown item={item} lines={lines} onChange={() => {}} locked />
+            ) : (
+              <Breakdown item={item} total={total} pending onUsePrice={() => {}} />
+            )}
+          </div>
+        </details>
+      )}
+
       {stage === "send" && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
