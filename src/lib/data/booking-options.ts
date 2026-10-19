@@ -10,6 +10,8 @@ import {
 } from "@/lib/data/public-booking";
 import { publicProof, serviceForCode } from "@/lib/data/booking-proof";
 import { NO_PROOF } from "@/lib/booking-proof";
+import { readPhotoQuotes } from "@/lib/data/photo-quotes";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { BookingOptions } from "@/app/book/booking-options";
 
 /**
@@ -38,6 +40,7 @@ export async function loadBookingOptions(params: { ref?: string; org?: string; r
       return NO_PROOF;
     }),
     serviceForCode(params.rec).catch(() => null),
+    readPhotoQuotes(createAdminClient(), context.organizationId).catch(() => null),
   ]);
   // Handled here too, so a page that closes early never leaves it unhandled.
   rest.catch(() => {});
@@ -48,7 +51,7 @@ export async function loadBookingOptions(params: { ref?: string; org?: string; r
 
   if (evaluatorIds.length === 0) return { status: "closed" };
 
-  const [[services, busy, notice, proof, service], availability] = await Promise.all([rest, listAvailabilityData(evaluatorIds)]);
+  const [[services, busy, notice, proof, service, photoQuotes], availability] = await Promise.all([rest, listAvailabilityData(evaluatorIds)]);
 
   const now = new Date();
   const slots = computeAvailableSlots({
@@ -74,5 +77,6 @@ export async function loadBookingOptions(params: { ref?: string; org?: string; r
     noticeText: describeNotice(notice),
     proof,
     service,
+    photoQuoteLine: photoQuotes?.ready && photoQuotes.enabled ? photoQuotes.line : null,
   };
 }

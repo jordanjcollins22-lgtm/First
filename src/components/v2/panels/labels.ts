@@ -23,6 +23,7 @@ export const PANEL_LABEL: Record<string, string> = {
   "physical-auto": "Automatic",
   // Sales › Pipeline
   "pipeline-needs": "Needs you",
+  "photo-quotes": "Photo quotes",
   "pipeline-numbers": "Sales numbers",
   "pipeline-rates": "Rates",
   "pipeline-auto": "Automatic",

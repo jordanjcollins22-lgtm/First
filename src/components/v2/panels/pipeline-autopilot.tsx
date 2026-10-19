@@ -8,6 +8,8 @@ import type { Tone } from "@/lib/sales/scorecard";
 import { DIVISION_LABEL, DIVISIONS } from "@/lib/sales/divisions";
 import { KpiTile, NeedsYouStrip, PanelSection, pct, usd } from "@/components/v2/panels/sales/sales-ui";
 import { AutopilotSettingsForm, ExceptionButtons, RateCoverage } from "@/components/v2/panels/sales/pipeline-autopilot-controls";
+import { PhotoQuoteButtons, PhotoQuoteSettingsForm } from "@/components/v2/panels/sales/photo-quote-controls";
+import { loadPhotoQuotesForRequest } from "@/components/v2/panels/photo-quotes";
 
 /**
  * Sales › Pipeline: the pipeline autopilot, one screen per button.
@@ -16,27 +18,39 @@ import { AutopilotSettingsForm, ExceptionButtons, RateCoverage } from "@/compone
  * the speed target, and anything from before the autopilot went live.
  * Sales numbers: against the report's planning bands. Rates: the rate
  * card's gaps, because a service with no rate is the commonest reason a
- * price is held. Automatic: the autopilot's switches and guardrails.
+ * price is held. Automatic: the autopilot's switches and guardrails, and
+ * the photo-quote switch and line. Photo quotes sent in and waiting on a
+ * price are under Needs you too (their own screen is photo-quotes.tsx).
  * All four read one load for the request.
  */
 
 const loadPipeline = cache(async () => loadPipelineAutopilot(await getCurrentOrganizationId()));
 
 export async function PipelineNeedsPanel() {
-  const data = await loadPipeline();
+  const [data, photoQuotes] = await Promise.all([loadPipeline(), loadPhotoQuotesForRequest()]);
 
   return (
     <PanelSection title="Needs you" sub="Only what couldn't be settled on its own.">
       <NeedsYouStrip
         empty="Nothing is waiting on you. Every price inside the guardrails went out on its own."
-        items={data.needsYou.map((item) => ({
-          id: item.id,
-          summary: item.summary,
-          detail: item.kind === "price_held" ? item.detail : null,
-          who: item.kind === "proposal_overdue" ? item.assignee : null,
-          open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
-          actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
-        }))}
+        items={[
+          // A photo quote sent in is a client waiting on a price.
+          ...photoQuotes.waiting.map((row) => ({
+            id: `photo-quote:${row.jobId}`,
+            summary: `Photo quote to price: ${row.clientName}, ${row.address.split(",")[0]}`,
+            detail: `${row.areas.length} area${row.areas.length === 1 ? "" : "s"}${row.estimateCents != null ? `, about ${usd(row.estimateCents / 100)} from the rate card` : ""}.${row.submittedAt ? ` Sent ${new Date(row.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}.` : ""}`,
+            open: { kind: "sales.photo_quote", id: row.jobId },
+            actions: <PhotoQuoteButtons jobId={row.jobId} />,
+          })),
+          ...data.needsYou.map((item) => ({
+            id: item.id,
+            summary: item.summary,
+            detail: item.kind === "price_held" ? item.detail : null,
+            who: item.kind === "proposal_overdue" ? item.assignee : null,
+            open: item.jobId ? { kind: "sales.job", id: item.jobId } : null,
+            actions: item.kind === "backlog" ? null : <ExceptionButtons id={item.id} jobId={item.jobId} kind={item.kind} />,
+          })),
+        ]}
       />
     </PanelSection>
   );
@@ -100,7 +114,7 @@ export async function PipelineRatesPanel() {
 }
 
 export async function PipelineAutoPanel() {
-  const { settings, activity } = await loadPipeline();
+  const [{ settings, activity }, photoQuotes] = await Promise.all([loadPipeline(), loadPhotoQuotesForRequest()]);
 
   return (
     <PanelSection
@@ -143,6 +157,7 @@ export async function PipelineAutoPanel() {
           mhicLicense: settings.mhicLicense,
         }}
       />
+      <PhotoQuoteSettingsForm ready={photoQuotes.settings.ready} enabled={photoQuotes.settings.enabled} line={photoQuotes.settings.line} />
     </PanelSection>
   );
 }

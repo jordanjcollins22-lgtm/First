@@ -5,6 +5,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getIntakeByToken } from "@/lib/data/evaluation-intake";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { IntakeForm } from "@/components/intake/intake-form";
+import { PhotoQuoteForm } from "@/components/intake/photo-quote-form";
 import { lotForProperty } from "@/lib/data/lot-map";
 
 /**
@@ -13,6 +14,9 @@ import { lotForProperty } from "@/lib/data/lot-map";
  * Also the page the evaluator opens at the door when the client never got
  * to it: ?together=1 marks the answers as gathered on the visit rather than
  * sent ahead, and changes nothing else.
+ *
+ * A photo quote (a small job booked with no visit) gets its own form: tap
+ * the areas on the lot, say what you want done, add photos of each.
  */
 export const dynamic = "force-dynamic";
 
@@ -39,7 +43,7 @@ export default async function PrepPage({
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-4 pt-4">
       <header className="mb-4">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">{intake.businessName}</p>
-        <h1 className="text-lg font-semibold">Before we come out</h1>
+        <h1 className="text-lg font-semibold">{intake.photoQuote ? "Your quote from photos" : "Before we come out"}</h1>
         {(intake.address || (intake.evaluationAt && !intake.cancelled)) && (
           <p className="truncate text-xs text-muted-foreground">
             {[intake.address, intake.evaluationAt && !intake.cancelled ? sayWhen(intake.evaluationAt) : null].filter(Boolean).join(" · ")}
@@ -52,6 +56,19 @@ export default async function PrepPage({
         </p>
       )}
 
+      {intake.photoQuote && !intake.cancelled ? (
+        <PhotoQuoteForm
+          token={intake.token}
+          initial={intake.answers}
+          initialPhotos={intake.photoUrls}
+          submittedAt={intake.submittedAt}
+          lot={lot}
+          lat={intake.lat}
+          lng={intake.lng}
+          businessPhone={intake.businessPhone}
+          greeting={`${intake.clientFirstName ? `${intake.clientFirstName}, your` : "Your"} project is a good size to quote from photos, so there's no visit to wait for.`}
+        />
+      ) : (
       <IntakeForm
         token={intake.token}
         initial={intake.answers}
@@ -63,6 +80,7 @@ export default async function PrepPage({
         lot={lot}
         greeting={`${intake.clientFirstName ? `${intake.clientFirstName}, a` : "A"} few quick questions, one at a time, so we arrive with ideas instead of guesses. Nothing here is binding.`}
       />
+      )}
     </main>
   );
 }

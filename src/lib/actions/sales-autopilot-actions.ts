@@ -14,6 +14,8 @@ import { DIVISIONS, type Division } from "@/lib/sales/divisions";
 import { mergeBlocker, readRate, type ServiceRow } from "@/lib/sales/service-dedupe";
 import { buildGoodBetterBest } from "@/lib/sales/good-better-best";
 import type { Database } from "@/lib/supabase/database.types";
+import { readPhotoQuotes } from "@/lib/data/photo-quotes";
+import { readLine, sayLine } from "@/lib/photo-quote";
 
 /**
  * The owner's controls for the pipeline autopilot: its switches and
@@ -98,6 +100,33 @@ export async function saveAutopilotSettings(input: AutopilotSettingsInput): Prom
     return { ok: true, message: "Saved." };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Couldn't save the settings." };
+  }
+}
+
+/**
+ * "Quote small jobs from photos": the switch, and the dollar line a budget
+ * has to be wholly under. Kept beside the autopilot's settings, in its row.
+ */
+export async function savePhotoQuoteSettings(input: { enabled: boolean; line: string }): Promise<ActionResult> {
+  const who = await owner();
+  if ("error" in who) return { ok: false, error: who.error };
+  const line = readLine(String(input.line ?? ""));
+  if (Number.isNaN(line)) return { ok: false, error: "Type the line in dollars, like 1500." };
+  try {
+    const supabase = await createClient();
+    const current = await readPhotoQuotes(supabase, who.organizationId);
+    if (!current.ready) return { ok: false, error: "Photo quotes aren't set up in the database yet." };
+    const { error } = await untyped(supabase)
+      .from("sales_autopilot_settings")
+      .upsert(
+        { organization_id: who.organizationId, photo_quotes: Boolean(input.enabled), photo_quote_line: line, updated_at: new Date().toISOString(), updated_by: who.id },
+        { onConflict: "organization_id" }
+      );
+    if (error) return { ok: false, error: error.message };
+    refresh();
+    return { ok: true, message: input.enabled ? `On. Budgets under ${sayLine(line)} are quoted from photos.` : "Off. Every booking picks a time for a visit." };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Couldn't save the setting." };
   }
 }
 

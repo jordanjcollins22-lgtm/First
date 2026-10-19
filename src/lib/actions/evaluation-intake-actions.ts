@@ -3,7 +3,21 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { answeredCount, cleanAnswers, MAX_INTAKE_PHOTOS, PHOTO_AREAS, PHOTOS_PER_AREA } from "@/lib/evaluation-intake";
+import Anthropic from "@anthropic-ai/sdk";
+
+import {
+  answeredCount,
+  cleanAnswers,
+  INTAKE_QUESTIONS,
+  MAX_INTAKE_PHOTOS,
+  mergeSpots,
+  PHOTO_AREAS,
+  PHOTOS_PER_AREA,
+  SPOT_ID,
+  type IntakeAnswers,
+} from "@/lib/evaluation-intake";
+import { env, isAnthropicConfigured } from "@/lib/env";
+import { ideasBrief, ideasSystemPrompt, parseIdeas } from "@/lib/photo-quote";
 import { log } from "@/lib/log";
 
 type Result = { ok: true; submittedAt: string } | { ok: false; error: string };
@@ -16,6 +30,18 @@ async function formFor(token: string) {
   const admin = createAdminClient();
   const { data } = await admin.from("evaluation_intakes").select("id, job_id, answers").eq("token", token).maybeSingle();
   return data ? { admin, id: data.id, jobId: data.job_id, answers: cleanAnswers(data.answers) } : null;
+}
+
+/**
+ * What the phone sent, with the parts only the server writes kept as the
+ * server has them: the photos (saved as they are added) and the wording of
+ * a photo quote's suggestions. The visit's form never sends areas, so a
+ * form with none in it keeps the ones already there.
+ */
+function withServerParts(raw: unknown, stored: IntakeAnswers): IntakeAnswers {
+  const sent = cleanAnswers(raw);
+  const sentSpots = Array.isArray((raw as { spots?: unknown } | null)?.spots);
+  return { ...sent, photos: stored.photos, photo_areas: stored.photo_areas, spots: sentSpots ? mergeSpots(stored.spots, sent.spots) : stored.spots };
 }
 
 /**
@@ -36,7 +62,10 @@ export async function submitEvaluationIntake(input: {
   const form = await formFor(input.token);
   if (!form) return { ok: false, error: "That link has expired or was never ours." };
 
-  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos, photo_areas: form.answers.photo_areas };
+  const answers = withServerParts(input.answers, form.answers);
+  // A photo quote's kinds of work are ticked per area; the form as a whole
+  // asks for them too, so the job page and the visit plan read them the same.
+  if (answers.spots.length > 0) answers.services = [...new Set([...answers.services, ...answers.spots.flatMap((s) => s.services)])];
   const submittedAt = new Date().toISOString();
 
   const { error } = await form.admin
@@ -68,7 +97,8 @@ type PhotoResult = { ok: true; path: string; url: string } | { ok: false; error:
 const MAX_PHOTO_BYTES = 15 * 1024 * 1024;
 
 function roomFor(answers: { photos: string[]; photo_areas: Record<string, string> }, area: string): string | null {
-  if (!PHOTO_AREAS.some((a) => a.value === area)) return "Which part of the yard is that of?";
+  // A part of the yard, or one of a photo quote's areas.
+  if (!PHOTO_AREAS.some((a) => a.value === area) && !SPOT_ID.test(area)) return "Which part of the yard is that of?";
   const inArea = answers.photos.filter((p) => (answers.photo_areas[p] ?? "whole") === area).length;
   if (inArea >= PHOTOS_PER_AREA) return `${PHOTOS_PER_AREA} photos of this part is plenty. Remove one to add another.`;
   if (answers.photos.length >= MAX_INTAKE_PHOTOS) return "That's plenty of photos. Remove one to add another.";
@@ -156,7 +186,72 @@ export async function removeIntakePhoto(input: { token: string; path: string }):
 export async function saveIntakeProgress(input: { token: string; answers: unknown }): Promise<{ ok: boolean }> {
   const form = await formFor(input.token);
   if (!form) return { ok: false };
-  const answers = { ...cleanAnswers(input.answers), photos: form.answers.photos, photo_areas: form.answers.photo_areas };
+  const answers = withServerParts(input.answers, form.answers);
   const { error } = await form.admin.from("evaluation_intakes").update({ answers, updated_at: new Date().toISOString() }).eq("id", form.id);
   return { ok: !error };
+}
+
+const SERVICE_LABELS: Record<string, string> = Object.fromEntries((INTAKE_QUESTIONS[0].options ?? []).map((o) => [o.value, o.label]));
+
+/**
+ * A few things that might be worth doing in one area of a photo quote, read
+ * off its photos, for the client to tick if they're interested.
+ *
+ * Asked once per area, once it has a photo, and kept with the form: the
+ * wording is the server's (mergeSpots keeps it), the ticks are theirs. A
+ * nice-to-have, so anything that goes wrong (no AI set up, no signal, a
+ * refusal, nothing useful back) is an empty list and the form carries on.
+ */
+export async function suggestSpotIdeas(input: { token: string; spotId: string }): Promise<{ ideas: { text: string; interested: boolean }[] }> {
+  const none = { ideas: [] };
+  try {
+    if (!isAnthropicConfigured || !SPOT_ID.test(input.spotId)) return none;
+    const form = await formFor(input.token);
+    if (!form) return none;
+    const spot = form.answers.spots.find((s) => s.id === input.spotId);
+    if (!spot) return none;
+    if (spot.ideas.length > 0) return { ideas: spot.ideas };
+    const paths = form.answers.photos.filter((p) => form.answers.photo_areas[p] === spot.id).slice(0, PHOTOS_PER_AREA);
+    if (paths.length === 0) return none;
+
+    const images: Anthropic.ImageBlockParam[] = [];
+    for (const path of paths) {
+      const { data: file } = await form.admin.storage.from("job-photos").download(path);
+      if (!file) continue;
+      const type = path.endsWith(".png") ? "image/png" : path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+      images.push({ type: "image", source: { type: "base64", media_type: type, data: Buffer.from(await file.arrayBuffer()).toString("base64") } });
+    }
+    if (images.length === 0) return none;
+
+    const client = new Anthropic({ apiKey: env.anthropicApiKey });
+    const response = await client.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 1000,
+      thinking: { type: "adaptive" },
+      // A glance at a yard and a few short lines.
+      output_config: { effort: "low" },
+      system: ideasSystemPrompt(),
+      messages: [{ role: "user", content: [...images, { type: "text", text: ideasBrief(spot, SERVICE_LABELS) }] }],
+    });
+    if (response.stop_reason === "refusal") return none;
+    const texts = parseIdeas(
+      response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === "text")
+        .map((block) => block.text)
+        .join("\n")
+    );
+    if (texts.length < 2) return none;
+
+    // Kept with the form, against what is there now: the phone may have
+    // saved more while this was being asked.
+    const latest = await formFor(input.token);
+    if (!latest) return none;
+    const ideas = texts.map((text) => ({ text, interested: false }));
+    const spots = latest.answers.spots.map((s) => (s.id === spot.id && s.ideas.length === 0 ? { ...s, ideas } : s));
+    await latest.admin.from("evaluation_intakes").update({ answers: { ...latest.answers, spots }, updated_at: new Date().toISOString() }).eq("id", latest.id);
+    return { ideas };
+  } catch (err) {
+    log.warn("intake.ideas_failed", { spot: input.spotId, error: err instanceof Error ? err.message : String(err) });
+    return none;
+  }
 }

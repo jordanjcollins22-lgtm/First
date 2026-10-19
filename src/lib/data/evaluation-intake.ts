@@ -26,6 +26,15 @@ export interface PublicIntake extends Intake {
   /** The visit, as an instant. */
   evaluationAt: string | null;
   cancelled: boolean;
+  /** Where the property's pin is, for the photo quote's map when the county has no lot. */
+  lat: number | null;
+  lng: number | null;
+  /**
+   * A photo quote with no visit booked: the form asks for areas on the map
+   * and photos of each instead of the visit's questions. Once a visit is
+   * booked on the job it is the visit's form again.
+   */
+  photoQuote: boolean;
 }
 
 /** An hour: long enough to read the form, short enough not to travel. */
@@ -55,11 +64,17 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
   const { data } = await admin
     .from("evaluation_intakes")
     .select(
-      "id, job_id, token, answers, submitted_at, submitted_by, organization:organizations(name, business_phone), job:jobs(evaluation_date, evaluation_status, cancelled_at, property:properties(id, address, customer:customers(name)))"
+      "id, job_id, token, answers, submitted_at, submitted_by, organization:organizations(name, business_phone), job:jobs(evaluation_date, evaluation_status, cancelled_at, property:properties(id, address, lat, lng, customer:customers(name)))"
     )
     .eq("token", token)
     .maybeSingle();
   if (!data) return null;
+  // Asked on its own, so the form still opens before migration 0369 adds the column.
+  const { data: kind } = await (admin as unknown as SupabaseClient)
+    .from("evaluation_intakes")
+    .select("photo_quote")
+    .eq("token", token)
+    .maybeSingle();
 
   const row = data as unknown as {
     id: string;
@@ -73,7 +88,7 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
       evaluation_date: string | null;
       evaluation_status: string;
       cancelled_at: string | null;
-      property: { id: string; address: string; customer: { name: string } | null } | null;
+      property: { id: string; address: string; lat: number | null; lng: number | null; customer: { name: string } | null } | null;
     } | null;
   };
 
@@ -93,6 +108,9 @@ export async function getIntakeByToken(token: string): Promise<PublicIntake | nu
     propertyId: row.job?.property?.id ?? null,
     evaluationAt: row.job?.evaluation_date ?? null,
     cancelled: Boolean(row.job?.cancelled_at) || row.job?.evaluation_status === "cancelled",
+    lat: row.job?.property?.lat ?? null,
+    lng: row.job?.property?.lng ?? null,
+    photoQuote: (kind as { photo_quote?: boolean } | null)?.photo_quote === true && !row.job?.evaluation_date,
   };
 }
 

@@ -24,6 +24,7 @@ import { ComplianceAutoPanel, ComplianceNeedsPanel, CompliancePanel } from "@/co
 import { CommissionsAutoPanel, CommissionsNeedsPanel, CommissionsPanel } from "@/components/v2/panels/commissions-panel";
 import { PeopleAutoPanel, PeopleNeedsPanel, PeopleOnboardingPanel, PeopleRolesPanel } from "@/components/v2/panels/people-panel";
 import { PipelineAutoPanel, PipelineNeedsPanel, PipelineNumbersPanel, PipelineRatesPanel } from "@/components/v2/panels/pipeline-autopilot";
+import { PhotoQuotesPanel } from "@/components/v2/panels/photo-quotes";
 import { EvaluatorNeedsPanel, EvaluatorScorecardPanel } from "@/components/v2/panels/evaluator-scorecard";
 import { TerritoriesNeedsPanel, TerritoriesPanel, TerritoryRoutingPanel } from "@/components/v2/panels/territories";
 import {
@@ -75,6 +76,7 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   "physical-auto": PhysicalAutoPanel,
   // Sales › Pipeline
   "pipeline-needs": PipelineNeedsPanel,
+  "photo-quotes": PhotoQuotesPanel,
   "pipeline-numbers": PipelineNumbersPanel,
   "pipeline-rates": PipelineRatesPanel,
   "pipeline-auto": PipelineAutoPanel,

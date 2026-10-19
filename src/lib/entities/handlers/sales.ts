@@ -31,6 +31,8 @@ import { updateCustomerContact } from "@/lib/actions/customer-actions";
 import { saveTerritory } from "@/lib/actions/territory-actions";
 import { setDoesEvaluations } from "@/lib/actions/team-actions";
 import { setServiceRate } from "@/lib/actions/sales-autopilot-actions";
+import { askForVisit, markPhotoQuotePriced } from "@/lib/actions/photo-quote-actions";
+import { cleanAnswers } from "@/lib/evaluation-intake";
 import { markPaymentCollected } from "@/lib/actions/collect-payment-actions";
 import { reissueInvoiceForJob } from "@/lib/actions/job-invoice-actions";
 import { reopenOfficeDeclined } from "@/lib/data/decline-proposals";
@@ -46,7 +48,7 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
 /**
  * What can be opened and done from the Sales page's lists: a job's sales
  * view, an evaluation visit, a proposal, a client, an evaluator, an invoice,
- * a held email and a priced service.
+ * a held email, a priced service and a photo quote.
  *
  * Every read is scoped to the owner's business. Every write goes through the
  * action the rest of the app already uses for it, so the checks, the
@@ -885,6 +887,81 @@ const service: EntityHandler = {
   },
 };
 
+/* ------------------------------------------------------------------ */
+/* sales.photo_quote: a small job sent in with photos, keyed by its job */
+/* ------------------------------------------------------------------ */
+
+const photoQuote: EntityHandler = {
+  kind: "sales.photo_quote",
+  async load(ctx, id) {
+    const j = await ownJob(ctx, id);
+    if (!j) return null;
+    const c = customerOfJob(j);
+    const { data } = await ctx.sb
+      .from("evaluation_intakes")
+      .select("answers,submitted_at,photo_quote,photo_quote_outcome,photo_quote_outcome_at")
+      .eq("job_id", id)
+      .eq("organization_id", ctx.organizationId)
+      .maybeSingle();
+    const intake = data as Row | null;
+    if (!intake?.photo_quote) return null;
+    const answers = cleanAnswers(intake.answers);
+    const outcome = str(intake.photo_quote_outcome);
+    const status = j.evaluation_date ? "Visit booked" : outcome === "visit" ? "Asked for a visit" : outcome === "priced" ? "Priced" : intake.submitted_at ? "Waiting for a price" : "Not sent in yet";
+    const photosOf = (spotId: string) => answers.photos.filter((p) => answers.photo_areas[p] === spotId).length;
+    const actions: EntityAction[] = [];
+    if (!j.evaluation_date && j.status !== "cancelled") {
+      actions.push({ id: "visit", label: "Needs a visit", tone: "primary", confirm: "Send them a link to pick a time for a visit?" });
+      if (outcome !== "priced") actions.push({ id: "priced", label: "Mark priced" });
+    }
+    return {
+      title: `Photo quote · ${place(addressOfJob(j))}`,
+      subtitle: str(c.name) || undefined,
+      status,
+      fields: [
+        { label: "Client", value: str(c.name) || "Unnamed client" },
+        { label: "Phone", value: str(c.phone) },
+        { label: "Email", value: str(c.email) },
+        { label: "Address", value: addressOfJob(j) },
+        { label: "Budget", value: str(j.budget_range) || "Not given" },
+        { label: "Sent in", value: intake.submitted_at ? salesWhen(str(intake.submitted_at)) : "Not yet" },
+        ...(j.evaluation_date ? [{ label: "Visit", value: salesWhen(str(j.evaluation_date)) }] : []),
+      ],
+      sections: [
+        {
+          title: "Areas",
+          rows: answers.spots.map((s, i) => ({
+            text: `Area ${i + 1}: ${s.wants || "nothing written"}${s.services.length ? ` (${s.services.map(statusWords).join(", ")})` : ""} · ${s.noPhotos ? "no photos, use the satellite" : `${photosOf(s.id)} photo${photosOf(s.id) === 1 ? "" : "s"}`}`.slice(0, 240),
+          })),
+          empty: "No areas marked yet.",
+        },
+        {
+          title: "Ideas they'd be interested in",
+          rows: answers.spots.flatMap((s, i) => s.ideas.filter((x) => x.interested).map((x) => ({ text: `Area ${i + 1}: ${x.text}` }))),
+          empty: "None ticked.",
+        },
+        { title: "Job", rows: [row(`${str(j.name) || place(addressOfJob(j))} · ${statusWords(str(j.status))}`, "sales.job", j.id)] },
+        { title: "Client", rows: [row(str(c.name) || "Unnamed client", "sales.client", c.id)] },
+      ],
+      actions,
+      note: "Price it on the job's site map and proposal, the way every job is priced: the photos are on the job. Needs a visit texts or emails them a link to pick a time, and the visit lands on this job.",
+    };
+  },
+  async act(ctx, id, action) {
+    const j = await ownJob(ctx, id);
+    if (!j) return fail("That job isn't there any more.");
+    if (action === "visit") {
+      const r = await askForVisit(id);
+      return r.ok ? done(r.message) : fail(r.error);
+    }
+    if (action === "priced") {
+      const r = await markPhotoQuotePriced(id);
+      return r.ok ? done(r.message) : fail(r.error);
+    }
+    return fail("That can't be done here.");
+  },
+};
+
 /** What can be opened and done from the Sales page's lists. */
-export const SALES_HANDLERS: EntityHandler[] = [job, evaluation, proposal, client, evaluator, invoice, approval, service];
+export const SALES_HANDLERS: EntityHandler[] = [job, evaluation, proposal, client, evaluator, invoice, approval, service, photoQuote];
 

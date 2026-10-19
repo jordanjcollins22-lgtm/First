@@ -347,6 +347,34 @@ export function pathOf(points: Px[]): string {
   return points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") + " Z";
 }
 
+/* ------------------------------------------------ a point on the picture */
+
+/** Enough of a picture to place a point on it: where it was taken from, and its size. */
+export type PictureView = Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">;
+
+/** The spot on the ground under a point on the picture, e.g. where somebody tapped. */
+export function pictureToGround(view: PictureView, [x, y]: Px): LngLat {
+  const origin = worldPx(view.center, view.zoom);
+  const turned = turnForBearing([x - view.width / 2, y - view.height / 2], -view.bearing);
+  return fromWorldPx([origin[0] + turned[0], origin[1] + turned[1]], view.zoom);
+}
+
+/** Where a spot on the ground falls on the picture. */
+export function groundToPicture(view: PictureView, point: LngLat): Px {
+  const origin = worldPx(view.center, view.zoom);
+  const w = worldPx(point, view.zoom);
+  const t = turnForBearing([w[0] - origin[0], w[1] - origin[1]], view.bearing);
+  return [t[0] + view.width / 2, t[1] + view.height / 2];
+}
+
+/**
+ * A picture of the property with no lot from the county: straight down on
+ * the pin, north up, close enough to see a bed from a lawn.
+ */
+export function pinView(lng: number, lat: number, width: number, height: number): PictureView {
+  return { center: [lng, lat], zoom: 19, bearing: 0, width, height };
+}
+
 /* ------------------------------------------------ onto the site map board */
 
 /** Where a site map's satellite photo was taken from. */

@@ -18,7 +18,6 @@ import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
 import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
-import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 import { loadTerritories } from "@/lib/data/territories";
 import { zipOf } from "@/lib/material-suppliers";
@@ -26,6 +25,13 @@ import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
 import { recordBookingAdClick } from "@/lib/data/meta-report";
 import { cleanHeardAbout } from "@/lib/heard-about";
+import { routeForBudget } from "@/lib/photo-quote";
+import { readPhotoQuotes, waitingPhotoQuoteJob } from "@/lib/data/photo-quotes";
+import { sendEvaluationConfirmationNow, sendPhotoQuoteLinkNow } from "@/lib/data/booking-notices";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// The photo-quote columns are newer than the generated types.
+const untyped = (c: unknown) => c as SupabaseClient;
 
 export interface SubmitPublicBookingInput {
   organizationId: string;
@@ -56,6 +62,19 @@ export interface SubmitPublicBookingInput {
   /** Their answer to "How did you hear about us?", and Other's few words. Optional. */
   heardAbout?: string | null;
   heardAboutDetail?: string | null;
+  /**
+   * They came from the office's "book a visit" link after a photo quote, so
+   * they get a visit whatever the budget. Only ever widens to a visit, which
+   * anybody gets by answering "Not sure yet" anyway.
+   */
+  wantsVisit?: boolean;
+}
+
+/** What was made: a visit (in person or on video), or a photo quote with no time at all. */
+export interface PublicBookingMade {
+  jobId: string;
+  mode: EvaluationMode | "photo_quote";
+  prepToken: string | null;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -113,24 +132,25 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * webhook). Re-validates everything server-side since none of it can be
  * trusted from the client.
  */
-export async function submitPublicBooking(
-  input: SubmitPublicBookingInput
-): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
+export async function submitPublicBooking(input: SubmitPublicBookingInput): Promise<PublicBookingMade> {
   // Made once: the same person sending the same booking twice at once (a
   // double tap, a resend on a slow phone) used to be booked twice. The
-  // second waits for the first and is told about the same visit.
+  // second waits for the first and is told about the same visit. A photo
+  // quote has no time, so it is made once per person instead.
   const email = input.email.trim().toLowerCase();
-  if (!EMAIL_RE.test(email) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return makePublicBooking(input);
+  if (!EMAIL_RE.test(email)) return makePublicBooking(input);
+  const slot = /^\d{4}-\d{2}-\d{2}$/.test(input.date) && /^\d{2}:\d{2}$/.test(input.time) ? `${input.date}T${input.time}` : "photo-quote";
   const admin = createAdminClient();
-  const key = bookingPageKey(input.organizationId, email, `${input.date}T${input.time}`);
+  const key = bookingPageKey(input.organizationId, email, slot);
   const claim = await claimBooking(admin, key);
   if (!claim.won) {
     if (!claim.jobId) throw new Error("Your booking is still going through. Give it a moment, then refresh the page.");
     const [{ data: job }, { data: intake }] = await Promise.all([
-      admin.from("jobs").select("evaluation_mode").eq("id", claim.jobId).maybeSingle(),
+      admin.from("jobs").select("evaluation_mode, evaluation_date").eq("id", claim.jobId).maybeSingle(),
       admin.from("evaluation_intakes").select("token").eq("job_id", claim.jobId).maybeSingle(),
     ]);
-    return { jobId: claim.jobId, mode: (job?.evaluation_mode ?? "in_person") as EvaluationMode, prepToken: intake?.token ?? null };
+    const mode = job && !job.evaluation_date ? "photo_quote" : ((job?.evaluation_mode ?? "in_person") as EvaluationMode);
+    return { jobId: claim.jobId, mode, prepToken: intake?.token ?? null };
   }
   try {
     const made = await makePublicBooking(input);
@@ -142,9 +162,7 @@ export async function submitPublicBooking(
   }
 }
 
-async function makePublicBooking(
-  input: SubmitPublicBookingInput
-): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
+async function makePublicBooking(input: SubmitPublicBookingInput): Promise<PublicBookingMade> {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
   const email = input.email.trim().toLowerCase();
@@ -165,12 +183,6 @@ async function makePublicBooking(
   if (budgetRange && !BUDGET_RANGES.includes(budgetRange as (typeof BUDGET_RANGES)[number])) {
     throw new Error("Select a budget range.");
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) {
-    throw new Error("Select a date and time.");
-  }
-  if (input.candidateEvaluatorIds.length === 0) {
-    throw new Error("That time is no longer available, please pick another.");
-  }
 
   const admin = createAdminClient();
   const adClick = cleanAdClick(input.adClick);
@@ -183,46 +195,13 @@ async function makePublicBooking(
   if (orgError) throw orgError;
   if (!org) throw new Error("This booking link isn't valid anymore.");
 
-  // The notice rule, checked at submit as well as when the times were drawn.
-  // A page left open overnight offers a slot that was tomorrow and is today.
-  const notice = await getBookingNotice(input.organizationId);
-
-  // "Monday at 8" is a wall clock on the business's zone. Written as the
-  // instant it means there, so every screen in every zone reads it back as
-  // Monday at 8. This used to be parsed on the server's own clock, which
-  // is UTC, and showed as four in the morning on every phone in Maryland.
-  const evaluationDateTime = zonedToUtc(input.date, input.time, notice.timeZone);
-  if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
-  const iso = evaluationDateTime.toISOString();
-  const soon = tooSoon(notice, new Date(), { date: input.date, at: evaluationDateTime });
-  if (soon) throw new Error(soon);
-
-  // Re-checked at submit, not merely when the slots were drawn: a booking page
-  // can sit open on somebody's phone for an hour, and two people can be on it
-  // at once. This used to compare the exact timestamp only, so an appointment
-  // that merely overlapped — or a whole day the crew were on an install —
-  // sailed straight through.
-  const end = new Date(evaluationDateTime.getTime() + SLOT_MINUTES * 60_000);
-  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
-
-  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end });
-  if (stillFree.length === 0) throw new Error("That time was just booked, please pick another.");
-
-  // Which of the free ones, rather than whichever the database named first.
-  // That used to decide it, so one person collected the bookings and the rest
-  // waited. Now it goes to whoever is already going that way, and failing
-  // that to whoever has the lightest day.
-  // Their territory first, when evaluators have one (zip codes or an area
-  // drawn on the map) and somebody whose patch it is is free.
-  const { territories } = await loadTerritories(admin, input.organizationId).catch(() => ({ territories: [] }));
-  const choice = chooseEvaluator(
-    stillFree,
-    await daysFor(admin, stillFree, input.date),
-    { lat: input.lat, lng: input.lng, zip: zipOf(address) },
-    territories
-  );
-  if (!choice) throw new Error("That time was just booked, please pick another.");
-  const evaluatorId = choice.evaluatorId;
+  // A visit, or a quote from photos. Decided here from the budget and the
+  // owner's line, whatever the page did: the page only uses the same rule to
+  // know whether to show the times. Before the migration, and with the
+  // switch off, everybody gets a visit, as they always have.
+  const photoQuotes = await readPhotoQuotes(admin, input.organizationId).catch(() => null);
+  const route = input.wantsVisit ? "visit" : routeForBudget(budgetRange, photoQuotes?.ready ? photoQuotes : null);
+  const visit = route === "visit" ? await pickVisit(admin, input, address) : null;
 
   const { data: activeServices, error: servicesError } = await admin
     .from("services")
@@ -317,43 +296,94 @@ async function makePublicBooking(
   // a group nobody ever posted in.
   const referralCode = await knownReferralCode(admin, input.organizationId, input.referralCode);
 
-  const { data: job, error: jobError } = await admin
-    .from("jobs")
-    .insert({
-      property_id: propertyId,
-      name: `${address}, Estimate`,
-      assigned_to: evaluatorId,
-      evaluation_date: iso,
-      evaluation_status: "scheduled",
-      evaluation_mode: mode.mode,
-      referral_code: referralCode,
-      booking_variant: isVariant(input.bookingVariant) ? input.bookingVariant : null,
-      address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
-      client_notes: input.notes.trim() || null,
-      budget_range: budgetRange || null,
-      referred_by_profile_id: input.referredByProfileId,
-      ...cleanHeardAbout(input.heardAbout, input.heardAboutDetail),
-    })
-    .select()
-    .single();
-  if (jobError) throw jobError;
+  // A photo quote, or a visit for a property that already has one waiting,
+  // stays on that one job: the office's "needs a visit" link and a second
+  // try on the form both land where the photos already are.
+  const waitingJobId = await waitingPhotoQuoteJob(admin, propertyId);
+  if (!visit && waitingJobId) {
+    const { data: waitingIntake } = await admin.from("evaluation_intakes").select("token").eq("job_id", waitingJobId).maybeSingle();
+    log.info("booking.photo_quote_reused", { jobId: waitingJobId, customerId });
+    return { jobId: waitingJobId, mode: "photo_quote", prepToken: waitingIntake?.token ?? null };
+  }
+
+  const shared = {
+    evaluation_mode: mode.mode,
+    referral_code: referralCode,
+    booking_variant: isVariant(input.bookingVariant) ? input.bookingVariant : null,
+    address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
+    client_notes: input.notes.trim() || null,
+    budget_range: budgetRange || null,
+    referred_by_profile_id: input.referredByProfileId,
+    ...cleanHeardAbout(input.heardAbout, input.heardAboutDetail),
+  };
+
+  let jobId: string;
+  if (visit && waitingJobId) {
+    // The visit goes on the photo quote's job. Only what the booking adds is
+    // written: a blank note or budget doesn't wipe what the first one said.
+    const { error: updateError } = await admin
+      .from("jobs")
+      .update({
+        assigned_to: visit.evaluatorId,
+        evaluation_date: visit.iso,
+        evaluation_status: "scheduled",
+        evaluation_mode: mode.mode,
+        ...(shared.client_notes ? { client_notes: shared.client_notes } : {}),
+        ...(shared.budget_range ? { budget_range: shared.budget_range } : {}),
+      })
+      .eq("id", waitingJobId);
+    if (updateError) throw updateError;
+    jobId = waitingJobId;
+    // Off the office's waiting list: a visit is what it was waiting for.
+    await untyped(admin)
+      .from("evaluation_intakes")
+      .update({ photo_quote_outcome: "visit", photo_quote_outcome_at: new Date().toISOString() })
+      .eq("job_id", jobId)
+      .is("photo_quote_outcome", null);
+  } else {
+    const { data: job, error: jobError } = await admin
+      .from("jobs")
+      .insert({
+        property_id: propertyId,
+        name: `${address}, Estimate`,
+        // A photo quote has nobody going out and no time: the office prices it.
+        assigned_to: visit?.evaluatorId ?? null,
+        evaluation_date: visit?.iso ?? null,
+        evaluation_status: "scheduled",
+        ...shared,
+      })
+      .select()
+      .single();
+    if (jobError) throw jobError;
+    jobId = job.id;
+  }
+
+  // The form a photo quote is sent on. The trigger only makes one for a job
+  // with a date, so this one is made here, marked as a photo quote.
+  if (!visit) {
+    const { error: intakeError } = await untyped(admin)
+      .from("evaluation_intakes")
+      .upsert({ organization_id: input.organizationId, job_id: jobId, photo_quote: true }, { onConflict: "job_id" });
+    if (intakeError) throw intakeError;
+  }
 
   // The visit this booking came from, so the test reads bookings over visits.
   if (input.visitId && UUID_RE.test(input.visitId)) {
     await admin
       .from("booking_visits")
-      .update({ booked_job_id: job.id, booked_at: new Date().toISOString() })
+      .update({ booked_job_id: jobId, booked_at: new Date().toISOString() })
       .eq("id", input.visitId)
       .is("booked_job_id", null);
   }
 
   if (requestedServiceIds.length > 0) {
-    const { error: requestedError } = await admin.from("job_requested_services").insert(
+    const { error: requestedError } = await admin.from("job_requested_services").upsert(
       requestedServiceIds.map((serviceTypeId) => ({
-        job_id: job.id,
+        job_id: jobId,
         organization_id: input.organizationId,
         service_type_id: serviceTypeId,
-      }))
+      })),
+      { onConflict: "job_id,service_type_id", ignoreDuplicates: true }
     );
     if (requestedError) throw requestedError;
   }
@@ -362,25 +392,27 @@ async function makePublicBooking(
   // Never in the way of the booking.
   const who = await requestHeaders();
   await recordBookingAdClick(admin, {
-    jobId: job.id,
+    jobId,
     organizationId: input.organizationId,
     click: adClick,
     email,
     phone,
     ip: who.ip,
     userAgent: who.userAgent,
-  }).catch((err) => log.warn("booking.meta_failed", { jobId: job.id, error: err instanceof Error ? err.message : String(err) }));
+  }).catch((err) => log.warn("booking.meta_failed", { jobId, error: err instanceof Error ? err.message : String(err) }));
 
   // They've just become a client — take them off the cold-prospect list now
   // rather than at the next nightly sweep.
   await reconcileProspects(admin).catch(() => null);
 
-  // Onto the GoHighLevel calendar too, so the office sees one calendar.
-  // Never fails the booking: it logs and moves on if GoHighLevel is down.
-  await syncEvaluationToGhl(job.id);
+  if (visit) {
+    // Onto the GoHighLevel calendar too, so the office sees one calendar.
+    // Never fails the booking: it logs and moves on if GoHighLevel is down.
+    await syncEvaluationToGhl(jobId);
 
-  // "You're booked", now, not at tomorrow's reminder run.
-  await sendEvaluationConfirmationNow(job.id);
+    // "You're booked", now, not at tomorrow's reminder run.
+    await sendEvaluationConfirmationNow(jobId);
+  }
 
   // And give them a way back in. No password: they ask for a code when they
   // want to see their quote again, instead of hunting for our email. Carries
@@ -388,23 +420,87 @@ async function makePublicBooking(
   await ensureClientAccount({ customerId, email }).catch(() => null);
 
   // The pre-evaluation form is made by a trigger the moment the job has a
-  // date, so the client can be handed the link on the very next screen.
-  const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", job.id).maybeSingle();
+  // date (or above, for a photo quote), so the client can be handed the link
+  // on the very next screen.
+  const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", jobId).maybeSingle();
+
+  // The link by email as well, for a photo quote, so closing the tab
+  // doesn't lose it. A visit's link is in its confirmation already.
+  if (!visit && intake?.token) await sendPhotoQuoteLinkNow(jobId, intake.token);
 
   log.info("booking.created", {
-    jobId: job.id,
+    jobId,
     customerId,
-    evaluatorId,
-    at: iso,
-    date: input.date,
-    time: input.time,
-    mode: mode.mode,
+    evaluatorId: visit?.evaluatorId ?? null,
+    at: visit?.iso ?? null,
+    date: visit ? input.date : null,
+    time: visit ? input.time : null,
+    mode: visit ? mode.mode : "photo_quote",
     referralCode,
     services: requestedServiceIds.length,
     prepForm: Boolean(intake?.token),
+    joinedPhotoQuote: Boolean(visit && waitingJobId),
   });
 
-  return { jobId: job.id, mode: mode.mode, prepToken: intake?.token ?? null };
+  return { jobId, mode: visit ? mode.mode : "photo_quote", prepToken: intake?.token ?? null };
+}
+
+/**
+ * The visit they picked, checked again now: a real time, far enough ahead,
+ * still free, and who of the people free then gets it.
+ */
+async function pickVisit(
+  admin: ReturnType<typeof createAdminClient>,
+  input: SubmitPublicBookingInput,
+  address: string
+): Promise<{ iso: string; evaluatorId: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) {
+    throw new Error("Select a date and time.");
+  }
+  if (input.candidateEvaluatorIds.length === 0) {
+    throw new Error("That time is no longer available, please pick another.");
+  }
+
+  // The notice rule, checked at submit as well as when the times were drawn.
+  // A page left open overnight offers a slot that was tomorrow and is today.
+  const notice = await getBookingNotice(input.organizationId);
+
+  // "Monday at 8" is a wall clock on the business's zone. Written as the
+  // instant it means there, so every screen in every zone reads it back as
+  // Monday at 8. This used to be parsed on the server's own clock, which
+  // is UTC, and showed as four in the morning on every phone in Maryland.
+  const evaluationDateTime = zonedToUtc(input.date, input.time, notice.timeZone);
+  if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
+  const iso = evaluationDateTime.toISOString();
+  const soon = tooSoon(notice, new Date(), { date: input.date, at: evaluationDateTime });
+  if (soon) throw new Error(soon);
+
+  // Re-checked at submit, not merely when the slots were drawn: a booking page
+  // can sit open on somebody's phone for an hour, and two people can be on it
+  // at once. This used to compare the exact timestamp only, so an appointment
+  // that merely overlapped — or a whole day the crew were on an install —
+  // sailed straight through.
+  const end = new Date(evaluationDateTime.getTime() + SLOT_MINUTES * 60_000);
+  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
+
+  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end });
+  if (stillFree.length === 0) throw new Error("That time was just booked, please pick another.");
+
+  // Which of the free ones, rather than whichever the database named first.
+  // That used to decide it, so one person collected the bookings and the rest
+  // waited. Now it goes to whoever is already going that way, and failing
+  // that to whoever has the lightest day.
+  // Their territory first, when evaluators have one (zip codes or an area
+  // drawn on the map) and somebody whose patch it is is free.
+  const { territories } = await loadTerritories(admin, input.organizationId).catch(() => ({ territories: [] }));
+  const choice = chooseEvaluator(
+    stillFree,
+    await daysFor(admin, stillFree, input.date),
+    { lat: input.lat, lng: input.lng, zip: zipOf(address) },
+    territories
+  );
+  if (!choice) throw new Error("That time was just booked, please pick another.");
+  return { iso, evaluatorId: choice.evaluatorId };
 }
 
 /**

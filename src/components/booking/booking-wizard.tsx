@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,8 @@ import { LandingCard } from "@/components/booking/landing-card";
 import { BOOKING_PAGES, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { HEARD_ABOUT, type HeardAbout } from "@/lib/heard-about";
+import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
+import { routeForBudget } from "@/lib/photo-quote";
 import {
   MEMORY_KEY,
   readRemembered,
@@ -48,6 +51,12 @@ import {
  * time, and the last says they are booked. What they want done is not asked
  * at all: the pre-evaluation form after booking asks it properly, and asking
  * twice is a page somebody gives up on.
+ *
+ * **A small job skips the time.** The details page asks, optionally, roughly
+ * what budget they have in mind. When the business quotes small jobs from
+ * photos and the budget is wholly under its line, there is no time to pick:
+ * the job is made and they go straight to the pre-evaluation form to tap the
+ * areas and add photos (photo-quote.ts has the rule; the server applies it).
  *
  * **A time is picked, then confirmed.** Tapping a time only chooses it, so a
  * slip of the thumb on a phone is not a booking.
@@ -144,6 +153,8 @@ export function BookingWizard({
   service = null,
   preview = false,
   start = null,
+  photoQuoteLine = null,
+  wantsVisit = false,
 }: {
   organizationId: string;
   organizationName: string;
@@ -173,6 +184,14 @@ export function BookingWizard({
   preview?: boolean;
   /** The address the landing page sent along: the booking opens on who they are, with it already in. */
   start?: { address: GeocodeSuggestion; located: boolean } | null;
+  /**
+   * The business's photo-quote line in dollars, or null when it books a visit
+   * for everybody. A budget wholly under it skips the times and goes to the
+   * pre-evaluation form instead; the server decides it again on submit.
+   */
+  photoQuoteLine?: number | null;
+  /** From the office's "book a visit" link: the times, whatever the budget. */
+  wantsVisit?: boolean;
 }) {
   // 0 is the landing card with the address; 1 is who they are; 2 is when.
   // Booked is the fourth page. What they want done is asked afterwards, on
@@ -189,6 +208,7 @@ export function BookingWizard({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   const today = new Date();
   const [monthCursor, setMonthCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -228,6 +248,10 @@ export function BookingWizard({
   // "How did you hear about us?": one tap, optional, so it never costs a booking.
   const [heardAbout, setHeardAbout] = useState<HeardAbout | null>(null);
   const [heardAboutDetail, setHeardAboutDetail] = useState("");
+  // "Roughly what budget do you have in mind?": optional, and blank is "Not sure yet".
+  const [budget, setBudget] = useState<string | null>(null);
+  // Under the line: no time to pick, straight to the photos instead.
+  const photoQuote = !wantsVisit && routeForBudget(budget, photoQuoteLine == null ? null : { enabled: true, line: photoQuoteLine }) === "photo_quote";
   useEffect(() => {
     adClickRef.current = rememberedAdClick();
   }, []);
@@ -449,7 +473,10 @@ export function BookingWizard({
       setStep(1);
       return setError(problem);
     }
-    if (!selectedAddress || !selectedSlot) return setError("Pick a time first.");
+    if (!selectedAddress) return setError("Pick your address first.");
+    // A photo quote has no time to pick; anything else needs one.
+    const slot = photoQuote ? null : selectedSlot;
+    if (!photoQuote && !slot) return setError("Pick a time first.");
     if (addressEntry === "located") noteLocate("accepted");
 
     startTransition(async () => {
@@ -457,9 +484,9 @@ export function BookingWizard({
         const result = await submitPublicBooking({
           organizationId,
           referredByProfileId,
-          candidateEvaluatorIds: selectedSlot.evaluatorIds,
-          date: selectedSlot.date,
-          time: selectedSlot.time,
+          candidateEvaluatorIds: slot?.evaluatorIds ?? [],
+          date: slot?.date ?? "",
+          time: slot?.time ?? "",
           firstName,
           lastName,
           email,
@@ -474,10 +501,10 @@ export function BookingWizard({
           visitId: visitIdRef.current,
           adClick: adClickRef.current,
           notes: service ? `Asked about ${service} in the post we answered.` : "",
-          // Not asked any more: the pre-evaluation form covers what they want.
-          budgetRange: "Not sure yet",
+          budgetRange: budget ?? "Not sure yet",
           heardAbout,
           heardAboutDetail,
+          wantsVisit,
         });
         // Kept in their own browser so a second booking is a tap rather than
         // the same four fields typed again on a phone.
@@ -491,9 +518,16 @@ export function BookingWizard({
           lng: selectedAddress.lng,
         });
         if (keep) writeMemory(keep);
+        // What the server decided, whichever way the page guessed: a photo
+        // quote goes straight to its form, where the areas and photos are asked.
+        if (result.mode === "photo_quote") {
+          if (result.prepToken) return router.push(`/prep/${result.prepToken}`);
+          return setError("We have your details, but couldn't open the photo form. We'll email you the link.");
+        }
+        if (!slot) return setError("Pick a time first.");
         setBooked({
-          date: selectedSlot.date,
-          time: selectedSlot.time,
+          date: slot.date,
+          time: slot.time,
           address: selectedAddress.fullAddress,
           // What the server decided, not what the browser guessed.
           digital: result.mode === "digital",
@@ -867,22 +901,60 @@ export function BookingWizard({
               />
             )}
           </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium">
+              Roughly what budget do you have in mind? <span className="font-normal text-muted-foreground">(optional)</span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {BUDGET_RANGES.map((range) => (
+                <button
+                  key={range}
+                  type="button"
+                  aria-pressed={budget === range}
+                  onClick={() => setBudget((v) => (v === range ? null : range))}
+                  className={cn(
+                    "min-h-10 rounded-full border px-3 text-sm transition-colors",
+                    budget === range ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
+                  )}
+                >
+                  {range}
+                </button>
+              ))}
+            </div>
+            {photoQuote && (
+              <p className="flex gap-2 rounded-lg border border-border bg-accent/40 px-3 py-2.5 text-sm text-muted-foreground">
+                <Camera className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                A project this size we can quote from photos, so there&apos;s no visit to wait for. Next you&apos;ll tap the areas on a
+                map of your property and add a few photos of each.
+              </p>
+            )}
+          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(0)}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(0)} disabled={isPending}>
               Back
             </Button>
             <Button
               type="button"
               className="flex-1"
+              disabled={isPending}
               onClick={() => {
                 const problem = preview ? null : detailsProblem();
                 if (problem) return setError(problem);
                 setError(null);
+                if (photoQuote) return handleSubmit();
                 setStep(2);
               }}
             >
-              See open times
+              {isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> One moment…
+                </>
+              ) : photoQuote ? (
+                "Continue to photos"
+              ) : (
+                "See open times"
+              )}
             </Button>
           </div>
           <p className="text-center text-xs text-muted-foreground">We won&apos;t pass your details to anyone.</p>

@@ -35,4 +35,10 @@ export type BookingOptions =
       proof: BookingProof;
       /** The work the person asked about, when the link says. */
       service: string | null;
+      /**
+       * The photo-quote line in dollars, when the business quotes small jobs
+       * from photos; null when it doesn't. Only so the page knows whether to
+       * offer the times: the server decides again when it books.
+       */
+      photoQuoteLine: number | null;
     };

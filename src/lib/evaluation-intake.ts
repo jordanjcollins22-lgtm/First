@@ -38,14 +38,14 @@ export interface IntakeOption {
 export type IntakeSection = "work" | "style" | "decide" | "ask";
 
 export interface IntakeQuestion {
-  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
+  key: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people" | "spots">;
   section: IntakeSection;
   title: string;
   help?: string;
   kind: IntakeKind;
   options?: IntakeOption[];
   /** For a chip question, the free-text field that goes with it. */
-  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people">;
+  notesKey?: Exclude<keyof IntakeAnswers, "details" | "photos" | "photo_areas" | "people" | "spots">;
   /**
    * When the notes box shows: once any chip is picked, or once one of these
    * is. Always, when not given. A box nobody needs is one more thing to skip.
@@ -77,7 +77,34 @@ export interface IntakeAnswers {
   photo_areas: Record<string, string>;
   /** Everybody else in the decision, with how to reach them. */
   people: IntakePerson[];
+  /** A photo quote's areas, each a pin on their lot. Empty on a booked visit's form. */
+  spots: PhotoQuoteSpot[];
 }
+
+/**
+ * One area of a photo quote: a place they tapped on their lot, what they
+ * want done there, and its photos (photo_areas names the spot's id).
+ */
+export interface PhotoQuoteSpot {
+  /** "spot-1", "spot-2" and so on, in the order they were dropped. */
+  id: string;
+  lng: number;
+  lat: number;
+  /** "What do you want done here?", in their words. */
+  wants: string;
+  /** Any of the services question's values they ticked for it. */
+  services: string[];
+  /** They can't take photos: we look at it from the satellite instead. */
+  noPhotos: boolean;
+  /** Suggestions read off its photos, and whether they'd be interested in each. */
+  ideas: { text: string; interested: boolean }[];
+}
+
+/** Most areas one photo quote takes: each gets up to PHOTOS_PER_AREA photos. */
+export const MAX_SPOTS = 6;
+
+/** A spot's id, as photo_areas names it. */
+export const SPOT_ID = /^spot-[1-9][0-9]?$/;
 
 /** Somebody else in the decision: a spouse, a parent, the HOA. */
 export interface IntakePerson {
@@ -760,6 +787,7 @@ export function emptyAnswers(): IntakeAnswers {
     photos: [],
     photo_areas: {},
     people: [],
+    spots: [],
   };
 }
 
@@ -830,9 +858,70 @@ export function cleanAnswers(input: unknown): IntakeAnswers {
   const known = new Set(PHOTO_AREAS.map((a) => a.value));
   for (const path of out.photos) {
     const area = areaOf[path];
-    if (typeof area === "string" && known.has(area)) out.photo_areas[path] = area;
+    // A photo quote's photo is of one of its spots, kept by the spot's id
+    // even before the spot itself is saved: on a slow phone the photo can land first.
+    if (typeof area === "string" && (known.has(area) || SPOT_ID.test(area))) out.photo_areas[path] = area;
+  }
+  out.spots = cleanSpots(raw.spots);
+  return out;
+}
+
+/** A photo quote's areas, made safe: real places, our services, short words. */
+export function cleanSpots(input: unknown): PhotoQuoteSpot[] {
+  if (!Array.isArray(input)) return [];
+  const services = new Set((INTAKE_QUESTIONS[0].options ?? []).map((o) => o.value));
+  const seen = new Set<string>();
+  const out: PhotoQuoteSpot[] = [];
+  for (const item of input) {
+    const o = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const id = typeof o.id === "string" && SPOT_ID.test(o.id) ? o.id : null;
+    const lng = typeof o.lng === "number" ? o.lng : NaN;
+    const lat = typeof o.lat === "number" ? o.lat : NaN;
+    if (!id || seen.has(id) || !Number.isFinite(lng) || !Number.isFinite(lat) || Math.abs(lng) > 180 || Math.abs(lat) > 90) continue;
+    seen.add(id);
+    const ideas = Array.isArray(o.ideas)
+      ? o.ideas
+          .map((i) => {
+            const idea = (i && typeof i === "object" ? i : {}) as Record<string, unknown>;
+            return { text: text(idea.text).slice(0, 140), interested: idea.interested === true };
+          })
+          .filter((i) => i.text)
+          .slice(0, 4)
+      : [];
+    out.push({
+      id,
+      lng,
+      lat,
+      wants: text(o.wants).slice(0, 600),
+      services: Array.isArray(o.services) ? [...new Set(o.services.filter((v): v is string => typeof v === "string" && services.has(v)))] : [],
+      noPhotos: o.noPhotos === true,
+      ideas,
+    });
+    if (out.length >= MAX_SPOTS) break;
   }
   return out;
+}
+
+/**
+ * The spots as the phone sent them, with the suggestions as the server wrote
+ * them. The client says where, what, and which suggestions interest them;
+ * the wording of a suggestion is only ever ours, so a page tampered with
+ * can't put words in it that the office would read as the AI's.
+ */
+export function mergeSpots(stored: PhotoQuoteSpot[], sent: PhotoQuoteSpot[]): PhotoQuoteSpot[] {
+  const byId = new Map(stored.map((s) => [s.id, s]));
+  return sent.map((spot) => {
+    const ticked = new Set(spot.ideas.filter((i) => i.interested).map((i) => i.text));
+    return { ...spot, ideas: (byId.get(spot.id)?.ideas ?? []).map((i) => ({ text: i.text, interested: ticked.has(i.text) })) };
+  });
+}
+
+/** The next free spot id, or null once there are as many as a form takes. */
+export function nextSpotId(spots: Pick<PhotoQuoteSpot, "id">[]): string | null {
+  if (spots.length >= MAX_SPOTS) return null;
+  const used = new Set(spots.map((s) => s.id));
+  for (let n = 1; n < 100; n++) if (!used.has(`spot-${n}`)) return `spot-${n}`;
+  return null;
 }
 
 function text(value: unknown): string {

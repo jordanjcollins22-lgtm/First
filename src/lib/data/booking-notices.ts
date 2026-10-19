@@ -125,3 +125,65 @@ export async function sendEvaluationConfirmationNow(jobId: string): Promise<void
     log.warn("booking.confirmation.failed", { jobId, error: err instanceof Error ? err.message : String(err) });
   }
 }
+
+/**
+ * The photo-quote form's link, by email, the moment it is made.
+ *
+ * The client goes straight to the form from the booking page, but photos
+ * are best taken standing in the yard, which is often later and on another
+ * screen. So the link goes to their inbox too. It answers what they just
+ * did, so quiet hours don't hold it. Never throws, never fails the booking.
+ */
+export async function sendPhotoQuoteLinkNow(jobId: string, token: string): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("jobs")
+      .select("id, property:properties(customer:customers(id, organization_id, organization:organizations(name, business_phone)))")
+      .eq("id", jobId)
+      .maybeSingle();
+    const customer = (data as unknown as {
+      property: { customer: { id: string; organization_id: string; organization: { name: string; business_phone: string | null } | null } | null } | null;
+    } | null)?.property?.customer;
+    if (!customer) return;
+    const contact = (await contactsFor([customer.id])).get(customer.id);
+    if (!contact?.email) return;
+    const business = customer.organization?.name || "us";
+    const phone = customer.organization?.business_phone;
+    const first = (contact.name ?? "").trim().split(/\s+/)[0];
+    const link = `${await outboundBaseUrl()}/prep/${token}`;
+    const outcome = await sendClientMessage(
+      {
+        organizationId: customer.organization_id,
+        customerId: customer.id,
+        channel: "email",
+        basis: "service",
+        kind: "photo_quote_link",
+        referenceId: jobId,
+        dedupeKey: `photo_quote_link:${jobId}:email`,
+        subject: `Your photo quote with ${business}`,
+        body: [
+          `Hi ${first || "there"},`,
+          "",
+          "Thanks for reaching out. Your project is a good size to quote from photos, so there's no visit to wait for.",
+          "",
+          "Tap the areas you want work in on the map of your property, tell us what you'd like done in each, and add a few photos:",
+          "",
+          link,
+          "",
+          "It works best on good Wi-Fi or a strong signal, since photos are large. If you can't take photos, say so on the form and we'll use the satellite view.",
+          "",
+          `We'll send your quote once we've looked, or let you know if it needs a quick visit.${phone ? ` Questions? Call or text ${phone}.` : ""}`,
+          "",
+          business,
+        ].join("\n"),
+        automatic: true,
+      },
+      contact,
+      { startHour: 0, endHour: 24, timeZone: "UTC" }
+    );
+    log.info("booking.photo_quote_link", { jobId, sent: outcome.sent, reason: outcome.sent ? null : outcome.reason });
+  } catch (err) {
+    log.warn("booking.photo_quote_link.failed", { jobId, error: err instanceof Error ? err.message : String(err) });
+  }
+}

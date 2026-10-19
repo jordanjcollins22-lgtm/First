@@ -149,6 +149,10 @@ export function BookingForm() {
       referralCode={rec}
       proof={options.proof}
       service={options.service}
+      // ?visit=1 is the link the office sends when a photo quote needs a
+      // visit after all: the times, whatever the budget.
+      photoQuoteLine={options.photoQuoteLine}
+      wantsVisit={searchParams.get("visit") === "1"}
       start={readStartAddress(searchParams)}
       // ?preview=1 is the owner looking at it from the website studio: the
       // arrows to step through it, no visit counted and nothing booked.
