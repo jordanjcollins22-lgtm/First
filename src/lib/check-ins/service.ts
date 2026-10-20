@@ -28,7 +28,7 @@ export async function ensureGhlContactId(supabase: Db, member: TeamMember): Prom
   return contactId;
 }
 
-async function sendTextToMember(
+export async function sendTextToMember(
   supabase: Db,
   member: TeamMember,
   body: string,

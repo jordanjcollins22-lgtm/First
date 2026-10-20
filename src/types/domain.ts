@@ -202,3 +202,66 @@ export interface CheckIn {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================================
+// Team store (custom merch made and shipped by an outside vendor)
+// ============================================================
+
+export type BarcodeFormat = "code128" | "qrcode" | "upca" | "ean13";
+
+export interface MerchProduct {
+  id: string;
+  name: string;
+  description: string | null;
+  /** SVG with a rect id="barcode-slot" and optional {{tokens}}. */
+  design_svg: string;
+  barcode_format: BarcodeFormat;
+  price_cents: number;
+  /** Who actually makes and ships it, e.g. "Sticker Mule". */
+  vendor_name: string | null;
+  vendor_sku: string | null;
+  /** Size, material, finish: whatever the vendor needs to know. */
+  print_specs: string | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type MerchOrderStatus =
+  | "requested"
+  | "approved"
+  | "sent_to_vendor"
+  | "shipped"
+  | "delivered"
+  | "cancelled";
+
+export type MerchPaymentStatus = "unpaid" | "paid" | "payroll_deduction" | "company_paid";
+
+export interface MerchShipTo {
+  name: string;
+  address1: string;
+  address2?: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
+export interface MerchOrder {
+  id: string;
+  product_id: string;
+  team_member_id: string;
+  quantity: number;
+  barcode_value: string;
+  field_values: Record<string, string>;
+  /** Snapshot of the print file at order time, so later design edits don't change it. */
+  print_svg: string;
+  ship_to: MerchShipTo;
+  unit_price_cents: number;
+  status: MerchOrderStatus;
+  payment_status: MerchPaymentStatus;
+  vendor_order_ref: string | null;
+  tracking_number: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}

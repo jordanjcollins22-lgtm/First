@@ -89,6 +89,41 @@ Scheduled text check-ins with crew members so delays surface early.
    endpoint instead, for example Supabase `pg_cron` + `pg_net` or
    cron-job.org. Send the header `Authorization: Bearer <CRON_SECRET>`.
 
+## Team store (custom merch with swappable barcodes)
+
+Team members order custom items, like a magnet with their own barcode. We
+don't make anything. We own the design, the app builds a print-ready file per
+order, and an outside print vendor makes it and ships it to the address on the order.
+
+**How it works**
+
+1. **Design once** (**/admin/store**). Export your design from any editor as an
+   SVG at its real print size (for example `width="3.5in" height="2in"`).
+   - Put a rectangle with `id="barcode-slot"` where the barcode goes. Each
+     order swaps that rectangle for the person's barcode, scaled to fit.
+   - Any text like `{{name}}` or `{{title}}` becomes a field on the order
+     form.
+   - Pick the barcode type (Code 128, QR, UPC-A or EAN-13) and add the
+     vendor, SKU, price and print specs.
+2. **Order** (**/store**). Pick the item, choose the team member, type the
+   barcode value and any fields, and enter the ship-to address. A live
+   preview shows the exact file that will print. Bad barcodes (for example
+   letters in a UPC) are caught here.
+3. **Fulfill** (**/store/orders**). Approve the order. Then download the
+   **print file** and copy the vendor details (item, SKU, specs, quantity,
+   ship-to). Place the order on the vendor's site or by email. Mark it sent
+   with the vendor's order number, then shipped with the tracking number. If
+   GoHighLevel is connected, the team member gets a text when it ships.
+   Payment is tracked per order: unpaid, paid, payroll deduction or company
+   paid.
+
+The print file is frozen when the order is placed, so editing a design later
+never changes an order that's already in progress. Barcodes are drawn as
+vector shapes, so the vendor doesn't need any fonts.
+
+**Setup**: run `supabase/migrations/0004_team_store.sql`, then optionally
+`supabase/seed/0002_merch_products.sql` for a starter barcode magnet.
+
 ## Architecture notes
 
 - **Single source of truth for measurements**: `src/lib/measurement.ts` is

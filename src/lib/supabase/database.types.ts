@@ -355,6 +355,71 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sms_messages"]["Row"]>;
         Relationships: [];
       };
+      merch_products: {
+        Row: {
+          id: string;
+          name: string;
+          description: string | null;
+          design_svg: string;
+          barcode_format: string;
+          price_cents: number;
+          vendor_name: string | null;
+          vendor_sku: string | null;
+          print_specs: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["merch_products"]["Row"]> & {
+          name: string;
+          design_svg: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["merch_products"]["Row"]>;
+        Relationships: [];
+      };
+      merch_orders: {
+        Row: {
+          id: string;
+          product_id: string;
+          team_member_id: string;
+          quantity: number;
+          barcode_value: string;
+          field_values: Json;
+          print_svg: string;
+          ship_to: Json;
+          unit_price_cents: number;
+          status: string;
+          payment_status: string;
+          vendor_order_ref: string | null;
+          tracking_number: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["merch_orders"]["Row"]> & {
+          product_id: string;
+          team_member_id: string;
+          barcode_value: string;
+          print_svg: string;
+          ship_to: Json;
+          unit_price_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["merch_orders"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "merch_orders_product_id_fkey";
+            columns: ["product_id"];
+            referencedRelation: "merch_products";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "merch_orders_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
