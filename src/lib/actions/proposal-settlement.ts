@@ -6,6 +6,8 @@ import { isStripeConfigured } from "@/lib/env";
 import { stripeClient } from "@/lib/stripe-customer";
 import { settlementFor } from "@/lib/flyer-settlement";
 import { revalidateJobViews } from "@/lib/revalidate-job";
+import { randomBytes } from "node:crypto";
+import { tipFromMetadata } from "@/lib/proposal-tip";
 
 /**
  * Find out whether a client's proposal payment went through, by asking.
@@ -40,9 +42,11 @@ export async function settleProposalPayment(token: string): Promise<void> {
     const reference = proposal.checkout_session_id;
     const stripe = stripeClient();
 
+    let tipCents = 0;
     const verdict = reference.startsWith("pi_")
       ? await (async () => {
           const intent = await stripe.paymentIntents.retrieve(reference);
+          tipCents = tipFromMetadata(intent.metadata);
           return settlementFor({
             // An intent says "succeeded" where a session says "paid", so it
             // is mapped rather than passed through and quietly never matching.
@@ -66,6 +70,7 @@ export async function settleProposalPayment(token: string): Promise<void> {
         .is("paid_at", null);
       // Salting on it goes on the salt route, so the salt is bought ahead.
       await saltOrdersForPaidProposal(admin, proposal.id);
+      if (tipCents > 0) await recordTip(admin, proposal.job_id, tipCents).catch(() => {});
       revalidateJobViews(proposal.job_id);
       return;
     }
@@ -105,4 +110,32 @@ export async function settleProposalForJob(jobId: string): Promise<void> {
   } catch {
     // Silent, like the rest of this.
   }
+}
+
+/**
+ * A tip paid with the bill, on the job's tip row: the same row a thank-you
+ * link would have used, so a job has one tip whichever way it came.
+ */
+async function recordTip(admin: ReturnType<typeof createAdminClient>, jobId: string, tipCents: number): Promise<void> {
+  const paidAt = new Date().toISOString();
+  const { data: existing } = await admin.from("job_tips").select("id, status").eq("job_id", jobId).maybeSingle();
+  if (existing) {
+    if (existing.status === "paid") return;
+    await admin.from("job_tips").update({ status: "paid", amount_cents: tipCents, paid_at: paidAt }).eq("id", existing.id);
+    return;
+  }
+  const [{ data: proposal }, { data: job }] = await Promise.all([
+    admin.from("job_proposals").select("organization_id, total_cost").eq("job_id", jobId).maybeSingle(),
+    admin.from("jobs").select("id").eq("id", jobId).maybeSingle(),
+  ]);
+  if (!proposal || !job) return;
+  await admin.from("job_tips").insert({
+    organization_id: proposal.organization_id,
+    job_id: jobId,
+    token: randomBytes(16).toString("base64url"),
+    status: "paid",
+    amount_cents: tipCents,
+    job_total_cents: proposal.total_cost != null ? Math.round(Number(proposal.total_cost) * 100) : null,
+    paid_at: paidAt,
+  });
 }

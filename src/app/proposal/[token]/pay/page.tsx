@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+
 import { env, isStripeConfigured, isStripeInPageReady, isSupabaseConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
@@ -78,6 +80,7 @@ export default async function ProposalPayPage({
       // offers the wallets, just on Stripe's page instead of ours.
       publishableKey={isStripeInPageReady ? env.stripePublishableKey : ""}
       returnUrl={returnUrl}
+      tipsEnabled={await tipsOn(proposal.organization_id)}
       organizationName={data.organizationName}
       context={{
         discountCents,
@@ -85,4 +88,15 @@ export default async function ProposalPayPage({
       }}
     />
   );
+}
+
+/** Whether the business takes tips. Off rather than an error if it cannot be read. */
+async function tipsOn(organizationId: string | null | undefined): Promise<boolean> {
+  if (!organizationId) return false;
+  try {
+    const { data } = await createAdminClient().from("organizations").select("tips_enabled").eq("id", organizationId).maybeSingle();
+    return data?.tips_enabled !== false;
+  } catch {
+    return false;
+  }
 }

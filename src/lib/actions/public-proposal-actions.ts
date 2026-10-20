@@ -8,6 +8,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice, freshInvoiceLink, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
+import { allowedTip } from "@/lib/proposal-tip";
 import { isExpired } from "@/lib/proposal-validity";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
@@ -966,7 +967,9 @@ export async function startProposalPayment(input: {
   pathId: string;
   instalments?: number;
   preview?: boolean;
-}): Promise<PublicResult<{ clientSecret: string; amountCents: number }>> {
+  /** A tip chosen on the pay page, in cents, charged on the same payment. */
+  tipCents?: number;
+}): Promise<PublicResult<{ clientSecret: string; amountCents: number; tipCents: number }>> {
   try {
     if (input.preview) return previewResult();
     if (!isStripeConfigured) {
@@ -1022,8 +1025,12 @@ export async function startProposalPayment(input: {
     const contact = await getJobCustomerContact(proposal.job_id);
     const existing = contact?.customerId ? await stripeCustomerFor(contact.customerId) : null;
 
+    // The tip rides on the same payment and is named in its metadata, so it
+    // is recorded as a tip on settling and never counted as the job's price.
+    const tipCents = allowedTip(input.tipCents, amountCents);
+
     const intent = await stripeClient().paymentIntents.create({
-      amount: amountCents,
+      amount: amountCents + tipCents,
       currency: "usd",
       // Lets Stripe offer the wallets and Link the browser can actually use,
       // rather than us guessing which and hiding the rest.
@@ -1034,6 +1041,7 @@ export async function startProposalPayment(input: {
         proposal_id: proposal.id,
         organization_id: proposal.organization_id,
         job_id: proposal.job_id,
+        ...(tipCents > 0 ? { tip_cents: String(tipCents) } : {}),
       },
     });
 
@@ -1046,7 +1054,7 @@ export async function startProposalPayment(input: {
       .update({ checkout_session_id: intent.id })
       .eq("id", proposal.id);
 
-    return { ok: true, clientSecret: intent.client_secret, amountCents };
+    return { ok: true, clientSecret: intent.client_secret, amountCents: amountCents + tipCents, tipCents };
   } catch (err) {
     return { ok: false, message: describe(err) };
   }
