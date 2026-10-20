@@ -508,6 +508,8 @@ export async function choosePaymentPath(input: {
   instalments?: number;
   /** Set by the internal preview, which reads the client's real proposal. */
   preview?: boolean;
+  /** A tip chosen on the pay page, in cents, as its own line on the checkout. */
+  tipCents?: number;
 }): Promise<PublicResult<{ message: string; checkoutUrl?: string; next?: string }>> {
   try {
     if (input.preview) return previewResult();
@@ -592,7 +594,14 @@ export async function choosePaymentPath(input: {
     // Paying in full pays the invoice that already exists. Its hosted page
     // takes a card or Apple Pay just as checkout would, and a second
     // charge alongside an open invoice is how a client pays twice.
-    if (option.id === "full") {
+    const tipCents = allowedTip(input.tipCents, dueNowCents);
+    // A tip cannot go on an invoice's own page, so with one chosen the open
+    // invoice is voided and the checkout takes the balance and the tip
+    // together. Without one, paying in full pays the invoice as before.
+    if (option.id === "full" && tipCents > 0) {
+      await voidOpenInvoice(proposal.job_id).catch((err) => console.error("could not void the invoice for a tipped checkout:", err));
+    }
+    if (option.id === "full" && tipCents === 0) {
       let open = await openInvoiceFor(proposal.job_id).catch(() => null);
       // An invoice for a price the proposal no longer says (a discount taken
       // off after it went) is voided and raised again at what is owed now.
@@ -618,6 +627,7 @@ export async function choosePaymentPath(input: {
         description,
         planId,
         instalmentId,
+        tipCents,
       });
       if (started) {
         checkoutUrl = started.url;

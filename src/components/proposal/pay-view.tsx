@@ -54,7 +54,7 @@ export function PayView({
   /** Empty when we cannot take a card on this page and must redirect. */
   publishableKey: string;
   returnUrl: string;
-  /** Offer a tip with the payment. Only where the card form is on this page. */
+  /** Offer a tip with the payment, on the card form here or on Stripe's checkout. */
   tipsEnabled?: boolean;
   /** Already paid towards this job; the amounts below are what is left. */
   paidCents?: number;
@@ -72,7 +72,7 @@ export function PayView({
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
   // The tip, chosen before the card form opens, so the amount on the form
   // is the whole of what they are paying.
-  const offersTip = tipsEnabled && canCharge && Boolean(publishableKey);
+  const offersTip = tipsEnabled && canCharge;
   const [tipCents, setTipCents] = useState(0);
   const [tipOther, setTipOther] = useState<string | null>(null);
 
@@ -130,6 +130,7 @@ export function PayView({
         // One. Splitting is arranged by the office against an invoice now,
         // not chosen by a client on the proposal page.
         instalments: 1,
+        tipCents: offersTip ? tipCents : 0,
       });
       if (!result.ok) {
         setBusyId(null);

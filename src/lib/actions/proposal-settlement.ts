@@ -6,8 +6,8 @@ import { isStripeConfigured } from "@/lib/env";
 import { stripeClient } from "@/lib/stripe-customer";
 import { settlementFor } from "@/lib/flyer-settlement";
 import { revalidateJobViews } from "@/lib/revalidate-job";
-import { randomBytes } from "node:crypto";
 import { tipFromMetadata } from "@/lib/proposal-tip";
+import { recordTipWithPayment } from "@/lib/data/record-tip";
 
 /**
  * Find out whether a client's proposal payment went through, by asking.
@@ -70,7 +70,7 @@ export async function settleProposalPayment(token: string): Promise<void> {
         .is("paid_at", null);
       // Salting on it goes on the salt route, so the salt is bought ahead.
       await saltOrdersForPaidProposal(admin, proposal.id);
-      if (tipCents > 0) await recordTip(admin, proposal.job_id, tipCents).catch(() => {});
+      if (tipCents > 0) await recordTipWithPayment(admin, proposal.job_id, tipCents).catch(() => {});
       revalidateJobViews(proposal.job_id);
       return;
     }
@@ -110,32 +110,4 @@ export async function settleProposalForJob(jobId: string): Promise<void> {
   } catch {
     // Silent, like the rest of this.
   }
-}
-
-/**
- * A tip paid with the bill, on the job's tip row: the same row a thank-you
- * link would have used, so a job has one tip whichever way it came.
- */
-async function recordTip(admin: ReturnType<typeof createAdminClient>, jobId: string, tipCents: number): Promise<void> {
-  const paidAt = new Date().toISOString();
-  const { data: existing } = await admin.from("job_tips").select("id, status").eq("job_id", jobId).maybeSingle();
-  if (existing) {
-    if (existing.status === "paid") return;
-    await admin.from("job_tips").update({ status: "paid", amount_cents: tipCents, paid_at: paidAt }).eq("id", existing.id);
-    return;
-  }
-  const [{ data: proposal }, { data: job }] = await Promise.all([
-    admin.from("job_proposals").select("organization_id, total_cost").eq("job_id", jobId).maybeSingle(),
-    admin.from("jobs").select("id").eq("id", jobId).maybeSingle(),
-  ]);
-  if (!proposal || !job) return;
-  await admin.from("job_tips").insert({
-    organization_id: proposal.organization_id,
-    job_id: jobId,
-    token: randomBytes(16).toString("base64url"),
-    status: "paid",
-    amount_cents: tipCents,
-    job_total_cents: proposal.total_cost != null ? Math.round(Number(proposal.total_cost) * 100) : null,
-    paid_at: paidAt,
-  });
 }
