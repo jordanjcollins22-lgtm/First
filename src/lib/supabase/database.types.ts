@@ -242,6 +242,7 @@ export interface Database {
           is_manager: boolean;
           active: boolean;
           ghl_contact_id: string | null;
+          affiliate_code: string;
           created_at: string;
           updated_at: string;
         };
@@ -362,6 +363,7 @@ export interface Database {
           description: string | null;
           design_svg: string;
           barcode_format: string;
+          barcode_source: string;
           price_cents: number;
           vendor_name: string | null;
           vendor_sku: string | null;
@@ -414,6 +416,27 @@ export interface Database {
           },
           {
             foreignKeyName: "merch_orders_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      affiliate_scans: {
+        Row: {
+          id: string;
+          team_member_id: string | null;
+          affiliate_code: string;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["affiliate_scans"]["Row"]> & {
+          affiliate_code: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["affiliate_scans"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_scans_team_member_id_fkey";
             columns: ["team_member_id"];
             referencedRelation: "team_members";
             referencedColumns: ["id"];

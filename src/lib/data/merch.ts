@@ -36,11 +36,13 @@ export async function listMerchOrders(limit = 200): Promise<MerchOrderWithRelati
   return (data ?? []) as unknown as MerchOrderWithRelations[];
 }
 
-export async function listActiveTeamMemberOptions(): Promise<Pick<TeamMember, "id" | "name">[]> {
+export async function listActiveTeamMemberOptions(): Promise<
+  Pick<TeamMember, "id" | "name" | "affiliate_code">[]
+> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("team_members")
-    .select("id, name")
+    .select("id, name, affiliate_code")
     .eq("active", true)
     .order("name");
   if (error) throw error;

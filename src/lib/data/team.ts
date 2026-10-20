@@ -2,7 +2,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { CheckIn, CheckInSchedule, TeamMember } from "@/types/domain";
 
 export type ScheduleWithJob = CheckInSchedule & { job: { id: string; name: string } | null };
-export type TeamMemberWithSchedules = TeamMember & { schedules: ScheduleWithJob[] };
+export type TeamMemberWithSchedules = TeamMember & {
+  schedules: ScheduleWithJob[];
+  /** All-time scans of their affiliate QR code. */
+  scan_count: number;
+};
 export type CheckInWithRelations = CheckIn & {
   team_member: Pick<TeamMember, "id" | "name"> | null;
   job: { id: string; name: string } | null;
@@ -12,12 +16,15 @@ export async function listTeamMembers(): Promise<TeamMemberWithSchedules[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("team_members")
-    .select("*, schedules:check_in_schedules(*, job:jobs(id, name))")
+    .select("*, schedules:check_in_schedules(*, job:jobs(id, name)), scans:affiliate_scans(count)")
     .eq("active", true)
     .order("name");
 
   if (error) throw error;
-  return (data ?? []) as unknown as TeamMemberWithSchedules[];
+  return (data ?? []).map((row) => {
+    const { scans, ...member } = row as unknown as TeamMemberWithSchedules & { scans: { count: number }[] };
+    return { ...member, scan_count: scans[0]?.count ?? 0 };
+  });
 }
 
 export async function listOpenJobs(): Promise<{ id: string; name: string }[]> {

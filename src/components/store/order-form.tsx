@@ -12,7 +12,7 @@ import { createMerchOrder } from "@/lib/actions/merch-actions";
 import { BARCODE_FORMATS } from "@/lib/merch/formats";
 import { formatCents } from "@/lib/merch/format";
 import type { TemplateField } from "@/lib/merch/template";
-import type { BarcodeFormat } from "@/types/domain";
+import type { BarcodeFormat, BarcodeSource } from "@/types/domain";
 
 import { DesignPreview } from "./design-preview";
 import { useDesignPreview } from "./use-design-preview";
@@ -23,11 +23,18 @@ export function OrderForm({
   teamMembers,
   initialPreviewSvg,
 }: {
-  product: { id: string; name: string; price_cents: number; barcode_format: BarcodeFormat };
+  product: {
+    id: string;
+    name: string;
+    price_cents: number;
+    barcode_format: BarcodeFormat;
+    barcode_source: BarcodeSource;
+  };
   fields: TemplateField[];
-  teamMembers: { id: string; name: string }[];
+  teamMembers: { id: string; name: string; affiliate_code: string }[];
   initialPreviewSvg: string;
 }) {
+  const [teamMemberId, setTeamMemberId] = useState("");
   const [barcodeValue, setBarcodeValue] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
@@ -35,11 +42,15 @@ export function OrderForm({
   const [placed, setPlaced] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const isAffiliate = product.barcode_source === "affiliate";
+  // Affiliate barcodes come from whoever is picked; custom ones from what's typed.
+  const personalized = isAffiliate ? Boolean(teamMemberId) : Boolean(barcodeValue);
   const preview = useDesignPreview(
-    barcodeValue ? { productId: product.id, barcodeValue, values } : null,
+    personalized ? { productId: product.id, barcodeValue, teamMemberId, values } : null,
     initialPreviewSvg
   );
   const format = BARCODE_FORMATS.find((f) => f.value === product.barcode_format);
+  const member = teamMembers.find((m) => m.id === teamMemberId);
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
@@ -73,11 +84,15 @@ export function OrderForm({
     <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
       <div className="flex flex-col gap-2 md:order-2">
         {preview.svg && <DesignPreview svg={preview.svg} alt={`${product.name} preview`} />}
-        {barcodeValue && preview.error ? (
+        {personalized && preview.error ? (
           <p className="text-sm text-destructive">{preview.error}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {barcodeValue ? "This is the exact file the vendor will print." : "Sample shown. Type your barcode to see yours."}
+            {personalized
+              ? "This is the exact file the vendor will print."
+              : isAffiliate
+                ? "Sample shown. Pick who it's for to see their QR code."
+                : "Sample shown. Type your barcode to see yours."}
           </p>
         )}
       </div>
@@ -87,7 +102,14 @@ export function OrderForm({
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="team_member_id">Who is this for?</Label>
-          <select id="team_member_id" name="team_member_id" required className={SELECT_CLASS} defaultValue="">
+          <select
+            id="team_member_id"
+            name="team_member_id"
+            required
+            className={SELECT_CLASS}
+            value={teamMemberId}
+            onChange={(e) => setTeamMemberId(e.target.value)}
+          >
             <option value="" disabled>
               Pick a team member
             </option>
@@ -99,17 +121,25 @@ export function OrderForm({
           </select>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="barcode_value">Barcode ({format?.label})</Label>
-          <Input
-            id="barcode_value"
-            name="barcode_value"
-            required
-            value={barcodeValue}
-            onChange={(e) => setBarcodeValue(e.target.value)}
-            placeholder={format?.hint}
-          />
-        </div>
+        {isAffiliate ? (
+          <p className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+            {member
+              ? `The QR code is ${member.name}'s affiliate link (code ${member.affiliate_code}). Every scan is credited to them.`
+              : "The QR code will be the affiliate link of whoever you pick, so every scan is credited to them."}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="barcode_value">Barcode ({format?.label})</Label>
+            <Input
+              id="barcode_value"
+              name="barcode_value"
+              required
+              value={barcodeValue}
+              onChange={(e) => setBarcodeValue(e.target.value)}
+              placeholder={format?.hint}
+            />
+          </div>
+        )}
 
         {fields.map((field) => (
           <div key={field.key} className="flex flex-col gap-1.5">

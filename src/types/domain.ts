@@ -159,6 +159,8 @@ export interface TeamMember {
   is_manager: boolean;
   active: boolean;
   ghl_contact_id: string | null;
+  /** Permanent referral code printed on their affiliate merch, e.g. "K7QM2P". */
+  affiliate_code: string;
   created_at: string;
   updated_at: string;
 }
@@ -209,6 +211,9 @@ export interface CheckIn {
 
 export type BarcodeFormat = "code128" | "qrcode" | "upca" | "ean13";
 
+/** affiliate: the buyer's referral link as a QR code. custom: typed in at order time. */
+export type BarcodeSource = "affiliate" | "custom";
+
 export interface MerchProduct {
   id: string;
   name: string;
@@ -216,6 +221,7 @@ export interface MerchProduct {
   /** SVG with a rect id="barcode-slot" and optional {{tokens}}. */
   design_svg: string;
   barcode_format: BarcodeFormat;
+  barcode_source: BarcodeSource;
   price_cents: number;
   /** Who actually makes and ships it, e.g. "Sticker Mule". */
   vendor_name: string | null;

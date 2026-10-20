@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 
 import { sendTextToMember } from "@/lib/check-ins/service";
-import { isGhlConfigured } from "@/lib/env";
+import { isGhlConfigured, serverEnv } from "@/lib/env";
+import { affiliateLink, SAMPLE_AFFILIATE_CODE } from "@/lib/merch/affiliate";
 import { renderBarcode } from "@/lib/merch/barcode";
 import { BARCODE_FORMATS } from "@/lib/merch/formats";
 import { nextStatus, PAYMENT_OPTIONS } from "@/lib/merch/format";
@@ -11,6 +13,7 @@ import { renderDesign, templateFields, validateTemplate } from "@/lib/merch/temp
 import { createClient } from "@/lib/supabase/server";
 import type {
   BarcodeFormat,
+  BarcodeSource,
   MerchOrderStatus,
   MerchPaymentStatus,
   MerchProduct,
@@ -30,6 +33,26 @@ function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+/** APP_URL, or the current host if it isn't set (fine for testing, not for printing). */
+async function appOrigin() {
+  if (serverEnv.appUrl) return serverEnv.appUrl;
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+async function affiliateBarcodeValue(teamMemberId: string | undefined): Promise<string | null> {
+  if (!teamMemberId) return affiliateLink(await appOrigin(), SAMPLE_AFFILIATE_CODE);
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("team_members")
+    .select("affiliate_code")
+    .eq("id", teamMemberId)
+    .maybeSingle();
+  return data ? affiliateLink(await appOrigin(), data.affiliate_code) : null;
+}
+
 function buildPrintFile(
   designSvg: string,
   format: BarcodeFormat,
@@ -43,29 +66,45 @@ function buildPrintFile(
   return { svg: renderDesign(designSvg, { barcodeSvg: barcode.svg, values }) };
 }
 
-/** Live preview for the design editor (raw SVG) and the order form (saved product). */
+/**
+ * Live preview for the design editor (raw SVG) and the order form (saved
+ * product). For affiliate items the barcode comes from the team member, not
+ * from `barcodeValue`.
+ */
 export async function previewMerchDesign(input: {
   productId?: string;
   designSvg?: string;
   barcodeFormat?: BarcodeFormat;
-  barcodeValue: string;
+  barcodeSource?: BarcodeSource;
+  barcodeValue?: string;
+  teamMemberId?: string;
   values: Record<string, string>;
 }): Promise<PreviewResult> {
   let design = input.designSvg ?? "";
   let format = input.barcodeFormat ?? "code128";
+  let source = input.barcodeSource ?? "custom";
   if (input.productId) {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("merch_products")
-      .select("design_svg, barcode_format")
+      .select("design_svg, barcode_format, barcode_source")
       .eq("id", input.productId)
       .single();
     if (error) return { error: "That product no longer exists." };
     design = data.design_svg;
     format = data.barcode_format as BarcodeFormat;
+    source = data.barcode_source as BarcodeSource;
   }
   if (design.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (2 MB max)." };
-  return buildPrintFile(design, format, input.barcodeValue, input.values);
+
+  let barcodeValue = input.barcodeValue ?? "";
+  if (source === "affiliate") {
+    const link = await affiliateBarcodeValue(input.teamMemberId);
+    if (!link) return { error: "That team member no longer exists." };
+    barcodeValue = link;
+    format = "qrcode";
+  }
+  return buildPrintFile(design, format, barcodeValue, input.values);
 }
 
 export async function createMerchProduct(formData: FormData): Promise<ActionResult> {
@@ -75,7 +114,9 @@ export async function createMerchProduct(formData: FormData): Promise<ActionResu
   if (designSvg.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (2 MB max)." };
   const problems = validateTemplate(designSvg);
   if (problems.length) return { error: problems.join(" ") };
-  const format = str(formData, "barcode_format") as BarcodeFormat;
+  const source: BarcodeSource = str(formData, "barcode_source") === "affiliate" ? "affiliate" : "custom";
+  // Affiliate links are URLs, which only a QR code holds and phones scan reliably.
+  const format = source === "affiliate" ? "qrcode" : (str(formData, "barcode_format") as BarcodeFormat);
   if (!BARCODE_FORMATS.some((f) => f.value === format)) return { error: "Pick a barcode type." };
   const price = Number.parseFloat(str(formData, "price") || "0");
   if (!Number.isFinite(price) || price < 0) return { error: "Enter a valid price." };
@@ -86,6 +127,7 @@ export async function createMerchProduct(formData: FormData): Promise<ActionResu
     description: str(formData, "description") || null,
     design_svg: designSvg,
     barcode_format: format,
+    barcode_source: source,
     price_cents: Math.round(price * 100),
     vendor_name: str(formData, "vendor_name") || null,
     vendor_sku: str(formData, "vendor_sku") || null,
@@ -127,7 +169,12 @@ export async function createMerchOrder(formData: FormData): Promise<ActionResult
     return { error: "Quantity must be between 1 and 500." };
   }
 
-  const barcodeValue = str(formData, "barcode_value");
+  let barcodeValue = str(formData, "barcode_value");
+  if (product.barcode_source === "affiliate") {
+    const link = await affiliateBarcodeValue(teamMemberId);
+    if (!link) return { error: "That team member no longer exists." };
+    barcodeValue = link;
+  }
   const values: Record<string, string> = {};
   for (const field of templateFields(product.design_svg)) {
     values[field.key] = str(formData, `field_${field.key}`);

@@ -79,12 +79,12 @@ describe("renderBarcode", () => {
   });
 });
 
-describe("seeded magnet design", () => {
-  it("is a valid template with name and title fields", async () => {
+describe("seeded truck magnet design", () => {
+  it("is a valid template with company, services and phone fields", async () => {
     const { readFileSync } = await import("node:fs");
     const seed = readFileSync("supabase/seed/0002_merch_products.sql", "utf8");
     const svg = seed.match(/'(<svg[\s\S]*?<\/svg>)'/)?.[1] ?? "";
     expect(validateTemplate(svg)).toEqual([]);
-    expect(templateFields(svg).map((f) => f.key)).toEqual(["name", "title"]);
+    expect(templateFields(svg).map((f) => f.key)).toEqual(["company", "services", "phone"]);
   });
 });

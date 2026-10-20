@@ -89,26 +89,39 @@ Scheduled text check-ins with crew members so delays surface early.
    endpoint instead, for example Supabase `pg_cron` + `pg_net` or
    cron-job.org. Send the header `Authorization: Bearer <CRON_SECRET>`.
 
-## Team store (custom merch with swappable barcodes)
+## Team store (truck magnets with affiliate QR codes)
 
-Team members order custom items, like a magnet with their own barcode. We
-don't make anything. We own the design, the app builds a print-ready file per
-order, and an outside print vendor makes it and ships it to the address on the order.
+Team members order custom items, mainly a truck door magnet whose QR code is
+their own affiliate link. We don't make anything. We own the design, the app
+builds a print-ready file per order, and an outside print vendor makes it and
+ships it to the address on the order.
+
+**Affiliate codes**
+
+- Every team member gets a permanent 6-character affiliate code (shown on
+  **/team** with their scan count).
+- An affiliate item's QR code holds `APP_URL/r/<code>`. When someone scans
+  it, the app logs the scan against that team member and redirects to
+  `AFFILIATE_LANDING_URL?ref=<code>`. Your quote form or CRM can read `ref`
+  to credit the sale.
+- The QR code points at this app, not straight at the landing page. So you
+  can change the landing page later without reprinting any magnets.
 
 **How it works**
 
 1. **Design once** (**/admin/store**). Export your design from any editor as an
-   SVG at its real print size (for example `width="3.5in" height="2in"`).
-   - Put a rectangle with `id="barcode-slot"` where the barcode goes. Each
-     order swaps that rectangle for the person's barcode, scaled to fit.
-   - Any text like `{{name}}` or `{{title}}` becomes a field on the order
-     form.
-   - Pick the barcode type (Code 128, QR, UPC-A or EAN-13) and add the
-     vendor, SKU, price and print specs.
-2. **Order** (**/store**). Pick the item, choose the team member, type the
-   barcode value and any fields, and enter the ship-to address. A live
-   preview shows the exact file that will print. Bad barcodes (for example
-   letters in a UPC) are caught here.
+   SVG at its real print size (for example `width="24in" height="12in"`).
+   - Put a rectangle with `id="barcode-slot"` where the QR code goes. Each
+     order swaps that rectangle for the buyer's code, scaled to fit.
+   - Any text like `{{company}}` or `{{phone}}` becomes a field on the
+     order form.
+   - Pick the barcode: **Buyer's affiliate QR code** (the default), or
+     **Typed in when ordering** for any other barcode (Code 128, QR, UPC-A or
+     EAN-13). Add the vendor, SKU, price and print specs.
+2. **Order** (**/store**). Pick the item and who it's for, fill in any
+   fields, and enter the ship-to address. For affiliate items the QR code
+   fills itself in from the person picked. A live preview shows the exact
+   file that will print.
 3. **Fulfill** (**/store/orders**). Approve the order. Then download the
    **print file** and copy the vendor details (item, SKU, specs, quantity,
    ship-to). Place the order on the vendor's site or by email. Mark it sent
@@ -121,8 +134,18 @@ The print file is frozen when the order is placed, so editing a design later
 never changes an order that's already in progress. Barcodes are drawn as
 vector shapes, so the vendor doesn't need any fonts.
 
-**Setup**: run `supabase/migrations/0004_team_store.sql`, then optionally
-`supabase/seed/0002_merch_products.sql` for a starter barcode magnet.
+**Setup**
+
+1. Run `supabase/migrations/0004_team_store.sql` and
+   `0005_affiliate_barcodes.sql`. Optionally run
+   `supabase/seed/0002_merch_products.sql` for a starter 24" x 12" truck
+   magnet.
+2. Set `APP_URL` to this app's permanent production address. It's printed
+   into every QR code, so never use a preview URL, and don't change it once
+   magnets are out.
+3. Set `AFFILIATE_LANDING_URL` to the page scans should land on.
+4. Set `SUPABASE_SERVICE_ROLE_KEY` (already needed for check-ins). The
+   public `/r/<code>` route uses it to log scans.
 
 ## Architecture notes
 

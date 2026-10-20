@@ -20,7 +20,8 @@ export default async function StorePage() {
         <div>
           <h1 className="mb-1 text-2xl font-bold">Team Store</h1>
           <p className="text-muted-foreground">
-            Order custom gear with your own barcode. Our print vendor makes it and ships it to you.
+            Order a truck magnet with your own affiliate QR code. Every scan is credited to you. Our print
+            vendor makes it and ships it to you.
           </p>
         </div>
         <div className="flex gap-2">

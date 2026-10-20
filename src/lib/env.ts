@@ -21,6 +21,10 @@ export const serverEnv = {
   ghlWebhookSecret: process.env.GHL_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  /** Permanent public URL of this app. Printed into affiliate QR codes. */
+  appUrl: (process.env.APP_URL ?? "").replace(/\/+$/, ""),
+  /** Where affiliate QR scans end up, e.g. your quote request page. */
+  affiliateLandingUrl: process.env.AFFILIATE_LANDING_URL ?? "",
 };
 
 export function isGhlConfigured() {

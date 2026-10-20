@@ -61,6 +61,9 @@ export function TeamMemberCard({
             <div className="mt-2 flex flex-wrap gap-1.5">
               {member.role && <Badge variant="outline">{member.role}</Badge>}
               {member.is_manager && <Badge>Manager</Badge>}
+              <Badge variant="outline" title="Printed in the QR code on their affiliate merch">
+                Affiliate {member.affiliate_code} · {member.scan_count} scan{member.scan_count === 1 ? "" : "s"}
+              </Badge>
               <Badge variant={member.ghl_contact_id ? "secondary" : "outline"}>
                 {member.ghl_contact_id ? "Linked in GoHighLevel" : "Not linked to GHL yet"}
               </Badge>
