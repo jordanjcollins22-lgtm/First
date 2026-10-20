@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice, freshInvoiceLink, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { allowedTip } from "@/lib/proposal-tip";
+import { balanceCents, paidOnJobCents } from "@/lib/data/paid-on-job";
 import { isExpired } from "@/lib/proposal-validity";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
@@ -376,7 +377,8 @@ export async function chooseOfflinePayment(input: {
     if (proposal.payment_path) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
 
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
-    const amountCents = Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents);
+    // What is left after anything already paid, by invoice or a deposit.
+    const amountCents = balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), await paidOnJobCents(admin, proposal.job_id));
     if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
 
     const { data: claimed } = await admin
@@ -532,7 +534,7 @@ export async function choosePaymentPath(input: {
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
     const context = {
       discountCents,
-      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+      totalCents: balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), await paidOnJobCents(admin, proposal.job_id)),
     };
 
     const option = optionById(context, input.pathId);
@@ -987,9 +989,12 @@ export async function startProposalPayment(input: {
     if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
 
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+    // Less whatever has been paid already, so a client who paid half by
+    // invoice is asked for the other half, not the whole again.
+    const paidCents = await paidOnJobCents(admin, proposal.job_id);
     const context = {
       discountCents,
-      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+      totalCents: balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), paidCents),
     };
     const option = optionById(context, input.pathId);
     if (!option) return { ok: false, message: "Pick one of the options." };

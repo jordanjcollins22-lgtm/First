@@ -43,6 +43,7 @@ export function PayView({
   publishableKey,
   returnUrl,
   tipsEnabled = false,
+  paidCents = 0,
 }: {
   token: string;
   context: AcceptanceContext;
@@ -55,6 +56,8 @@ export function PayView({
   returnUrl: string;
   /** Offer a tip with the payment. Only where the card form is on this page. */
   tipsEnabled?: boolean;
+  /** Already paid towards this job; the amounts below are what is left. */
+  paidCents?: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -154,7 +157,9 @@ export function PayView({
             missing. */}
         <h1 className="mt-1 text-2xl font-bold">Last step</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Settle up and pick the day you would like us.
+          {paidCents > 0
+            ? `You've already paid ${money(paidCents)}. Thank you! This is the balance.`
+            : "Settle up and pick the day you would like us."}
         </p>
       </div>
 

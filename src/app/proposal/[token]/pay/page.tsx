@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { balanceCents, paidOnJobCents } from "@/lib/data/paid-on-job";
 
 import { env, isStripeConfigured, isStripeInPageReady, isSupabaseConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
@@ -62,6 +63,8 @@ export default async function ProposalPayPage({
   if (settled.redirectTo === null && !previewing) redirect(schedulePath(token));
 
   const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+  // Paid already, by invoice or a deposit: the page asks for what is left.
+  const paidCents = await paidOnJobCents(createAdminClient(), proposal.job_id).catch(() => 0);
 
   // Where Stripe sends them once the wallet sheet closes. Absolute, because
   // it is a redirect out of somebody else's payment sheet.
@@ -82,9 +85,10 @@ export default async function ProposalPayPage({
       returnUrl={returnUrl}
       tipsEnabled={await tipsOn(proposal.organization_id)}
       organizationName={data.organizationName}
+      paidCents={paidCents}
       context={{
         discountCents,
-        totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+        totalCents: balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), paidCents),
       }}
     />
   );
