@@ -130,3 +130,41 @@ export function renderDesign(
 export function sampleFieldValues(svg: string): Record<string, string> {
   return Object.fromEntries(templateFields(svg).map((f) => [f.key, f.label]));
 }
+
+/**
+ * Wrap a flat image design (PNG/JPG) in an SVG template. A white patch covers
+ * whatever placeholder code is printed in the slot, then the slot rect marks
+ * where the real barcode goes.
+ */
+export function rasterDesignSvg(input: {
+  dataUrl: string;
+  pixelWidth: number;
+  pixelHeight: number;
+  /** Physical print width; height follows the image's aspect ratio. */
+  printWidthIn: number;
+  slot: SlotBox;
+}): string {
+  const { dataUrl, pixelWidth: w, pixelHeight: h, slot } = input;
+  const heightIn = (input.printWidthIn * h) / w;
+  const round = (n: number) => Math.round(n * 100) / 100;
+  // Quiet zone around the code so stray edges of the old one never show.
+  const pad = Math.round(Math.min(slot.width, slot.height) * 0.03);
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${round(input.printWidthIn)}in" height="${round(heightIn)}in" viewBox="0 0 ${w} ${h}">`,
+    `<image href="${dataUrl}" x="0" y="0" width="${w}" height="${h}" preserveAspectRatio="none"/>`,
+    `<rect x="${round(slot.x - pad)}" y="${round(slot.y - pad)}" width="${round(slot.width + 2 * pad)}" height="${round(slot.height + 2 * pad)}" fill="#ffffff"/>`,
+    `<rect id="${BARCODE_SLOT_ID}" x="${round(slot.x)}" y="${round(slot.y)}" width="${round(slot.width)}" height="${round(slot.height)}" fill="none"/>`,
+    `</svg>`,
+  ].join("\n");
+}
+
+/** Physical width (if given in inches) and viewBox width of a design. */
+export function findSvgSize(svg: string): { widthIn: number | null; viewBoxWidth: number | null } {
+  const open = svg.match(/<svg\b[^>]*>/i)?.[0] ?? "";
+  const width = attr(open, "width");
+  const viewBox = attr(open, "viewBox")?.trim().split(/[\s,]+/).map(Number);
+  return {
+    widthIn: width && /in\s*$/.test(width) ? num(width) : null,
+    viewBoxWidth: viewBox && viewBox.length === 4 && Number.isFinite(viewBox[2]) ? viewBox[2] : null,
+  };
+}

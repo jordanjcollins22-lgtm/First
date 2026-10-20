@@ -27,7 +27,8 @@ export interface ActionResult {
 
 export type PreviewResult = { svg: string; error?: undefined } | { svg?: undefined; error: string };
 
-const MAX_DESIGN_BYTES = 2_000_000;
+// Vercel caps request bodies at 4.5 MB; an image design is sent base64-encoded inside its SVG.
+const MAX_DESIGN_BYTES = 4_000_000;
 
 function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -95,7 +96,7 @@ export async function previewMerchDesign(input: {
     format = data.barcode_format as BarcodeFormat;
     source = data.barcode_source as BarcodeSource;
   }
-  if (design.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (2 MB max)." };
+  if (design.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (4 MB max; about a 3 MB image)." };
 
   let barcodeValue = input.barcodeValue ?? "";
   if (source === "affiliate") {
@@ -111,7 +112,7 @@ export async function createMerchProduct(formData: FormData): Promise<ActionResu
   const name = str(formData, "name");
   if (!name) return { error: "Name is required." };
   const designSvg = String(formData.get("design_svg") ?? "");
-  if (designSvg.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (2 MB max)." };
+  if (designSvg.length > MAX_DESIGN_BYTES) return { error: "Design file is too large (4 MB max; about a 3 MB image)." };
   const problems = validateTemplate(designSvg);
   if (problems.length) return { error: problems.join(" ") };
   const source: BarcodeSource = str(formData, "barcode_source") === "affiliate" ? "affiliate" : "custom";

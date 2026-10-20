@@ -109,8 +109,15 @@ ships it to the address on the order.
 
 **How it works**
 
-1. **Design once** (**/admin/store**). Export your design from any editor as an
-   SVG at its real print size (for example `width="24in" height="12in"`).
+1. **Design once** (**/admin/store**). The easiest way: upload the finished
+   design as a PNG or JPG with any placeholder QR code where the real one goes.
+   The app finds that QR code, shows what it links to, and marks its spot as
+   the barcode slot (drag on the image to adjust). Set the print width, and the
+   page shows the resulting DPI. Each order covers the placeholder and prints
+   the buyer's code in its place. Orders can be downloaded as PNG (full
+   resolution) or SVG.
+
+   You can also upload an SVG at its real print size (for example `width="24in" height="12in"`).
    - Put a rectangle with `id="barcode-slot"` where the QR code goes. Each
      order swaps that rectangle for the buyer's code, scaled to fit.
    - Any text like `{{company}}` or `{{phone}}` becomes a field on the

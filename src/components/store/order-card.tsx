@@ -84,9 +84,15 @@ export function OrderCard({ order }: { order: MerchOrderWithRelations }) {
           </div>
           <div className="flex gap-1">
             <Button asChild size="sm" variant="outline">
+              <a href={`/api/store/orders/${order.id}/print-file?format=png`} download>
+                <Download className="mr-1.5 h-4 w-4" />
+                PNG
+              </a>
+            </Button>
+            <Button asChild size="sm" variant="outline">
               <a href={`/api/store/orders/${order.id}/print-file`} download>
                 <Download className="mr-1.5 h-4 w-4" />
-                Print file
+                SVG
               </a>
             </Button>
             <Button

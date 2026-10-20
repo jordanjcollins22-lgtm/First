@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { renderBarcode } from "./barcode";
-import { findBarcodeSlot, renderDesign, templateFields, validateTemplate } from "./template";
+import { findBarcodeSlot, findSvgSize, rasterDesignSvg, renderDesign, templateFields, validateTemplate } from "./template";
 
 const DESIGN = `<svg xmlns="http://www.w3.org/2000/svg" width="3.5in" height="2in" viewBox="0 0 350 200">
   <text x="20" y="40">{{name}}</text>
@@ -86,5 +86,29 @@ describe("seeded truck magnet design", () => {
     const svg = seed.match(/'(<svg[\s\S]*?<\/svg>)'/)?.[1] ?? "";
     expect(validateTemplate(svg)).toEqual([]);
     expect(templateFields(svg).map((f) => f.key)).toEqual(["company", "services", "phone"]);
+  });
+});
+
+describe("rasterDesignSvg", () => {
+  it("wraps an image at print size with a covered barcode slot", () => {
+    const svg = rasterDesignSvg({
+      dataUrl: "data:image/png;base64,AAAA",
+      pixelWidth: 3600,
+      pixelHeight: 1800,
+      printWidthIn: 24,
+      slot: { x: 2797, y: 90, width: 676, height: 676 },
+    });
+    expect(svg).toContain('width="24in" height="12in" viewBox="0 0 3600 1800"');
+    expect(validateTemplate(svg)).toEqual([]);
+    expect(findBarcodeSlot(svg)).toEqual({ x: 2797, y: 90, width: 676, height: 676 });
+    // White cover sits under the slot, slightly larger.
+    expect(svg).toMatch(/<rect x="2777" y="70" width="716" height="716" fill="#ffffff"\/>/);
+  });
+});
+
+describe("findSvgSize", () => {
+  it("reads inches and viewBox width", () => {
+    expect(findSvgSize(DESIGN)).toEqual({ widthIn: 3.5, viewBoxWidth: 350 });
+    expect(findSvgSize('<svg width="300px" viewBox="0,0,10,5">')).toEqual({ widthIn: null, viewBoxWidth: 10 });
   });
 });

@@ -1,11 +1,17 @@
+import type { NextRequest } from "next/server";
+
+import { renderPrintPng } from "@/lib/merch/png";
 import { createClient } from "@/lib/supabase/server";
 
 function slug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "item";
 }
 
-/** Download the frozen print file for an order, ready to upload to the vendor. */
-export async function GET(_request: Request, ctx: RouteContext<"/api/store/orders/[orderId]/print-file">) {
+/**
+ * Download the frozen print file for an order, ready to upload to the vendor.
+ * SVG by default; ?format=png for vendors that want a flat image.
+ */
+export async function GET(request: NextRequest, ctx: RouteContext<"/api/store/orders/[orderId]/print-file">) {
   const { orderId } = await ctx.params;
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -17,12 +23,21 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/store/order
 
   const product = (data.product as unknown as { name: string } | null)?.name ?? "item";
   const member = (data.team_member as unknown as { name: string } | null)?.name ?? "member";
-  const filename = `${slug(product)}-${slug(member)}-${data.id.slice(0, 8)}.svg`;
+  const basename = `${slug(product)}-${slug(member)}-${data.id.slice(0, 8)}`;
+
+  if (request.nextUrl.searchParams.get("format") === "png") {
+    return new Response(new Uint8Array(renderPrintPng(data.print_svg)), {
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Disposition": `attachment; filename="${basename}.png"`,
+      },
+    });
+  }
 
   return new Response(data.print_svg, {
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${basename}.svg"`,
       // Uploaded designs are ours, but never let a downloaded SVG run script in our origin.
       "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
       "X-Content-Type-Options": "nosniff",
