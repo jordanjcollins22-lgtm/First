@@ -187,3 +187,14 @@ export const addOns: AddOn[] = [
   { id: "headlights", name: "Headlight Restoration", description: "Cloudy, yellow headlights polished clear and sealed.", price: 69 },
   { id: "engine", name: "Engine Bay Cleaning", description: "Degreased, rinsed and dressed.", price: 45 },
 ];
+
+// Real vehicle photos for the funnel tiles (public/detailing/vehicles), from
+// Wikimedia Commons. CC BY-SA photos must stay credited where they're shown.
+export const vehiclePhotos: Record<VehicleSize, { src: string; credit: string | null }> = {
+  sedan: { src: "/detailing/vehicles/sedan.jpg", credit: null },
+  suv: { src: "/detailing/vehicles/suv.jpg", credit: "Alexander Migl, CC BY-SA 4.0" },
+  truck: { src: "/detailing/vehicles/truck.jpg", credit: null },
+  boat: { src: "/detailing/vehicles/boat.jpg", credit: "Matti Blume, CC BY-SA 4.0" },
+  rv: { src: "/detailing/vehicles/rv.jpg", credit: "TaurusEmerald, CC BY-SA 4.0" },
+  motorcycle: { src: "/detailing/vehicles/motorcycle.jpg", credit: "Livioandronico2013, CC BY-SA 4.0" },
+};

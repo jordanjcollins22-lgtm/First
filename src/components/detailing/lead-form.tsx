@@ -1,11 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, Check, Loader2 } from "lucide-react";
 
-import { vehicleIcons } from "@/components/detailing/vehicle-icons";
 import { createDetailingLead, type LeadFormState } from "@/lib/actions/detailing-lead-actions";
-import { membershipPrices, vehicleOrder } from "@/lib/detailing";
+import { membershipPrices, vehicleOrder, vehiclePhotos } from "@/lib/detailing";
 
 const fieldClass =
   "w-full rounded-md border border-white/15 bg-white/5 px-4 py-3.5 text-base text-white placeholder:text-white/40 focus:border-[#d4a843] focus:outline-none focus:ring-1 focus:ring-[#d4a843]";
@@ -21,15 +21,14 @@ export function LeadForm() {
         <legend className="mb-3 text-sm font-medium text-white/80">What are we detailing?</legend>
         <div className="grid grid-cols-3 gap-2.5">
           {vehicleOrder.map((id) => {
-            const Icon = vehicleIcons[id];
             const on = vehicle === id;
             return (
               <label
                 key={id}
-                className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border px-2 py-4 text-center transition ${
+                className={`group relative block aspect-[4/3] cursor-pointer overflow-hidden rounded-xl border-2 transition ${
                   on
-                    ? "border-[#d4a843] bg-[#d4a843]/15 text-white shadow-[0_0_24px_-8px_rgba(212,168,67,0.7)]"
-                    : "border-white/15 text-white/70 hover:border-white/35 hover:text-white"
+                    ? "border-[#d4a843] shadow-[0_0_24px_-6px_rgba(212,168,67,0.8)]"
+                    : "border-white/10 hover:border-white/40"
                 }`}
               >
                 <input
@@ -41,10 +40,21 @@ export function LeadForm() {
                   onChange={() => setVehicle(id)}
                   className="sr-only"
                 />
-                <Icon className={`size-9 ${on ? "text-[#f0c75e]" : ""}`} strokeWidth={1.5} />
-                <span className="text-xs font-bold uppercase leading-tight tracking-wide">
+                <Image
+                  src={vehiclePhotos[id].src}
+                  alt=""
+                  fill
+                  sizes="(max-width: 640px) 33vw, 140px"
+                  className={`object-cover transition duration-300 group-hover:scale-105 ${on ? "" : "brightness-75"}`}
+                />
+                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-1.5 pb-1.5 pt-6 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-white">
                   {membershipPrices[id].label}
                 </span>
+                {on && (
+                  <span className="bg-gold absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full text-black">
+                    <Check className="size-3.5" strokeWidth={3} />
+                  </span>
+                )}
               </label>
             );
           })}
