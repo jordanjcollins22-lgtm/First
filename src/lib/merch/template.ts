@@ -2,7 +2,7 @@
  * Merch design templates. A design is an SVG (or a PNG/JPG wrapped in one)
  * with exactly one swap point: a rectangle with id="barcode-slot". At print
  * time it is replaced by the buyer's barcode, scaled to fit. Everything else
- * on the design, phone number included, is the same for everyone.
+ * on the design is the same for everyone.
  *
  * Everything here is pure string work so it runs anywhere and is easy to test.
  */

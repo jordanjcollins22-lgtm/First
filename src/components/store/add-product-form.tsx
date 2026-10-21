@@ -169,7 +169,7 @@ export function AddProductForm() {
           Easiest: upload the finished design as a PNG with any placeholder QR code where the real one goes.
           The app finds it and swaps in each buyer&apos;s code. For SVGs, put a rectangle with the ID{" "}
           <code>{BARCODE_SLOT_ID}</code> where the barcode goes. The barcode is the only thing that changes
-          per person; the phone number and everything else print as designed.
+          per person. Leave the phone number off so every booking comes through someone&apos;s code.
         </p>
       </div>
 

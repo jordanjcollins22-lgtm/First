@@ -5,7 +5,7 @@ import { findBarcodeSlot, findSvgSize, rasterDesignSvg, renderDesign, validateTe
 
 const DESIGN = `<svg xmlns="http://www.w3.org/2000/svg" width="3.5in" height="2in" viewBox="0 0 350 200">
   <text x="20" y="40">JS Landscaping</text>
-  <text x="20" y="70">443-819-1521</text>
+  <text x="20" y="70">Free yard evaluations</text>
   <rect id="barcode-slot" x="20" y="100" width="310" height="80" fill="#eee"/>
 </svg>`;
 
@@ -44,8 +44,8 @@ describe("renderDesign", () => {
     expect(out).not.toContain("barcode-slot");
     expect(out).toContain('<svg x="20" y="100" width="310" height="80"');
     expect(out).toContain('preserveAspectRatio="xMidYMid meet"');
-    // The phone number and everything else stay exactly as designed.
-    expect(out).toContain("443-819-1521");
+    // Everything else stays exactly as designed.
+    expect(out).toContain("Free yard evaluations");
     expect(out.match(/<svg\b/g)).toHaveLength(2);
   });
 });
@@ -66,12 +66,12 @@ describe("renderBarcode", () => {
 });
 
 describe("seeded truck magnet design", () => {
-  it("is a valid template with a fixed phone number", async () => {
+  it("is a valid template with no phone number", async () => {
     const { readFileSync } = await import("node:fs");
     const seed = readFileSync("supabase/seed/0002_merch_products.sql", "utf8");
     const svg = seed.match(/'(<svg[\s\S]*?<\/svg>)'/)?.[1] ?? "";
     expect(validateTemplate(svg)).toEqual([]);
-    expect(svg).toContain("443-819-1521");
+    expect(svg).not.toMatch(/\d{3}-\d{3}-\d{4}/);
     expect(svg).not.toMatch(/\{\{/);
   });
 });

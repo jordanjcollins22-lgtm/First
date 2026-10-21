@@ -120,8 +120,10 @@ ships it to the address on the order.
    You can also upload an SVG at its real print size (for example `width="24in" height="12in"`).
    - Put a rectangle with `id="barcode-slot"` where the QR code goes. Each
      order swaps that rectangle for the buyer's code, scaled to fit.
-   - The barcode is the only thing that changes per person. The phone number
-     and everything else print exactly as designed.
+   - The barcode is the only thing that changes per person. Everything else
+     prints exactly as designed.
+   - Leave the phone number off the design. If scanning is the only way to
+     book, every lead gets credited to the person whose truck it was.
    - Pick the barcode: **Buyer's affiliate QR code** (the default), or
      **Typed in when ordering** for any other barcode (Code 128, QR, UPC-A or
      EAN-13). Add the vendor, SKU, price and print specs.
