@@ -19,13 +19,13 @@ export function LeadForm() {
     <form action={formAction} className="grid gap-4">
       <fieldset>
         <legend className="mb-3 text-sm font-medium text-white/80">What are we detailing?</legend>
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {vehicleOrder.map((id) => {
             const on = vehicle === id;
             return (
               <label
                 key={id}
-                className={`group relative block aspect-[4/3] cursor-pointer overflow-hidden rounded-xl border-2 transition ${
+                className={`group relative block cursor-pointer overflow-hidden rounded-xl border-2 bg-black transition ${
                   on
                     ? "border-[#d4a843] shadow-[0_0_24px_-6px_rgba(212,168,67,0.8)]"
                     : "border-white/10 hover:border-white/40"
@@ -40,14 +40,20 @@ export function LeadForm() {
                   onChange={() => setVehicle(id)}
                   className="sr-only"
                 />
-                <Image
-                  src={vehiclePhotos[id].src}
-                  alt=""
-                  fill
-                  sizes="(max-width: 640px) 33vw, 140px"
-                  className={`object-cover transition duration-300 group-hover:scale-105 ${on ? "" : "brightness-75"}`}
-                />
-                <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black via-black/70 to-transparent px-1.5 pb-1.5 pt-6 text-center text-[11px] font-bold uppercase leading-tight tracking-wide text-white">
+                <span className="relative block aspect-[4/3] overflow-hidden">
+                  <Image
+                    src={vehiclePhotos[id].src}
+                    alt=""
+                    fill
+                    sizes="(max-width: 640px) 50vw, 170px"
+                    className={`object-cover transition duration-300 group-hover:scale-105 ${on ? "" : "brightness-90"}`}
+                  />
+                </span>
+                <span
+                  className={`block px-2 py-2 text-center text-xs font-bold uppercase tracking-wide ${
+                    on ? "bg-gold text-black" : "text-white"
+                  }`}
+                >
                   {membershipPrices[id].label}
                 </span>
                 {on && (
