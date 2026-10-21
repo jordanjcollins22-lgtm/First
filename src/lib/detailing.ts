@@ -7,7 +7,7 @@ export const business = {
   phoneDisplay: "443-528-0896",
   phoneHref: "tel:+14435280896",
   smsHref: "sms:+14435280896",
-  email: "apexshinemobileco@gmail.com",
+  email: "jace@apexshinemobile.com",
   instagramHandle: "@apex.shinemobile",
   instagramUrl: "https://www.instagram.com/apex.shinemobile/",
 };
