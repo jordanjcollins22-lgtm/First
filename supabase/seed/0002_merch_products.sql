@@ -9,16 +9,15 @@ values (
   'Truck Door Magnet',
   'Vehicle magnet with a QR code that credits you for every scan.',
   '<svg xmlns="http://www.w3.org/2000/svg" width="24in" height="12in" viewBox="0 0 2400 1200">
-  <rect width="2400" height="1200" rx="60" fill="#8ec2f2"/>
-  <rect y="440" width="2400" height="250" fill="#ffffff"/>
-  <rect y="690" width="2400" height="510" fill="#267f0e"/>
-  <rect y="1100" width="2400" height="100" rx="60" fill="#267f0e"/>
-  <text x="80" y="330" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="700" fill="#ffffff" stroke="#1a1a1a" stroke-width="6" textLength="1700" lengthAdjust="spacingAndGlyphs">JS LANDSCAPING SERVICES</text>
-  <text x="80" y="630" font-family="Arial, Helvetica, sans-serif" font-size="170" font-weight="700" fill="#267f0e" textLength="1700" lengthAdjust="spacingAndGlyphs">FREE YARD EVALUATIONS</text>
-  <text x="1200" y="1080" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="380" font-weight="700" fill="#ffffff" textLength="2200" lengthAdjust="spacingAndGlyphs">SCAN TO BOOK</text>
-  <rect x="1840" y="30" width="520" height="620" rx="36" fill="#ffffff" stroke="#267f0e" stroke-width="14"/>
-  <rect id="barcode-slot" x="1880" y="70" width="440" height="440" fill="#eeeeee"/>
-  <text x="2100" y="600" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="80" font-weight="700" fill="#267f0e" textLength="440" lengthAdjust="spacingAndGlyphs">SCAN TO BOOK</text>
+  <rect width="2400" height="1200" rx="60" fill="#8ec2f4"/>
+  <rect y="790" width="2400" height="410" fill="#24820c"/>
+  <rect y="1100" width="2400" height="100" rx="60" fill="#24820c"/>
+  <text x="745" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="300" font-weight="700" fill="#ffffff" stroke="#1a1a1a" stroke-width="8">JS</text>
+  <text x="745" y="640" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="140" font-weight="700" fill="#ffffff" stroke="#1a1a1a" stroke-width="5" textLength="1370" lengthAdjust="spacingAndGlyphs">LANDSCAPING SERVICES</text>
+  <text x="745" y="1050" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="700" fill="#ffffff" textLength="1370" lengthAdjust="spacingAndGlyphs">FREE YARD EVALUATIONS</text>
+  <rect x="1500" y="34" width="866" height="1132" rx="46" fill="#ffffff" stroke="#24820c" stroke-width="16"/>
+  <rect id="barcode-slot" x="1533" y="106" width="800" height="800" fill="#eeeeee"/>
+  <text x="1933" y="1060" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="700" fill="#24820c" textLength="800" lengthAdjust="spacingAndGlyphs">SCAN TO BOOK</text>
 </svg>',
   'qrcode',
   'affiliate',
