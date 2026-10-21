@@ -127,6 +127,9 @@ export const PRODUCTION_SERVICES: ProductionService[] = [
   { key: "leaf-removal", label: "Leaf removal", unit: "SF", pr: 3000, group: "Seasonal" },
   { key: "leaf-removal-heavy", label: "Leaf removal, heavy", unit: "SF", pr: 1500, group: "Seasonal" },
   { key: "snow-removal", label: "Snow removal (shovel and blow)", unit: "SF", pr: 1500, group: "Seasonal" },
+  // One person with a spreader, per visit. The melt is the pet-safe blend at
+  // about 5 lb on a 600 sq ft driveway: 0.83 lb a hundred sq ft at 90 cents.
+  { key: "salting", label: "Salting (spread melt, per visit)", unit: "SF", pr: 6000, materialCentsPerUnit: 0.75, materialName: "Pet-safe melt", group: "Seasonal" },
   { key: "soft-washing", label: "Soft washing", unit: "SF", pr: 1000, materialCentsPerUnit: 2, materialName: "Cleaner", group: "Washing and gutters" },
   { key: "gutter-cleaning", label: "Gutter cleaning", unit: "LF", pr: 100, group: "Washing and gutters" },
 ];

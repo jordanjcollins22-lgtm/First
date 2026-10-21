@@ -27,6 +27,8 @@ export async function notifyTeamMember(
      * general per-kind toggle shouldn't veto it. The master switch and a
      * usable phone number still apply. */
     overridesKindPreference?: boolean;
+    /** Who it is about, for the subject line when it goes as an email. */
+    about?: string | null;
   }
 ): Promise<boolean> {
   const admin = createAdminClient();
@@ -89,7 +91,7 @@ async function emailInstead(
   profileId: string,
   kind: NotificationKind,
   body: string,
-  options?: { dedupeKey?: string; overridesKindPreference?: boolean }
+  options?: { dedupeKey?: string; overridesKindPreference?: boolean; about?: string | null }
 ): Promise<boolean> {
   const admin = createAdminClient();
   const [{ data: prefsRow }, { data: profile }] = await Promise.all([
@@ -112,7 +114,7 @@ async function emailInstead(
   const sent = await sendEmail({
     organizationId: profile.organization_id,
     to,
-    subject: label(kind as GateKind),
+    subject: options?.about ? `${label(kind as GateKind)}: ${options.about}` : label(kind as GateKind),
     html: textToHtml(body),
     text: body,
     stream: "transactional",
@@ -166,7 +168,54 @@ export async function notifyJobTeam(
   options?: { dedupeKey?: string; except?: string | null }
 ): Promise<void> {
   const profileIds = (await teamMembersForJob(jobId)).filter((id) => id !== options?.except);
+  if (profileIds.length === 0) return;
+  const who = await jobWho(jobId).catch(() => null);
+  const text = withJobContext(body, who);
   await Promise.all(
-    profileIds.map((id) => notifyTeamMember(id, kind, body, options).catch(() => false))
+    profileIds.map((id) => notifyTeamMember(id, kind, text, { ...options, about: who?.name ?? null }).catch(() => false))
   );
+}
+
+/** The client, the street and the job number a job alert is about. */
+export interface JobWho {
+  name: string | null;
+  address: string | null;
+  jobNumber: number | null;
+}
+
+async function jobWho(jobId: string): Promise<JobWho | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("jobs")
+    .select("job_number, property:properties(address, customer:customers(name))")
+    .eq("id", jobId)
+    .maybeSingle();
+  if (!data) return null;
+  const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] ?? null : v ?? null);
+  const property = one((data as { property?: unknown }).property as { address: string | null; customer: unknown } | null);
+  const customer = one(property?.customer as { name: string | null } | null);
+  return {
+    name: customer?.name?.trim() || null,
+    address: property?.address?.trim() || null,
+    jobNumber: (data as { job_number?: number | null }).job_number ?? null,
+  };
+}
+
+/**
+ * The alert with who it is about. "A client accepted their proposal" told
+ * the office something happened and not to whom, so every one of them meant
+ * opening the app to find out. The client's name goes where "A client" was,
+ * or in front when the message names nobody, and the street and job number
+ * follow on a line of their own.
+ */
+export function withJobContext(body: string, who: JobWho | null): string {
+  if (!who) return body;
+  let text = body;
+  if (who.name) {
+    if (/^A client\b/.test(text)) text = text.replace(/^A client\b/, who.name);
+    else if (!text.includes(who.name)) text = `${who.name}: ${text}`;
+  }
+  const street = who.address ? who.address.split(",").slice(0, 2).join(",").trim() : null;
+  const where = [street, who.jobNumber != null ? `Job #${who.jobNumber}` : null].filter(Boolean).join(" · ");
+  return where ? `${text}\n${where}` : text;
 }

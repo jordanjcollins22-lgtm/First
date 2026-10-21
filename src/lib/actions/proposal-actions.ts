@@ -202,7 +202,11 @@ export async function generateProposal(
       // Salting says its price in its words: at the price it came to.
       // Salting in its own area's words: a walkway is not "on the driveway"
       // because a driveway on the same job came first.
-      scopeText: approved.get(zone.name) ?? (salting ? saltingText : scopeTexts[index]),
+      // Salting says its price in its words, so approved words are brought to
+      // the price this rebuild came to: never "$375 in all" on a $285 line.
+      scopeText: salting
+        ? repriceSaltingScope(approved.get(zone.name) ?? saltingText, areaPrices[index])
+        : (approved.get(zone.name) ?? scopeTexts[index]),
       photoPaths: salting ? saltIndexes.flatMap((i) => zones[i].service?.photos ?? []) : (zone.service?.photos ?? []),
       points: zone.points,
       ...(salting && saltIndexes.length > 1 ? { shapes: saltIndexes.slice(1).map((i) => zones[i].points) } : {}),
@@ -301,8 +305,13 @@ export async function generateProposal(
   // card prices it, so the job page, the proposal and the card all say the
   // same price from the start. Best effort: the rate card's price above
   // stands if it can't be worked out. Salting keeps its own.
+  //
+  // A proposal already approved or sent is priced the same way. It used to
+  // be left at the rate card's price, which on a job with no rates set is
+  // an hour's minimum: an area added and the evaluation submitted again
+  // took a sent $1,084 proposal to $77, live on the client's link.
   let forwardPriced = false;
-  if (nextStatus === "needs_approval") {
+  {
     const forward = await forwardPriceForJob(supabase, organizationId, jobId).catch((err: unknown) => {
       console.error("[proposal] forward price failed:", jobId, err);
       return null;
@@ -315,6 +324,12 @@ export async function generateProposal(
       if (forwardError) console.error("[proposal] forward price not saved:", jobId, forwardError.message);
       else forwardPriced = true;
     }
+  }
+  // Could not be priced that way and the client has, or is about to have,
+  // a price: that price stands rather than the rate card's.
+  if (!forwardPriced && existing && existing.status !== "needs_approval" && existing.total_cost != null && !priced.salting.some((s) => s != null)) {
+    await supabase.from("job_proposals").update({ total_cost: Number(existing.total_cost) }).eq("job_id", jobId);
+    console.error("[proposal] rebuilt without a forward price; kept the price already given:", jobId, existing.total_cost);
   }
 
   revalidateJobViews(jobId);

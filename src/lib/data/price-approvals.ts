@@ -14,7 +14,7 @@ import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
-import { DEFAULT_SETUP, suggestJob, type AreaFacts, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
+import { DEFAULT_SETUP, priceForward, suggestJob, type AreaFacts, type PriceLine, type PricingSetup } from "@/lib/forward-pricing";
 import { getProductionPricing } from "@/lib/data/production-pricing";
 import { getInventoryItems } from "@/lib/data/inventory-items";
 import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
@@ -133,13 +133,16 @@ export function forwardAreas(
     areaSqFt: zoneMeasurements(z)?.areaSqFt ?? null,
   }));
   const suggested = suggestJob(facts, pricing.equation, pricing.services);
-  const saved = pricedForward(snapshot, priced.length) ? snapshot : null;
+  // Each area keeps the services it was priced with; only an area with none
+  // saved (one just added) is suggested afresh. It was all or nothing: one
+  // new area threw away every price set on the others.
+  const saved = snapshot && snapshot.length === priced.length ? snapshot : null;
   return priced.map((z, i) => ({
     notes: z.service!.notes?.trim() || null,
     photos: (z.service!.photos ?? []).map((path) => canvasImageUrl(path, PREVIEW)),
     markers: (z.service!.photos ?? []).map((path) => z.service!.photoMarkers?.[path] ?? []),
     cover: Math.max(0, (z.service!.photos ?? []).findIndex((path) => (z.service!.photoMarkers?.[path]?.length ?? 0) > 0)),
-    lines: saved ? (saved[i].lines ?? []) : suggested[i],
+    lines: saved && Array.isArray(saved[i].lines) ? saved[i].lines! : suggested[i],
     facts: facts[i],
   }));
 }
@@ -259,7 +262,14 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
     // forward way first, so what is approved and sent is that price.
     // A proposal written without a site map (an add-on, say) has nothing to
     // price from: the price it was given is the price.
-    const oldPrice = !salting && zones.length > 0 && r.status === "sent" && !r.sent_at && !pricedForward(r.scope_snapshot, zones.length);
+    const forward = salting
+      ? null
+      : forwardAreas(zones, r.scope_snapshot, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, setup);
+    // And work nothing has a rate for (a wall rebuilt from the client's own
+    // block, a lawn nobody measured) prices to nothing the forward way, so
+    // the price it was given stands rather than turning into $0.
+    const forwardPrices = forward != null && priceForward(forward.map((a) => a.lines), setup.equation, setup.services, driveThereAndBack(travels[index])).rCents > 0;
+    const oldPrice = !salting && zones.length > 0 && r.status === "sent" && !r.sent_at && !pricedForward(r.scope_snapshot, zones.length) && forwardPrices;
     return {
       jobId: r.job_id,
       client: r.job.property?.customer?.name || "Client",
@@ -286,9 +296,7 @@ export async function getPriceApprovals(only?: { jobId?: string }): Promise<Pric
       crewRateCents: catalog.crewCostPerHourCents,
       markup,
       areaPhotos: breakdown.areas.map((a) => a.photoPaths.map((path) => canvasImageUrl(path, THUMBNAIL))),
-      forward: salting
-        ? null
-        : forwardAreas(zones, r.scope_snapshot, (typeId) => catalog.servicePricing.find((p) => p.service_type_id === typeId)?.name ?? typeId, setup),
+      forward,
       pricing: setup,
       driveMinutesPerDay: driveThereAndBack(travels[index]),
       inventory,

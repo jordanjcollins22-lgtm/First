@@ -3,6 +3,8 @@
 import type Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { tipFromMetadata } from "@/lib/proposal-tip";
+import { recordTipWithPayment } from "@/lib/data/record-tip";
 import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
 import { env, isStripeConfigured } from "@/lib/env";
 import { contactForStripeCustomer, stripeClient } from "@/lib/stripe-customer";
@@ -96,6 +98,13 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
   const mowOrderId = session.metadata?.mow_order_id ?? null;
   if (mowOrderId) {
     await settleMowOrder(mowOrderId).catch((err) => console.error("settleMowOrder failed:", err));
+  }
+
+  // A tip added on the pay page rides on the proposal's checkout as its own
+  // line. It goes on the job's tip row; work_cents keeps it off the payment.
+  const proposalTipCents = tipFromMetadata(session.metadata);
+  if (proposalTipCents > 0 && jobId) {
+    await recordTipWithPayment(admin, jobId, proposalTipCents).catch((err) => console.error("recording a tip failed:", err));
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

@@ -42,6 +42,32 @@ export interface Stop {
   meetOnSite?: boolean;
 }
 
+/** One block of a stop's note, as the crew read it on a phone. */
+export type NoteBlock = { kind: "heading"; text: string } | { kind: "item"; text: string } | { kind: "line"; text: string };
+
+/**
+ * A stop's note, laid out. The office writes it as lines: a line ending in a
+ * colon is a heading, a line starting with "-" or "•" is a point under it,
+ * anything else is a sentence of its own. A note written as one paragraph
+ * stays one paragraph.
+ */
+export function noteBlocks(note: string | null | undefined): NoteBlock[] {
+  return (note ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line): NoteBlock => {
+      if (/^[-•*]\s+/.test(line)) return { kind: "item", text: line.replace(/^[-•*]\s+/, "") };
+      if (line.endsWith(":")) return { kind: "heading", text: line.slice(0, -1) };
+      return { kind: "line", text: line };
+    });
+}
+
+/** "307 Goldeneye Court, Havre de Grace": the street and the town, without the state and country. */
+export function shortAddress(address: string): string {
+  return address.split(",").slice(0, 2).map((part) => part.trim()).filter(Boolean).join(", ") || address;
+}
+
 /** A day with no shop in it: every stop is met on site. */
 export function skipsShop(stops: readonly Stop[]): boolean {
   return stops.length > 0 && stops.every((s) => s.meetOnSite);

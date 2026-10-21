@@ -6,6 +6,8 @@ import { isStripeConfigured } from "@/lib/env";
 import { stripeClient } from "@/lib/stripe-customer";
 import { settlementFor } from "@/lib/flyer-settlement";
 import { revalidateJobViews } from "@/lib/revalidate-job";
+import { tipFromMetadata } from "@/lib/proposal-tip";
+import { recordTipWithPayment } from "@/lib/data/record-tip";
 
 /**
  * Find out whether a client's proposal payment went through, by asking.
@@ -40,9 +42,11 @@ export async function settleProposalPayment(token: string): Promise<void> {
     const reference = proposal.checkout_session_id;
     const stripe = stripeClient();
 
+    let tipCents = 0;
     const verdict = reference.startsWith("pi_")
       ? await (async () => {
           const intent = await stripe.paymentIntents.retrieve(reference);
+          tipCents = tipFromMetadata(intent.metadata);
           return settlementFor({
             // An intent says "succeeded" where a session says "paid", so it
             // is mapped rather than passed through and quietly never matching.
@@ -66,6 +70,7 @@ export async function settleProposalPayment(token: string): Promise<void> {
         .is("paid_at", null);
       // Salting on it goes on the salt route, so the salt is bought ahead.
       await saltOrdersForPaidProposal(admin, proposal.id);
+      if (tipCents > 0) await recordTipWithPayment(admin, proposal.job_id, tipCents).catch(() => {});
       revalidateJobViews(proposal.job_id);
       return;
     }

@@ -218,3 +218,28 @@ describe("directionsUrl", () => {
     expect(directionsUrl({ ...STOPS[0], lat: null, lng: null })).toBe("/jobs/j1/directions");
   });
 });
+
+describe("a stop's note, laid out", () => {
+  it("reads headings, points and lines", async () => {
+    const { noteBlocks } = await import("@/lib/crew-day");
+    expect(noteBlocks("Do this stop first.\nPick up:\n- Unit 1132\n• Kit 4\n\nCall Jace.")).toEqual([
+      { kind: "line", text: "Do this stop first." },
+      { kind: "heading", text: "Pick up" },
+      { kind: "item", text: "Unit 1132" },
+      { kind: "item", text: "Kit 4" },
+      { kind: "line", text: "Call Jace." },
+    ]);
+  });
+
+  it("keeps a one-paragraph note as one line", async () => {
+    const { noteBlocks } = await import("@/lib/crew-day");
+    expect(noteBlocks("Second stop, after Austin: kit 4.")).toEqual([{ kind: "line", text: "Second stop, after Austin: kit 4." }]);
+    expect(noteBlocks(null)).toEqual([]);
+  });
+
+  it("shortens the address to the street and town", async () => {
+    const { shortAddress } = await import("@/lib/crew-day");
+    expect(shortAddress("307 Goldeneye Court, Havre de Grace, Maryland 21078, United States")).toBe("307 Goldeneye Court, Havre de Grace");
+    expect(shortAddress("Saddle View Way")).toBe("Saddle View Way");
+  });
+});

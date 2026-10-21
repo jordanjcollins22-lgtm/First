@@ -69,7 +69,9 @@ export function PriceCard({
     const start = item.forward.map((a) => a.lines);
     return item.stage === "price" ? priceFromSuppliers(start, item.pricing.services, item.suppliers ?? [], item.site ?? null).lines : start;
   });
-  const forwardCents = lines ? priceLines(item, lines).rCents : null;
+  // Nothing priced (no rates for the work) is no price, not a $0 one.
+  const priced = lines ? priceLines(item, lines).rCents : null;
+  const forwardCents = priced != null && priced > 0 ? priced : null;
   // Wording still to approve, approved here on the card; Accept waits for it.
   const needsWording = item.wordingToApprove.length > 0;
   const [wordingDone, setWordingDone] = useState(!needsWording);
@@ -108,7 +110,7 @@ export function PriceCard({
       return setStage("send");
     }
     start(async () => {
-      const result = lines ? await acceptPrice(item.jobId, lines) : await acceptPrice(item.jobId);
+      const result = lines && forwardCents != null ? await acceptPrice(item.jobId, lines) : await acceptPrice(item.jobId);
       if (!result.ok) return setError(result.error);
       if (forwardCents != null) setTotal(forwardCents);
       setSendTo(result.sendTo);
@@ -272,6 +274,21 @@ export function PriceCard({
 
       {/* The last step, still on the card: the proposal as the client will
           see it, then Send to client. */}
+      {/* What the accepted price is made of, still there at the send step:
+          the time, the labour, the materials and what it leaves. Read only. */}
+      {(stage === "send" || stage === "sent") && (
+        <details className="rounded-xl border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-semibold">Breakdown: time, labour, materials and profit</summary>
+          <div className="flex flex-col gap-2 border-t border-border p-2">
+            {lines ? (
+              <ForwardBreakdown item={item} lines={lines} onChange={() => {}} locked />
+            ) : (
+              <Breakdown item={item} total={total} pending onUsePrice={() => {}} />
+            )}
+          </div>
+        </details>
+      )}
+
       {stage === "send" && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
@@ -444,7 +461,7 @@ function ProfitTable({
     ...c.labour.map((l) => ({ label: l.label, detail: `${l.detail}, at ${dollars(item.crewRateCents)}/hr`, cents: l.cents })),
     {
       label: "Materials",
-      detail: b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
+      detail: c.materialsNote ? c.materialsNote : b.materialTotals.length > 0 ? b.materialTotals.map((x) => `${x.amount} ${x.name.toLowerCase()}${x.cents == null ? ", no cost set" : ""}`).join(" · ") : "None",
       cents: m.materialsCents,
     },
     { label: feeLabel(item.fee), detail: item.fee.shares ? item.fee.shares.join(" · ") : "of the price", cents: m.feeCents },

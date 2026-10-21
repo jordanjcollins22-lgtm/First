@@ -59,6 +59,9 @@ export function priceSiteMap(input: {
           fromSiteMinutes: input.travel.fromSiteMinutes,
           crewCostPerHourCents: catalog.crewCostPerHourCents,
           feePct: input.feePct,
+          areaSqFt: saltIndexes.every((index) => (zoneMeasurements(zones[index])?.areaSqFt ?? 0) > 0)
+            ? saltIndexes.reduce((sum, index) => sum + (zoneMeasurements(zones[index])?.areaSqFt ?? 0), 0)
+            : null,
         })[0]
       : null;
   const salting: (SaltingVisits | null)[] = zones.map((_, index) => {
@@ -133,8 +136,11 @@ export interface JobCosts {
   materialsCents: number;
   /** Each area's price with its share of travel, whole hours and the floor, in the order of the site map. */
   areaPricesCents: number[];
+  /** What the materials are, in words, when they come from salting timed by size. */
+  materialsNote?: string | null;
 }
 
+const mins = (m: number) => (Math.abs(m - Math.round(m)) < 0.05 ? String(Math.round(m)) : m.toFixed(1));
 const hrs = (h: number) => (Math.abs(h - Math.round(h)) < 0.05 ? String(Math.round(h)) : h.toFixed(1));
 
 export function jobCosts(priced: SiteMapPrice): JobCosts {
@@ -168,11 +174,29 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     const treatments = Math.max(...salting.map((v) => v.treatments));
     const onSite = salting.reduce((sum, v) => sum + v.onSiteMinutes, 0);
     const hours = s.visitBilledHours ?? s.billedHours;
-    labour.push({
-      label: "Salting visits",
-      detail: `${treatments} × ${hrs(hours)} hr${hours === 1 ? "" : "s"}: ${onSite} min on site${salting.length > 1 ? ` (${salting.length} areas)` : ""}, ${s.travelMinutes} min from the shop and back`,
-      cents: salting.reduce((sum, v) => sum + v.labourCents * v.treatments, 0),
-    });
+    const allLabour = salting.reduce((sum, v) => sum + v.labourCents * v.treatments, 0);
+    if (s.areaSqFt != null && s.rate) {
+      // Timed by size: the spreading and the drive, each at the minutes it takes.
+      const visitMinutes = onSite + s.travelMinutes;
+      const onSiteCents = visitMinutes > 0 ? Math.round((allLabour * onSite) / visitMinutes) : 0;
+      const spread = Math.round(((s.areaSqFt / s.rate.sqFtPerHour) * 60) * 10) / 10;
+      labour.push({
+        label: "Salting on site",
+        detail: `${treatments} visits × ${mins(onSite)} min: ${s.rate.setupMinutes} min setup + ${mins(spread)} min spreading ${s.areaSqFt.toLocaleString()} sq ft at ${s.rate.sqFtPerHour.toLocaleString()} sq ft/hr`,
+        cents: onSiteCents,
+      });
+      labour.push({
+        label: "Salting drive",
+        detail: `${treatments} visits × ${s.travelMinutes} min, shop to the house and back`,
+        cents: allLabour - onSiteCents,
+      });
+    } else {
+      labour.push({
+        label: "Salting visits",
+        detail: `${treatments} × ${hrs(hours)} hr${hours === 1 ? "" : "s"}: ${onSite} min on site${salting.length > 1 ? ` (${salting.length} areas)` : ""}, ${s.travelMinutes} min from the shop and back`,
+        cents: allLabour,
+      });
+    }
   }
   const saltMaterials = salting.reduce((sum, s) => sum + s.materialCents * s.treatments, 0);
   const onlySalting = e.zones.length === 0 && salting.length > 0 && salting.every((s) => s.treatments === salting[0].treatments);
@@ -183,5 +207,9 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     labourCents: labour.reduce((sum, l) => sum + l.cents, 0),
     materialsCents: e.costs.materialsCents + saltMaterials,
     areaPricesCents: priced.areaPricesCents,
+    materialsNote:
+      onlySalting && salting[0].areaSqFt != null && salting[0].rate
+        ? `Pet-safe melt: ${salting[0].treatments} visits × ${salting[0].areaSqFt.toLocaleString()} sq ft at ${salting[0].rate.materialCentsPerSqFt}¢ a sq ft`
+        : null,
   };
 }

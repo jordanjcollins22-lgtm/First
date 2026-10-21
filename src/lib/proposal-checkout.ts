@@ -36,6 +36,8 @@ export interface CheckoutRequest {
    * price: the webhook must not mark the proposal paid in full on it.
    */
   deposit?: boolean;
+  /** A tip for the crew, its own line, not part of the work or the card fee. */
+  tipCents?: number;
 }
 
 export interface CheckoutStarted {
@@ -67,6 +69,7 @@ export async function startProposalCheckout(
 
   const stripe = stripeClient();
   const fee = surchargeCents(input.amountCents);
+  const tip = Math.max(0, Math.round(input.tipCents ?? 0));
 
   // Reuse the contact's Stripe customer where we know it. A fresh customer
   // per payment is what stopped payments reconciling to anybody, and it also
@@ -109,6 +112,18 @@ export async function startProposalCheckout(
             },
           ]
         : []),
+      ...(tip > 0
+        ? [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: tip,
+                product_data: { name: "Tip for the crew" },
+              },
+              quantity: 1,
+            },
+          ]
+        : []),
     ],
     // Straight to picking a day. They have paid; asking them to find their
     // way back to a link in an email to book is how a paid job sits unbooked.
@@ -123,6 +138,7 @@ export async function startProposalCheckout(
       // more for the work than they were billed.
       work_cents: String(input.amountCents),
       surcharge_cents: String(fee),
+      ...(tip > 0 ? { tip_cents: String(tip) } : {}),
       ...(input.planId ? { plan_id: input.planId } : {}),
       ...(input.instalmentId ? { instalment_id: input.instalmentId } : {}),
       ...(input.deposit ? { deposit: "1" } : {}),

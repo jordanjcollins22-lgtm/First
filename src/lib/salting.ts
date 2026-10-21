@@ -2,7 +2,6 @@ import { billedHours, priceForTarget } from "@/lib/gross-profit";
 import {
   DEFAULT_SALT_SETTINGS,
   MINIMUM_TREATMENTS,
-  money,
   ON_SITE_MINUTES,
   poundsFor,
   priceTreatment,
@@ -125,9 +124,43 @@ export interface SaltingVisits {
   totalCents: number;
   /** Raised over the salt page's price to reach the floor. */
   lifted: boolean;
+  /** The square feet the visit was timed by; null when it was not measured. */
+  areaSqFt?: number | null;
+  /** The rate it was timed at, when it was. */
+  rate?: SaltingRate | null;
 }
 
-type SaltingTrip = { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number };
+type SaltingTrip = {
+  toSiteMinutes: number | null;
+  fromSiteMinutes: number | null;
+  crewCostPerHourCents: number;
+  feePct: number;
+  fallbackDriveMinutes?: number;
+  /**
+   * The square feet salted at the house, all its areas together. With it, a
+   * visit is timed and billed by its size: the production rate's minutes on
+   * site and the drive, as they are, not rounded to an hour. Without it (an
+   * area nobody measured) the old fixed minutes and whole hours stand.
+   */
+  areaSqFt?: number | null;
+  /** The salting production rate: square feet a person spreads in an hour, and melt per square foot. */
+  rate?: SaltingRate;
+};
+
+export interface SaltingRate {
+  sqFtPerHour: number;
+  materialCentsPerSqFt: number;
+  /** Parking, loading the spreader and the photo, each visit. */
+  setupMinutes: number;
+}
+
+/** Matches the "salting" production unit. */
+export const SALTING_RATE: SaltingRate = { sqFtPerHour: 6000, materialCentsPerSqFt: 0.75, setupMinutes: 5 };
+
+/** The minutes on site a visit takes for this many square feet. */
+export function saltingMinutes(areaSqFt: number, rate: SaltingRate = SALTING_RATE): number {
+  return rate.setupMinutes + (Math.max(0, areaSqFt) / Math.max(1, rate.sqFtPerHour)) * 60;
+}
 
 /**
  * Salting a visit at a time, held to the same rules as every service: the
@@ -150,14 +183,24 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
   const fallback = trip.fallbackDriveMinutes ?? 30;
   const to = trip.toSiteMinutes ?? fallback;
   const back = trip.fromSiteMinutes ?? trip.toSiteMinutes ?? fallback;
+  // Timed by size when the house is measured and priced as one area.
+  const sized = areas.length === 1 && trip.areaSqFt != null && trip.areaSqFt > 0 ? trip.areaSqFt : null;
+  const rate = trip.rate ?? SALTING_RATE;
   const each = areas.map((values) => {
     const order = saltingOrder(values);
     const treatment = priceTreatment(order.surface, order.petFriendly, settings);
+    if (sized != null) {
+      return {
+        quote: quoteOrder(order, settings),
+        one: { ...treatment, minutes: saltingMinutes(sized, rate), materialCents: Math.round(sized * rate.materialCentsPerSqFt) },
+      };
+    }
     // On the ground only: the drive is added once below, for the whole house.
     return { quote: quoteOrder(order, settings), one: { ...treatment, minutes: ON_SITE_MINUTES[order.surface] } };
   });
   const onSite = each.reduce((sum, a) => sum + a.one.minutes, 0);
-  const hours = billedHours((onSite + to + back) / 60);
+  // Measured: the time it takes. Not measured: whole hours, an hour at the least.
+  const hours = sized != null ? (onSite + to + back) / 60 : billedHours((onSite + to + back) / 60);
   const visitLabourCents = Math.round(hours * Math.max(0, trip.crewCostPerHourCents));
   let labourLeft = visitLabourCents;
   return each.map(({ quote, one }, index) => {
@@ -169,7 +212,7 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
     const perVisitCents = Math.max(quote.perTreatmentCents, floor);
     return {
       treatments: quote.treatments,
-      onSiteMinutes: one.minutes,
+      onSiteMinutes: Math.round(one.minutes * 10) / 10,
       travelMinutes: Math.round(to + back),
       billedHours: hours * share,
       visitBilledHours: hours,
@@ -180,20 +223,24 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
       perVisitCents,
       totalCents: perVisitCents * quote.treatments,
       lifted: perVisitCents > quote.perTreatmentCents,
+      areaSqFt: sized,
+      rate: sized != null ? rate : null,
     };
   });
 }
 
 /**
- * A salting area's words brought to a new price, when the account manager
- * sets the job's price by hand: "3 applications included in this quote,
- * $120 in all" becomes the new total. The client is told the total, never a
- * price a visit. Words that are not salting's are returned as they were.
+ * Salting's words with no price in them. The wording on a proposal never
+ * states a price: the price is the proposal's, shown once, where it can be
+ * changed. Words written when salting did carry one ("3 applications
+ * included in this quote, $264 in all") are cleaned of it. The total is
+ * taken and ignored, so every caller that reprices still compiles.
  */
-export function repriceSaltingScope(text: string, totalCents: number): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function repriceSaltingScope(text: string, _totalCents?: number): string {
   return text.replace(
     /^Pre-paid salting: (\d+) (?:treatments at \$[\d,.]+ each|applications included in this quote(?:, at \$[\d,.]+ each)?), \$[\d,.]+ in all/,
-    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote, ${money(totalCents)} in all`
+    (_, n: string) => `Pre-paid salting: ${Math.max(1, Number(n))} applications included in this quote`
   );
 }
 
@@ -201,16 +248,16 @@ export function repriceSaltingScope(text: string, totalCents: number): string {
 export function saltingScope(
   values: Record<string, string | undefined>,
   settings: SaltSettings = DEFAULT_SALT_SETTINGS,
-  perTreatmentCents?: number,
+  /** No longer said: the wording carries no price. Kept so callers need not change. */
+  _perTreatmentCents?: number,
   /** Where it goes, in the client's words, when it is more than one area: "the driveway and the back deck". */
   areas?: string
 ): string {
   const order = saltingOrder(values);
   const quote = quoteOrder(order, settings);
   const where = areas ?? `the ${order.surfaceLabel.toLowerCase()}`;
-  const each = perTreatmentCents ?? quote.perTreatmentCents;
   return [
-    `Pre-paid salting: ${quote.treatments} applications included in this quote, ${money(each * quote.treatments)} in all, on ${where}.`,
+    `Pre-paid salting: ${quote.treatments} applications included in this quote, on ${where}.`,
     // The pet blend is named for what it is to the client: a pet friendly snow melt.
     order.petFriendly
       ? `Each application is a pet friendly snow melt, never rock salt, so the concrete isn't pitted. We come out when ice is forecast or after a snow push.`

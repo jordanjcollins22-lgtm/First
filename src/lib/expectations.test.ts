@@ -48,6 +48,17 @@ describe("expectationsFor", () => {
     expect(expectationsFor([{ serviceLabel: "Bush removal", scopeText: "We'll remove the bush." }]).map((e) => e.heading)).toContain("Removals leave roots behind");
   });
 
+  it("says nothing about mulch or removals on a salting proposal", () => {
+    const salting = {
+      serviceLabel: "Salting (prepaid)",
+      scopeText: "Pre-paid salting: 3 applications included in this quote, on the driveway. Each application is a pet friendly snow melt, never rock salt. Snow removal, when you want it, is billed after each storm.",
+    };
+    expect(expectationsFor([salting])).toEqual([]);
+    const withRemoval = expectationsFor([salting, { serviceLabel: "Bush removal", scopeText: "We'll remove the bush." }]).map((e) => e.heading);
+    expect(withRemoval).toContain("Removals leave roots behind");
+    expect(withRemoval).not.toContain("Fresh mulch fades, and beds are never weed free");
+  });
+
   it("has nothing to say about an empty proposal", () => {
     expect(expectationsFor([])).toEqual([]);
     expect(expectationsFor([area("", "")])).toEqual([]);

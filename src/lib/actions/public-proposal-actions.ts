@@ -8,6 +8,8 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAndSendInvoice, freshInvoiceLink, openInvoiceFor, voidOpenInvoice } from "@/lib/invoicing";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
+import { allowedTip } from "@/lib/proposal-tip";
+import { balanceCents, paidOnJobCents } from "@/lib/data/paid-on-job";
 import { isExpired } from "@/lib/proposal-validity";
 import { reportStripeFailure } from "@/lib/data/payments-health";
 import { isStripeConfigured } from "@/lib/env";
@@ -381,8 +383,9 @@ export async function chooseOfflinePayment(input: {
     if (proposal.payment_path) return { ok: false, message: "You've already chosen how to pay. We'll be in touch." };
 
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
-    // A deposit of at most a third on home-improvement work (Maryland MHIC).
-    const amountCents = atSigningForSnapshot(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), proposal.scope_snapshot).dueNowCents;
+    // What is left after anything already paid, and on home-improvement work
+    // a deposit of at most a third of it (Maryland MHIC).
+    const amountCents = atSigningForSnapshot(balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), await paidOnJobCents(admin, proposal.job_id)), proposal.scope_snapshot).dueNowCents;
     if (amountCents <= 0) return { ok: false, message: "There is nothing to pay on this one." };
 
     const { data: claimed } = await admin
@@ -512,6 +515,8 @@ export async function choosePaymentPath(input: {
   instalments?: number;
   /** Set by the internal preview, which reads the client's real proposal. */
   preview?: boolean;
+  /** A tip chosen on the pay page, in cents, as its own line on the checkout. */
+  tipCents?: number;
 }): Promise<PublicResult<{ message: string; checkoutUrl?: string; next?: string }>> {
   try {
     if (input.preview) return previewResult();
@@ -538,7 +543,7 @@ export async function choosePaymentPath(input: {
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
     const context = {
       discountCents,
-      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+      totalCents: balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), await paidOnJobCents(admin, proposal.job_id)),
     };
 
     const option = optionById(context, input.pathId);
@@ -606,7 +611,14 @@ export async function choosePaymentPath(input: {
     // Paying in full pays the invoice that already exists. Its hosted page
     // takes a card or Apple Pay just as checkout would, and a second
     // charge alongside an open invoice is how a client pays twice.
-    if (option.id === "full") {
+    const tipCents = allowedTip(input.tipCents, dueNowCents);
+    // A tip cannot go on an invoice's own page, so with one chosen the open
+    // invoice is voided and the checkout takes the balance and the tip
+    // together. Without one, paying in full pays the invoice as before.
+    if (option.id === "full" && tipCents > 0) {
+      await voidOpenInvoice(proposal.job_id).catch((err) => console.error("could not void the invoice for a tipped checkout:", err));
+    }
+    if (option.id === "full" && tipCents === 0) {
       let open = await openInvoiceFor(proposal.job_id).catch(() => null);
       // An invoice for a price the proposal no longer says (a discount taken
       // off after it went) is voided and raised again at what is owed now.
@@ -633,6 +645,7 @@ export async function choosePaymentPath(input: {
         planId,
         instalmentId,
         deposit: Boolean(signing?.isDeposit),
+        tipCents,
       });
       if (started) {
         checkoutUrl = started.url;
@@ -986,7 +999,9 @@ export async function startProposalPayment(input: {
   pathId: string;
   instalments?: number;
   preview?: boolean;
-}): Promise<PublicResult<{ clientSecret: string; amountCents: number }>> {
+  /** A tip chosen on the pay page, in cents, charged on the same payment. */
+  tipCents?: number;
+}): Promise<PublicResult<{ clientSecret: string; amountCents: number; tipCents: number }>> {
   try {
     if (input.preview) return previewResult();
     if (!isStripeConfigured) {
@@ -1004,9 +1019,12 @@ export async function startProposalPayment(input: {
     if (proposal.status !== "accepted") return { ok: false, message: "Accept the proposal first." };
 
     const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+    // Less whatever has been paid already, so a client who paid half by
+    // invoice is asked for the other half, not the whole again.
+    const paidCents = await paidOnJobCents(admin, proposal.job_id);
     const context = {
       discountCents,
-      totalCents: Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents),
+      totalCents: balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), paidCents),
     };
     const option = optionById(context, input.pathId);
     if (!option) return { ok: false, message: "Pick one of the options." };
@@ -1048,8 +1066,12 @@ export async function startProposalPayment(input: {
     const contact = await getJobCustomerContact(proposal.job_id);
     const existing = contact?.customerId ? await stripeCustomerFor(contact.customerId) : null;
 
+    // The tip rides on the same payment and is named in its metadata, so it
+    // is recorded as a tip on settling and never counted as the job's price.
+    const tipCents = allowedTip(input.tipCents, amountCents);
+
     const intent = await stripeClient().paymentIntents.create({
-      amount: amountCents,
+      amount: amountCents + tipCents,
       currency: "usd",
       // Lets Stripe offer the wallets and Link the browser can actually use,
       // rather than us guessing which and hiding the rest.
@@ -1061,6 +1083,7 @@ export async function startProposalPayment(input: {
         organization_id: proposal.organization_id,
         job_id: proposal.job_id,
         ...(signing?.isDeposit ? { deposit: "1" } : {}),
+        ...(tipCents > 0 ? { tip_cents: String(tipCents) } : {}),
       },
     });
 
@@ -1073,7 +1096,7 @@ export async function startProposalPayment(input: {
       .update({ checkout_session_id: intent.id })
       .eq("id", proposal.id);
 
-    return { ok: true, clientSecret: intent.client_secret, amountCents };
+    return { ok: true, clientSecret: intent.client_secret, amountCents: amountCents + tipCents, tipCents };
   } catch (err) {
     return { ok: false, message: describe(err) };
   }

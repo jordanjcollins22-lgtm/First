@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, MessageSquarePlus } from "lucide-react";
+import { ChevronDown, ChevronRight, MessageSquarePlus } from "lucide-react";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { after } from "next/server";
@@ -791,6 +791,10 @@ async function OwnersDay({ profile }: { profile: Profile }) {
       <Suspense fallback={null}>
         <ApprovalsBlock />
       </Suspense>
+      {/* Proposals waiting on a price or a send, each with its breakdown. */}
+      <Suspense fallback={null}>
+        <OwnersPriceApprovalsBlock />
+      </Suspense>
       <Suspense fallback={null}>
         <PostsToApproveBlock organizationId={profile.organization_id} />
       </Suspense>
@@ -805,6 +809,37 @@ async function OwnersDay({ profile }: { profile: Profile }) {
         <ProjectsTodayBlock profile={profile} refresh={false} />
       </Suspense>
     </div>
+  );
+}
+
+/**
+ * The proposals waiting on Jordan: the same price cards, breakdown and all,
+ * that everybody else who prices sees on their day, folded shut until opened.
+ */
+async function OwnersPriceApprovalsBlock() {
+  const approvals = await getPriceApprovals().catch((err) => {
+    console.error("Price approvals failed to load:", err);
+    return null;
+  });
+  if (!approvals || approvals.length === 0) return null;
+  const toPrice = approvals.filter((a) => a.stage === "price").length;
+  return (
+    <details className="group mb-6 rounded-lg border border-primary/40 bg-primary/5">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm">
+        <span>
+          <span className="block font-semibold">
+            {approvals.length} {approvals.length === 1 ? "proposal" : "proposals"} waiting for your approval
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {toPrice > 0 ? `${toPrice} to price, ${approvals.length - toPrice} to send.` : "Priced, and waiting to be sent."} Open for each price breakdown.
+          </span>
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-primary/20 px-2 py-3 sm:px-4">
+        <PriceApprovals items={approvals} />
+      </div>
+    </details>
   );
 }
 

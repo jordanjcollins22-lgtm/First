@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+import { balanceCents, paidOnJobCents } from "@/lib/data/paid-on-job";
+
 import { env, isStripeConfigured, isStripeInPageReady, isSupabaseConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
@@ -61,6 +64,8 @@ export default async function ProposalPayPage({
   if (settled.redirectTo === null && !previewing) redirect(schedulePath(token));
 
   const discountCents = Math.round((proposal.discount_amount ?? 0) * 100);
+  // Paid already, by invoice or a deposit: the page asks for what is left.
+  const paidCents = await paidOnJobCents(createAdminClient(), proposal.job_id).catch(() => 0);
 
   // Where Stripe sends them once the wallet sheet closes. Absolute, because
   // it is a redirect out of somebody else's payment sheet.
@@ -79,14 +84,27 @@ export default async function ProposalPayPage({
       // offers the wallets, just on Stripe's page instead of ours.
       publishableKey={isStripeInPageReady ? env.stripePublishableKey : ""}
       returnUrl={returnUrl}
+      tipsEnabled={await tipsOn(proposal.organization_id)}
       organizationName={data.organizationName}
+      paidCents={paidCents}
       context={{
         discountCents,
-        // What is taken now: the whole price, or on Maryland home-improvement
-        // work a deposit of at most a third (MHIC), the same figure the
-        // payment action charges.
-        totalCents: atSigningForSnapshot(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), proposal.scope_snapshot).dueNowCents,
+        // What is taken now: the balance left after anything already paid,
+        // or on Maryland home-improvement work a deposit of at most a third of
+        // it (MHIC), the same figure the payment action charges.
+        totalCents: atSigningForSnapshot(balanceCents(Math.max(0, Math.round((proposal.total_cost ?? 0) * 100) - discountCents), paidCents), proposal.scope_snapshot).dueNowCents,
       }}
     />
   );
+}
+
+/** Whether the business takes tips. Off rather than an error if it cannot be read. */
+async function tipsOn(organizationId: string | null | undefined): Promise<boolean> {
+  if (!organizationId) return false;
+  try {
+    const { data } = await createAdminClient().from("organizations").select("tips_enabled").eq("id", organizationId).maybeSingle();
+    return data?.tips_enabled !== false;
+  } catch {
+    return false;
+  }
 }

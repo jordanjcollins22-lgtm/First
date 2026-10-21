@@ -19,6 +19,8 @@ import {
 import type { OfflineMethod } from "@/lib/collect-payment";
 import { PREVIEW_BLOCKED, schedulePath } from "@/lib/proposal-flow";
 import { PayInPlace } from "@/components/proposal/pay-in-place";
+import { tipChoices, typedTipCents } from "@/lib/proposal-tip";
+import { cn } from "@/lib/utils";
 
 function money(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -40,6 +42,8 @@ export function PayView({
   canCharge,
   publishableKey,
   returnUrl,
+  tipsEnabled = false,
+  paidCents = 0,
 }: {
   token: string;
   context: AcceptanceContext;
@@ -50,6 +54,10 @@ export function PayView({
   /** Empty when we cannot take a card on this page and must redirect. */
   publishableKey: string;
   returnUrl: string;
+  /** Offer a tip with the payment, on the card form here or on Stripe's checkout. */
+  tipsEnabled?: boolean;
+  /** Already paid towards this job; the amounts below are what is left. */
+  paidCents?: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -62,6 +70,11 @@ export function PayView({
   // Cash or check: the choice, then the confirmation before moving on.
   const [offline, setOffline] = useState<"closed" | "choosing" | "done">("closed");
   const [offlineMessage, setOfflineMessage] = useState<string | null>(null);
+  // The tip, chosen before the card form opens, so the amount on the form
+  // is the whole of what they are paying.
+  const offersTip = tipsEnabled && canCharge;
+  const [tipCents, setTipCents] = useState(0);
+  const [tipOther, setTipOther] = useState<string | null>(null);
 
   function chooseOffline(method: OfflineMethod) {
     if (preview) {
@@ -101,6 +114,7 @@ export function PayView({
           token,
           pathId: option.id,
           instalments: 1,
+          tipCents: offersTip ? tipCents : 0,
         });
         setBusyId(null);
         if (result.ok) setPaying({ clientSecret: result.clientSecret, amount: result.amountCents });
@@ -116,6 +130,7 @@ export function PayView({
         // One. Splitting is arranged by the office against an invoice now,
         // not chosen by a client on the proposal page.
         instalments: 1,
+        tipCents: offersTip ? tipCents : 0,
       });
       if (!result.ok) {
         setBusyId(null);
@@ -143,7 +158,9 @@ export function PayView({
             missing. */}
         <h1 className="mt-1 text-2xl font-bold">Last step</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Settle up and pick the day you would like us.
+          {paidCents > 0
+            ? `You've already paid ${money(paidCents)}. Thank you! This is the balance.`
+            : "Settle up and pick the day you would like us."}
         </p>
       </div>
 
@@ -162,10 +179,13 @@ export function PayView({
         />
       ) : (
         <>
+      {offersTip && <TipPicker amountCents={context.totalCents} tipCents={tipCents} other={tipOther} onChange={(cents, other) => { setTipCents(cents); setTipOther(other); }} />}
+
       {options.map((option) => {
-        const amount = option.keepsDiscount
+        const base = option.keepsDiscount
           ? context.totalCents
           : context.totalCents + context.discountCents;
+        const amount = base + (offersTip ? tipCents : 0);
         return (
           <div
             key={option.id}
@@ -194,9 +214,14 @@ export function PayView({
             {/* Before the tap, never on the receipt. A surcharge has to be
                 disclosed ahead of the payment, and somebody who would rather
                 write a cheque deserves to know that in time to. */}
-            {canCharge && surchargeCents(amount) > 0 && (
+            {offersTip && tipCents > 0 && (
+              <p className="-mt-1 text-center text-xs text-muted-foreground">
+                {money(base)} for the work, plus a {money(tipCents)} tip for the crew.
+              </p>
+            )}
+            {canCharge && surchargeCents(base) > 0 && (
               <p className="text-center text-xs text-muted-foreground">
-                {surchargeNotice(amount)}
+                {surchargeNotice(base)}
               </p>
             )}
           </div>
@@ -246,6 +271,77 @@ export function PayView({
           ? "Card, Apple Pay and Google Pay, handled by Stripe."
           : "We will email your invoice, and a team member will reach out to get you booked in."}
       </p>
+    </div>
+  );
+}
+
+/** A tip for the crew: none, a share of the bill, or an amount of their own. */
+function TipPicker({
+  amountCents,
+  tipCents,
+  other,
+  onChange,
+}: {
+  amountCents: number;
+  tipCents: number;
+  /** What they typed, while "Other" is open; null otherwise. */
+  other: string | null;
+  onChange: (cents: number, other: string | null) => void;
+}) {
+  const choices = tipChoices(amountCents);
+  const typed = other == null ? null : typedTipCents(other);
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4">
+      <div>
+        <p className="font-semibold">Add a tip for the crew?</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Optional. All of it goes to the people who did the work.</p>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
+        {choices.map((choice) => {
+          const on = other == null && tipCents === choice.cents;
+          return (
+            <button
+              key={choice.label}
+              type="button"
+              onClick={() => onChange(choice.cents, null)}
+              className={cn(
+                "flex min-h-14 flex-col items-center justify-center rounded-xl border px-1 text-sm font-semibold",
+                on ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
+              )}
+            >
+              <span>{choice.label}</span>
+              {choice.cents > 0 && <span className={cn("text-xs font-normal", on ? "text-primary-foreground/90" : "text-muted-foreground")}>{money(choice.cents)}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {other == null ? (
+        <button type="button" className="self-center text-sm text-primary underline" onClick={() => onChange(0, "")}>
+          Enter a different amount
+        </button>
+      ) : (
+        <div className="flex flex-col gap-1">
+          <label htmlFor="tip-other" className="text-sm font-medium">
+            Tip amount
+          </label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+            <input
+              id="tip-other"
+              inputMode="decimal"
+              value={other}
+              onChange={(e) => {
+                const next = e.target.value;
+                const cents = typedTipCents(next);
+                onChange(cents == null ? 0 : Math.min(cents, amountCents), next);
+              }}
+              placeholder="0"
+              className="h-12 w-full rounded-xl border border-border bg-background pl-7 pr-3 text-lg"
+            />
+          </div>
+          {typed == null && <p className="text-xs text-destructive">Type an amount in dollars, like 25.</p>}
+        </div>
+      )}
     </div>
   );
 }
