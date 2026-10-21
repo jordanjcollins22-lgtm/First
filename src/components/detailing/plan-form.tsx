@@ -4,12 +4,11 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Check, Loader2 } from "lucide-react";
 
+import { vehicleIcons } from "@/components/detailing/vehicle-icons";
 import { requestMembership } from "@/lib/actions/detailing-lead-actions";
-import { addOns, firstTimeDiscount, membershipPrices, type VehicleSize } from "@/lib/detailing";
+import { addOns, firstTimeDiscount, membershipPrices, vehicleOrder, type VehicleSize } from "@/lib/detailing";
 
-const sizes = Object.entries(membershipPrices) as [VehicleSize, (typeof membershipPrices)[VehicleSize]][];
-
-function SubmitButton() {
+function SubmitButton({ quote }: { quote: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -17,18 +16,18 @@ function SubmitButton() {
       disabled={pending}
       className="bg-gold inline-flex h-14 w-full items-center justify-center gap-2 rounded-md px-6 text-base font-bold uppercase tracking-wider text-black transition hover:brightness-110 disabled:opacity-70"
     >
-      {pending ? <Loader2 className="size-5 animate-spin" /> : "Start my membership"}
+      {pending ? <Loader2 className="size-5 animate-spin" /> : quote ? "Request my quote" : "Start my membership"}
     </button>
   );
 }
 
-export function PlanForm({ leadId }: { leadId: string }) {
-  const [size, setSize] = useState<VehicleSize>("sedan");
+export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVehicle: VehicleSize }) {
+  const [size, setSize] = useState<VehicleSize>(initialVehicle);
   const [picked, setPicked] = useState<string[]>([]);
 
   const monthly = membershipPrices[size].price;
   const addOnTotal = addOns.filter((a) => picked.includes(a.id)).reduce((sum, a) => sum + a.price, 0);
-  const firstVisit = monthly - firstTimeDiscount + addOnTotal;
+  const firstVisit = monthly === null ? null : monthly - firstTimeDiscount + addOnTotal;
 
   return (
     <form action={requestMembership} className="grid gap-10 lg:grid-cols-[1fr_340px]">
@@ -36,31 +35,40 @@ export function PlanForm({ leadId }: { leadId: string }) {
 
       <div className="grid gap-10">
         <fieldset>
-          <legend className="mb-4 text-lg font-bold uppercase tracking-wide">1. Your vehicle</legend>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {sizes.map(([id, s]) => (
-              <label
-                key={id}
-                className={`cursor-pointer rounded-xl border p-4 transition ${
-                  size === id ? "border-[#d4a843] bg-[#d4a843]/10" : "border-white/15 hover:border-white/30"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="vehicle_size"
-                  value={id}
-                  checked={size === id}
-                  onChange={() => setSize(id)}
-                  className="sr-only"
-                />
-                <span className="block font-bold">{s.label}</span>
-                <span className="block text-xs text-white/50">{s.examples}</span>
-                <span className="font-display text-gold mt-3 block text-3xl font-bold">
-                  ${s.price}
-                  <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
-                </span>
-              </label>
-            ))}
+          <legend className="mb-4 text-lg font-bold uppercase tracking-wide">1. What we&apos;re detailing</legend>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {vehicleOrder.map((id) => {
+              const s = membershipPrices[id];
+              const Icon = vehicleIcons[id];
+              return (
+                <label
+                  key={id}
+                  className={`cursor-pointer rounded-xl border p-4 transition ${
+                    size === id ? "border-[#d4a843] bg-[#d4a843]/10" : "border-white/15 hover:border-white/30"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="vehicle_size"
+                    value={id}
+                    checked={size === id}
+                    onChange={() => setSize(id)}
+                    className="sr-only"
+                  />
+                  <Icon className={`mb-2 size-7 ${size === id ? "text-[#f0c75e]" : "text-white/60"}`} strokeWidth={1.5} />
+                  <span className="block font-bold">{s.label}</span>
+                  <span className="block text-xs text-white/50">{s.examples}</span>
+                  {s.price === null ? (
+                    <span className="text-gold mt-3 block text-lg font-bold">Custom quote</span>
+                  ) : (
+                    <span className="font-display text-gold mt-3 block text-3xl font-bold">
+                      ${s.price}
+                      <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
+                    </span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
 
@@ -113,7 +121,7 @@ export function PlanForm({ leadId }: { leadId: string }) {
           <dl className="mt-5 grid gap-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-white/65">{membershipPrices[size].label}</dt>
-              <dd>${monthly}/mo</dd>
+              <dd>{monthly === null ? "Quoted" : `$${monthly}/mo`}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-white/65">First-timer discount</dt>
@@ -125,14 +133,23 @@ export function PlanForm({ leadId }: { leadId: string }) {
                 <dd>+${addOnTotal}</dd>
               </div>
             )}
-            <div className="mt-2 flex items-baseline justify-between border-t border-white/15 pt-3">
-              <dt className="font-semibold">First visit</dt>
-              <dd className="font-display text-gold text-3xl font-bold">${firstVisit}</dd>
-            </div>
-            <p className="text-right text-xs text-white/50">Then ${monthly}/mo</p>
+            {firstVisit === null ? (
+              <p className="mt-2 border-t border-white/15 pt-3 text-sm text-white/65">
+                {membershipPrices[size].label} pricing depends on size and condition. We&apos;ll send your exact monthly
+                price before your first visit.
+              </p>
+            ) : (
+              <>
+                <div className="mt-2 flex items-baseline justify-between border-t border-white/15 pt-3">
+                  <dt className="font-semibold">First visit</dt>
+                  <dd className="font-display text-gold text-3xl font-bold">${firstVisit}</dd>
+                </div>
+                <p className="text-right text-xs text-white/50">Then ${monthly}/mo</p>
+              </>
+            )}
           </dl>
           <div className="mt-6">
-            <SubmitButton />
+            <SubmitButton quote={monthly === null} />
           </div>
           <p className="mt-3 text-center text-xs text-white/50">
             No payment today. We&apos;ll call or text to confirm and schedule your first visit.

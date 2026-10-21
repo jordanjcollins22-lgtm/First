@@ -3,14 +3,14 @@
 import { redirect } from "next/navigation";
 
 import { normalizePhone } from "@/lib/check-ins/phone";
-import { addOns, membershipPrices, type VehicleSize } from "@/lib/detailing";
+import { addOns, isVehicleSize, membershipPrices } from "@/lib/detailing";
 import { isGhlConfigured } from "@/lib/env";
 import { upsertDetailingLeadContact } from "@/lib/ghl/client";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export interface LeadFormState {
   error?: string;
-  values?: { name: string; phone: string; email: string; address: string };
+  values?: { vehicle: string; name: string; phone: string; email: string; address: string };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -19,12 +19,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Step 1: save who they are and where the car will be, then go to the plan page. */
 export async function createDetailingLead(_prev: LeadFormState, formData: FormData): Promise<LeadFormState> {
   const values = {
+    vehicle: String(formData.get("vehicle_size") ?? ""),
     name: String(formData.get("name") ?? "").trim(),
     phone: String(formData.get("phone") ?? "").trim(),
     email: String(formData.get("email") ?? "").trim(),
     address: String(formData.get("address") ?? "").trim(),
   };
 
+  if (!isVehicleSize(values.vehicle)) return { error: "Pick what we're detailing.", values };
   if (!values.name) return { error: "Please enter your name.", values };
   const phone = normalizePhone(values.phone);
   if (!phone) return { error: "Enter a valid phone number, e.g. (443) 555-0123.", values };
@@ -34,7 +36,13 @@ export async function createDetailingLead(_prev: LeadFormState, formData: FormDa
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("detailing_leads")
-    .insert({ name: values.name, phone, email: values.email.toLowerCase(), service_address: values.address })
+    .insert({
+      name: values.name,
+      phone,
+      email: values.email.toLowerCase(),
+      service_address: values.address,
+      vehicle_size: values.vehicle,
+    })
     .select("id")
     .single();
   if (error || !data) {
@@ -62,14 +70,18 @@ export async function createDetailingLead(_prev: LeadFormState, formData: FormDa
   redirect(`/detailing/start/plan?lead=${data.id}`);
 }
 
-/** Step 2: record the membership request with the size and add-ons they picked. */
+/**
+ * Step 2: record the membership request with the vehicle and add-ons they
+ * picked. Boats and RVs have no set price, so monthly_price stays null and the
+ * request is a quote request.
+ */
 export async function requestMembership(formData: FormData) {
   const leadId = String(formData.get("lead") ?? "");
   if (!UUID_RE.test(leadId)) redirect("/detailing/start");
 
-  const size = String(formData.get("vehicle_size") ?? "") as VehicleSize;
+  const size = formData.get("vehicle_size");
+  if (!isVehicleSize(size)) redirect(`/detailing/start/plan?lead=${leadId}`);
   const plan = membershipPrices[size];
-  if (!plan) redirect(`/detailing/start/plan?lead=${leadId}`);
 
   // Prices come from the server-side config, never from the form.
   const picked = addOns.filter((a) => formData.getAll("add_ons").includes(a.id));

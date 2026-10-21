@@ -125,16 +125,27 @@ export const vehicleTypes = ["Sedan / Coupe", "SUV / Crossover", "Truck", "Van /
 
 export const firstTimeDiscount = 20;
 
-export type VehicleSize = "sedan" | "suv" | "truck";
+export type VehicleSize = "sedan" | "suv" | "truck" | "motorcycle" | "boat" | "rv";
 
-// Monthly price by vehicle size, in whole dollars. Sedan matches the $199
-// Complete Care flyer; larger vehicles step up roughly in line with the
+// What we detail, in the order the funnel shows them. Monthly price in whole
+// dollars; null means it's priced per vehicle (boats and RVs vary by length),
+// so the funnel asks for a quote instead of showing a number. Sedan matches
+// the $199 Complete Care flyer; larger cars step up roughly in line with the
 // one-time size pricing (SUVs ~20% more, trucks ~35% more).
-export const membershipPrices: Record<VehicleSize, { label: string; examples: string; price: number }> = {
-  sedan: { label: "Sedan / Coupe", examples: "Civic, Camry, Model 3", price: 199 },
+export const membershipPrices: Record<VehicleSize, { label: string; examples: string; price: number | null }> = {
+  sedan: { label: "Car", examples: "Sedan, coupe, hatchback", price: 199 },
   suv: { label: "SUV / Crossover", examples: "RAV4, Explorer, CR-V", price: 239 },
-  truck: { label: "Truck / Van / 3-Row", examples: "F-150, Tahoe, Odyssey", price: 269 },
+  truck: { label: "Truck / Van", examples: "F-150, Tahoe, Odyssey", price: 269 },
+  boat: { label: "Boat", examples: "Bowrider, pontoon, center console", price: null },
+  rv: { label: "RV / Camper", examples: "Motorhome, travel trailer", price: null },
+  motorcycle: { label: "Motorcycle", examples: "Cruiser, sport, touring", price: 149 },
 };
+
+export const vehicleOrder: VehicleSize[] = ["sedan", "suv", "truck", "boat", "rv", "motorcycle"];
+
+export function isVehicleSize(value: unknown): value is VehicleSize {
+  return typeof value === "string" && value in membershipPrices;
+}
 
 export const membershipIncludes = {
   interior: [
