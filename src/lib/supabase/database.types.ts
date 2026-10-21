@@ -363,7 +363,7 @@ export interface Database {
           email: string;
           service_address: string;
           status: "lead" | "membership_requested";
-          vehicle_size: "sedan" | "suv" | "truck" | null;
+          vehicle_size: "sedan" | "suv" | "truck" | "motorcycle" | "boat" | "rv" | null;
           monthly_price: number | null;
           add_ons: string[];
           add_ons_total: number | null;
