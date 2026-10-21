@@ -55,7 +55,7 @@ export default async function FunnelDonePage({ searchParams }: PageProps<"/detai
                   First visit <span className="text-gold text-xl font-bold">${firstVisit}</span>, then ${data.monthly_price}/mo
                 </>
               ) : (
-                <>Custom quote — ${firstTimeDiscount} first-timer discount applies</>
+                <>Custom quote, ${firstTimeDiscount} first-timer discount applies</>
               )}
             </p>
           </div>

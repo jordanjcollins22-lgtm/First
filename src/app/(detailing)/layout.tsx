@@ -15,7 +15,7 @@ const oswald = Oswald({
 export const metadata: Metadata = {
   title: "Apex Shine Mobile | Premium Mobile Detailing",
   description:
-    "Interior, exterior, ceramic coatings and paint protection — premium mobile detailing that comes to you. Call 443-528-0896.",
+    "Interior, exterior, ceramic coatings and paint protection. Premium mobile detailing that comes to you. Call 443-528-0896.",
   openGraph: {
     title: "Apex Shine Mobile | Premium Mobile Detailing",
     description: "Your car deserves the best. Premium mobile detailing that comes to you.",

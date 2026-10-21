@@ -32,7 +32,7 @@ export function QuoteForm() {
   const body = encodeURIComponent(message);
   const smsHref = `${business.smsHref}?&body=${body}`;
   const mailHref = `mailto:${business.email}?subject=${encodeURIComponent(
-    `Quote request – ${service}`
+    `Quote request: ${service}`
   )}&body=${body}`;
 
   return (
@@ -94,7 +94,7 @@ export function QuoteForm() {
         </a>
       </div>
       <p className="text-xs text-white/50 sm:col-span-2">
-        Opens your messages or email app with your details filled in — just hit send.
+        Opens your messages or email app with your details filled in. Just hit send.
       </p>
     </form>
   );
