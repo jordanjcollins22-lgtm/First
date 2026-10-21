@@ -122,6 +122,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/automation":
+    "Everything waiting on a person, and the switch for the event automations. Owner only: the page sends anyone " +
+    "else to My Day, and the switch checks the owner again when it saves.",
   "/snow":
     "Storm-day stop logging for whoever is on the salt or plow route: salt used, photos, surface temperature. " +
     "Shows only the business's own active snow event, and every save checks the person is staff of that business.",

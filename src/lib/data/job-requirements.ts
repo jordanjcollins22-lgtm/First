@@ -96,9 +96,15 @@ function stockState(
   };
 }
 
-/** Cached per request: jobFacts asks, and so does anything pricing the same job. */
-export const jobRequirements = cache(async function jobRequirements(jobId: string): Promise<JobRequirements> {
-  const supabase = await createClient();
+/**
+ * Cached per request: jobFacts asks, and so does anything pricing the same job.
+ * A caller with no signed-in session (a scheduled run) passes its own client.
+ */
+export const jobRequirements = cache(async function jobRequirements(
+  jobId: string,
+  client?: Awaited<ReturnType<typeof createClient>>
+): Promise<JobRequirements> {
+  const supabase = client ?? (await createClient());
 
   const [{ data: design }, { data: requested }] = await Promise.all([
     supabase.from("canvas_designs").select("zones").eq("job_id", jobId).maybeSingle(),

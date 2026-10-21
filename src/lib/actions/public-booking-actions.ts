@@ -29,6 +29,7 @@ import { routeForBudget } from "@/lib/photo-quote";
 import { readPhotoQuotes, waitingPhotoQuoteJob } from "@/lib/data/photo-quotes";
 import { sendEvaluationConfirmationNow, sendPhotoQuoteLinkNow } from "@/lib/data/booking-notices";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordBooking } from "@/lib/os/app-events";
 
 // The photo-quote columns are newer than the generated types.
 const untyped = (c: unknown) => c as SupabaseClient;
@@ -404,6 +405,10 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   // They've just become a client — take them off the cold-prospect list now
   // rather than at the next nightly sweep.
   await reconcileProspects(admin).catch(() => null);
+
+  // The lead, and the visit if they picked a time, for the event backbone.
+  // Off unless switched on; never in the way of the booking.
+  await recordBooking(jobId, "booking_page");
 
   if (visit) {
     // Onto the GoHighLevel calendar too, so the office sees one calendar.

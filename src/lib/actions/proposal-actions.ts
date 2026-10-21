@@ -48,6 +48,7 @@ import { listScopeRecommendations, zonesForReview } from "@/lib/data/scope-revie
 import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
 import { DEFAULT_VALID_DAYS, expiryOf, isValidDays } from "@/lib/proposal-validity";
+import { recordEstimateSent } from "@/lib/os/app-events";
 
 function generateToken(): string {
   return randomUUID().replace(/-/g, "");
@@ -658,6 +659,7 @@ export async function markProposalSent(jobId: string): Promise<void> {
     .eq("status", "sent")
     .is("sent_at", null);
   if (error) throw error;
+  await recordEstimateSent(jobId, "sent_by_hand");
   revalidateJobViews(jobId);
   revalidatePath("/pipeline");
 }

@@ -30,6 +30,7 @@ import type { ProposalZoneSnapshot } from "@/types/domain";
 import { applyOption, readOptions } from "@/lib/proposal-options";
 import { atSigningForSnapshot } from "@/lib/sales/mhic";
 import type { Json } from "@/lib/supabase/database.types";
+import { recordEstimateResponse } from "@/lib/os/app-events";
 
 /**
  * The client's Accept/Decline click — no logged-in user exists, so this runs
@@ -124,6 +125,9 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     // A sale, for the ads to learn from. Off until Meta is connected.
     await reportSaleToMeta(admin, proposal.job_id, Math.round(owed * 100)).catch(() => {});
   }
+
+  // The answer, for the event backbone. Off unless switched on.
+  await recordEstimateResponse(proposal.job_id, response);
 
   // Every screen, not just this job and the list. The pipeline reads the
   // proposal status too, and a card left in the old column is what a client

@@ -156,8 +156,11 @@ export const listGateOverrides = cache(async function listGateOverrides(jobId: s
  * answer one question four times. The facts cannot change while the request is
  * in flight, so they are worked out once.
  */
-export const jobFacts = cache(async function jobFacts(jobId: string): Promise<JobFacts> {
-  const supabase = await createClient();
+export const jobFacts = cache(async function jobFacts(
+  jobId: string,
+  client?: Awaited<ReturnType<typeof createClient>>
+): Promise<JobFacts> {
+  const supabase = client ?? (await createClient());
 
   const [{ data: job }, { data: crew }, { data: photos }, { data: design }, { data: walkthrough }] =
     await Promise.all([
@@ -182,7 +185,7 @@ export const jobFacts = cache(async function jobFacts(jobId: string): Promise<Jo
     { data: disposition },
   ] =
     await Promise.all([
-      jobRequirements(jobId),
+      client ? jobRequirements(jobId, client) : jobRequirements(jobId),
       supabase.from("job_confirmations").select("kind, state").eq("job_id", jobId),
       supabase
         .from("payment_plans")

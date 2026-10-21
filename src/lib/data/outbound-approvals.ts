@@ -14,6 +14,7 @@ import { MOOT_LABEL, type MootReason } from "@/lib/approvals/moot";
 import type { DeclineReason } from "@/lib/approvals/declines";
 import { mootFor } from "@/lib/data/approval-policy";
 import type { Database } from "@/lib/supabase/database.types";
+import { recordEstimateSent } from "@/lib/os/app-events";
 
 type Admin = SupabaseClient<Database>;
 
@@ -364,6 +365,7 @@ export async function deliverApproval(admin: Admin, approval: ApprovalRow, decid
   // The proposal is sent from this moment, not from its approval.
   if (sent.ok && approval.kind === "proposal_ready" && approval.job_id) {
     await admin.from("job_proposals").update({ sent_at: now }).eq("job_id", approval.job_id).is("sent_at", null);
+    await recordEstimateSent(approval.job_id, "proposal_email");
   }
   return sent.ok ? { ok: true, message: "Sent." } : { ok: false, message: sent.message };
 }

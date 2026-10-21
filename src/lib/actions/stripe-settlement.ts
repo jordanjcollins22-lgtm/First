@@ -17,6 +17,7 @@ import { recordStripePayment } from "@/lib/actions/payment-plan-actions";
 import { getCurrentProfile } from "@/lib/data/team";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { webhookVerdict, type WebhookVerdict } from "@/lib/webhook-health";
+import { recordPaymentSettled } from "@/lib/os/app-events";
 
 /**
  * Turning a paid Stripe checkout into what the app records about it.
@@ -131,6 +132,8 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
       .eq("id", planId);
   }
 
+  const paymentIntentId =
+    typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? session.id;
   await recordStripePayment({
     organizationId,
     customerId,
@@ -139,12 +142,21 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     instalmentId,
     amountCents: session.amount_total ?? 0,
     workCents: Number(session.metadata?.work_cents) || null,
-    paymentIntentId:
-      typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id ?? session.id,
+    paymentIntentId,
     invoiceId: typeof session.invoice === "string" ? session.invoice : session.invoice?.id ?? null,
   });
+
+  // Settled money only: a bank debit still clearing is "unpaid" here and
+  // reports nothing until it lands.
+  if (jobId && session.payment_status === "paid") {
+    await recordPaymentSettled({
+      organizationId,
+      jobId,
+      proposalId,
+      amountCents: Number(session.metadata?.work_cents) || session.amount_total || 0,
+      paymentRef: paymentIntentId,
+    });
+  }
 
   return true;
 }

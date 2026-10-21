@@ -36,6 +36,7 @@ import { validateAppointment } from "@/lib/scheduling";
 import { adoptEvaluationPhotosAsBefores } from "@/lib/data/adopt-befores";
 import type { Database } from "@/lib/supabase/database.types";
 import type { EvaluationStatus, JobStatus } from "@/types/domain";
+import { recordVisitCompleted, recordVisitScheduled } from "@/lib/os/app-events";
 
 /**
  * Submitting an evaluation, and submitting it again.
@@ -65,6 +66,8 @@ export async function updateEvaluationStatus(
   let outcome: GenerateOutcome | null = null;
 
   if (status === "completed") {
+    await recordVisitCompleted(jobId, null);
+
     // A rebuild that fails used to come back as nothing, which the page
     // read as "could not be rebuilt" with no reason. The reason is the
     // whole point: a constraint the database refused, a service with no
@@ -430,6 +433,7 @@ export async function scheduleEstimate(
     if (date) {
       await syncEvaluationToGhl(jobId);
       await sendEvaluationConfirmationNow(jobId);
+      await recordVisitScheduled(jobId, null);
     }
     else await cancelEvaluationInGhl(jobId);
 
