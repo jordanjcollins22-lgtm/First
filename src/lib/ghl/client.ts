@@ -66,6 +66,38 @@ export async function upsertTeamMemberContact(input: { name: string; phone: stri
   return id;
 }
 
+/**
+ * Create or update the GHL contact for an Apex Shine detailing funnel lead, so
+ * new leads land in the CRM alongside everything else.
+ */
+export async function upsertDetailingLeadContact(input: {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  tags: string[];
+}): Promise<string> {
+  const [firstName, ...rest] = input.name.trim().split(/\s+/);
+  const data = await ghlFetch<{ contact?: { id?: string } }>("/contacts/upsert", {
+    method: "POST",
+    version: "2021-07-28",
+    body: {
+      locationId: serverEnv.ghlLocationId,
+      firstName,
+      lastName: rest.join(" ") || undefined,
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+      address1: input.address,
+      tags: input.tags,
+      source: "Apex Shine Mobile booking funnel",
+    },
+  });
+  const id = data.contact?.id;
+  if (!id) throw new GhlError("GoHighLevel contact upsert returned no contact id.");
+  return id;
+}
+
 export async function sendSms(input: { contactId: string; message: string }) {
   return ghlFetch<{ messageId?: string; conversationId?: string }>("/conversations/messages", {
     method: "POST",

@@ -355,6 +355,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sms_messages"]["Row"]>;
         Relationships: [];
       };
+      detailing_leads: {
+        Row: {
+          id: string;
+          name: string;
+          phone: string;
+          email: string;
+          service_address: string;
+          status: "lead" | "membership_requested";
+          vehicle_size: "sedan" | "suv" | "truck" | null;
+          monthly_price: number | null;
+          add_ons: string[];
+          add_ons_total: number | null;
+          ghl_contact_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["detailing_leads"]["Row"]> & {
+          name: string;
+          phone: string;
+          email: string;
+          service_address: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["detailing_leads"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -63,7 +63,7 @@ export default function DetailingPage() {
             <a href="#services" className="hover:text-[#f0c75e]">Services</a>
             <a href="#packages" className="hover:text-[#f0c75e]">Packages</a>
             <a href="#how" className="hover:text-[#f0c75e]">How it works</a>
-            <a href="#book" className="hover:text-[#f0c75e]">Book</a>
+            <a href="/detailing/start" className="hover:text-[#f0c75e]">Book</a>
           </nav>
           <a
             href={business.phoneHref}
@@ -102,7 +102,7 @@ export default function DetailingPage() {
             </p>
             <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
               <a
-                href="#book"
+                href="/detailing/start"
                 className="bg-gold inline-flex h-14 items-center justify-center gap-2 rounded-md px-8 font-bold uppercase tracking-wider text-black transition hover:brightness-110"
               >
                 <CalendarCheck className="size-5" /> Book service
@@ -328,7 +328,7 @@ export default function DetailingPage() {
           <Phone className="size-4" /> Call
         </a>
         <a
-          href="#book"
+          href="/detailing/start"
           className="bg-gold inline-flex h-12 items-center justify-center gap-2 rounded-md font-bold uppercase tracking-wider text-black"
         >
           <CalendarCheck className="size-4" /> Book
