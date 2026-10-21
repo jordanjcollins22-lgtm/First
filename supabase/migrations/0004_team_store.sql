@@ -5,7 +5,7 @@ create table if not exists merch_products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   description text,
-  -- SVG with a <rect id="barcode-slot"> and optional {{tokens}}.
+  -- SVG with a <rect id="barcode-slot">, the only part that changes per order.
   design_svg text not null,
   barcode_format text not null default 'code128'
     check (barcode_format in ('code128', 'qrcode', 'upca', 'ean13')),
@@ -24,7 +24,6 @@ create table if not exists merch_orders (
   team_member_id uuid not null references team_members(id) on delete restrict,
   quantity integer not null default 1 check (quantity between 1 and 500),
   barcode_value text not null,
-  field_values jsonb not null default '{}'::jsonb,
   -- The exact file sent to the vendor, frozen when the order is placed.
   print_svg text not null,
   ship_to jsonb not null,

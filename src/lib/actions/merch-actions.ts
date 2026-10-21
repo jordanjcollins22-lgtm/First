@@ -9,7 +9,7 @@ import { affiliateLink, SAMPLE_AFFILIATE_CODE } from "@/lib/merch/affiliate";
 import { renderBarcode } from "@/lib/merch/barcode";
 import { BARCODE_FORMATS } from "@/lib/merch/formats";
 import { nextStatus, PAYMENT_OPTIONS } from "@/lib/merch/format";
-import { renderDesign, templateFields, validateTemplate } from "@/lib/merch/template";
+import { renderDesign, validateTemplate } from "@/lib/merch/template";
 import { createClient } from "@/lib/supabase/server";
 import type {
   BarcodeFormat,
@@ -54,17 +54,12 @@ async function affiliateBarcodeValue(teamMemberId: string | undefined): Promise<
   return data ? affiliateLink(await appOrigin(), data.affiliate_code) : null;
 }
 
-function buildPrintFile(
-  designSvg: string,
-  format: BarcodeFormat,
-  barcodeValue: string,
-  values: Record<string, string>
-): PreviewResult {
+function buildPrintFile(designSvg: string, format: BarcodeFormat, barcodeValue: string): PreviewResult {
   const problems = validateTemplate(designSvg);
   if (problems.length) return { error: problems.join(" ") };
   const barcode = renderBarcode(format, barcodeValue);
   if (!barcode.ok) return { error: barcode.error };
-  return { svg: renderDesign(designSvg, { barcodeSvg: barcode.svg, values }) };
+  return { svg: renderDesign(designSvg, { barcodeSvg: barcode.svg }) };
 }
 
 /**
@@ -79,7 +74,6 @@ export async function previewMerchDesign(input: {
   barcodeSource?: BarcodeSource;
   barcodeValue?: string;
   teamMemberId?: string;
-  values: Record<string, string>;
 }): Promise<PreviewResult> {
   let design = input.designSvg ?? "";
   let format = input.barcodeFormat ?? "code128";
@@ -105,7 +99,7 @@ export async function previewMerchDesign(input: {
     barcodeValue = link;
     format = "qrcode";
   }
-  return buildPrintFile(design, format, barcodeValue, input.values);
+  return buildPrintFile(design, format, barcodeValue);
 }
 
 export async function createMerchProduct(formData: FormData): Promise<ActionResult> {
@@ -176,10 +170,6 @@ export async function createMerchOrder(formData: FormData): Promise<ActionResult
     if (!link) return { error: "That team member no longer exists." };
     barcodeValue = link;
   }
-  const values: Record<string, string> = {};
-  for (const field of templateFields(product.design_svg)) {
-    values[field.key] = str(formData, `field_${field.key}`);
-  }
 
   const shipTo: MerchShipTo = {
     name: str(formData, "ship_name"),
@@ -193,7 +183,7 @@ export async function createMerchOrder(formData: FormData): Promise<ActionResult
     return { error: "Fill in the full shipping address." };
   }
 
-  const printFile = buildPrintFile(product.design_svg, product.barcode_format, barcodeValue, values);
+  const printFile = buildPrintFile(product.design_svg, product.barcode_format, barcodeValue);
   if (printFile.error !== undefined) return { error: printFile.error };
 
   const { error } = await supabase.from("merch_orders").insert({
@@ -201,7 +191,6 @@ export async function createMerchOrder(formData: FormData): Promise<ActionResult
     team_member_id: teamMemberId,
     quantity,
     barcode_value: barcodeValue,
-    field_values: values,
     print_svg: printFile.svg,
     ship_to: shipTo as unknown as Record<string, string>,
     unit_price_cents: product.price_cents,

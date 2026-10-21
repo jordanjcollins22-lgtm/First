@@ -27,7 +27,7 @@ export async function listMerchOrders(limit = 200): Promise<MerchOrderWithRelati
   const { data, error } = await supabase
     .from("merch_orders")
     .select(
-      "id, product_id, team_member_id, quantity, barcode_value, field_values, ship_to, unit_price_cents, status, payment_status, vendor_order_ref, tracking_number, notes, created_at, updated_at, " +
+      "id, product_id, team_member_id, quantity, barcode_value, ship_to, unit_price_cents, status, payment_status, vendor_order_ref, tracking_number, notes, created_at, updated_at, " +
         "product:merch_products(id, name, vendor_name, vendor_sku, print_specs), team_member:team_members(id, name, phone)"
     )
     .order("created_at", { ascending: false })

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { renderBarcode } from "./barcode";
-import { findBarcodeSlot, findSvgSize, rasterDesignSvg, renderDesign, templateFields, validateTemplate } from "./template";
+import { findBarcodeSlot, findSvgSize, rasterDesignSvg, renderDesign, validateTemplate } from "./template";
 
 const DESIGN = `<svg xmlns="http://www.w3.org/2000/svg" width="3.5in" height="2in" viewBox="0 0 350 200">
-  <text x="20" y="40">{{name}}</text>
-  <text x="20" y="70">{{ phone }} · {{name}}</text>
+  <text x="20" y="40">JS Landscaping</text>
+  <text x="20" y="70">443-819-1521</text>
   <rect id="barcode-slot" x="20" y="100" width="310" height="80" fill="#eee"/>
 </svg>`;
 
@@ -23,19 +23,6 @@ describe("findBarcodeSlot", () => {
   });
 });
 
-describe("templateFields", () => {
-  it("lists each token once, in order", () => {
-    expect(templateFields(DESIGN)).toEqual([
-      { key: "name", label: "Name" },
-      { key: "phone", label: "Phone" },
-    ]);
-    expect(templateFields("{{job_title}} {{crewLead}}").map((f) => f.label)).toEqual([
-      "Job title",
-      "Crew Lead",
-    ]);
-  });
-});
-
 describe("validateTemplate", () => {
   it("accepts a good design", () => {
     expect(validateTemplate(DESIGN)).toEqual([]);
@@ -49,17 +36,16 @@ describe("validateTemplate", () => {
 });
 
 describe("renderDesign", () => {
-  it("swaps the slot for the barcode and fills tokens, escaping text", () => {
+  it("swaps only the slot for the barcode", () => {
     const barcode = renderBarcode("code128", "TM-0042");
     if (!barcode.ok) throw new Error(barcode.error);
-    const out = renderDesign(DESIGN, { barcodeSvg: barcode.svg, values: { name: "Ana & <Co>" } });
+    const out = renderDesign(DESIGN, { barcodeSvg: barcode.svg });
 
     expect(out).not.toContain("barcode-slot");
     expect(out).toContain('<svg x="20" y="100" width="310" height="80"');
     expect(out).toContain('preserveAspectRatio="xMidYMid meet"');
-    expect(out).toContain("Ana &amp; &lt;Co&gt;");
-    // Missing values print blank rather than as raw tokens.
-    expect(out).not.toMatch(/\{\{/);
+    // The phone number and everything else stay exactly as designed.
+    expect(out).toContain("443-819-1521");
     expect(out.match(/<svg\b/g)).toHaveLength(2);
   });
 });
@@ -80,12 +66,13 @@ describe("renderBarcode", () => {
 });
 
 describe("seeded truck magnet design", () => {
-  it("is a valid template with company, services and phone fields", async () => {
+  it("is a valid template with a fixed phone number", async () => {
     const { readFileSync } = await import("node:fs");
     const seed = readFileSync("supabase/seed/0002_merch_products.sql", "utf8");
     const svg = seed.match(/'(<svg[\s\S]*?<\/svg>)'/)?.[1] ?? "";
     expect(validateTemplate(svg)).toEqual([]);
-    expect(templateFields(svg).map((f) => f.key)).toEqual(["company", "services", "phone"]);
+    expect(svg).toContain("443-819-1521");
+    expect(svg).not.toMatch(/\{\{/);
   });
 });
 

@@ -1,7 +1,7 @@
 import { renderBarcode } from "./barcode";
 import { SAMPLE_AFFILIATE_CODE } from "./affiliate";
 import { SAMPLE_BARCODE_VALUES } from "./formats";
-import { renderDesign, sampleFieldValues } from "./template";
+import { renderDesign } from "./template";
 import type { MerchProduct } from "@/types/domain";
 
 /** The product's design with a sample barcode and placeholder text, or null if it can't render. */
@@ -14,10 +14,7 @@ export function renderSamplePreview(
       : renderBarcode(product.barcode_format, SAMPLE_BARCODE_VALUES[product.barcode_format]);
   if (!barcode.ok) return null;
   try {
-    return renderDesign(product.design_svg, {
-      barcodeSvg: barcode.svg,
-      values: sampleFieldValues(product.design_svg),
-    });
+    return renderDesign(product.design_svg, { barcodeSvg: barcode.svg });
   } catch {
     return null;
   }

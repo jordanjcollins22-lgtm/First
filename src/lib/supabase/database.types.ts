@@ -386,7 +386,6 @@ export interface Database {
           team_member_id: string;
           quantity: number;
           barcode_value: string;
-          field_values: Json;
           print_svg: string;
           ship_to: Json;
           unit_price_cents: number;

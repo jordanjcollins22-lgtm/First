@@ -12,9 +12,7 @@ import { BARCODE_FORMATS, SAMPLE_BARCODE_VALUES } from "@/lib/merch/formats";
 import {
   BARCODE_SLOT_ID,
   rasterDesignSvg,
-  sampleFieldValues,
   type SlotBox,
-  templateFields,
 } from "@/lib/merch/template";
 import type { BarcodeFormat, BarcodeSource } from "@/types/domain";
 
@@ -55,11 +53,9 @@ export function AddProductForm() {
           barcodeFormat: format,
           barcodeSource: source,
           barcodeValue: SAMPLE_BARCODE_VALUES[format],
-          values: sampleFieldValues(designSvg),
         }
       : null
   );
-  const fields = designSvg ? templateFields(designSvg) : [];
 
   function clearDesign() {
     setUploadedSvg("");
@@ -172,8 +168,8 @@ export function AddProductForm() {
         <p className="text-xs text-muted-foreground">
           Easiest: upload the finished design as a PNG with any placeholder QR code where the real one goes.
           The app finds it and swaps in each buyer&apos;s code. For SVGs, put a rectangle with the ID{" "}
-          <code>{BARCODE_SLOT_ID}</code> where the barcode goes; text like <code>{"{{name}}"}</code> becomes a
-          field people fill in when they order.
+          <code>{BARCODE_SLOT_ID}</code> where the barcode goes. The barcode is the only thing that changes
+          per person; the phone number and everything else print as designed.
         </p>
       </div>
 
@@ -207,9 +203,6 @@ export function AddProductForm() {
           ) : (
             preview.svg && <DesignPreview svg={preview.svg} alt="Design preview" className="max-w-md" />
           )}
-          <p className="text-xs text-muted-foreground">
-            Order form fields: {fields.length ? fields.map((f) => f.label).join(", ") : "barcode only"}
-          </p>
         </div>
       )}
 

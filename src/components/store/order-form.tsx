@@ -11,7 +11,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { createMerchOrder } from "@/lib/actions/merch-actions";
 import { BARCODE_FORMATS } from "@/lib/merch/formats";
 import { formatCents } from "@/lib/merch/format";
-import type { TemplateField } from "@/lib/merch/template";
 import type { BarcodeFormat, BarcodeSource } from "@/types/domain";
 
 import { DesignPreview } from "./design-preview";
@@ -19,7 +18,6 @@ import { useDesignPreview } from "./use-design-preview";
 
 export function OrderForm({
   product,
-  fields,
   teamMembers,
   initialPreviewSvg,
 }: {
@@ -30,13 +28,11 @@ export function OrderForm({
     barcode_format: BarcodeFormat;
     barcode_source: BarcodeSource;
   };
-  fields: TemplateField[];
   teamMembers: { id: string; name: string; affiliate_code: string }[];
   initialPreviewSvg: string;
 }) {
   const [teamMemberId, setTeamMemberId] = useState("");
   const [barcodeValue, setBarcodeValue] = useState("");
-  const [values, setValues] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [placed, setPlaced] = useState(false);
@@ -46,7 +42,7 @@ export function OrderForm({
   // Affiliate barcodes come from whoever is picked; custom ones from what's typed.
   const personalized = isAffiliate ? Boolean(teamMemberId) : Boolean(barcodeValue);
   const preview = useDesignPreview(
-    personalized ? { productId: product.id, barcodeValue, teamMemberId, values } : null,
+    personalized ? { productId: product.id, barcodeValue, teamMemberId } : null,
     initialPreviewSvg
   );
   const format = BARCODE_FORMATS.find((f) => f.value === product.barcode_format);
@@ -141,17 +137,6 @@ export function OrderForm({
           </div>
         )}
 
-        {fields.map((field) => (
-          <div key={field.key} className="flex flex-col gap-1.5">
-            <Label htmlFor={`field_${field.key}`}>{field.label}</Label>
-            <Input
-              id={`field_${field.key}`}
-              name={`field_${field.key}`}
-              value={values[field.key] ?? ""}
-              onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-            />
-          </div>
-        ))}
 
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="quantity">Quantity</Label>

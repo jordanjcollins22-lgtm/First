@@ -128,14 +128,6 @@ export function OrderCard({ order }: { order: MerchOrderWithRelations }) {
             </p>
           </div>
           <div className="flex flex-col gap-2 rounded-md bg-muted/50 px-3 py-2">
-            {Object.entries(order.field_values).filter(([, v]) => v).length > 0 && (
-              <p className="text-muted-foreground">
-                {Object.entries(order.field_values)
-                  .filter(([, v]) => v)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(" · ")}
-              </p>
-            )}
             {order.notes && <p className="text-muted-foreground">&ldquo;{order.notes}&rdquo;</p>}
             <label className="flex items-center gap-2">
               <span className="font-medium">Payment</span>

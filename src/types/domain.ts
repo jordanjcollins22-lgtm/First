@@ -218,7 +218,7 @@ export interface MerchProduct {
   id: string;
   name: string;
   description: string | null;
-  /** SVG with a rect id="barcode-slot" and optional {{tokens}}. */
+  /** SVG with a rect id="barcode-slot", the only part that changes per order. */
   design_svg: string;
   barcode_format: BarcodeFormat;
   barcode_source: BarcodeSource;
@@ -258,7 +258,6 @@ export interface MerchOrder {
   team_member_id: string;
   quantity: number;
   barcode_value: string;
-  field_values: Record<string, string>;
   /** Snapshot of the print file at order time, so later design edits don't change it. */
   print_svg: string;
   ship_to: MerchShipTo;

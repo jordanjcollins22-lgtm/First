@@ -7,7 +7,6 @@ import { getMerchProduct, listActiveTeamMemberOptions } from "@/lib/data/merch";
 import { isSupabaseConfigured } from "@/lib/env";
 import { formatCents } from "@/lib/merch/format";
 import { renderSamplePreview } from "@/lib/merch/sample";
-import { templateFields } from "@/lib/merch/template";
 
 export default async function OrderProductPage({ params }: { params: Promise<{ productId: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
@@ -33,7 +32,6 @@ export default async function OrderProductPage({ params }: { params: Promise<{ p
       ) : (
         <OrderForm
           product={product}
-          fields={templateFields(product.design_svg)}
           teamMembers={teamMembers}
           initialPreviewSvg={renderSamplePreview(product) ?? ""}
         />
