@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
+import Image from "next/image";
 import { Check, Loader2 } from "lucide-react";
 
-import { vehicleIcons } from "@/components/detailing/vehicle-icons";
 import { requestMembership } from "@/lib/actions/detailing-lead-actions";
-import { addOns, firstTimeDiscount, membershipPrices, vehicleOrder, type VehicleSize } from "@/lib/detailing";
+import { addOns, firstTimeDiscount, membershipPrices, vehicleOrder, vehiclePhotos, type VehicleSize } from "@/lib/detailing";
 
 function SubmitButton({ quote }: { quote: boolean }) {
   const { pending } = useFormStatus();
@@ -39,12 +39,11 @@ export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVe
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {vehicleOrder.map((id) => {
               const s = membershipPrices[id];
-              const Icon = vehicleIcons[id];
               return (
                 <label
                   key={id}
-                  className={`cursor-pointer rounded-xl border p-4 transition ${
-                    size === id ? "border-[#d4a843] bg-[#d4a843]/10" : "border-white/15 hover:border-white/30"
+                  className={`cursor-pointer overflow-hidden rounded-xl border-2 transition ${
+                    size === id ? "border-[#d4a843] bg-[#d4a843]/10" : "border-white/10 hover:border-white/30"
                   }`}
                 >
                   <input
@@ -55,17 +54,27 @@ export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVe
                     onChange={() => setSize(id)}
                     className="sr-only"
                   />
-                  <Icon className={`mb-2 size-7 ${size === id ? "text-[#f0c75e]" : "text-white/60"}`} strokeWidth={1.5} />
-                  <span className="block font-bold">{s.label}</span>
-                  <span className="block text-xs text-white/50">{s.examples}</span>
-                  {s.price === null ? (
-                    <span className="text-gold mt-3 block text-lg font-bold">Custom quote</span>
-                  ) : (
-                    <span className="font-display text-gold mt-3 block text-3xl font-bold">
-                      ${s.price}
-                      <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
-                    </span>
-                  )}
+                  <span className="relative block aspect-[16/10]">
+                    <Image
+                      src={vehiclePhotos[id].src}
+                      alt=""
+                      fill
+                      sizes="(max-width: 640px) 50vw, 240px"
+                      className={`object-cover ${size === id ? "" : "brightness-75"}`}
+                    />
+                  </span>
+                  <span className="block p-3">
+                    <span className="block font-bold">{s.label}</span>
+                    <span className="block text-xs text-white/50">{s.examples}</span>
+                    {s.price === null ? (
+                      <span className="text-gold mt-2 block text-lg font-bold">Custom quote</span>
+                    ) : (
+                      <span className="font-display text-gold mt-2 block text-3xl font-bold">
+                        ${s.price}
+                        <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
+                      </span>
+                    )}
+                  </span>
                 </label>
               );
             })}

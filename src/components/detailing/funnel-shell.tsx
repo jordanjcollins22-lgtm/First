@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Phone } from "lucide-react";
 
-import { business } from "@/lib/detailing";
+import { business, vehicleOrder, vehiclePhotos } from "@/lib/detailing";
 
 const STEPS = ["Your info", "Your plan", "Done"];
 
@@ -44,7 +44,16 @@ export function FunnelShell({ step, children }: { step: 1 | 2 | 3; children: Rea
         })}
       </ol>
 
-      <main className="mx-auto max-w-5xl px-4 pb-20 pt-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 pb-12 pt-8">{children}</main>
+
+      <footer className="mx-auto max-w-5xl px-4 pb-8 text-center text-[10px] leading-relaxed text-white/30">
+        Vehicle photos via Wikimedia Commons:{" "}
+        {vehicleOrder
+          .map((id) => vehiclePhotos[id].credit)
+          .filter(Boolean)
+          .join("; ")}
+        ; others public domain.
+      </footer>
     </div>
   );
 }
