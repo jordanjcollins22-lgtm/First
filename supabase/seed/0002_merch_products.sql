@@ -14,7 +14,7 @@ values (
   <rect y="1100" width="2400" height="100" rx="60" fill="#24820c"/>
   <text x="745" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="300" font-weight="700" fill="#ffffff" stroke="#1a1a1a" stroke-width="8">JS</text>
   <text x="745" y="640" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="140" font-weight="700" fill="#ffffff" stroke="#1a1a1a" stroke-width="5" textLength="1370" lengthAdjust="spacingAndGlyphs">LANDSCAPING SERVICES</text>
-  <text x="745" y="1050" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="150" font-weight="700" fill="#ffffff" textLength="1370" lengthAdjust="spacingAndGlyphs">FREE YARD EVALUATIONS</text>
+  <text x="745" y="1072" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="210" font-weight="700" fill="#ffffff" textLength="1370" lengthAdjust="spacingAndGlyphs">FREE EVALUATION</text>
   <rect x="1500" y="34" width="866" height="1132" rx="46" fill="#ffffff" stroke="#24820c" stroke-width="16"/>
   <rect id="barcode-slot" x="1533" y="106" width="800" height="800" fill="#eeeeee"/>
   <text x="1933" y="1060" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="700" fill="#24820c" textLength="800" lengthAdjust="spacingAndGlyphs">SCAN TO BOOK</text>
