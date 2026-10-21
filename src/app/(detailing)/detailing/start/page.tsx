@@ -12,12 +12,12 @@ export const metadata: Metadata = {
 export default function FunnelStartPage() {
   return (
     <FunnelShell step={1}>
-      <div className="grid items-start gap-10 lg:grid-cols-[1fr_440px]">
+      <div className="grid items-start gap-10 lg:grid-cols-[1fr_540px]">
         <div className="text-center lg:pt-6 lg:text-left">
           <span className="bg-gold inline-block rounded-full px-4 py-1 text-xs font-bold uppercase tracking-widest text-black">
             ${firstTimeDiscount} off for first timers
           </span>
-          <h1 className="font-display mt-5 text-5xl font-bold uppercase leading-[0.95] sm:text-6xl">
+          <h1 className="font-display mt-5 text-5xl font-bold uppercase leading-[0.95] sm:text-6xl lg:text-5xl xl:text-6xl">
             <span className="text-silver block">Mobile detailing</span>
             <span className="text-gold block">that comes to you.</span>
           </h1>
