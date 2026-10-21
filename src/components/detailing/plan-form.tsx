@@ -23,6 +23,7 @@ function SubmitButton({ quote }: { quote: boolean }) {
 
 export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVehicle: VehicleSize }) {
   const [size, setSize] = useState<VehicleSize>(initialVehicle);
+  const [changing, setChanging] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
 
   const monthly = membershipPrices[size].price;
@@ -34,12 +35,13 @@ export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVe
       <input type="hidden" name="lead" value={leadId} />
 
       <div className="grid gap-10">
-        <fieldset>
-          <legend className="mb-4 text-lg font-bold uppercase tracking-wide">1. What we&apos;re detailing</legend>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {vehicleOrder.map((id) => {
-              const s = membershipPrices[id];
-              return (
+        {/* They already picked this on step 1, so show it as a summary. The full
+            grid only opens if they tap Change. */}
+        {changing ? (
+          <fieldset>
+            <legend className="mb-4 text-lg font-bold uppercase tracking-wide">What we&apos;re detailing</legend>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {vehicleOrder.map((id) => (
                 <label
                   key={id}
                   className={`cursor-pointer overflow-hidden rounded-xl border-2 transition ${
@@ -51,38 +53,50 @@ export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVe
                     name="vehicle_size"
                     value={id}
                     checked={size === id}
-                    onChange={() => setSize(id)}
+                    onChange={() => {
+                      setSize(id);
+                      setChanging(false);
+                    }}
                     className="sr-only"
                   />
                   <span className="relative block aspect-[16/10]">
-                    <Image
-                      src={vehiclePhotos[id].src}
-                      alt=""
-                      fill
-                      sizes="(max-width: 640px) 50vw, 240px"
-                      className={`object-cover ${size === id ? "" : "brightness-75"}`}
-                    />
+                    <Image src={vehiclePhotos[id].src} alt="" fill sizes="(max-width: 640px) 50vw, 240px" className="object-cover" />
                   </span>
-                  <span className="block p-3">
-                    <span className="block font-bold">{s.label}</span>
-                    <span className="block text-xs text-white/50">{s.examples}</span>
-                    {s.price === null ? (
-                      <span className="text-gold mt-2 block text-lg font-bold">Custom quote</span>
-                    ) : (
-                      <span className="font-display text-gold mt-2 block text-3xl font-bold">
-                        ${s.price}
-                        <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
-                      </span>
-                    )}
-                  </span>
+                  <span className="block p-3 font-bold">{membershipPrices[id].label}</span>
                 </label>
-              );
-            })}
+              ))}
+            </div>
+          </fieldset>
+        ) : (
+          <div className="flex items-center gap-4 overflow-hidden rounded-xl border-2 border-[#d4a843] bg-[#d4a843]/10 pr-4">
+            <input type="hidden" name="vehicle_size" value={size} />
+            <span className="relative block aspect-[4/3] w-28 shrink-0 sm:w-36">
+              <Image src={vehiclePhotos[size].src} alt="" fill sizes="144px" className="object-cover" />
+            </span>
+            <span className="min-w-0 flex-1 py-3">
+              <span className="block text-xs uppercase tracking-widest text-white/50">Detailing your</span>
+              <span className="block text-lg font-bold">{membershipPrices[size].label}</span>
+              {monthly === null ? (
+                <span className="text-gold block font-bold">Custom quote</span>
+              ) : (
+                <span className="font-display text-gold block text-2xl font-bold">
+                  ${monthly}
+                  <span className="ml-1 text-sm font-semibold text-white/50">/mo</span>
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => setChanging(true)}
+              className="shrink-0 text-sm font-semibold text-[#f0c75e] underline-offset-4 hover:underline"
+            >
+              Change
+            </button>
           </div>
-        </fieldset>
+        )}
 
         <fieldset>
-          <legend className="mb-1 text-lg font-bold uppercase tracking-wide">2. Add-ons (optional)</legend>
+          <legend className="mb-1 text-lg font-bold uppercase tracking-wide">Add-ons (optional)</legend>
           <p className="mb-4 text-sm text-white/55">Member pricing. Added to your first visit. You can add more anytime.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {addOns.map((a) => {
