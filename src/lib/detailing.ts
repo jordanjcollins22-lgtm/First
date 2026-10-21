@@ -78,7 +78,7 @@ export const packages: DetailPackage[] = [
     id: "full",
     name: "Full Detail",
     startingPrice: null,
-    blurb: "Inside and out — our most popular service.",
+    blurb: "Inside and out. Our most popular service.",
     features: [
       "Everything in Interior",
       "Foam pre-wash & hand wash",
@@ -149,7 +149,7 @@ export function isVehicleSize(value: unknown): value is VehicleSize {
 
 export const membershipIncludes = {
   interior: [
-    "Full vacuum — seats, carpets, mats & trunk",
+    "Full vacuum: seats, carpets, mats & trunk",
     "Dashboard & console wipe down",
     "Door panels & jambs cleaned",
     "Interior windows cleaned",

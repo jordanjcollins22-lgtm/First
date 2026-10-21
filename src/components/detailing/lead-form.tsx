@@ -73,7 +73,7 @@ export function LeadForm() {
           placeholder="Street address, city, zip"
           className={fieldClass}
         />
-        <span className="text-xs font-normal text-white/45">Home, work — anywhere we can park next to it.</span>
+        <span className="text-xs font-normal text-white/45">Home, work, anywhere we can park next to it.</span>
       </label>
 
       {state.error && (

@@ -34,7 +34,7 @@ export default async function FunnelPlanPage({ searchParams }: PageProps<"/detai
           <span className="text-gold">Membership</span>
         </h1>
         <p className="mt-5 text-lg text-white/70">
-          Once a month, we come to you and fully detail your {vehicleNoun(data.vehicle_size)} inside and out — hand wash, wheels, glass, a full interior
+          Once a month, we come to you and fully detail your {vehicleNoun(data.vehicle_size)} inside and out: hand wash, wheels, glass, a full interior
           reset and a fresh coat of spray wax. No driving anywhere, no waiting. It just stays clean.
         </p>
       </section>

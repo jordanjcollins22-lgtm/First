@@ -85,7 +85,7 @@ export default function DetailingPage() {
             <div className="relative aspect-[1254/540] w-full max-w-xl">
               <Image
                 src="/detailing/logo.png"
-                alt="Apex Shine Mobile — Premium Mobile Detailing"
+                alt="Apex Shine Mobile, Premium Mobile Detailing"
                 fill
                 priority
                 sizes="(max-width: 640px) 100vw, 576px"
@@ -97,7 +97,7 @@ export default function DetailingPage() {
               <span className="text-gold block">deserves the best.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base text-white/70 sm:text-lg">
-              Showroom-level interior and exterior detailing, ceramic coatings and paint protection —
+              Showroom-level interior and exterior detailing, ceramic coatings and paint protection,
               done right in your driveway.
             </p>
             <div className="mt-8 flex w-full flex-col gap-3 sm:w-auto sm:flex-row">

@@ -74,7 +74,7 @@ export function PlanForm({ leadId, initialVehicle }: { leadId: string; initialVe
 
         <fieldset>
           <legend className="mb-1 text-lg font-bold uppercase tracking-wide">2. Add-ons (optional)</legend>
-          <p className="mb-4 text-sm text-white/55">Member pricing. Added to your first visit — you can add more anytime.</p>
+          <p className="mb-4 text-sm text-white/55">Member pricing. Added to your first visit. You can add more anytime.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             {addOns.map((a) => {
               const on = picked.includes(a.id);

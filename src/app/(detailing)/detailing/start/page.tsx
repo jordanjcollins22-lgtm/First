@@ -26,7 +26,7 @@ export default function FunnelStartPage() {
           </p>
           <ul className="mx-auto mt-8 grid max-w-md gap-4 text-left lg:mx-0">
             {[
-              { icon: MapPin, text: "We come to your home or work — no drop-off, no waiting room." },
+              { icon: MapPin, text: "We come to your home or work. No drop-off, no waiting room." },
               { icon: Car, text: "Interior and exterior done right, every month." },
               { icon: ShieldCheck, text: "Locked-in pricing and priority scheduling for members." },
             ].map(({ icon: Icon, text }) => (
