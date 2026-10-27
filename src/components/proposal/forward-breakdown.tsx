@@ -6,6 +6,7 @@ import { Check, ChevronLeft, ChevronRight, ExternalLink, Images, Plus, X } from 
 
 import {
   crewRateCents,
+  materialCentsFor,
   priceForward,
   productionService,
   projectCostMargin,
@@ -16,6 +17,7 @@ import {
   type PricedJob,
   type PricedLine,
   type PricingEquation,
+  type ProductionService,
   type ScopeGap,
 } from "@/lib/forward-pricing";
 import type { PriceApproval } from "@/lib/data/price-approvals";
@@ -101,7 +103,7 @@ export function ForwardBreakdown({
     if (!service) return;
     const size = Number(String(item.breakdown.areas[area]?.size ?? "").replace(/[^0-9.]/g, "")) || 0;
     const quantity = service.unit === "SF" ? size : service.unit === "job" ? 1 : 0;
-    const materialCents = service.materialCentsPerUnit ? Math.round(quantity * service.materialCentsPerUnit) : 0;
+    const materialCents = materialCentsFor(service, quantity);
     change(lines.map((ls, a) => (a === area ? [...ls, { key, quantity, materialCents, note: quantity === 0 ? "Type how many." : null }] : ls)));
   };
 
@@ -189,7 +191,7 @@ export function ForwardBreakdown({
                                 `${qty(l.quantity)}${l.unit === "job" ? "" : ` ${l.unit}`}`
                               ) : (
                                 <span className="inline-flex items-center gap-1">
-                                  <QuantityInput line={l} perUnit={productionService(l.key, services)?.materialCentsPerUnit} onChange={(patch) => setLine(a, i, patch)} />
+                                  <QuantityInput line={l} service={productionService(l.key, services)} onChange={(patch) => setLine(a, i, patch)} />
                                   <span className="text-xs text-muted-foreground">{l.unit}</span>
                                 </span>
                               )}
@@ -275,7 +277,7 @@ export function ForwardBreakdown({
                             {locked || l.unit === "job" ? (
                               <span className="text-foreground tabular-nums">{qty(l.quantity)}</span>
                             ) : (
-                              <QuantityInput line={l} perUnit={productionService(l.key, services)?.materialCentsPerUnit} onChange={(patch) => setLine(a, i, patch)} />
+                              <QuantityInput line={l} service={productionService(l.key, services)} onChange={(patch) => setLine(a, i, patch)} />
                             )}
                             {l.unit !== "job" && l.unit}
                           </span>
@@ -367,7 +369,7 @@ export function ForwardBreakdown({
 }
 
 /** Q, typed. A service with a material per unit keeps its material in step. */
-function QuantityInput({ line, perUnit, onChange }: { line: PricedLine; perUnit?: number; onChange: (patch: Partial<PriceLine>) => void }) {
+function QuantityInput({ line, service, onChange }: { line: PricedLine; service: ProductionService | null; onChange: (patch: Partial<PriceLine>) => void }) {
   return (
     <input
       type="number"
@@ -378,8 +380,7 @@ function QuantityInput({ line, perUnit, onChange }: { line: PricedLine; perUnit?
       placeholder="0"
       onChange={(e) => {
         const quantity = Math.max(0, Number(e.target.value) || 0);
-        const per = perUnit;
-        onChange(per ? { quantity, materialCents: Math.round(quantity * per) } : { quantity });
+        onChange(service?.materialCentsPerUnit ? { quantity, materialCents: materialCentsFor(service, quantity) } : { quantity });
       }}
       aria-label={`${line.label} quantity`}
       className="h-8 w-20 rounded-md border border-input bg-background px-1.5 text-right text-sm text-foreground tabular-nums"

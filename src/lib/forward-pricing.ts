@@ -537,12 +537,27 @@ function sized(line: PriceLine, size: string): PriceLine {
   return line.quantity > 0 ? { ...line, note: `${line.note}, priced as ${size}` } : line;
 }
 
+/** One bag of mulch, rock or topsoil, in cubic yards: what the store sells as the least you can buy. */
+export const BAG_CY = 0.1;
+
+/**
+ * M for a quantity of a service. Mulch, rock and topsoil under the bulk
+ * threshold are bought by the bag, and a bag is bought whole: 0.01 cu yd of
+ * topsoil is still a bag, so it is charged as one.
+ */
+export function materialCentsFor(service: ProductionService | null | undefined, quantity: number): number {
+  if (!service?.materialCentsPerUnit || !(quantity > 0)) return 0;
+  const bagged = service.unit === "CY" && service.bulkOver != null && quantity <= service.bulkOver;
+  const bought = bagged ? Math.ceil(quantity / BAG_CY - 1e-9) * BAG_CY : quantity;
+  return Math.round(bought * service.materialCentsPerUnit);
+}
+
 /** Only services that are on, each with its material at its set cost. */
 function withMaterials(lines: PriceLine[], services: ProductionService[]): PriceLine[] {
   return lines.flatMap((l) => {
     const s = productionService(l.key, services);
     if (!isOn(s)) return [];
-    return [s.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l];
+    return [s.materialCentsPerUnit ? { ...l, materialCents: materialCentsFor(s, l.quantity) } : l];
   });
 }
 
