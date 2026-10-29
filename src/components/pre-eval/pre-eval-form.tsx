@@ -84,8 +84,8 @@ export function PreEvalForm({ preEval }: { preEval: ClientPreEval }) {
         <CheckCircle2 className="size-16 text-primary" />
         <h1 className="text-3xl font-bold">Got it, thank you!</h1>
         <p className="max-w-sm text-lg text-muted-foreground">
-          We&apos;ll look over the {taps.length === 1 ? "spot" : `${taps.length} spots`} you marked
-          before your evaluation.
+          We&apos;ll use the {taps.length === 1 ? "spot" : `${taps.length} spots`} you marked to put
+          together your proposal today.
         </p>
         <Button variant="ghost" onClick={() => setSent(false)}>
           Change my answers
