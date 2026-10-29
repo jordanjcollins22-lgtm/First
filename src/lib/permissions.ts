@@ -111,6 +111,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
   // Bulk mulch, topsoil and stone suppliers near the work: prices, delivery fees and minimums.
   { key: "suppliers", label: "Bulk Suppliers", href: "/admin/suppliers" },
+  // The plant nurseries' weekly availability: size, our cost, our price and how many they have.
+  { key: "plants", label: "Plant Availability", href: "/admin/plants" },
   // The company shirts: the designs, and ordering them by design, colour and size.
   { key: "shirts", label: "Company Shirts", href: "/admin/shirts" },
 ];
