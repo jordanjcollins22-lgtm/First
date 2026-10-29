@@ -98,6 +98,17 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     await settleMowOrder(mowOrderId).catch((err) => console.error("settleMowOrder failed:", err));
   }
 
+  // The deposit on the estimate from the map pre-evaluation. It carries the
+  // job_id too, so the money itself lands on the job below like any payment.
+  const estimateId = session.metadata?.estimate_id ?? null;
+  if (estimateId) {
+    await admin
+      .from("job_estimates")
+      .update({ deposit_paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", estimateId)
+      .is("deposit_paid_at", null);
+  }
+
   const proposalId = session.metadata?.proposal_id ?? null;
   // A Maryland home-improvement deposit is a third of the job at most: the
   // money is recorded below like any payment, but the proposal is not paid.
