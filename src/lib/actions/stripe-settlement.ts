@@ -107,6 +107,17 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     await recordTipWithPayment(admin, jobId, proposalTipCents).catch((err) => console.error("recording a tip failed:", err));
   }
 
+  // The deposit on the estimate from the map pre-evaluation. It carries the
+  // job_id too, so the money itself lands on the job below like any payment.
+  const estimateId = session.metadata?.estimate_id ?? null;
+  if (estimateId) {
+    await admin
+      .from("job_estimates")
+      .update({ deposit_paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq("id", estimateId)
+      .is("deposit_paid_at", null);
+  }
+
   const proposalId = session.metadata?.proposal_id ?? null;
   if (proposalId) {
     await admin

@@ -2401,6 +2401,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]>;
         Relationships: [];
       };
+      job_estimates: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          spots: Json;
+          price: Json;
+          total_cents: number;
+          deposit_cents: number;
+          accepted_at: string | null;
+          checkout_session_id: string | null;
+          deposit_paid_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_estimates"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          price: Json;
+          total_cents: number;
+          deposit_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_estimates"]["Row"]>;
+        Relationships: [];
+      };
       evaluation_sequence_steps: {
         Row: {
           organization_id: string;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -176,6 +177,7 @@ export function BookingWizard({
   // 0 is the landing card with the address; 1 is who they are; 2 is when.
   // Booked is the fourth page. What they want done is asked afterwards, on
   // the pre-evaluation form, so it is not asked here.
+  const router = useRouter();
   const [step, setStep] = useState(0);
   // The preview can show the page a client sees once they have booked.
   const [previewDone, setPreviewDone] = useState(false);
@@ -493,6 +495,9 @@ export function BookingWizard({
           digital: result.mode === "digital",
           prepToken: result.prepToken ?? null,
         });
+        // Straight on to the map pre-evaluation, and from it their estimate:
+        // booking is the first step of the sale, not the end of it.
+        if (result.prepToken) router.push(`/prep/${result.prepToken}/map?booked=1`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong, please try again.");
       }
@@ -529,16 +534,16 @@ export function BookingWizard({
         {/* The one thing left to do, and the reason the booking asked so little. */}
         {(booked.prepToken || preview) && (
           <div className="w-full rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-left text-sm">
-            <p className="font-semibold">Next step: tell us what you&apos;d like done</p>
+            <p className="font-semibold">Next step: show us what you&apos;d like done</p>
             <p className="mt-1 text-muted-foreground">
-              Fill out a short pre-evaluation form about the work you want, the looks you like, and any concerns you have.
-              It takes about five minutes and helps us arrive with ideas ready for you.
+              Tap the spots on a map of your property and snap a photo of each. You&apos;ll get your estimate as soon as
+              you&apos;re finished.
             </p>
             <a
-              href={booked.prepToken ? `/prep/${booked.prepToken}` : undefined}
+              href={booked.prepToken ? `/prep/${booked.prepToken}/map?booked=1` : undefined}
               className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
             >
-              Fill out the pre-evaluation form
+              Mark the spots on the map
             </a>
           </div>
         )}
