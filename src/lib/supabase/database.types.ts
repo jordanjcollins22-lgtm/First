@@ -384,7 +384,7 @@ export interface Database {
         Row: {
           id: string;
           job_id: string;
-          taps: Json;
+          spots: Json;
           submitted_at: string | null;
           created_at: string;
           updated_at: string;

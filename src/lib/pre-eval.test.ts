@@ -1,46 +1,63 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_TAPS, parsePreEvalTaps, readStoredTaps } from "./pre-eval";
+import { MAX_SPOTS, parsePreEvalSpots, readStoredSpots, UNSURE_SERVICE } from "./pre-eval";
 
-const property = { lng: -76.6122, lat: 39.2904 };
+const preEvalId = "11111111-2222-3333-4444-555555555555";
+const photo = `${preEvalId}/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpg`;
+const ctx = {
+  preEvalId,
+  property: { lng: -76.6122, lat: 39.2904 },
+  serviceIds: new Set(["mulch", "weeds"]),
+};
+const spot = (over: Record<string, unknown> = {}) => ({
+  lng: -76.6122,
+  lat: 39.2904,
+  services: ["mulch"],
+  photos: [photo],
+  ...over,
+});
 
-describe("parsePreEvalTaps", () => {
-  it("accepts taps on and around the property", () => {
-    const taps = [
-      [-76.6122, 39.2904],
-      [-76.6125, 39.2906],
-    ];
-    expect(parsePreEvalTaps(taps, property)).toEqual(taps);
+describe("parsePreEvalSpots", () => {
+  it("accepts spots on the property with services and photos", () => {
+    const spots = [spot(), spot({ lng: -76.6125, services: ["weeds", UNSURE_SERVICE], photos: [] })];
+    expect(parsePreEvalSpots(spots, ctx)).toEqual(spots);
   });
 
-  it("accepts no taps", () => {
-    expect(parsePreEvalTaps([], property)).toEqual([]);
+  it("dedupes services", () => {
+    expect(parsePreEvalSpots([spot({ services: ["mulch", "mulch"] })], ctx)?.[0].services).toEqual(["mulch"]);
   });
 
-  it("rejects taps far from the property", () => {
+  it("rejects spots far from the property", () => {
     // ~1.1 km north
-    expect(parsePreEvalTaps([[-76.6122, 39.3004]], property)).toBeNull();
+    expect(parsePreEvalSpots([spot({ lat: 39.3004 })], ctx)).toBeNull();
+  });
+
+  it("rejects a spot with no service or an unknown one", () => {
+    expect(parsePreEvalSpots([spot({ services: [] })], ctx)).toBeNull();
+    expect(parsePreEvalSpots([spot({ services: ["roofing"] })], ctx)).toBeNull();
+  });
+
+  it("rejects photos that weren't uploaded for this pre-eval", () => {
+    const other = "99999999-2222-3333-4444-555555555555/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpg";
+    expect(parsePreEvalSpots([spot({ photos: [other] })], ctx)).toBeNull();
+    expect(parsePreEvalSpots([spot({ photos: [`${preEvalId}/../x.jpg`] })], ctx)).toBeNull();
   });
 
   it("rejects malformed input", () => {
-    expect(parsePreEvalTaps("nope", property)).toBeNull();
-    expect(parsePreEvalTaps([[1]], property)).toBeNull();
-    expect(parsePreEvalTaps([["-76.6", "39.2"]], property)).toBeNull();
-    expect(parsePreEvalTaps([[NaN, 39.29]], property)).toBeNull();
+    expect(parsePreEvalSpots("nope", ctx)).toBeNull();
+    expect(parsePreEvalSpots([null], ctx)).toBeNull();
+    expect(parsePreEvalSpots([spot({ lng: "-76.6" })], ctx)).toBeNull();
+    expect(parsePreEvalSpots([spot({ lat: NaN })], ctx)).toBeNull();
   });
 
-  it("rejects too many taps", () => {
-    const taps = Array.from({ length: MAX_TAPS + 1 }, () => [property.lng, property.lat]);
-    expect(parsePreEvalTaps(taps, property)).toBeNull();
+  it("rejects too many spots", () => {
+    expect(parsePreEvalSpots(Array.from({ length: MAX_SPOTS + 1 }, () => spot()), ctx)).toBeNull();
   });
 });
 
-describe("readStoredTaps", () => {
-  it("keeps well-formed taps and drops the rest", () => {
-    expect(readStoredTaps([[1, 2], "x", [3], [4, 5]])).toEqual([
-      [1, 2],
-      [4, 5],
-    ]);
-    expect(readStoredTaps(null)).toEqual([]);
+describe("readStoredSpots", () => {
+  it("keeps well-formed spots and drops the rest", () => {
+    expect(readStoredSpots([spot(), "x", { lng: 1 }])).toEqual([spot()]);
+    expect(readStoredSpots(null)).toEqual([]);
   });
 });

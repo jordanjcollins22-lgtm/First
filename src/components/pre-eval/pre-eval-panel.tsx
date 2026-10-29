@@ -6,9 +6,18 @@ import { Check, Copy, Hand } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getOrCreatePreEvalLink } from "@/lib/actions/pre-eval-actions";
 import type { PreEvalSummary } from "@/lib/data/pre-evals";
+import { PRE_EVAL_PHOTO_BUCKET, UNSURE_SERVICE } from "@/lib/pre-eval";
+import { createClient } from "@/lib/supabase/client";
+import type { ServiceTemplate } from "@/types/domain";
 
-/** Job workspace section: copy the client's pre-eval link and see if they've filled it in. */
-export function PreEvalPanel({ jobId, preEval }: { jobId: string; preEval: PreEvalSummary | null }) {
+interface PreEvalPanelProps {
+  jobId: string;
+  preEval: PreEvalSummary | null;
+  serviceTemplates: ServiceTemplate[];
+}
+
+/** Job workspace section: copy the client's pre-eval link and see what they sent. */
+export function PreEvalPanel({ jobId, preEval, serviceTemplates }: PreEvalPanelProps) {
   const [copied, setCopied] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -26,14 +35,18 @@ export function PreEvalPanel({ jobId, preEval }: { jobId: string; preEval: PreEv
     });
   }
 
+  const serviceName = (id: string) =>
+    id === UNSURE_SERVICE
+      ? "Not sure, take a look"
+      : serviceTemplates.find((t) => t.id === id)?.name ?? "Service no longer offered";
+  const photoUrl = (path: string) =>
+    createClient().storage.from(PRE_EVAL_PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+
   let status = "Send the client this link so they can tap the areas they want worked on.";
   if (preEval?.submittedAt) {
-    const count = preEval.taps.length;
-    status = `Client marked ${count} ${count === 1 ? "spot" : "spots"} (orange pins) on ${new Date(
-      preEval.submittedAt
-    ).toLocaleDateString()}.`;
+    status = `Sent ${new Date(preEval.submittedAt).toLocaleDateString()}. Orange pins on the map.`;
   } else if (preEval) {
-    status = "Link created. The client hasn't sent their spots yet.";
+    status = "Link created. The client hasn't sent anything yet.";
   }
 
   return (
@@ -48,6 +61,28 @@ export function PreEvalPanel({ jobId, preEval }: { jobId: string; preEval: PreEv
         </Button>
       </div>
       <p className="text-sm text-muted-foreground">{status}</p>
+
+      {preEval?.submittedAt &&
+        preEval.spots.map((spot, i) => (
+          <div key={i} className="flex flex-col gap-1.5 rounded-md border border-border bg-card p-2.5">
+            <p className="flex items-start gap-2 text-sm">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white">
+                {i + 1}
+              </span>
+              {spot.services.map(serviceName).join(", ")}
+            </p>
+            {spot.photos.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {spot.photos.map((path) => (
+                  <a key={path} href={photoUrl(path)} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photoUrl(path)} alt="" className="h-16 w-16 rounded object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
     </div>
   );
 }

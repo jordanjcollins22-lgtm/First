@@ -219,7 +219,7 @@ export function JobWorkspace({
           onFeatureUpdate={handleFeatureUpdate}
           onFeatureDelete={handleFeatureDelete}
           onSelectionChange={handleSelectionChange}
-          clientTaps={preEval?.taps}
+          clientTaps={preEval?.spots.map((s) => [s.lng, s.lat] as [number, number])}
         />
 
         <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-lg border border-border bg-card p-1.5 shadow-md">
@@ -244,7 +244,7 @@ export function JobWorkspace({
           <h1 className="text-lg font-bold">{job.property.address}</h1>
         </div>
 
-        <PreEvalPanel jobId={job.id} preEval={preEval} />
+        <PreEvalPanel jobId={job.id} preEval={preEval} serviceTemplates={serviceTemplates} />
 
         <div className="flex flex-col gap-2 border-b border-border p-4">
           <div className="flex items-center justify-between">
