@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getJobWorkspace } from "@/lib/data/jobs";
+import { getPreEvalForJob } from "@/lib/data/pre-evals";
 import { listServiceTemplates } from "@/lib/data/service-templates";
 import { JobWorkspaceClient as JobWorkspace } from "@/components/map/job-workspace-loader";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -14,9 +15,10 @@ export default async function JobPage({
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const { jobId } = await params;
-  const [workspace, serviceTemplates] = await Promise.all([
+  const [workspace, serviceTemplates, preEval] = await Promise.all([
     getJobWorkspace(jobId),
     listServiceTemplates(),
+    getPreEvalForJob(jobId),
   ]);
 
   if (!workspace) notFound();
@@ -27,6 +29,7 @@ export default async function JobPage({
       zones={workspace.zones}
       workAreas={workspace.workAreas}
       serviceTemplates={serviceTemplates}
+      preEval={preEval}
     />
   );
 }

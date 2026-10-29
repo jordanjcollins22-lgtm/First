@@ -380,6 +380,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["detailing_leads"]["Row"]>;
         Relationships: [];
       };
+      pre_evals: {
+        Row: {
+          id: string;
+          job_id: string;
+          taps: Json;
+          submitted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["pre_evals"]["Row"]> & {
+          job_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["pre_evals"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "pre_evals_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -38,11 +38,21 @@ interface MapboxMapProps {
   onFeatureUpdate: (id: string, feature: Feature<Geometry>) => void;
   onFeatureDelete: (id: string) => void;
   onSelectionChange: (ids: string[]) => void;
+  /** Spots the client tapped on the pre-eval page, as [lng, lat]. Read-only pins. */
+  clientTaps?: [number, number][];
 }
 
 export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(
   function MapboxMap(
-    { center, initialFeatures, onFeatureCreate, onFeatureUpdate, onFeatureDelete, onSelectionChange },
+    {
+      center,
+      initialFeatures,
+      onFeatureCreate,
+      onFeatureUpdate,
+      onFeatureDelete,
+      onSelectionChange,
+      clientTaps = [],
+    },
     ref
   ) {
     const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +119,15 @@ export const MapboxMap = forwardRef<MapboxMapHandle, MapboxMapProps>(
       });
       drawRef.current = draw;
       map.addControl(draw);
+
+      clientTaps.forEach((tap, i) => {
+        const el = document.createElement("div");
+        el.textContent = String(i + 1);
+        el.title = `Client spot ${i + 1}`;
+        el.className =
+          "pointer-events-none flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-orange-500 text-xs font-bold text-white shadow-md";
+        new mapboxgl.Marker({ element: el }).setLngLat(tap).addTo(map);
+      });
 
       map.on("load", () => {
         for (const f of initialFeatures) {

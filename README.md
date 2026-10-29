@@ -44,6 +44,19 @@ tell you if either credential is still missing.
 Auth is intentionally minimal for this internal MVP tool (Supabase Auth,
 unstyled) — RLS policies currently allow any authenticated user full access.
 
+## Client pre-eval
+
+A one-screen page for clients who've already booked an evaluation: a
+satellite view of their property that says "Tap on the areas you'd like
+worked on". They tap spots, then Send. No login and no contact form.
+
+1. Run `supabase/migrations/0006_pre_evals.sql`. The page reads and writes
+   through `SUPABASE_SERVICE_ROLE_KEY`, so that must be set.
+2. On a job, hit **Copy link** under **Client pre-eval** and text it to the
+   client (`/pre-eval/<id>`).
+3. Once they send it, their spots show as numbered orange pins on the job
+   map, ready to draw work areas around.
+
 ## Team check-ins (SMS via GoHighLevel)
 
 Scheduled text check-ins with crew members so delays surface early.

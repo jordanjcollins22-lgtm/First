@@ -26,6 +26,7 @@ import { AssignServiceDialog } from "@/components/work-area/assign-service-dialo
 import { CleanupDialog } from "@/components/work-area/cleanup-dialog";
 import { WorkAreaCard } from "@/components/work-area/work-area-card";
 import { ZoneList } from "@/components/zone/zone-list";
+import { PreEvalPanel } from "@/components/pre-eval/pre-eval-panel";
 import {
   createWorkArea,
   deleteWorkArea,
@@ -36,6 +37,7 @@ import {
 import { autoClusterZones } from "@/lib/actions/zone-actions";
 import { generateSequence } from "@/lib/actions/sequence-actions";
 import type { JobWithProperty, WorkAreaWithPhotos } from "@/lib/data/jobs";
+import type { PreEvalSummary } from "@/lib/data/pre-evals";
 import type { ServiceTemplate, Zone } from "@/types/domain";
 
 interface JobWorkspaceProps {
@@ -43,6 +45,7 @@ interface JobWorkspaceProps {
   zones: Zone[];
   workAreas: WorkAreaWithPhotos[];
   serviceTemplates: ServiceTemplate[];
+  preEval: PreEvalSummary | null;
 }
 
 interface PendingFeature {
@@ -58,7 +61,13 @@ const DRAW_TOOLS: { mode: DrawShapeMode; label: string; icon: typeof Square }[] 
   { mode: "draw_point", label: "Point", icon: MapPinIcon },
 ];
 
-export function JobWorkspace({ job, zones, workAreas, serviceTemplates }: JobWorkspaceProps) {
+export function JobWorkspace({
+  job,
+  zones,
+  workAreas,
+  serviceTemplates,
+  preEval,
+}: JobWorkspaceProps) {
   const router = useRouter();
   const mapHandleRef = useRef<MapboxMapHandle>(null);
 
@@ -210,6 +219,7 @@ export function JobWorkspace({ job, zones, workAreas, serviceTemplates }: JobWor
           onFeatureUpdate={handleFeatureUpdate}
           onFeatureDelete={handleFeatureDelete}
           onSelectionChange={handleSelectionChange}
+          clientTaps={preEval?.taps}
         />
 
         <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-lg border border-border bg-card p-1.5 shadow-md">
@@ -233,6 +243,8 @@ export function JobWorkspace({ job, zones, workAreas, serviceTemplates }: JobWor
           <p className="text-sm text-muted-foreground">{job.property.customer.name}</p>
           <h1 className="text-lg font-bold">{job.property.address}</h1>
         </div>
+
+        <PreEvalPanel jobId={job.id} preEval={preEval} />
 
         <div className="flex flex-col gap-2 border-b border-border p-4">
           <div className="flex items-center justify-between">
