@@ -251,7 +251,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
                   onClick={() => toggleChoice(choice.value)}
                   className={cn(
                     "flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-base font-medium transition-colors",
-                    on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card"
+                    on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card"
                   )}
                 >
                   {on && <Check className="size-4" />}
