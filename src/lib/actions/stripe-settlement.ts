@@ -1,6 +1,7 @@
 "use server";
 
 import type Stripe from "stripe";
+import { isTierId } from "@/lib/evaluation-tiers";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { tipFromMetadata } from "@/lib/proposal-tip";
@@ -107,15 +108,25 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     await recordTipWithPayment(admin, jobId, proposalTipCents).catch((err) => console.error("recording a tip failed:", err));
   }
 
-  // The deposit on the estimate from the map pre-evaluation. It carries the
-  // job_id too, so the money itself lands on the job below like any payment.
+  // Paid on the estimate from the map pre-evaluation: its deposit, or a paid
+  // evaluation. It carries the job_id too, so the money itself lands on the
+  // job below like any payment, and comes off the job's price.
   const estimateId = session.metadata?.estimate_id ?? null;
   if (estimateId) {
     await admin
       .from("job_estimates")
-      .update({ deposit_paid_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .update({
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        // What this payment was for, from the session itself.
+        ...(session.metadata?.estimate_choice === "deposit" || session.metadata?.estimate_choice === "evaluation"
+          ? { choice: session.metadata.estimate_choice }
+          : {}),
+        ...(isTierId(session.metadata?.estimate_tier) ? { evaluation_tier: session.metadata.estimate_tier } : {}),
+        ...(Number(session.metadata?.work_cents) > 0 ? { charged_cents: Number(session.metadata?.work_cents) } : {}),
+      })
       .eq("id", estimateId)
-      .is("deposit_paid_at", null);
+      .is("paid_at", null);
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

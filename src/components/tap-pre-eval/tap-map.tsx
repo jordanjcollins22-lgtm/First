@@ -28,14 +28,12 @@ export interface TapMapProps {
   /** Spots already sent, to change. */
   initialSpots: TapSpot[];
   photoUrls: Record<string, string>;
-  /** "Tuesday, November 3 at 10:00 am", when there's a visit booked. */
-  bookedFor: string | null;
-  /** Straight from booking: say so, so the page doesn't feel like a new task. */
-  justBooked: boolean;
+  /** Their first name, to greet them straight from the details page. */
+  firstName: string | null;
   estimateHref: string;
 }
 
-export function TapMap({ token, home, lot, initialSpots, photoUrls, bookedFor, justBooked, estimateHref }: TapMapProps) {
+export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, estimateHref }: TapMapProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -203,16 +201,11 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, bookedFor, j
   if (step === "intro") {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-        {justBooked && bookedFor && (
-          <p className="flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-semibold text-primary">
-            <Check className="size-4" /> You&apos;re booked for {bookedFor}
-          </p>
-        )}
         <span className="flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Sprout className="size-10" />
         </span>
         <div>
-          <h1 className="text-3xl font-bold">{justBooked ? "Next: show us what you'd like done" : "Show us what you'd like done"}</h1>
+          <h1 className="text-3xl font-bold">{firstName ? `Thanks, ${firstName}! Now show us what you'd like done` : "Show us what you'd like done"}</h1>
           <p className="mx-auto mt-3 max-w-sm text-lg text-muted-foreground">
             It&apos;s easiest outside, where you can look at your garden beds and see what needs to get done. You&apos;ll get
             your estimate as soon as you&apos;re finished.

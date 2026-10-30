@@ -1,10 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { computeAvailableSlots } from "@/lib/booking-availability";
-import { firstBookableDate, minLeadMinutes } from "@/lib/booking-notice";
-import { getBusyBlocksAsAdmin } from "@/lib/data/busy";
-import { getBookingNotice, listAvailabilityData, listOrgEvaluatorIds, resolveBookingContext } from "@/lib/data/public-booking";
-import { rankSlots, recommendSlots, type RankedSlot } from "@/lib/booking-recommendation";
+import { bookingTimesFor, type BookingTimes } from "@/lib/data/booking-times";
+import { listOrgEvaluatorIds, resolveBookingContext } from "@/lib/data/public-booking";
 import { isSupabaseConfigured } from "@/lib/env";
 
 /**
@@ -22,25 +19,7 @@ import { isSupabaseConfigured } from "@/lib/env";
  * being nearby.
  */
 
-export interface OfferedTime {
-  date: string;
-  time: string;
-  evaluatorIds: string[];
-  /** Why this one, in the client's language. Null when there is nothing true to say. */
-  says: string | null;
-}
-
-export interface BookingTimes {
-  /** The two or three to put in front of somebody, at most one a day. */
-  recommended: OfferedTime[];
-  /** Everything free, in the order we would rather they were taken. */
-  all: OfferedTime[];
-}
-
-/** What crosses the wire: the time and the reason, never the distance or whose it is. */
-function offered(slot: RankedSlot): OfferedTime {
-  return { date: slot.date, time: slot.time, evaluatorIds: slot.evaluatorIds, says: slot.says };
-}
+export type { BookingTimes, OfferedTime } from "@/lib/data/booking-times";
 
 function coordinate(raw: string | null, limit: number): number | null {
   if (!raw) return null;
@@ -66,39 +45,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<BookingTim
   const evaluatorIds = context.dedicatedEvaluatorId
     ? [context.dedicatedEvaluatorId]
     : await listOrgEvaluatorIds(context.organizationId);
-  if (evaluatorIds.length === 0) return empty;
-
-  const [availability, busy, notice] = await Promise.all([
-    listAvailabilityData(evaluatorIds),
-    getBusyBlocksAsAdmin().catch(() => []),
-    getBookingNotice(context.organizationId),
-  ]);
-
-  const now = new Date();
-  const slots = computeAvailableSlots({
-    evaluatorIds,
-    weeklyAvailability: availability.weeklyAvailability,
-    daysOff: availability.daysOff,
-    bookedTimes: availability.bookedTimes,
-    busy,
-    from: now,
-    // The business's notice rule: no same-day visits unless allowed, and
-    // never inside its hours of notice.
-    firstDate: firstBookableDate(notice, now),
-    minLeadMinutes: minLeadMinutes(notice),
-    // The evaluators' hours are on the business's clock, not the server's.
-    timeZone: notice.timeZone,
-  });
 
   const where = {
     lat: coordinate(params.get("lat"), 90),
     lng: coordinate(params.get("lng"), 180),
   };
 
-  const ranked = rankSlots(slots, where, availability.bookedPlaces);
-
-  return NextResponse.json<BookingTimes>(
-    { recommended: recommendSlots(ranked).map(offered), all: ranked.map(offered) },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+  return NextResponse.json<BookingTimes>(await bookingTimesFor(context.organizationId, evaluatorIds, where), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }

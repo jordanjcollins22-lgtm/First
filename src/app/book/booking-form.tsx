@@ -38,7 +38,7 @@ export function BookingFormSkeleton() {
         <div className="flex items-center justify-between">
           <div className="h-3 w-20 rounded bg-muted" />
           <div className="flex gap-1">
-            {[0, 1, 2, 3].map((i) => (
+            {[0, 1].map((i) => (
               <div key={i} className="h-1.5 w-5 rounded-full bg-muted" />
             ))}
           </div>
@@ -142,10 +142,7 @@ export function BookingForm() {
       organizationName={options.organizationName}
       referredByProfileId={options.referredByProfileId}
       services={options.services}
-      slots={options.slots}
-      noticeText={options.noticeText ?? ""}
       linkRef={ref}
-      linkOrg={org}
       referralCode={rec}
       proof={options.proof}
       service={options.service}

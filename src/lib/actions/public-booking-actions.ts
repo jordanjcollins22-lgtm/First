@@ -13,10 +13,9 @@ import { log } from "@/lib/log";
 import { getBookingNotice } from "@/lib/data/public-booking";
 import { SLOT_MINUTES } from "@/lib/booking-availability";
 import { lookupPropertyDetails } from "@/lib/rentcast";
-import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
 import { findDuplicateCustomer, findDuplicateProperty, mergeableFields } from "@/lib/dedupe";
 import { reconcileProspects } from "@/lib/data/prospect-reconcile";
-import { modeForAddress, type EvaluationMode } from "@/lib/evaluation-mode";
+import { modeForAddress } from "@/lib/evaluation-mode";
 import { syncEvaluationToGhl } from "@/lib/ghl/sync";
 import { sendEvaluationConfirmationNow } from "@/lib/data/booking-notices";
 import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
@@ -24,14 +23,10 @@ import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
 import { recordBookingAdClick } from "@/lib/data/meta-report";
 
-export interface SubmitPublicBookingInput {
+/** Who they are and where, from the booking page. The visit time comes later, once they've paid. */
+export interface StartPublicLeadInput {
   organizationId: string;
   referredByProfileId: string | null;
-  /** Every evaluator who was free at this slot when the client picked it — the
-   * server re-checks each in order and books the first still free. */
-  candidateEvaluatorIds: string[];
-  date: string;
-  time: string;
   firstName: string;
   lastName: string;
   email: string;
@@ -41,7 +36,6 @@ export interface SubmitPublicBookingInput {
   lng: number;
   requestedServiceTypeIds: string[];
   notes: string;
-  budgetRange: string;
   /** The code off a posted recommendation link, if this came through one. */
   referralCode?: string | null;
   /** The address test: which side this browser was on, how the address went in, and the visit it came from. */
@@ -102,43 +96,36 @@ export async function recordLocateResult(input: { visitId: string; result: Locat
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * The one write path for the public /book flow — no logged-in user exists,
- * so this runs entirely on the service-role client (same pattern as the GHL
- * webhook). Re-validates everything server-side since none of it can be
- * trusted from the client.
+ * The first half of booking, now that the time comes last: who they are and
+ * where, saved as a lead (a job with no visit yet) with its pre-evaluation
+ * form ready. They go straight on to mark the map and see their estimate,
+ * and pick a visit time only once they have paid.
  */
-export async function submitPublicBooking(
-  input: SubmitPublicBookingInput
-): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
-  // Made once: the same person sending the same booking twice at once (a
-  // double tap, a resend on a slow phone) used to be booked twice. The
-  // second waits for the first and is told about the same visit.
+export async function startPublicLead(input: StartPublicLeadInput): Promise<{ jobId: string; prepToken: string }> {
   const email = input.email.trim().toLowerCase();
-  if (!EMAIL_RE.test(email) || !/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return makePublicBooking(input);
   const admin = createAdminClient();
-  const key = bookingPageKey(input.organizationId, email, `${input.date}T${input.time}`);
-  const claim = await claimBooking(admin, key);
-  if (!claim.won) {
-    if (!claim.jobId) throw new Error("Your booking is still going through. Give it a moment, then refresh the page.");
-    const [{ data: job }, { data: intake }] = await Promise.all([
-      admin.from("jobs").select("evaluation_mode").eq("id", claim.jobId).maybeSingle(),
-      admin.from("evaluation_intakes").select("token").eq("job_id", claim.jobId).maybeSingle(),
-    ]);
-    return { jobId: claim.jobId, mode: (job?.evaluation_mode ?? "in_person") as EvaluationMode, prepToken: intake?.token ?? null };
+  // The same person sending the same details twice at once (a double tap, a
+  // slow phone) gets the one lead, not two.
+  const key = EMAIL_RE.test(email) ? bookingPageKey(input.organizationId, email, `lead:${input.address.trim().toLowerCase()}`) : null;
+  if (key) {
+    const claim = await claimBooking(admin, key);
+    if (!claim.won) {
+      if (!claim.jobId) throw new Error("That's still going through. Give it a moment, then try again.");
+      const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", claim.jobId).maybeSingle();
+      if (intake?.token) return { jobId: claim.jobId, prepToken: intake.token };
+    }
   }
   try {
-    const made = await makePublicBooking(input);
-    await settleClaim(admin, key, made.jobId);
+    const made = await makePublicLead(input);
+    if (key) await settleClaim(admin, key, made.jobId);
     return made;
   } catch (err) {
-    await releaseClaim(admin, key).catch(() => undefined);
+    if (key) await releaseClaim(admin, key).catch(() => undefined);
     throw err;
   }
 }
 
-async function makePublicBooking(
-  input: SubmitPublicBookingInput
-): Promise<{ jobId: string; mode: EvaluationMode; prepToken: string | null }> {
+async function makePublicLead(input: StartPublicLeadInput): Promise<{ jobId: string; prepToken: string }> {
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
   const email = input.email.trim().toLowerCase();
@@ -151,67 +138,12 @@ async function makePublicBooking(
   if (!address || typeof input.lat !== "number" || typeof input.lng !== "number") {
     throw new Error("Select your address from the search results.");
   }
-  // Optional, and it has to actually be optional. The form has said so since
-  // the brackets were added, but this refused a blank one — so anybody who
-  // skipped the question lost the appointment on the final click, which is
-  // the exact failure the "Not sure yet" bracket was added to prevent.
-  const budgetRange = input.budgetRange?.trim() ?? "";
-  if (budgetRange && !BUDGET_RANGES.includes(budgetRange as (typeof BUDGET_RANGES)[number])) {
-    throw new Error("Select a budget range.");
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) {
-    throw new Error("Select a date and time.");
-  }
-  if (input.candidateEvaluatorIds.length === 0) {
-    throw new Error("That time is no longer available, please pick another.");
-  }
 
   const admin = createAdminClient();
   const adClick = cleanAdClick(input.adClick);
-
-  const { data: org, error: orgError } = await admin
-    .from("organizations")
-    .select("id")
-    .eq("id", input.organizationId)
-    .maybeSingle();
+  const { data: org, error: orgError } = await admin.from("organizations").select("id").eq("id", input.organizationId).maybeSingle();
   if (orgError) throw orgError;
   if (!org) throw new Error("This booking link isn't valid anymore.");
-
-  // The notice rule, checked at submit as well as when the times were drawn.
-  // A page left open overnight offers a slot that was tomorrow and is today.
-  const notice = await getBookingNotice(input.organizationId);
-
-  // "Monday at 8" is a wall clock on the business's zone. Written as the
-  // instant it means there, so every screen in every zone reads it back as
-  // Monday at 8. This used to be parsed on the server's own clock, which
-  // is UTC, and showed as four in the morning on every phone in Maryland.
-  const evaluationDateTime = zonedToUtc(input.date, input.time, notice.timeZone);
-  if (Number.isNaN(evaluationDateTime.getTime())) throw new Error("Select a date and time.");
-  const iso = evaluationDateTime.toISOString();
-  const soon = tooSoon(notice, new Date(), { date: input.date, at: evaluationDateTime });
-  if (soon) throw new Error(soon);
-
-  // Re-checked at submit, not merely when the slots were drawn: a booking page
-  // can sit open on somebody's phone for an hour, and two people can be on it
-  // at once. This used to compare the exact timestamp only, so an appointment
-  // that merely overlapped — or a whole day the crew were on an install —
-  // sailed straight through.
-  const end = new Date(evaluationDateTime.getTime() + SLOT_MINUTES * 60_000);
-  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
-
-  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: evaluationDateTime, end });
-  if (stillFree.length === 0) throw new Error("That time was just booked, please pick another.");
-
-  // Which of the free ones, rather than whichever the database named first.
-  // That used to decide it, so one person collected the bookings and the rest
-  // waited. Now it goes to whoever is already going that way, and failing
-  // that to whoever has the lightest day.
-  const choice = chooseEvaluator(stillFree, await daysFor(admin, stillFree, input.date), {
-    lat: input.lat,
-    lng: input.lng,
-  });
-  if (!choice) throw new Error("That time was just booked, please pick another.");
-  const evaluatorId = choice.evaluatorId;
 
   const { data: activeServices, error: servicesError } = await admin
     .from("services")
@@ -222,6 +154,145 @@ async function makePublicBooking(
   const validServiceIds = new Set((activeServices ?? []).map((s) => s.service_type_id));
   const requestedServiceIds = input.requestedServiceTypeIds.filter((id) => validServiceIds.has(id));
 
+  const referralCode = await knownReferralCode(admin, input.organizationId, input.referralCode);
+  const { customerId, propertyId } = await customerAndProperty(admin, {
+    organizationId: input.organizationId,
+    firstName,
+    lastName,
+    email,
+    phone,
+    address,
+    lat: input.lat,
+    lng: input.lng,
+    source: bookingSource(adClick, referralCode),
+  });
+  const mode = modeForAddress(input.lat, input.lng, address);
+
+  // No evaluation_date, no evaluator: that is set when they pick a time.
+  const { data: job, error: jobError } = await admin
+    .from("jobs")
+    .insert({
+      property_id: propertyId,
+      name: `${address}, Estimate`,
+      evaluation_mode: mode.mode,
+      referral_code: referralCode,
+      booking_variant: isVariant(input.bookingVariant) ? input.bookingVariant : null,
+      address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
+      client_notes: input.notes.trim() || null,
+      referred_by_profile_id: input.referredByProfileId,
+    })
+    .select()
+    .single();
+  if (jobError) throw jobError;
+
+  // The form is normally made by a trigger when a job gets a date. This job
+  // has none yet, and the form is the very next page, so it is made here.
+  const { data: intake, error: intakeError } = await admin
+    .from("evaluation_intakes")
+    .upsert({ organization_id: input.organizationId, job_id: job.id }, { onConflict: "job_id" })
+    .select("token")
+    .single();
+  if (intakeError) throw intakeError;
+
+  if (input.visitId && UUID_RE.test(input.visitId)) {
+    await admin
+      .from("booking_visits")
+      .update({ booked_job_id: job.id, booked_at: new Date().toISOString() })
+      .eq("id", input.visitId)
+      .is("booked_job_id", null);
+  }
+  if (requestedServiceIds.length > 0) {
+    const { error: requestedError } = await admin.from("job_requested_services").insert(
+      requestedServiceIds.map((serviceTypeId) => ({ job_id: job.id, organization_id: input.organizationId, service_type_id: serviceTypeId }))
+    );
+    if (requestedError) throw requestedError;
+  }
+
+  const who = await requestHeaders();
+  await recordBookingAdClick(admin, {
+    jobId: job.id,
+    organizationId: input.organizationId,
+    click: adClick,
+    email,
+    phone,
+    ip: who.ip,
+    userAgent: who.userAgent,
+  }).catch((err) => log.warn("lead.meta_failed", { jobId: job.id, error: err instanceof Error ? err.message : String(err) }));
+  await reconcileProspects(admin).catch(() => null);
+  await ensureClientAccount({ customerId, email }).catch(() => null);
+
+  log.info("lead.created", { jobId: job.id, customerId, mode: mode.mode, referralCode, services: requestedServiceIds.length });
+  return { jobId: job.id, prepToken: intake.token };
+}
+
+/**
+ * The visit, booked once they have paid: a deposit (which comes with the
+ * basic evaluation) or a paid evaluation. The same checks as a booking made
+ * the old way, at the moment it is made: the business's notice, and that
+ * the evaluator is still free.
+ */
+export async function bookPaidEvaluationVisit(input: {
+  token: string;
+  date: string;
+  time: string;
+  candidateEvaluatorIds: string[];
+}): Promise<{ ok: true; at: string } | { ok: false; error: string }> {
+  if (!/^[0-9a-f]{24}$/.test(input.token)) return { ok: false, error: "That link has expired or was never ours. Give us a call." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return { ok: false, error: "Pick a time first." };
+  if (input.candidateEvaluatorIds.length === 0) return { ok: false, error: "That time is no longer available, please pick another." };
+
+  const admin = createAdminClient();
+  const { data: intake } = await admin
+    .from("evaluation_intakes")
+    .select("job_id, organization_id, job:jobs(evaluation_date, property:properties(address, lat, lng))")
+    .eq("token", input.token)
+    .maybeSingle();
+  if (!intake) return { ok: false, error: "That link has expired or was never ours. Give us a call." };
+  const job = intake.job as unknown as { evaluation_date: string | null; property: { address: string; lat: number; lng: number } | null } | null;
+  // Already booked: picking again is a reschedule, which goes through us.
+  if (job?.evaluation_date) return { ok: true, at: job.evaluation_date };
+  if (!job?.property) return { ok: false, error: "We couldn't find your property. Give us a call." };
+
+  const { data: estimate } = await admin.from("job_estimates").select("paid_at").eq("job_id", intake.job_id).maybeSingle();
+  if (!estimate?.paid_at) return { ok: false, error: "Your payment hasn't come through yet. Give it a minute and try again." };
+
+  const notice = await getBookingNotice(intake.organization_id);
+  const at = zonedToUtc(input.date, input.time, notice.timeZone);
+  if (Number.isNaN(at.getTime())) return { ok: false, error: "Pick a time first." };
+  const soon = tooSoon(notice, new Date(), { date: input.date, at });
+  if (soon) return { ok: false, error: soon };
+
+  const end = new Date(at.getTime() + SLOT_MINUTES * 60_000);
+  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
+  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: at, end });
+  if (stillFree.length === 0) return { ok: false, error: "That time was just booked, please pick another." };
+  const choice = chooseEvaluator(stillFree, await daysFor(admin, stillFree, input.date), { lat: job.property.lat, lng: job.property.lng });
+  if (!choice) return { ok: false, error: "That time was just booked, please pick another." };
+
+  const { error } = await admin
+    .from("jobs")
+    .update({ evaluation_date: at.toISOString(), assigned_to: choice.evaluatorId, evaluation_status: "scheduled" })
+    .eq("id", intake.job_id)
+    .is("evaluation_date", null);
+  if (error) return { ok: false, error: "Couldn't book that time. Try again in a moment." };
+
+  await syncEvaluationToGhl(intake.job_id);
+  await sendEvaluationConfirmationNow(intake.job_id);
+  log.info("lead.visit_booked", { jobId: intake.job_id, evaluatorId: choice.evaluatorId, at: at.toISOString() });
+  return { ok: true, at: at.toISOString() };
+}
+
+/**
+ * The client and the property a booking is for: the ones we already have
+ * when they match (by email, phone or name, and by address), new ones when
+ * they don't. Shared by the booking and by the lead that starts the map
+ * pre-evaluation, so both land on the same records.
+ */
+async function customerAndProperty(
+  admin: ReturnType<typeof createAdminClient>,
+  input: { organizationId: string; firstName: string; lastName: string; email: string; phone: string; address: string; lat: number; lng: number; source: string | null }
+): Promise<{ customerId: string; propertyId: string }> {
+  const { firstName, lastName, email, phone, address } = input;
   const { data: existingCustomers, error: existingCustomerError } = await admin
     .from("customers")
     .select("id, name, email, phone")
@@ -261,7 +332,7 @@ async function makePublicBooking(
         email,
         phone,
         organization_id: input.organizationId,
-        source: bookingSource(adClick, await knownReferralCode(admin, input.organizationId, input.referralCode)),
+        source: input.source,
       })
       .select()
       .single();
@@ -295,104 +366,7 @@ async function makePublicBooking(
     }
   }
 
-  // Decided here as well as in the browser. The client is told which kind of
-  // evaluation they are getting before they pick a time, but what is written
-  // down is worked out from the coordinates on the server, where nobody can
-  // edit it into a free visit three states away.
-  const mode = modeForAddress(input.lat, input.lng, address);
-
-  // Only a code we actually issued. Anybody can put ?rec=whatever in a URL,
-  // and a made-up code stored on a job would show up as a booking credited to
-  // a group nobody ever posted in.
-  const referralCode = await knownReferralCode(admin, input.organizationId, input.referralCode);
-
-  const { data: job, error: jobError } = await admin
-    .from("jobs")
-    .insert({
-      property_id: propertyId,
-      name: `${address}, Estimate`,
-      assigned_to: evaluatorId,
-      evaluation_date: iso,
-      evaluation_status: "scheduled",
-      evaluation_mode: mode.mode,
-      referral_code: referralCode,
-      booking_variant: isVariant(input.bookingVariant) ? input.bookingVariant : null,
-      address_entry: input.addressEntry === "located" || input.addressEntry === "typed" ? input.addressEntry : null,
-      client_notes: input.notes.trim() || null,
-      budget_range: budgetRange || null,
-      referred_by_profile_id: input.referredByProfileId,
-    })
-    .select()
-    .single();
-  if (jobError) throw jobError;
-
-  // The visit this booking came from, so the test reads bookings over visits.
-  if (input.visitId && UUID_RE.test(input.visitId)) {
-    await admin
-      .from("booking_visits")
-      .update({ booked_job_id: job.id, booked_at: new Date().toISOString() })
-      .eq("id", input.visitId)
-      .is("booked_job_id", null);
-  }
-
-  if (requestedServiceIds.length > 0) {
-    const { error: requestedError } = await admin.from("job_requested_services").insert(
-      requestedServiceIds.map((serviceTypeId) => ({
-        job_id: job.id,
-        organization_id: input.organizationId,
-        service_type_id: serviceTypeId,
-      }))
-    );
-    if (requestedError) throw requestedError;
-  }
-
-  // Which ad it came from, kept with the job, and the booking told to Meta.
-  // Never in the way of the booking.
-  const who = await requestHeaders();
-  await recordBookingAdClick(admin, {
-    jobId: job.id,
-    organizationId: input.organizationId,
-    click: adClick,
-    email,
-    phone,
-    ip: who.ip,
-    userAgent: who.userAgent,
-  }).catch((err) => log.warn("booking.meta_failed", { jobId: job.id, error: err instanceof Error ? err.message : String(err) }));
-
-  // They've just become a client — take them off the cold-prospect list now
-  // rather than at the next nightly sweep.
-  await reconcileProspects(admin).catch(() => null);
-
-  // Onto the GoHighLevel calendar too, so the office sees one calendar.
-  // Never fails the booking: it logs and moves on if GoHighLevel is down.
-  await syncEvaluationToGhl(job.id);
-
-  // "You're booked", now, not at tomorrow's reminder run.
-  await sendEvaluationConfirmationNow(job.id);
-
-  // And give them a way back in. No password: they ask for a code when they
-  // want to see their quote again, instead of hunting for our email. Carries
-  // no organization, so the signup trigger gives it no staff access at all.
-  await ensureClientAccount({ customerId, email }).catch(() => null);
-
-  // The pre-evaluation form is made by a trigger the moment the job has a
-  // date, so the client can be handed the link on the very next screen.
-  const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", job.id).maybeSingle();
-
-  log.info("booking.created", {
-    jobId: job.id,
-    customerId,
-    evaluatorId,
-    at: iso,
-    date: input.date,
-    time: input.time,
-    mode: mode.mode,
-    referralCode,
-    services: requestedServiceIds.length,
-    prepForm: Boolean(intake?.token),
-  });
-
-  return { jobId: job.id, mode: mode.mode, prepToken: intake?.token ?? null };
+  return { customerId, propertyId };
 }
 
 /**

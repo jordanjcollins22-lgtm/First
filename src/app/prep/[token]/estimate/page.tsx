@@ -1,12 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 
-import { isSupabaseConfigured, isStripeConfigured } from "@/lib/env";
+import { isSupabaseConfigured } from "@/lib/env";
 import { publicEnv } from "@/lib/public-env";
-import { getTapPreEval, tapMapPath } from "@/lib/data/tap-estimate";
+import { getTapPreEval, schedulePath, tapMapPath } from "@/lib/data/tap-estimate";
 import { listExternalMessagesForJob } from "@/lib/data/public-job-messages";
-import { recordCheckoutSession } from "@/lib/actions/stripe-settlement";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { stripeClient } from "@/lib/stripe-customer";
 import { fitView, type LngLat } from "@/lib/lot-map";
 import { dayOnly, timeOnly } from "@/lib/time-zone";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -14,25 +11,13 @@ import { EstimateView } from "@/components/tap-pre-eval/estimate-view";
 
 /**
  * The estimate, straight after the map pre-evaluation: what they asked for,
- * what it comes to, and a third down to hold it.
+ * what it comes to, and how they'd like to pay (a third down, or a paid
+ * evaluation) before they pick a visit time.
  */
 export const dynamic = "force-dynamic";
 
 const MAP_WIDTH = 600;
 const MAP_HEIGHT = 400;
-
-/**
- * Back from the card page before Stripe's webhook has landed: ask Stripe
- * directly, and record it the way the webhook would (it is idempotent), so
- * the page says "deposit received" rather than leaving them wondering.
- */
-async function settleIfPaid(jobId: string): Promise<void> {
-  if (!isStripeConfigured) return;
-  const { data } = await createAdminClient().from("job_estimates").select("checkout_session_id, deposit_paid_at").eq("job_id", jobId).maybeSingle();
-  if (!data?.checkout_session_id || data.deposit_paid_at) return;
-  const session = await stripeClient().checkout.sessions.retrieve(data.checkout_session_id);
-  if (session.payment_status === "paid") await recordCheckoutSession(session);
-}
 
 /** A satellite picture of the property with each spot numbered on it. */
 function spotsMapUrl(points: LngLat[], frame: LngLat[]): string | null {
@@ -42,25 +27,14 @@ function spotsMapUrl(points: LngLat[], frame: LngLat[]): string | null {
   return `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${pins}/${center[0].toFixed(6)},${center[1].toFixed(6)},${zoom}/${MAP_WIDTH}x${MAP_HEIGHT}@2x?access_token=${publicEnv.mapboxToken}`;
 }
 
-export default async function EstimatePage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ token: string }>;
-  searchParams?: Promise<{ paid?: string }>;
-}) {
+export default async function EstimatePage({ params }: { params: Promise<{ token: string }> }) {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { token } = await params;
-  const { paid } = (await searchParams) ?? {};
 
-  let data = await getTapPreEval(token);
+  const data = await getTapPreEval(token);
   if (!data) notFound();
   if (!data.estimate) redirect(tapMapPath(token));
-  if (paid === "1" && !data.estimate.depositPaidAt) {
-    await settleIfPaid(data.intake.jobId).catch((err) => console.error("[estimate] deposit check failed:", err));
-    data = (await getTapPreEval(token)) ?? data;
-  }
-  const estimate = data.estimate!;
+  const estimate = data.estimate;
 
   const points = estimate.spots.map((s): LngLat => [s.lng, s.lat]);
   const frame = [...(data.lot?.ring ?? (data.home ? [data.home] : [])), ...points];
@@ -78,7 +52,8 @@ export default async function EstimatePage({
       mapUrl={spotsMapUrl(points, frame)}
       photoUrls={data.photoUrls}
       messages={messages.map((m) => ({ id: m.id, fromClient: m.author_type === "client", author: m.author_name, body: m.body, at: m.created_at }))}
-      justPaid={paid === "1"}
+      tiers={data.tiers}
+      scheduleHref={schedulePath(token)}
       mapHref={tapMapPath(token)}
     />
   );

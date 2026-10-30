@@ -95,6 +95,7 @@ export interface Database {
           slug: string | null;
           crew_cost_per_hour: number | null;
           price_multiplier: number;
+          evaluation_tiers: Json | null;
           overhead_percent: number;
           /** Days a month the crew is on a paying job, not working days. */
           billable_days_per_month: number;
@@ -2412,7 +2413,10 @@ export interface Database {
           deposit_cents: number;
           accepted_at: string | null;
           checkout_session_id: string | null;
-          deposit_paid_at: string | null;
+          paid_at: string | null;
+          choice: "deposit" | "evaluation" | null;
+          evaluation_tier: "basic" | "measured" | "design" | null;
+          charged_cents: number | null;
           created_at: string;
           updated_at: string;
         };

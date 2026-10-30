@@ -85,6 +85,7 @@ import { getJobCustomerContact } from "@/lib/job-customer";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
 import { estimatePath, getEstimateForJob } from "@/lib/data/tap-estimate";
 import { ClientEstimateCard } from "@/components/tap-pre-eval/client-estimate-card";
+import { readTiers, tierById } from "@/lib/evaluation-tiers";
 import { intakeHeadline, isGrounds } from "@/lib/evaluation-intake";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
@@ -790,7 +791,12 @@ export default async function JobPage({
       )}
 
       {clientEstimate && intake && (
-        <ClientEstimateCard estimate={clientEstimate} clientHref={estimatePath(intake.token)} showMoney={seen.jobMoney} />
+        <ClientEstimateCard
+          estimate={clientEstimate}
+          tierName={tierById(readTiers(organization.evaluation_tiers), clientEstimate.evaluationTier)?.name ?? null}
+          clientHref={estimatePath(intake.token)}
+          showMoney={seen.jobMoney}
+        />
       )}
 
       {/* Everything for changing the project: the drawing tool, the

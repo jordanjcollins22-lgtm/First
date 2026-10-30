@@ -75,10 +75,7 @@ export default async function BookingPagePage() {
               organizationName={options.organizationName}
               referredByProfileId={null}
               services={options.services}
-              slots={options.slots}
-              noticeText={options.noticeText}
               linkRef={null}
-              linkOrg={slug}
               referralCode={null}
               proof={proof}
             />
