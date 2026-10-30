@@ -7,7 +7,8 @@ import { cleanAnswers } from "@/lib/evaluation-intake";
 import { instantPrice } from "@/lib/instant-price";
 import { estimateCatalogFor } from "@/lib/data/estimate-catalog";
 import { lotForProperty } from "@/lib/data/lot-map";
-import { estimatePath } from "@/lib/data/tap-estimate";
+import { estimatePath, schedulePath, tiersForOrganization } from "@/lib/data/tap-estimate";
+import { DEPOSIT_TIER, isTierId, tierById, type TierId } from "@/lib/evaluation-tiers";
 import { answersFromSpots, areaForPoint, depositCents, dollars, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
 import { isStripeConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
@@ -71,8 +72,8 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
     return { ok: false, error: "One of those photos didn't finish uploading. Remove it and add it again." };
   }
 
-  const { data: existing } = await form.admin.from("job_estimates").select("id, accepted_at").eq("job_id", form.jobId).maybeSingle();
-  if (existing?.accepted_at) return { ok: false, error: "You've already accepted this estimate. Message us to change anything." };
+  const { data: existing } = await form.admin.from("job_estimates").select("id, paid_at").eq("job_id", form.jobId).maybeSingle();
+  if (existing?.paid_at) return { ok: false, error: "You've already paid on this estimate. Message us to change anything." };
 
   const lot = await lotForProperty(form.property.id);
   const regions = regionsFor(lot);
@@ -119,43 +120,62 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
 }
 
 /**
- * Accepting the estimate: a card checkout for a third of it, which holds
- * the job. Recorded against the job when Stripe says it landed, so the
- * proposal after the visit asks only for the rest.
+ * Paying, one of two ways, either of which comes before anybody drives out:
+ *
+ * - "deposit": a third of the estimate, which holds the job and comes with
+ *   the basic evaluation visit;
+ * - a tier id: a paid evaluation, for somebody not ready to commit.
+ *
+ * Both are recorded against the job when Stripe says they landed, so the
+ * proposal after the visit asks only for the rest: the evaluation fee comes
+ * off the job like the deposit does. Afterwards they pick the visit time.
  */
-export async function startEstimateDeposit(token: string): Promise<Result<{ url: string }>> {
-  const form = await formFor(token);
+export async function startEstimatePayment(input: { token: string; pay: string }): Promise<Result<{ url: string }>> {
+  const form = await formFor(input.token);
   if (!form) return { ok: false, error: LINK_GONE };
   if (form.cancelled) return { ok: false, error: "This visit was cancelled. Give us a call to book again." };
   if (!isStripeConfigured) return { ok: false, error: "Card payments aren't switched on yet. Give us a call." };
 
   const { data: estimate } = await form.admin
     .from("job_estimates")
-    .select("id, deposit_cents, deposit_paid_at")
+    .select("id, deposit_cents, paid_at")
     .eq("job_id", form.jobId)
     .maybeSingle();
   if (!estimate) return { ok: false, error: "Send your map first, then your estimate shows here." };
-  if (estimate.deposit_paid_at) return { ok: false, error: "Your deposit is already in. Thank you!" };
-  if (!(estimate.deposit_cents > 0)) {
-    return { ok: false, error: "We need to see this one before we can price it. We'll go over it at your evaluation." };
+  if (estimate.paid_at) return { ok: false, error: "You've already paid. Thank you!" };
+
+  let choice: "deposit" | "evaluation";
+  let tierId: TierId;
+  let amountCents: number;
+  let description: string;
+  if (input.pay === "deposit") {
+    if (!(estimate.deposit_cents > 0)) return { ok: false, error: "We need to see this one before we can price it. Book an evaluation instead." };
+    choice = "deposit";
+    tierId = DEPOSIT_TIER;
+    amountCents = estimate.deposit_cents;
+    description = "Deposit, one third of your estimate";
+  } else {
+    // Prices come from the business's settings, never from the page.
+    const tier = isTierId(input.pay) ? tierById(await tiersForOrganization(form.organizationId), input.pay) : null;
+    if (!tier) return { ok: false, error: "Pick one of the evaluations." };
+    choice = "evaluation";
+    tierId = tier.id;
+    amountCents = tier.priceCents;
+    description = `${tier.name} (comes off your project if you go ahead)`;
   }
 
   const baseUrl = await outboundBaseUrl();
   const contact = await getJobCustomerContact(form.jobId);
   if (!baseUrl || !contact) return { ok: false, error: "Couldn't open the payment page. Give us a call." };
   const existing = contact.customerId ? await stripeCustomerFor(contact.customerId) : null;
-  const fee = surchargeCents(estimate.deposit_cents);
-  const back = absolute(baseUrl, estimatePath(token));
+  const fee = surchargeCents(amountCents);
 
   try {
     const session = await stripeClient().checkout.sessions.create({
       mode: "payment",
       ...(existing ? { customer: existing } : { customer_email: contact.email || undefined, customer_creation: "always" as const }),
       line_items: [
-        {
-          price_data: { currency: "usd", unit_amount: estimate.deposit_cents, product_data: { name: "Deposit, one third of your estimate" } },
-          quantity: 1,
-        },
+        { price_data: { currency: "usd", unit_amount: amountCents, product_data: { name: description } }, quantity: 1 },
         ...(fee > 0
           ? [
               {
@@ -169,26 +189,37 @@ export async function startEstimateDeposit(token: string): Promise<Result<{ url:
             ]
           : []),
       ],
-      success_url: `${back}?paid=1`,
-      cancel_url: back,
+      // Straight on to picking the visit time.
+      success_url: `${absolute(baseUrl, schedulePath(input.token))}?paid=1`,
+      cancel_url: absolute(baseUrl, estimatePath(input.token)),
       metadata: {
         organization_id: form.organizationId,
         // On the job, so it counts towards what the proposal after the visit asks for.
         job_id: form.jobId,
         estimate_id: estimate.id,
-        work_cents: String(estimate.deposit_cents),
+        // What this checkout is for, so the webhook records what was paid
+        // even if they started another one meanwhile.
+        estimate_choice: choice,
+        estimate_tier: tierId,
+        work_cents: String(amountCents),
         surcharge_cents: String(fee),
       },
     });
     if (!session.url) throw new Error("Stripe returned no checkout link.");
 
+    const now = new Date().toISOString();
     await form.admin
       .from("job_estimates")
-      .update({ accepted_at: new Date().toISOString(), checkout_session_id: session.id, updated_at: new Date().toISOString() })
+      .update({ accepted_at: now, choice, evaluation_tier: tierId, charged_cents: amountCents, checkout_session_id: session.id, updated_at: now })
       .eq("id", estimate.id);
-    notifyJobTeam(form.jobId, "proposal_responses", `A client accepted their estimate and is paying the ${dollars(estimate.deposit_cents)} deposit.`, {
-      dedupeKey: `estimate-accept-${estimate.id}`,
-    }).catch(() => {});
+    notifyJobTeam(
+      form.jobId,
+      "proposal_responses",
+      choice === "deposit"
+        ? `A client accepted their estimate and is paying the ${dollars(amountCents)} deposit.`
+        : `A client is booking a paid evaluation (${description.split(" (")[0]}, ${dollars(amountCents)}).`,
+      { dedupeKey: `estimate-pay-${estimate.id}-${choice}-${tierId}` }
+    ).catch(() => {});
     return { ok: true, url: session.url };
   } catch (err) {
     log.error("estimate.checkout_failed", { jobId: form.jobId, error: err instanceof Error ? err.message : String(err) });

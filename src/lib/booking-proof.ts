@@ -69,12 +69,12 @@ export function showcaseTitleFromCaption(caption: string | null | undefined, zon
 }
 
 /**
- * The pages a client goes through, in order. The first says what the comment
- * said and asks where the property is; then who they are; then when; then
- * they are booked. What they want done is asked afterwards, on the
- * pre-evaluation form, so it is not asked here.
+ * The booking card's pages, in order. The first says what the comment said
+ * and asks where the property is; then who they are. From there they go on
+ * to mark what they want done on the map, see their estimate, pay (a deposit
+ * or a paid evaluation), and only then pick the visit time.
  */
-export const BOOKING_PAGES = ["Where", "Your details", "When", "Booked"] as const;
+export const BOOKING_PAGES = ["Where", "Your details"] as const;
 
 /** One review is not "amazing reviews". Two is the least that reads as a pattern. */
 export const REVIEWS_TO_CLAIM = 2;

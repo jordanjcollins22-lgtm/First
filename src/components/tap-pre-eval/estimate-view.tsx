@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Info, Loader2, MessageCircleQuestion } from "lucide-react";
+import { Check, CheckCircle2, Info, Loader2, MessageCircleQuestion } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { askEstimateQuestion, startEstimateDeposit } from "@/lib/actions/tap-estimate-actions";
+import { askEstimateQuestion, startEstimatePayment } from "@/lib/actions/tap-estimate-actions";
 import type { ClientEstimate } from "@/lib/data/tap-estimate";
+import { tierById, type EvaluationTier, type TierId } from "@/lib/evaluation-tiers";
 import { choiceLabel, dollars } from "@/lib/tap-estimate";
 
 interface Message {
@@ -28,7 +29,10 @@ export interface EstimateViewProps {
   mapUrl: string | null;
   photoUrls: Record<string, string>;
   messages: Message[];
-  justPaid: boolean;
+  /** The paid evaluations on offer, for somebody not ready to put a deposit down. */
+  tiers: EvaluationTier[];
+  /** Where they pick the visit time once they've paid. */
+  scheduleHref: string;
   mapHref: string;
 }
 
@@ -36,7 +40,9 @@ export interface EstimateViewProps {
  * The estimate, laid out like the proposal a client gets after the visit
  * (same header, same scope then price then questions), and plain that it is
  * an estimate: worked out before anybody has seen the yard, confirmed at the
- * visit, with a third down to hold it.
+ * visit. Then the one decision, which is paid either way: a third down to
+ * hold the job (the basic visit comes with it), or a paid evaluation for
+ * somebody not ready to commit, whose fee comes off the job if they go ahead.
  */
 export function EstimateView({
   token,
@@ -49,7 +55,8 @@ export function EstimateView({
   mapUrl,
   photoUrls,
   messages: initialMessages,
-  justPaid,
+  tiers,
+  scheduleHref,
   mapHref,
 }: EstimateViewProps) {
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +68,15 @@ export function EstimateView({
   const priced = estimate.price.lines.filter((l) => l.priceCents != null);
   const atVisit = estimate.price.lines.filter((l) => l.priceCents == null);
   const hasPrice = estimate.totalCents > 0;
-  const paid = Boolean(estimate.depositPaidAt);
+  const paid = Boolean(estimate.paidAt);
+  const [tierId, setTierId] = useState<TierId>(hasPrice ? "measured" : "basic");
+  const tier = tierById(tiers, tierId);
+  const paidTier = tierById(tiers, estimate.evaluationTier);
 
-  function payDeposit() {
+  function pay(choice: "deposit" | TierId) {
     setError(null);
     startPaying(async () => {
-      const result = await startEstimateDeposit(token);
+      const result = await startEstimatePayment({ token, pay: choice });
       if (!result.ok) setError(result.error);
       else window.location.assign(result.url);
     });
@@ -100,18 +110,25 @@ export function EstimateView({
       {paid && (
         <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
           <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
-          <div>
-            <p className="font-semibold">Deposit received. You&apos;re all set.</p>
-            <p className="text-sm text-muted-foreground">
-              {visit ? `We'll see you ${visit}. ` : ""}We confirm everything at the visit, and your deposit comes off the final price.
+          <div className="flex flex-1 flex-col gap-2">
+            <p className="font-semibold">
+              {estimate.choice === "evaluation" ? `${paidTier?.name ?? "Evaluation"} booked and paid.` : "Deposit received. You're all set."}
             </p>
+            <p className="text-sm text-muted-foreground">
+              {visit
+                ? `We'll see you ${visit}. `
+                : ""}
+              {estimate.choice === "evaluation"
+                ? "If you go ahead with the project, what you paid comes off the price."
+                : "We confirm everything at the visit, and your deposit comes off the final price."}
+            </p>
+            {!visit && (
+              <Button asChild size="lg" className="self-start">
+                <a href={scheduleHref}>Pick your visit time</a>
+              </Button>
+            )}
           </div>
         </div>
-      )}
-      {justPaid && !paid && (
-        <p className="rounded-2xl border border-border bg-muted/40 p-4 text-sm">
-          Thanks! Your payment is going through. This page will show it as received in a minute or two.
-        </p>
       )}
 
       {mapUrl && (
@@ -142,7 +159,7 @@ export function EstimateView({
             )}
           </div>
         ))}
-        {!estimate.acceptedAt && (
+        {!paid && (
           <a href={mapHref} className="self-start text-sm font-semibold text-primary underline-offset-2 hover:underline">
             Change my spots
           </a>
@@ -177,7 +194,9 @@ export function EstimateView({
           <p className="text-4xl font-bold text-primary">{dollars(estimate.totalCents)}</p>
           {atVisit.length > 0 && <p className="text-sm text-muted-foreground">Plus anything we price at your visit.</p>}
           <p className="mt-3 text-base font-semibold">
-            {paid ? `Deposit paid: ${dollars(estimate.depositCents)}` : `To hold your spot: ${dollars(estimate.depositCents)} deposit (one third)`}
+            {paid
+              ? `Paid: ${dollars(estimate.chargedCents ?? 0)}, comes off your project`
+              : `Deposit to hold your spot: ${dollars(estimate.depositCents)} (one third)`}
           </p>
         </section>
       ) : (
@@ -207,13 +226,66 @@ export function EstimateView({
 
       {error && <p className="text-center text-sm font-medium text-destructive">{error}</p>}
 
-      {hasPrice && !paid && (
-        <div className="flex flex-col gap-2">
-          <Button size="xl" className="w-full" disabled={paying} onClick={payDeposit}>
-            {paying ? <Loader2 className="size-6 animate-spin" /> : estimate.acceptedAt ? `Finish paying your ${dollars(estimate.depositCents)} deposit` : `Accept and pay ${dollars(estimate.depositCents)} deposit`}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">Card, Apple Pay or Google Pay. A 3.5% card processing fee is added at checkout.</p>
-        </div>
+      {!paid && (
+        <section className="flex flex-col gap-4">
+          {hasPrice && (
+            <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary p-4">
+              <div>
+                <h2 className="text-lg font-semibold">Ready to go ahead?</h2>
+                <p className="text-sm text-muted-foreground">
+                  Put down {dollars(estimate.depositCents)} (one third) to hold your spot. Your site evaluation is included, and the
+                  deposit comes off your final price.
+                </p>
+              </div>
+              <Button size="xl" className="w-full" disabled={paying} onClick={() => pay("deposit")}>
+                {paying ? <Loader2 className="size-6 animate-spin" /> : `Accept and pay ${dollars(estimate.depositCents)} deposit`}
+              </Button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-border p-4">
+            <div>
+              <h2 className="text-lg font-semibold">{hasPrice ? "Not ready yet? Book an evaluation" : "Book an evaluation"}</h2>
+              <p className="text-sm text-muted-foreground">We come out and go over everything with you. If you go ahead, what you pay comes off the project.</p>
+            </div>
+            <div className="flex flex-col gap-2" role="radiogroup" aria-label="Evaluations">
+              {tiers.map((t) => {
+                const on = t.id === tierId;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setTierId(t.id)}
+                    className={on ? "rounded-xl border-2 border-primary bg-primary/5 p-3 text-left" : "rounded-xl border-2 border-border p-3 text-left"}
+                  >
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="font-semibold">{t.name}</span>
+                      <span className="font-semibold text-primary">{dollars(t.priceCents)}</span>
+                    </span>
+                    <span className="mt-0.5 block text-sm text-muted-foreground">{t.blurb}</span>
+                    {on && (
+                      <ul className="mt-2 flex flex-col gap-1 text-sm">
+                        {t.includes.map((item) => (
+                          <li key={item} className="flex items-start gap-2">
+                            <Check className="mt-0.5 size-4 shrink-0 text-primary" /> {item}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <Button size="lg" variant={hasPrice ? "outline" : "default"} className="w-full" disabled={paying || !tier} onClick={() => pay(tierId)}>
+              {paying ? <Loader2 className="size-5 animate-spin" /> : tier ? `Book ${tier.name} for ${dollars(tier.priceCents)}` : "Pick one"}
+            </Button>
+          </div>
+          <p className="text-center text-xs text-muted-foreground">
+            Card, Apple Pay or Google Pay. A 3.5% card processing fee is added at checkout. You pick your visit time right after.
+          </p>
+        </section>
       )}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-border p-4">

@@ -68,7 +68,18 @@ export interface SubmitPublicBookingInput {
    * anybody gets by answering "Not sure yet" anyway.
    */
   wantsVisit?: boolean;
+  /**
+   * The two-option funnel: only a lead, with no visit and no time. They go on
+   * to the map and the estimate, and a visit is booked only once they pay.
+   */
+  leadOnly?: boolean;
 }
+
+/** Who they are and where: the start of the two-option funnel. */
+export type StartPublicLeadInput = Omit<
+  SubmitPublicBookingInput,
+  "candidateEvaluatorIds" | "date" | "time" | "budgetRange" | "wantsVisit" | "leadOnly"
+> & { budgetRange?: string };
 
 /** What was made: a visit (in person or on video), or a photo quote with no time at all. */
 export interface PublicBookingMade {
@@ -125,6 +136,46 @@ export async function recordLocateResult(input: { visitId: string; result: Locat
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * The first half of the two-option funnel: who they are and where, saved as
+ * a lead (a job with no visit yet) with its pre-evaluation form ready. They go
+ * straight on to mark the map and see their estimate. Nobody is put on the
+ * calendar until they have paid a deposit or for an evaluation.
+ */
+export async function startPublicLead(input: StartPublicLeadInput): Promise<{ jobId: string; prepToken: string }> {
+  const email = input.email.trim().toLowerCase();
+  const full: SubmitPublicBookingInput = {
+    ...input,
+    candidateEvaluatorIds: [],
+    date: "",
+    time: "",
+    budgetRange: input.budgetRange ?? "",
+    leadOnly: true,
+  };
+  const admin = createAdminClient();
+  // The same person sending the same details twice at once (a double tap, a
+  // slow phone) gets the one lead, not two.
+  const key = EMAIL_RE.test(email) ? bookingPageKey(input.organizationId, email, `lead:${input.address.trim().toLowerCase()}`) : null;
+  if (key) {
+    const claim = await claimBooking(admin, key);
+    if (!claim.won) {
+      if (!claim.jobId) throw new Error("That's still going through. Give it a moment, then try again.");
+      const { data: intake } = await admin.from("evaluation_intakes").select("token").eq("job_id", claim.jobId).maybeSingle();
+      if (intake?.token) return { jobId: claim.jobId, prepToken: intake.token };
+      throw new Error("We have your details, but couldn't open your project. Refresh the page to try again.");
+    }
+  }
+  try {
+    const made = await makePublicBooking(full);
+    if (!made.prepToken) throw new Error("We have your details, but couldn't open your project. Refresh the page to try again.");
+    if (key) await settleClaim(admin, key, made.jobId);
+    return { jobId: made.jobId, prepToken: made.prepToken };
+  } catch (err) {
+    if (key) await releaseClaim(admin, key).catch(() => undefined);
+    throw err;
+  }
+}
 
 /**
  * The one write path for the public /book flow — no logged-in user exists,
@@ -200,7 +251,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   // know whether to show the times. Before the migration, and with the
   // switch off, everybody gets a visit, as they always have.
   const photoQuotes = await readPhotoQuotes(admin, input.organizationId).catch(() => null);
-  const route = input.wantsVisit ? "visit" : routeForBudget(budgetRange, photoQuotes?.ready ? photoQuotes : null);
+  const route = input.leadOnly ? "lead" : input.wantsVisit ? "visit" : routeForBudget(budgetRange, photoQuotes?.ready ? photoQuotes : null);
   const visit = route === "visit" ? await pickVisit(admin, input, address) : null;
 
   const { data: activeServices, error: servicesError } = await admin
@@ -300,7 +351,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   // stays on that one job: the office's "needs a visit" link and a second
   // try on the form both land where the photos already are.
   const waitingJobId = await waitingPhotoQuoteJob(admin, propertyId);
-  if (!visit && waitingJobId) {
+  if (!visit && waitingJobId && !input.leadOnly) {
     const { data: waitingIntake } = await admin.from("evaluation_intakes").select("token").eq("job_id", waitingJobId).maybeSingle();
     log.info("booking.photo_quote_reused", { jobId: waitingJobId, customerId });
     return { jobId: waitingJobId, mode: "photo_quote", prepToken: waitingIntake?.token ?? null };
@@ -318,7 +369,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   };
 
   let jobId: string;
-  if (visit && waitingJobId) {
+  if (visit && waitingJobId && !input.leadOnly) {
     // The visit goes on the photo quote's job. Only what the booking adds is
     // written: a blank note or budget doesn't wipe what the first one said.
     const { error: updateError } = await admin
@@ -363,7 +414,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   if (!visit) {
     const { error: intakeError } = await untyped(admin)
       .from("evaluation_intakes")
-      .upsert({ organization_id: input.organizationId, job_id: jobId, photo_quote: true }, { onConflict: "job_id" });
+      .upsert({ organization_id: input.organizationId, job_id: jobId, photo_quote: !input.leadOnly }, { onConflict: "job_id" });
     if (intakeError) throw intakeError;
   }
 
@@ -426,7 +477,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
 
   // The link by email as well, for a photo quote, so closing the tab
   // doesn't lose it. A visit's link is in its confirmation already.
-  if (!visit && intake?.token) await sendPhotoQuoteLinkNow(jobId, intake.token);
+  if (!visit && !input.leadOnly && intake?.token) await sendPhotoQuoteLinkNow(jobId, intake.token);
 
   log.info("booking.created", {
     jobId,
@@ -435,7 +486,7 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
     at: visit?.iso ?? null,
     date: visit ? input.date : null,
     time: visit ? input.time : null,
-    mode: visit ? mode.mode : "photo_quote",
+    mode: visit ? mode.mode : input.leadOnly ? "lead" : "photo_quote",
     referralCode,
     services: requestedServiceIds.length,
     prepForm: Boolean(intake?.token),
