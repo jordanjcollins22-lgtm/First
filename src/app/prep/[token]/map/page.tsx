@@ -13,6 +13,14 @@ import { TapMapLoader } from "@/components/tap-pre-eval/tap-map-loader";
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * Sending the map reads each spot's satellite picture and photos to size it,
+ * which can take up to its own 25 second deadline, plus the lot and the save.
+ * Server actions take their time limit from the page, so this keeps that from
+ * being cut off on a host whose default is shorter.
+ */
+export const maxDuration = 60;
+
 export default async function TapMapPage({
   params,
   searchParams,

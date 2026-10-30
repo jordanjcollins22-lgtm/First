@@ -11,6 +11,8 @@
  * Pure, so the mapping from taps to answers is tested without a database.
  */
 
+import { area as turfArea, kinks, polygon, simplify } from "@turf/turf";
+
 import { cleanAnswers, type IntakeAnswers } from "@/lib/evaluation-intake";
 import { groundRegions, pointInRing, type AreaKey, type LngLat, type LotData } from "@/lib/lot-map";
 
@@ -52,6 +54,13 @@ export interface TapSpot {
   choices: string[];
   /** Storage paths of this spot's photos, in the job-photos bucket. */
   photos: string[];
+  /**
+   * What the client drew round to show how big the spot is, when they did.
+   * A closed lng/lat ring (the last point repeats the first) of 3 to
+   * MAX_OUTLINE_POINTS corners. Optional: most clients just tap, and a size
+   * comes from elsewhere then.
+   */
+  outline?: LngLat[];
 }
 
 export const MAX_SPOTS = 20;
@@ -59,6 +68,14 @@ export const MAX_SPOTS = 20;
 export const MAX_PHOTOS_PER_SPOT = 3;
 // Further than this from the house is a mis-tap or a map panned away, not the job.
 const MAX_SPOT_METERS = 400;
+
+/** Corners kept on a drawn outline; a finger drags out hundreds, a bed needs a few dozen. */
+export const MAX_OUTLINE_POINTS = 60;
+// Smaller than a doormat is a slip of the finger, not a bed.
+const MIN_OUTLINE_SQFT = 4;
+// Bigger than this is round half the yard, not one spot; better sized at the visit than priced off a scribble.
+const MAX_OUTLINE_SQFT = 20_000;
+const SQFT_PER_SQ_METER = 10.763_910_4;
 
 /** The share of the estimate paid to hold it. */
 export const DEPOSIT_SHARE = 1 / 3;
@@ -81,6 +98,100 @@ function metersBetween([lng1, lat1]: LngLat, [lng2, lat2]: LngLat): number {
   return Math.sqrt(x * x + y * y) * 6_371_000;
 }
 
+/** The corners of a ring, without the closing repeat of the first. */
+function openRing(ring: LngLat[]): LngLat[] {
+  const [first, last] = [ring[0], ring[ring.length - 1]];
+  return ring.length > 1 && first[0] === last[0] && first[1] === last[1] ? ring.slice(0, -1) : ring;
+}
+
+/**
+ * The area inside a drawn outline, in square feet, measured on the globe
+ * (not on the flat map, which stretches with latitude). Null when it isn't
+ * a shape that has an area: too few corners, crossing itself, or junk.
+ */
+export function outlineAreaSqft(outline: LngLat[] | null | undefined): number | null {
+  if (!Array.isArray(outline)) return null;
+  const corners = openRing(outline);
+  if (corners.length < 3) return null;
+  if (!corners.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))) return null;
+  try {
+    const shape = polygon([[...corners, corners[0]]]);
+    // A figure eight has no honest area: the two loops cancel out.
+    if (kinks(shape).features.length > 0) return null;
+    const sqft = turfArea(shape) * SQFT_PER_SQ_METER;
+    return Number.isFinite(sqft) && sqft > 0 ? sqft : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A path dragged on the map made into an outline to keep: thinned to at
+ * most MAX_OUTLINE_POINTS corners and closed. Null when what's left isn't a
+ * believable spot (crosses itself, a sliver, or bigger than one spot could
+ * be), so the page can ask them to draw again rather than send it. Points
+ * further than a spot may be from the house are refused too, as the server
+ * would refuse them.
+ */
+export function cleanOutline(path: LngLat[], home: LngLat): LngLat[] | null {
+  let corners = openRing(path.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])));
+  // Consecutive repeats from a finger held still add nothing.
+  corners = corners.filter((p, i) => i === 0 || p[0] !== corners[i - 1][0] || p[1] !== corners[i - 1][1]);
+  if (corners.length < 3) return null;
+  if (corners.some((p) => metersBetween(home, p) > MAX_SPOT_METERS)) return null;
+  // Thin by distance until few enough, starting finer than a finger's width
+  // on the map (about 10 cm) so small beds keep their shape.
+  let ring: LngLat[] = [...corners, corners[0]];
+  for (let tolerance = 0.000_001; ring.length - 1 > MAX_OUTLINE_POINTS || ring.length - 1 < 3; tolerance *= 2) {
+    if (tolerance > 0.001) return null;
+    try {
+      ring = simplify(polygon([[...corners, corners[0]]]), { tolerance, highQuality: true }).geometry.coordinates[0] as LngLat[];
+    } catch {
+      return null;
+    }
+    if (ring.length - 1 < 3) return null;
+  }
+  const sqft = outlineAreaSqft(ring);
+  if (sqft === null || sqft < MIN_OUTLINE_SQFT || sqft > MAX_OUTLINE_SQFT) return null;
+  return ring.map(([lng, lat]) => [lng, lat]);
+}
+
+/**
+ * An outline as sent, checked. "bad" for something the page would never
+ * send (wrong types, too many corners, off away from the house), so the
+ * whole request is refused like any other tampering; null for a shape that
+ * was honestly drawn but can't be measured, which just goes, leaving the
+ * spot sized another way.
+ */
+function parseOutline(raw: unknown, home: LngLat): LngLat[] | null | "bad" {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw) || raw.length < 3 || raw.length > MAX_OUTLINE_POINTS + 1) return "bad";
+  const points: LngLat[] = [];
+  for (const p of raw) {
+    if (!Array.isArray(p) || p.length !== 2 || typeof p[0] !== "number" || typeof p[1] !== "number") return "bad";
+    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return "bad";
+    if (metersBetween(home, [p[0], p[1]]) > MAX_SPOT_METERS) return "bad";
+    points.push([p[0], p[1]]);
+  }
+  const corners = openRing(points);
+  if (corners.length < 3 || corners.length > MAX_OUTLINE_POINTS) return "bad";
+  const sqft = outlineAreaSqft(corners);
+  if (sqft === null || sqft < MIN_OUTLINE_SQFT || sqft > MAX_OUTLINE_SQFT) return null;
+  return [...corners, corners[0]];
+}
+
+/** An outline as stored, or nothing: only well-formed rings come back. */
+function readOutline(raw: unknown): LngLat[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const points = raw.filter(
+    (p): p is LngLat => Array.isArray(p) && p.length === 2 && typeof p[0] === "number" && typeof p[1] === "number" && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  );
+  if (points.length !== raw.length) return undefined;
+  const corners = openRing(points);
+  if (corners.length < 3 || corners.length > MAX_OUTLINE_POINTS) return undefined;
+  return [...corners, corners[0]];
+}
+
 /**
  * Spots from the page, made safe, or null when anything is off so a bad
  * request never half-saves. Photos are checked to be this job's form
@@ -92,13 +203,21 @@ export function parseTapSpots(input: unknown, ctx: { jobId: string; home: LngLat
   const spots: TapSpot[] = [];
   for (const raw of input) {
     if (!raw || typeof raw !== "object") return null;
-    const { lng, lat, choices, photos } = raw as Record<string, unknown>;
+    const { lng, lat, choices, photos, outline: rawOutline } = raw as Record<string, unknown>;
     if (typeof lng !== "number" || typeof lat !== "number" || !Number.isFinite(lng) || !Number.isFinite(lat)) return null;
     if (metersBetween(ctx.home, [lng, lat]) > MAX_SPOT_METERS) return null;
     if (!Array.isArray(choices) || choices.length === 0 || !choices.every((c) => typeof c === "string" && CHOICE.has(c))) return null;
     if (!Array.isArray(photos) || photos.length > MAX_PHOTOS_PER_SPOT) return null;
     if (!photos.every((p) => typeof p === "string" && photoPath.test(p))) return null;
-    spots.push({ lng, lat, choices: [...new Set(choices as string[])], photos: [...new Set(photos as string[])] });
+    const outline = parseOutline(rawOutline, ctx.home);
+    if (outline === "bad") return null;
+    spots.push({
+      lng,
+      lat,
+      choices: [...new Set(choices as string[])],
+      photos: [...new Set(photos as string[])],
+      ...(outline ? { outline } : {}),
+    });
   }
   return spots;
 }
@@ -108,10 +227,11 @@ export function readTapSpots(value: unknown): TapSpot[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((s): TapSpot[] => {
     if (!s || typeof s !== "object") return [];
-    const { lng, lat, choices, photos } = s as Record<string, unknown>;
+    const { lng, lat, choices, photos, outline: rawOutline } = s as Record<string, unknown>;
     if (typeof lng !== "number" || typeof lat !== "number") return [];
     const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-    return [{ lng, lat, choices: strings(choices), photos: strings(photos) }];
+    const outline = readOutline(rawOutline);
+    return [{ lng, lat, choices: strings(choices), photos: strings(photos), ...(outline ? { outline } : {}) }];
   });
 }
 
