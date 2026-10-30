@@ -2409,6 +2409,8 @@ export interface Database {
           job_id: string;
           spots: Json;
           price: Json;
+          sizing: Json | null;
+          ai_readings: Json | null;
           total_cents: number;
           deposit_cents: number;
           accepted_at: string | null;

@@ -648,9 +648,12 @@ export default async function JobPage({
         )
       : null;
   // The form is in and the visit has not been written up: enough for a
-  // general number over the phone first. Staff who see money only.
+  // general number over the phone first. Staff who see money only. Not when
+  // the client marked their map: that estimate prices each spot at its own
+  // size and is what they were shown, so a second, pooled number from the
+  // same answers would only disagree with it.
   const phoneQuote =
-    intake?.submittedAt && job.evaluation_status !== "completed" && !proposal && seen.jobMoney
+    intake?.submittedAt && job.evaluation_status !== "completed" && !proposal && seen.jobMoney && !clientEstimate
       ? instantPrice(intake.answers, await lotForProperty(job.property_id).catch(() => null), catalog)
       : null;
   // While the job is being worked: who is in which area, and at what stage.

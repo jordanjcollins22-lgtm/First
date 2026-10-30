@@ -9,6 +9,7 @@ import { askEstimateQuestion, startEstimatePayment } from "@/lib/actions/tap-est
 import type { ClientEstimate } from "@/lib/data/tap-estimate";
 import { tierById, type EvaluationTier, type TierId } from "@/lib/evaluation-tiers";
 import { choiceLabel, dollars } from "@/lib/tap-estimate";
+import { clientSizeWords } from "@/lib/spot-size-words";
 
 interface Message {
   id: string;
@@ -65,6 +66,13 @@ export function EstimateView({
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState(initialMessages);
 
+  // Each spot's size in words, by its place in the list. Estimates from
+  // before sizes were kept have none, and show none.
+  const sizingByIndex = new Map(estimate.sizing.map((s) => [s.index, s]));
+  const sizeWords = estimate.spots.map((spot, i) => {
+    const s = sizingByIndex.get(i);
+    return s ? clientSizeWords(s, { hasPhotos: spot.photos.length > 0, traced: Boolean(spot.outline) }) : null;
+  });
   const priced = estimate.price.lines.filter((l) => l.priceCents != null);
   const atVisit = estimate.price.lines.filter((l) => l.priceCents == null);
   const hasPrice = estimate.totalCents > 0;
@@ -145,7 +153,10 @@ export function EstimateView({
           <div key={i} className="flex flex-col gap-3 rounded-2xl border border-border p-4">
             <p className="flex items-start gap-3 font-semibold">
               <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</span>
-              <span className="pt-0.5">{spot.choices.map(choiceLabel).join(", ")}</span>
+              <span className="pt-0.5">
+                {spot.choices.map(choiceLabel).join(", ")}
+                {sizeWords[i] && <span className="block text-sm font-normal text-muted-foreground">{sizeWords[i]}</span>}
+              </span>
             </p>
             {spot.photos.some((p) => photoUrls[p]) && (
               <div className="grid grid-cols-3 gap-2">

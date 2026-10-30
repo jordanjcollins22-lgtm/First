@@ -4,12 +4,17 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cleanAnswers } from "@/lib/evaluation-intake";
-import { instantPrice } from "@/lib/instant-price";
+import { priceSpots, type SpotInput } from "@/lib/spot-price";
+import { sizePriorsFor } from "@/lib/data/size-priors";
+import { aiSpotSizes } from "@/lib/data/ai-spot-size";
+import { aiReadingKey, aiRunAllowed, cropScale, othersInCrop, readAiCache, recentRuns, type AiReadingCache } from "@/lib/ai-spot-size";
+import type { AiSpotSize } from "@/lib/spot-sizing";
+import type { EstimateSizing } from "@/lib/spot-size-words";
 import { estimateCatalogFor } from "@/lib/data/estimate-catalog";
 import { lotForProperty } from "@/lib/data/lot-map";
 import { estimatePath, schedulePath, tiersForOrganization } from "@/lib/data/tap-estimate";
 import { DEPOSIT_TIER, isTierId, tierById, type TierId } from "@/lib/evaluation-tiers";
-import { answersFromSpots, areaForPoint, depositCents, dollars, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
+import { answersFromSpots, areaForPoint, depositCents, dollars, outlineAreaSqft, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
 import { isStripeConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
@@ -51,6 +56,12 @@ async function formFor(token: string) {
   };
 }
 
+/** The picture readings kept on an estimate; none when the column isn't there yet or can't be read. */
+async function readKeptReadings(admin: ReturnType<typeof createAdminClient>, estimateId: string): Promise<AiReadingCache> {
+  const { data, error } = await admin.from("job_estimates").select("ai_readings").eq("id", estimateId).maybeSingle();
+  return readAiCache(error ? null : data?.ai_readings);
+}
+
 /**
  * The map, sent: the spots fill in the pre-evaluation answers (so the
  * evaluator's site map is set up from them like any other form), and the
@@ -75,10 +86,51 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
   const { data: existing } = await form.admin.from("job_estimates").select("id, paid_at").eq("job_id", form.jobId).maybeSingle();
   if (existing?.paid_at) return { ok: false, error: "You've already paid on this estimate. Message us to change anything." };
 
+  // The picture readings already paid for on this estimate, and when the
+  // model was last called for it. Read on its own, so a database without
+  // the column (migration 0357) still prices the map, just without reuse.
+  const cache = existing ? await readKeptReadings(form.admin, existing.id) : readAiCache(null);
+  const nowDate = new Date();
+
+  // Each spot's reading is keyed on what it depends on. An unchanged spot
+  // reuses its kept reading; only new or changed spots are read again, and
+  // only while this estimate is under its few model calls an hour. Past
+  // that, those spots are priced from history or the lot like a spot the
+  // picture couldn't read.
+  const aiSpots = spots.map((s, index) => {
+    const others = othersInCrop(s, spots, cropScale(s.lat, s.choices));
+    return { index, lng: s.lng, lat: s.lat, choices: s.choices, photoPaths: s.photos, others, key: aiReadingKey({ ...s, photoPaths: s.photos }, others) };
+  });
+  const keptByKey = new Map(cache.readings.map((r) => [r.key, r]));
+  const fresh = aiSpots.filter((s) => !keptByKey.has(s.key));
+  const runs = recentRuns(cache.runs, nowDate);
+  const callAi = fresh.length > 0 && aiRunAllowed(runs, nowDate);
+  if (fresh.length > 0 && !callAi) log.warn("estimate.ai_run_limited", { jobId: form.jobId, spots: fresh.length });
+  if (callAi) {
+    runs.push(nowDate.toISOString());
+    // Counted before the calls start, so sends close together see each other.
+    if (existing) await form.admin.from("job_estimates").update({ ai_readings: { ...cache, runs } as unknown as Json }).eq("id", existing.id);
+  }
+
+  // Reading the satellite picture and photos is the slow part (up to its own
+  // 25 second deadline), so it starts now, alongside the lot, and needs
+  // nothing but the spots. It never throws: with no key, no map token or no
+  // time left it gives back what it has, and those spots fall to the next
+  // source. The catch is only so a surprise can't lose the client's map.
+  const aiPending = callAi
+    ? aiSpotSizes({
+        organizationId: form.organizationId,
+        address: "",
+        spots: fresh.map((s) => ({ index: s.index, lng: s.lng, lat: s.lat, choices: s.choices, photoPaths: s.photoPaths, others: s.others })),
+      }).catch(() => [])
+    : Promise.resolve([]);
+  const priorsPending = sizePriorsFor(form.admin, form.organizationId);
+
   const lot = await lotForProperty(form.property.id);
   const regions = regionsFor(lot);
+  const areaOf = spots.map((s) => areaForPoint([s.lng, s.lat], regions));
   const answers = {
-    ...answersFromSpots(form.answers, spots, (s) => areaForPoint([s.lng, s.lat], regions)),
+    ...answersFromSpots(form.answers, spots, (s) => areaOf[spots.indexOf(s)] ?? null),
     // Saved as they were added, never taken from what was sent.
     photos: form.answers.photos,
     photo_areas: form.answers.photo_areas,
@@ -91,24 +143,72 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
     .eq("id", form.id);
   if (intakeError) return { ok: false, error: "Could not save that. Try again in a moment." };
 
-  const catalog = await estimateCatalogFor(form.admin, form.organizationId);
-  const price = instantPrice(answers, lot, catalog);
+  // Each spot priced on its own, at its own size: traced if they drew round
+  // it, else the picture, else this business's measured jobs, else a share
+  // of the lot. Sizes are never pooled across spots.
+  const [catalog, priors, freshAi] = await Promise.all([estimateCatalogFor(form.admin, form.organizationId), priorsPending, aiPending]);
+  const freshByIndex = new Map(freshAi.map((a) => [a.index, a]));
+  const ai: AiSpotSize[] = aiSpots.flatMap((s) => {
+    const read = freshByIndex.get(s.index);
+    if (read) return [read];
+    const kept = keptByKey.get(s.key);
+    return kept ? [{ index: s.index, areaSqft: kept.areaSqft, count: kept.count, confidence: kept.confidence, notes: kept.notes }] : [];
+  });
+  // Kept for next time: this map's readings only, so a moved pin's old one goes.
+  const aiReadings: AiReadingCache = {
+    readings: ai.map((a) => ({ key: aiSpots[a.index].key, areaSqft: a.areaSqft, count: a.count, confidence: a.confidence, notes: a.notes })),
+    runs,
+  };
+  const spotInputs: SpotInput[] = spots.map((s, index) => ({
+    index,
+    choices: s.choices,
+    tracedSqft: outlineAreaSqft(s.outline),
+    area: areaOf[index] ?? null,
+  }));
+  const { price, sizing } = priceSpots({ spots: spotInputs, ai, priors, lot, catalog });
+  // The picture's own reading is kept with each spot even when a traced
+  // outline set the price, so the office sees what to check at the visit.
+  const aiByIndex = new Map(ai.map((a) => [a.index, a]));
+  const kept: EstimateSizing[] = sizing.map((s) => {
+    const read = aiByIndex.get(s.index);
+    return { ...s, aiNote: read?.notes || null, aiConfidence: read?.confidence ?? null };
+  });
   const row = {
     organization_id: form.organizationId,
     job_id: form.jobId,
     spots: spots as unknown as Json,
     price: price as unknown as Json,
+    sizing: kept as unknown as Json,
+    ai_readings: aiReadings as unknown as Json,
     total_cents: price.totalCents,
     deposit_cents: depositCents(price.totalCents),
     updated_at: now,
   };
-  const { error } = await form.admin.from("job_estimates").upsert(row, { onConflict: "job_id" });
+  let saving: Partial<typeof row> & Omit<typeof row, "sizing" | "ai_readings"> = row;
+  let { error } = await form.admin.from("job_estimates").upsert(saving, { onConflict: "job_id" });
+  for (const column of ["ai_readings", "sizing"] as const) {
+    if (!error || !new RegExp(column).test(error.message)) continue;
+    // That column (migration 0356 or 0357) isn't on this database yet. The
+    // price is what the client needs; save it without that column rather
+    // than lose their map, and say so in the log so the migration gets run.
+    log.warn("estimate.column_missing", { jobId: form.jobId, column, error: error.message });
+    const { [column]: _unsaved, ...without } = saving;
+    void _unsaved;
+    saving = without;
+    ({ error } = await form.admin.from("job_estimates").upsert(saving, { onConflict: "job_id" }));
+  }
   if (error) {
     log.error("estimate.save_failed", { jobId: form.jobId, error: error.message });
     return { ok: false, error: "Could not work out your estimate. Try again in a moment." };
   }
 
-  log.info("estimate.sent", { jobId: form.jobId, spots: spots.length, totalCents: price.totalCents });
+  log.info("estimate.sent", {
+    jobId: form.jobId,
+    spots: spots.length,
+    totalCents: price.totalCents,
+    // How many spots each source sized, to see how often the picture lands in time.
+    sources: sizing.map((s) => s.source).join(","),
+  });
   notifyJobTeam(
     form.jobId,
     "proposal_responses",

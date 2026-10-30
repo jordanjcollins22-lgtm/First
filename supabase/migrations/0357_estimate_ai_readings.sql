@@ -1,0 +1,11 @@
+-- What the satellite picture and photos were read as, for each spot on a map
+-- estimate, and when the model was last called for this estimate.
+--
+-- { readings: [{ key, areaSqft, count, confidence, notes }], runs: [iso time] }
+-- (AiReadingCache in src/lib/ai-spot-size.ts). Each reading is kept under a
+-- key of what it depends on (where the pin is, what was asked for there, the
+-- photos and the other pins in the picture), so sending the map again reuses
+-- the readings of spots that haven't changed instead of paying for them
+-- again. The run times hold the model calls to a few sends an hour, however
+-- often the estimate link is used. Null on estimates made before this.
+alter table job_estimates add column if not exists ai_readings jsonb;

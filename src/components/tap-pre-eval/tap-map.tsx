@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import mapboxgl from "mapbox-gl";
-import { Camera, Check, Loader2, Sprout, Trash2 } from "lucide-react";
+import { Camera, Check, Loader2, PencilLine, RotateCcw, Sprout, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { removeIntakePhoto } from "@/lib/actions/evaluation-intake-actions";
@@ -11,7 +11,16 @@ import { submitTapPreEval } from "@/lib/actions/tap-estimate-actions";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { publicEnv } from "@/lib/public-env";
 import { isHeic, shrinkImage } from "@/lib/shrink-image";
-import { areaForPoint, MAX_PHOTOS_PER_SPOT, MAX_SPOTS, regionsFor, TAP_CHOICES, type TapSpot } from "@/lib/tap-estimate";
+import {
+  areaForPoint,
+  cleanOutline,
+  MAX_PHOTOS_PER_SPOT,
+  MAX_SPOTS,
+  outlineAreaSqft,
+  regionsFor,
+  TAP_CHOICES,
+  type TapSpot,
+} from "@/lib/tap-estimate";
 import type { LngLat, LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +29,28 @@ import "mapbox-gl/dist/mapbox-gl.css";
 // `key` is local only, so a photo that finishes uploading lands on the right
 // spot even if spots before it were removed meanwhile.
 type LocalSpot = TapSpot & { key: string };
+
+// Ignore finger jitter smaller than this, in screen pixels, while drawing.
+const DRAW_STEP_PX = 4;
+
+/** "About 240 sq ft": to the nearest ten once it's big enough that the units don't matter. */
+function aboutSqft(sqft: number): string {
+  const n = sqft >= 100 ? Math.round(sqft / 10) * 10 : Math.round(sqft);
+  return `About ${n.toLocaleString("en-US")} sq ft`;
+}
+
+function outlinesData(spots: LocalSpot[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: spots.flatMap((s): GeoJSON.Feature[] =>
+      s.outline ? [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [s.outline] } }] : []
+    ),
+  };
+}
+
+function pathData(points: LngLat[]): GeoJSON.Feature {
+  return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } };
+}
 
 export interface TapMapProps {
   token: string;
@@ -48,6 +79,18 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
   const [urls, setUrls] = useState<Record<string, string>>(photoUrls);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Drawing round the open spot to show how big it is. Optional: the sheet
+  // hides while they draw and comes back when they lift their finger.
+  const [drawing, setDrawing] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
+  // The path being dragged, in screen pixels for the jitter check and
+  // lng/lat to keep; a ref, not state, so a fast finger doesn't re-render.
+  const drawRef = useRef<{ pointerId: number; last: [number, number]; points: LngLat[] } | null>(null);
+  // Read by the map's load handler, which is bound once.
+  const spotsRef = useRef(spots);
+  useEffect(() => {
+    spotsRef.current = spots;
+  }, [spots]);
 
   // Read inside the map's click handler, which is bound once.
   const openKeyRef = useRef(openKey);
@@ -73,13 +116,20 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
 
-    // Their property line from the county, so "the back bed" has a frame.
-    if (lot?.ring?.length) {
-      map.on("load", () => {
+    map.on("load", () => {
+      // Their property line from the county, so "the back bed" has a frame.
+      if (lot?.ring?.length) {
         map.addSource("lot", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [lot.ring] } } });
         map.addLayer({ id: "lot-line", type: "line", source: "lot", paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 1.5], "line-opacity": 0.85 } });
-      });
-    }
+      }
+      // What they drew round, so they can see the size they gave matches the bed.
+      map.addSource("outlines", { type: "geojson", data: outlinesData(spotsRef.current) });
+      map.addLayer({ id: "outlines-fill", type: "fill", source: "outlines", paint: { "fill-color": "#facc15", "fill-opacity": 0.3 } });
+      map.addLayer({ id: "outlines-line", type: "line", source: "outlines", paint: { "line-color": "#facc15", "line-width": 2.5 } });
+      // The line following their finger while they draw.
+      map.addSource("draw-path", { type: "geojson", data: pathData([]) });
+      map.addLayer({ id: "draw-path-line", type: "line", source: "draw-path", paint: { "line-color": "#facc15", "line-width": 3 } });
+    });
 
     map.on("click", (e) => {
       // Finish the open spot before starting another.
@@ -118,16 +168,31 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     });
   }, [spots, openKey, step]);
 
-  // Keep the open spot in view above the sheet, which covers the bottom of the map.
+  // The drawn outlines, redrawn whenever the spots change.
+  useEffect(() => {
+    const source = mapRef.current?.getSource("outlines") as mapboxgl.GeoJSONSource | undefined;
+    source?.setData(outlinesData(spots));
+  }, [spots]);
+
+  // Keep the open spot in view above the sheet, which covers the bottom of the
+  // map; while drawing the sheet is away, so the spot sits in the middle.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const spot = spots.find((s) => s.key === openKey);
-    const bottom = spot ? map.getContainer().clientHeight * 0.6 : 0;
+    const bottom = spot && !drawing ? map.getContainer().clientHeight * 0.6 : 0;
     map.easeTo({ center: spot ? [spot.lng, spot.lat] : undefined, padding: { top: 0, left: 0, right: 0, bottom } });
-    // Only when a spot opens or closes, not on every change to it.
+    // Only when a spot opens or closes or drawing starts or stops, not on every change to it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openKey]);
+  }, [openKey, drawing]);
+
+  // The map mustn't pan under a finger that's drawing.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (drawing) map.dragPan.disable();
+    else map.dragPan.enable();
+  }, [drawing]);
 
   function updateSpot(key: string, change: (spot: LocalSpot) => LocalSpot) {
     setSpots((prev) => prev.map((s) => (s.key === key ? change(s) : s)));
@@ -139,6 +204,73 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       ...s,
       choices: s.choices.includes(value) ? s.choices.filter((c) => c !== value) : [...s.choices, value],
     }));
+  }
+
+  function startDrawing() {
+    setDrawError(null);
+    setDrawing(true);
+  }
+
+  function stopDrawing() {
+    drawRef.current = null;
+    (mapRef.current?.getSource("draw-path") as mapboxgl.GeoJSONSource | undefined)?.setData(pathData([]));
+    setDrawing(false);
+  }
+
+  function clearOutline() {
+    if (!openKey) return;
+    setDrawError(null);
+    updateSpot(openKey, (s) => {
+      const rest = { ...s };
+      delete rest.outline;
+      return rest;
+    });
+  }
+
+  // The point under a finger or the mouse, on the map.
+  function pointAt(e: ReactPointerEvent<HTMLDivElement>): { px: [number, number]; lngLat: LngLat } | null {
+    const map = mapRef.current;
+    if (!map) return null;
+    const box = map.getContainer().getBoundingClientRect();
+    const px: [number, number] = [e.clientX - box.left, e.clientY - box.top];
+    const { lng, lat } = map.unproject(px);
+    return { px, lngLat: [lng, lat] };
+  }
+
+  function onDrawDown(e: ReactPointerEvent<HTMLDivElement>) {
+    // One finger draws; a second one landing is ignored rather than jumping the line.
+    if (drawRef.current) return;
+    const at = pointAt(e);
+    if (!at) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDrawError(null);
+    drawRef.current = { pointerId: e.pointerId, last: at.px, points: [at.lngLat] };
+  }
+
+  function onDrawMove(e: ReactPointerEvent<HTMLDivElement>) {
+    const path = drawRef.current;
+    if (!path || path.pointerId !== e.pointerId) return;
+    const at = pointAt(e);
+    if (!at || Math.hypot(at.px[0] - path.last[0], at.px[1] - path.last[1]) < DRAW_STEP_PX) return;
+    path.last = at.px;
+    path.points.push(at.lngLat);
+    (mapRef.current?.getSource("draw-path") as mapboxgl.GeoJSONSource | undefined)?.setData(pathData(path.points));
+  }
+
+  function onDrawUp(e: ReactPointerEvent<HTMLDivElement>) {
+    const path = drawRef.current;
+    if (!path || path.pointerId !== e.pointerId) return;
+    drawRef.current = null;
+    (mapRef.current?.getSource("draw-path") as mapboxgl.GeoJSONSource | undefined)?.setData(pathData([]));
+    // A tap, not a drag: nothing drawn yet, so let them start again quietly.
+    if (path.points.length < 3) return;
+    const outline = cleanOutline(path.points, home);
+    if (!outline || !openKey) {
+      setDrawError("We couldn't make out that shape. Try drawing one loop round the area.");
+      return;
+    }
+    updateSpot(openKey, (s) => ({ ...s, outline }));
+    setDrawing(false);
   }
 
   function removeOpenSpot() {
@@ -191,7 +323,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     startTransition(async () => {
       const result = await submitTapPreEval({
         token,
-        spots: spots.map(({ lng, lat, choices, photos }) => ({ lng, lat, choices, photos })),
+        spots: spots.map(({ lng, lat, choices, photos, outline }) => ({ lng, lat, choices, photos, ...(outline ? { outline } : {}) })),
       });
       if (!result.ok) setError(result.error);
       else router.push(estimateHref);
@@ -233,11 +365,32 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
         <div ref={containerRef} className="h-full w-full" />
       </div>
 
+      {drawing && (
+        // Over the map while drawing, so a drag draws instead of panning. touch-none
+        // stops the phone scrolling or zooming the page under the finger.
+        <div
+          className="absolute inset-0 cursor-crosshair touch-none"
+          onPointerDown={onDrawDown}
+          onPointerMove={onDrawMove}
+          onPointerUp={onDrawUp}
+          onPointerCancel={onDrawUp}
+        />
+      )}
+
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-5 pb-10 pt-5 text-center text-white">
-        <h1 className="text-2xl font-bold drop-shadow">Tap where you want work done</h1>
+        <h1 className="text-2xl font-bold drop-shadow">{drawing ? "Draw round the area with your finger" : "Tap where you want work done"}</h1>
+        {drawing && <p className="mt-1 text-base drop-shadow">One loop round the edge is plenty. It doesn&apos;t have to be neat.</p>}
       </div>
 
-      {openSpot ? (
+      {drawing ? (
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {drawError && <p className="rounded-lg bg-card px-4 py-2 text-center text-sm font-medium text-destructive shadow">{drawError}</p>}
+          <Button type="button" size="xl" variant="secondary" className="w-full shadow-lg" onClick={stopDrawing}>
+            <X className="size-6" />
+            Never mind
+          </Button>
+        </div>
+      ) : openSpot ? (
         <div className="absolute inset-x-0 bottom-0 flex max-h-[72%] flex-col gap-4 overflow-y-auto rounded-t-2xl bg-card p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
           <p className="text-lg font-bold">Spot {openIndex + 1}: what do you want done here?</p>
 
@@ -280,6 +433,25 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
             <Button type="button" size="lg" variant="secondary" disabled={uploading > 0} onClick={() => fileInputRef.current?.click()}>
               <Camera className="size-5" />
               {openSpot.photos.length === 0 ? "Take a photo" : "Add another photo"}
+            </Button>
+          )}
+
+          {openSpot.outline ? (
+            <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
+              <PencilLine className="size-5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 font-medium">{aboutSqft(outlineAreaSqft(openSpot.outline) ?? 0)}</span>
+              <Button type="button" size="sm" variant="ghost" onClick={startDrawing}>
+                <RotateCcw className="size-4" />
+                Redo
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={clearOutline}>
+                Clear
+              </Button>
+            </div>
+          ) : (
+            <Button type="button" size="lg" variant="secondary" onClick={startDrawing}>
+              <PencilLine className="size-5" />
+              Show how big (optional)
             </Button>
           )}
 

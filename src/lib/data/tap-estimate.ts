@@ -6,11 +6,14 @@ import { readTiers, type EvaluationTier, type TierId } from "@/lib/evaluation-ti
 import type { InstantPrice } from "@/lib/instant-price";
 import type { LngLat, LotData } from "@/lib/lot-map";
 import { readTapSpots, type TapSpot } from "@/lib/tap-estimate";
+import { readSizing, type EstimateSizing } from "@/lib/spot-size-words";
 
 export interface ClientEstimate {
   id: string;
   spots: TapSpot[];
   price: InstantPrice;
+  /** How each spot was sized, by spot index. Empty on estimates from before sizes were kept. */
+  sizing: EstimateSizing[];
   totalCents: number;
   depositCents: number;
   /** Chose how to pay and was sent to pay. */
@@ -40,12 +43,13 @@ export interface TapPreEval {
 }
 
 const ESTIMATE_COLUMNS =
-  "id, spots, price, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, created_at" as const;
+  "id, spots, price, sizing, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, created_at" as const;
 
 type EstimateRow = {
   id: string;
   spots: unknown;
   price: unknown;
+  sizing: unknown;
   total_cents: number;
   deposit_cents: number;
   accepted_at: string | null;
@@ -61,6 +65,7 @@ function toEstimate(row: EstimateRow): ClientEstimate {
     id: row.id,
     spots: readTapSpots(row.spots),
     price: row.price as InstantPrice,
+    sizing: readSizing(row.sizing),
     totalCents: row.total_cents,
     depositCents: row.deposit_cents,
     acceptedAt: row.accepted_at,
