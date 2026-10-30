@@ -147,7 +147,7 @@ export function SchedulePicker({
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-5 px-4 py-8">
       {header}
-      <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
+      <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
         <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
         <div>
           <p className="font-semibold">{choice === "evaluation" ? `${tier?.name ?? "Evaluation"} paid. Thank you!` : "Deposit received. Thank you!"}</p>
@@ -186,7 +186,7 @@ export function SchedulePicker({
                       onClick={() => setPicked(t)}
                       className={cn(
                         "min-h-11 rounded-lg border px-3 text-sm font-medium",
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary"
+                        on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary!"
                       )}
                     >
                       {timeLabel(t.time)}

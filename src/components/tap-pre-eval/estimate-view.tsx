@@ -108,7 +108,7 @@ export function EstimateView({
       </div>
 
       {paid && (
-        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40 bg-primary/5 p-4">
+        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
           <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
           <div className="flex flex-1 flex-col gap-2">
             <p className="font-semibold">
@@ -189,7 +189,7 @@ export function EstimateView({
       </section>
 
       {hasPrice ? (
-        <section className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-6 text-center">
+        <section className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30! bg-primary/5 p-6 text-center">
           <p className="text-sm font-medium text-muted-foreground">Estimated total</p>
           <p className="text-4xl font-bold text-primary">{dollars(estimate.totalCents)}</p>
           {atVisit.length > 0 && <p className="text-sm text-muted-foreground">Plus anything we price at your visit.</p>}
@@ -206,7 +206,7 @@ export function EstimateView({
         </section>
       )}
 
-      <section className="flex gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+      <section className="flex gap-3 rounded-2xl border border-amber-500/40! bg-amber-500/10 p-4 text-sm">
         <Info className="mt-0.5 size-5 shrink-0 text-amber-700" />
         <div className="flex flex-col gap-2">
           <p className="font-semibold">This is an estimate, not the final price</p>
@@ -229,7 +229,7 @@ export function EstimateView({
       {!paid && (
         <section className="flex flex-col gap-4">
           {hasPrice && (
-            <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary p-4">
+            <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary! p-4">
               <div>
                 <h2 className="text-lg font-semibold">Ready to go ahead?</h2>
                 <p className="text-sm text-muted-foreground">
@@ -258,7 +258,7 @@ export function EstimateView({
                     role="radio"
                     aria-checked={on}
                     onClick={() => setTierId(t.id)}
-                    className={on ? "rounded-xl border-2 border-primary bg-primary/5 p-3 text-left" : "rounded-xl border-2 border-border p-3 text-left"}
+                    className={on ? "rounded-xl border-2 border-primary! bg-primary/5 p-3 text-left" : "rounded-xl border-2 border-border p-3 text-left"}
                   >
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="font-semibold">{t.name}</span>
