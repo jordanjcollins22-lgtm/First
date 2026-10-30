@@ -186,3 +186,9 @@ describe("overheadParity", () => {
     expect(p.detail).toMatch(/collects less/);
   });
 });
+
+describe("median rounding", () => {
+  it("keeps one decimal place when it averages two middles", () => {
+    expect(median([-5.2, 4.6])).toBe(-0.3);
+  });
+});
