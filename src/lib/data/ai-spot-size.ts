@@ -5,12 +5,13 @@ import {
   AiSizeAnswerSchema,
   SIZE_SYSTEM_PROMPT,
   cropScale,
-  cropUrl,
+  cropPath,
   readAiSize,
   spotSizingPrompt,
 } from "@/lib/ai-spot-size";
 import { env, isAnthropicConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
+import { drawStaticPicture } from "@/lib/data/imagery";
 import type { AiSpotSize } from "@/lib/spot-sizing";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -57,11 +58,6 @@ export async function aiSpotSizes(input: {
   const spots = input.spots.filter((s) => Number.isFinite(s.lng) && Number.isFinite(s.lat) && s.choices.length > 0);
   if (spots.length === 0) return [];
   if (!isAnthropicConfigured) return [];
-  const token = env.mapboxToken;
-  if (!token) {
-    log.warn("ai_spot_size.no_map_token", { organizationId: input.organizationId });
-    return [];
-  }
 
   const started = Date.now();
   const stop = new AbortController();
@@ -76,7 +72,7 @@ export async function aiSpotSizes(input: {
     const worker = async () => {
       for (let spot = queue.shift(); spot && !stop.signal.aborted; spot = queue.shift()) {
         try {
-          const size = await sizeOneSpot(client, admin, spot, token, stop.signal);
+          const size = await sizeOneSpot(client, admin, spot, stop.signal);
           if (size) found.push(size);
           else failed += 1;
         } catch (err) {
@@ -119,12 +115,11 @@ async function sizeOneSpot(
   client: Anthropic,
   admin: ReturnType<typeof createAdminClient>,
   spot: AiSpotInput,
-  token: string,
   signal: AbortSignal
 ): Promise<AiSpotSize | null> {
   const scale = cropScale(spot.lat, spot.choices);
   const [satellite, photos] = await Promise.all([
-    fetchSatellite(cropUrl(spot, scale, token, spot.others ?? []), signal),
+    fetchSatellite(cropPath(spot, scale, spot.others ?? []), signal),
     Promise.all(spot.photoPaths.slice(0, PHOTOS_PER_SPOT).map((path) => fetchPhoto(admin, path))),
   ]);
   if (!satellite) return null;
@@ -163,17 +158,20 @@ async function sizeOneSpot(
   });
 }
 
-/** The satellite crop. Fetched here so the map token never leaves this server. */
-async function fetchSatellite(url: string, signal: AbortSignal): Promise<Picture | null> {
-  const res = await fetch(url, { signal, cache: "no-store" });
-  if (!res.ok) {
-    log.warn("ai_spot_size.map_failed", { status: res.status });
+/** The satellite crop, drawn on this server, so no map token ever leaves it. */
+async function fetchSatellite(path: string, signal: AbortSignal): Promise<Picture | null> {
+  try {
+    const picture = await Promise.race([
+      drawStaticPicture(path),
+      new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true })),
+    ]);
+    const media = imageMedia(picture.contentType);
+    if (!media || picture.body.length === 0 || picture.body.length > MAX_IMAGE_BYTES) return null;
+    return { media, data: picture.body.toString("base64") };
+  } catch (err) {
+    log.warn("ai_spot_size.map_failed", { error: err instanceof Error ? err.message : String(err) });
     return null;
   }
-  const media = imageMedia(res.headers.get("content-type"));
-  const bytes = Buffer.from(await res.arrayBuffer());
-  if (!media || bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
-  return { media, data: bytes.toString("base64") };
 }
 
 /**

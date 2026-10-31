@@ -80,14 +80,20 @@ export function cropScale(lat: number, choices: string[], pixels = CROP_PIXELS):
  * it would have to ignore.
  */
 export function cropUrl(spot: { lng: number; lat: number }, scale: CropScale, token: string, others: LngLatPoint[] = []): string {
+  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${cropPath(spot, scale, others)}?attribution=false&logo=false&access_token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * The same crop in the form the app's own imagery takes (static-imagery.ts),
+ * which draws it from the newest aerial covering the spot: the county's own
+ * flight where there is one. Same geometry, so the stated scale holds.
+ */
+export function cropPath(spot: { lng: number; lat: number }, scale: CropScale, others: LngLatPoint[] = []): string {
   const lng = spot.lng.toFixed(6);
   const lat = spot.lat.toFixed(6);
   // The other taps go on first, in blue, so the red pin is drawn on top.
   const blue = others.map((o) => `pin-s+3b82f6(${o.lng.toFixed(6)},${o.lat.toFixed(6)}),`).join("");
-  return (
-    `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${blue}pin-s+ff3b30(${lng},${lat})/` +
-    `${lng},${lat},${scale.zoom},0/${scale.pixels}x${scale.pixels}?attribution=false&logo=false&access_token=${encodeURIComponent(token)}`
-  );
+  return `${blue}pin-s+ff3b30(${lng},${lat})/${lng},${lat},${scale.zoom},0/${scale.pixels}x${scale.pixels}`;
 }
 
 export interface LngLatPoint {

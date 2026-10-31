@@ -3,7 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { RotateCw } from "lucide-react";
 
-import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
+import { isMapboxConfigured } from "@/lib/public-env";
 import { MAP_CREDIT, layoutLot, pathOf, satelliteUrl, type AreaKey, type LotData } from "@/lib/lot-map";
 
 const WIDTH = 640;
@@ -44,7 +44,7 @@ export function LotPicker({
       <div className="relative overflow-hidden rounded-xl border border-border bg-muted" style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}>
         {/* A static Mapbox photo: next/image has nothing to optimise. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={satelliteUrl(layout, publicEnv.mapboxToken)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={satelliteUrl(layout)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="absolute inset-0 h-full w-full" role="img" aria-label="Your property line, with the parts you picked highlighted">
           <defs>
             <clipPath id={`lot-${clip}`}>

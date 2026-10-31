@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { recordFunnelStep } from "@/lib/data/funnel-events";
-import { publicEnv } from "@/lib/public-env";
+import { staticImageryPath } from "@/lib/static-imagery";
 import { getTapPreEval, schedulePath, tapMapPath } from "@/lib/data/tap-estimate";
 import { listExternalMessagesForJob } from "@/lib/data/public-job-messages";
 import { fitView, type LngLat } from "@/lib/lot-map";
@@ -21,12 +21,15 @@ export const dynamic = "force-dynamic";
 const MAP_WIDTH = 600;
 const MAP_HEIGHT = 400;
 
-/** A satellite picture of the property with each spot numbered on it. */
+/**
+ * A satellite picture of the property with each spot numbered on it, from
+ * the newest aerial covering it (the county's own flight, where there is one).
+ */
 function spotsMapUrl(points: LngLat[], frame: LngLat[]): string | null {
-  if (!publicEnv.mapboxToken || points.length === 0) return null;
+  if (points.length === 0) return null;
   const { center, zoom } = fitView(frame, MAP_WIDTH, MAP_HEIGHT);
   const pins = points.map(([lng, lat], i) => `pin-l-${i + 1}+2f6d3c(${lng.toFixed(6)},${lat.toFixed(6)})`).join(",");
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/static/${pins}/${center[0].toFixed(6)},${center[1].toFixed(6)},${zoom}/${MAP_WIDTH}x${MAP_HEIGHT}@2x?access_token=${publicEnv.mapboxToken}`;
+  return staticImageryPath(`${pins}/${center[0].toFixed(6)},${center[1].toFixed(6)},${zoom}/${MAP_WIDTH}x${MAP_HEIGHT}@2x`);
 }
 
 export default async function EstimatePage({ params }: { params: Promise<{ token: string }> }) {

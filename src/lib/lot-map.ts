@@ -16,6 +16,8 @@
  * Pure: the parsing, the choosing and the drawing are all tested here.
  */
 
+import { staticImageryPath } from "@/lib/static-imagery";
+
 export type LngLat = [number, number];
 
 export interface LotData {
@@ -333,14 +335,15 @@ export function layoutLot(lot: LotData, width: number, height: number, turn = 0)
 }
 
 /** The satellite photo behind it, from Mapbox, turned to the same bearing. */
-/** The map's credits, shown under a photo from satelliteUrl. */
-export const MAP_CREDIT = "© Mapbox © OpenStreetMap © Maxar";
+/** The credits shown under a photo from satelliteUrl, when nothing more exact is known. */
+export const MAP_CREDIT = "Aerial photo: Harford County or © Mapbox © Maxar";
 
-export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">, token: string): string {
+export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">): string {
   const [lng, lat] = layout.center;
-  // No logo or credits printed over the photo: the credits are said under it
-  // instead (MAP_CREDIT), which is what Mapbox asks for when they are off the image.
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x?attribution=false&logo=false&access_token=${token}`;
+  // The newest aerial covering the lot, drawn to Mapbox's geometry so the
+  // parcel lines laid over it still fit. No logo or credits on the photo:
+  // they are said under it instead (MAP_CREDIT).
+  return staticImageryPath(`${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x`);
 }
 
 export function pathOf(points: Px[]): string {

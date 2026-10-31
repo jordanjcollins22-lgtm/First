@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { isMapboxConfigured } from "@/lib/public-env";
 import { estimatePath, getTapPreEval } from "@/lib/data/tap-estimate";
+import { imageryAt } from "@/lib/data/imagery";
 import { intakePath } from "@/lib/data/evaluation-intake";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { TapMapLoader } from "@/components/tap-pre-eval/tap-map-loader";
@@ -53,6 +54,7 @@ export default async function TapMapPage({
       photoUrls={data.photoUrls}
       firstName={welcome === "1" ? data.intake.clientFirstName : null}
       estimateHref={estimatePath(token)}
+      imagery={await imageryAt(data.home[0], data.home[1]).catch(() => null)}
     />
   );
 }
