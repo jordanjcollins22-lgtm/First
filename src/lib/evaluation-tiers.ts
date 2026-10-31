@@ -1,9 +1,9 @@
 /**
  * The paid evaluations a client can book from their estimate instead of
  * putting a deposit down. Either way the business is paid before anybody
- * drives out: a deposit holds the job (and comes with the basic visit), and
- * an evaluation is a service of its own whose fee comes off the job if they
- * go ahead.
+ * drives out, and what differs is the first visit: after a deposit the crew
+ * comes to work, after a paid evaluation the evaluator comes to evaluate.
+ * An evaluation's fee comes off the job if they go ahead.
  *
  * The defaults are placeholders. A business sets its own names, prices and
  * what each includes in organizations.evaluation_tiers; anything missing or
@@ -23,9 +23,6 @@ export interface EvaluationTier {
 }
 
 export const TIER_IDS: TierId[] = ["basic", "measured", "design"];
-
-/** The visit that comes with a deposit. */
-export const DEPOSIT_TIER: TierId = "basic";
 
 export const DEFAULT_TIERS: EvaluationTier[] = [
   {

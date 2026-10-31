@@ -26,6 +26,8 @@ export interface ClientEstimate {
   chargedCents: number | null;
   /** The payment landed. */
   paidAt: string | null;
+  /** After a deposit: the day they'd like the work to start, YYYY-MM-DD, for the team to confirm. */
+  startDay: string | null;
   createdAt: string;
 }
 
@@ -43,7 +45,7 @@ export interface TapPreEval {
 }
 
 const ESTIMATE_COLUMNS =
-  "id, spots, price, sizing, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, created_at" as const;
+  "id, spots, price, sizing, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, start_day, created_at" as const;
 
 type EstimateRow = {
   id: string;
@@ -57,6 +59,7 @@ type EstimateRow = {
   evaluation_tier: TierId | null;
   charged_cents: number | null;
   paid_at: string | null;
+  start_day: string | null;
   created_at: string;
 };
 
@@ -73,6 +76,7 @@ function toEstimate(row: EstimateRow): ClientEstimate {
     evaluationTier: row.evaluation_tier,
     chargedCents: row.charged_cents,
     paidAt: row.paid_at,
+    startDay: row.start_day,
     createdAt: row.created_at,
   };
 }

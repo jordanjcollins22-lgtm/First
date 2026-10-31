@@ -13,7 +13,7 @@ import type { EstimateSizing } from "@/lib/spot-size-words";
 import { estimateCatalogFor } from "@/lib/data/estimate-catalog";
 import { lotForProperty } from "@/lib/data/lot-map";
 import { estimatePath, schedulePath, tiersForOrganization } from "@/lib/data/tap-estimate";
-import { DEPOSIT_TIER, isTierId, tierById, type TierId } from "@/lib/evaluation-tiers";
+import { isTierId, tierById, type TierId } from "@/lib/evaluation-tiers";
 import { answersFromSpots, areaForPoint, depositCents, dollars, outlineAreaSqft, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
 import { isStripeConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
@@ -24,6 +24,9 @@ import { surchargeCents, SURCHARGE_LABEL } from "@/lib/card-surcharge";
 import { notifyJobTeam } from "@/lib/notifications";
 import { log } from "@/lib/log";
 import { recordFunnelStep } from "@/lib/data/funnel-events";
+import { getBookingNotice } from "@/lib/data/public-booking";
+import { isStartDayOption } from "@/lib/start-day";
+import { dayOnly } from "@/lib/time-zone";
 import type { Json } from "@/lib/supabase/database.types";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -247,13 +250,14 @@ export async function startEstimatePayment(input: { token: string; pay: string }
   if (estimate.paid_at) return { ok: false, error: "You've already paid. Thank you!" };
 
   let choice: "deposit" | "evaluation";
-  let tierId: TierId;
+  // Only an evaluation has a tier: after a deposit, the first visit is the work.
+  let tierId: TierId | null;
   let amountCents: number;
   let description: string;
   if (input.pay === "deposit") {
     if (!(estimate.deposit_cents > 0)) return { ok: false, error: "We need to see this one before we can price it. Book an evaluation instead." };
     choice = "deposit";
-    tierId = DEPOSIT_TIER;
+    tierId = null;
     amountCents = estimate.deposit_cents;
     description = "Deposit, one third of your estimate";
   } else {
@@ -291,7 +295,7 @@ export async function startEstimatePayment(input: { token: string; pay: string }
             ]
           : []),
       ],
-      // Straight on to picking the visit time.
+      // Straight on to picking the first day: the start day, or the evaluation.
       success_url: `${absolute(baseUrl, schedulePath(input.token))}?paid=1`,
       cancel_url: absolute(baseUrl, estimatePath(input.token)),
       metadata: {
@@ -302,7 +306,7 @@ export async function startEstimatePayment(input: { token: string; pay: string }
         // What this checkout is for, so the webhook records what was paid
         // even if they started another one meanwhile.
         estimate_choice: choice,
-        estimate_tier: tierId,
+        ...(tierId ? { estimate_tier: tierId } : {}),
         work_cents: String(amountCents),
         surcharge_cents: String(fee),
       },
@@ -318,7 +322,7 @@ export async function startEstimatePayment(input: { token: string; pay: string }
       organizationId: form.organizationId,
       step: "pay_started",
       jobId: form.jobId,
-      detail: choice === "deposit" ? "deposit" : tierId,
+      detail: tierId ?? "deposit",
     });
     notifyJobTeam(
       form.jobId,
@@ -333,6 +337,34 @@ export async function startEstimatePayment(input: { token: string; pay: string }
     log.error("estimate.checkout_failed", { jobId: form.jobId, error: err instanceof Error ? err.message : String(err) });
     return { ok: false, error: "Couldn't open the payment page. Try again, or give us a call." };
   }
+}
+
+/**
+ * After a deposit, the day they'd like the crew to start. A preference the
+ * team confirms with them, not a booking: it goes on the estimate for the
+ * scheduler to read, and the team is told to confirm it.
+ */
+export async function chooseStartDay(input: { token: string; day: string }): Promise<Result> {
+  const form = await formFor(input.token);
+  if (!form) return { ok: false, error: LINK_GONE };
+  const { data: estimate } = await form.admin.from("job_estimates").select("id, choice, paid_at").eq("job_id", form.jobId).maybeSingle();
+  if (!estimate?.paid_at || estimate.choice !== "deposit") return { ok: false, error: "Your deposit hasn't come through yet. Give it a minute and try again." };
+
+  const notice = await getBookingNotice(form.organizationId);
+  if (!isStartDayOption(input.day, new Date(), notice.timeZone)) return { ok: false, error: "Pick one of the days shown." };
+
+  const { error } = await form.admin
+    .from("job_estimates")
+    .update({ start_day: input.day, updated_at: new Date().toISOString() })
+    .eq("id", estimate.id);
+  if (error) return { ok: false, error: "Couldn't save that day. Try again in a moment." };
+
+  await recordFunnelStep(form.admin, { organizationId: form.organizationId, step: "visit_booked", jobId: form.jobId, detail: "start_day" });
+  notifyJobTeam(form.jobId, "proposal_responses", `A deposit client would like to start on ${dayOnly(`${input.day}T12:00:00Z`)}. Confirm the day with them.`, {
+    dedupeKey: `start-day-${estimate.id}-${input.day}`,
+  }).catch(() => {});
+  revalidatePath(`/jobs/${form.jobId}`);
+  return { ok: true };
 }
 
 /** The first spot tapped on the map: counted on the admin Funnel page, where most of the map's drop-off is before it. */

@@ -65,9 +65,9 @@ export const FUNNEL_PAGES: FunnelPage[] = [
   { id: "address", name: "Booking: where", what: "Types or picks the property's address.", path: "/book", view: "book_opened", done: "details_shown" },
   { id: "details", name: "Booking: your details", what: "Name, email and phone, then on to the project.", path: "/book", view: "details_shown", done: "lead" },
   { id: "map", name: "Map pre-evaluation", what: "Taps each spot, picks what's wanted, adds photos, can draw round it.", path: "/prep/<link>/map", view: "map_opened", done: "map_sent" },
-  { id: "estimate", name: "Estimate", what: "Sees the estimate, then a deposit or a paid evaluation.", path: "/prep/<link>/estimate", view: "estimate_viewed", done: "pay_started" },
+  { id: "estimate", name: "Estimate", what: "Sees the estimate, then pays a deposit (we come to work) or for an evaluation (we come to evaluate).", path: "/prep/<link>/estimate", view: "estimate_viewed", done: "pay_started" },
   { id: "checkout", name: "Card payment", what: "Stripe's checkout, for the deposit or the evaluation.", path: "Stripe", view: "pay_started", done: "paid" },
-  { id: "schedule", name: "Visit time", what: "Picks when the evaluator comes out.", path: "/prep/<link>/schedule", view: "schedule_viewed", done: "visit_booked" },
+  { id: "schedule", name: "First day", what: "After a deposit: the day the crew starts work. After a paid evaluation: when the evaluator comes.", path: "/prep/<link>/schedule", view: "schedule_viewed", done: "visit_booked" },
 ];
 
 export interface PageStats {

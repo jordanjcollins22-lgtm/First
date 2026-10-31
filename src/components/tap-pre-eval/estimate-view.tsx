@@ -37,13 +37,20 @@ export interface EstimateViewProps {
   mapHref: string;
 }
 
+/** "Tuesday, Nov 3" from YYYY-MM-DD, without the day slipping across time zones. */
+function startDayLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+}
+
 /**
  * The estimate, laid out like the proposal a client gets after the visit
  * (same header, same scope then price then questions), and plain that it is
  * an estimate: worked out before anybody has seen the yard, confirmed at the
  * visit. Then the one decision, which is paid either way: a third down to
- * hold the job (the basic visit comes with it), or a paid evaluation for
- * somebody not ready to commit, whose fee comes off the job if they go ahead.
+ * hold the job, whose first visit is the crew coming to work, or a paid
+ * evaluation for somebody not ready to commit, whose fee comes off the job if
+ * they go ahead.
  */
 export function EstimateView({
   token,
@@ -122,17 +129,19 @@ export function EstimateView({
             <p className="font-semibold">
               {estimate.choice === "evaluation" ? `${paidTier?.name ?? "Evaluation"} booked and paid.` : "Deposit received. You're all set."}
             </p>
-            <p className="text-sm text-muted-foreground">
-              {visit
-                ? `We'll see you ${visit}. `
-                : ""}
-              {estimate.choice === "evaluation"
-                ? "If you go ahead with the project, what you paid comes off the price."
-                : "We confirm everything at the visit, and your deposit comes off the final price."}
-            </p>
-            {!visit && (
+            {estimate.choice === "evaluation" ? (
+              <p className="text-sm text-muted-foreground">
+                {visit ? `We'll see you ${visit}. ` : ""}If you go ahead with the project, what you paid comes off the price.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {estimate.startDay ? `You'd like us to start ${startDayLabel(estimate.startDay)}; we'll text you to confirm. ` : ""}
+                On the day we confirm the price with you and get to work. Your deposit comes off it.
+              </p>
+            )}
+            {(estimate.choice === "evaluation" ? !visit : !estimate.startDay) && (
               <Button asChild size="lg" className="self-start">
-                <a href={scheduleHref}>Pick your visit time</a>
+                <a href={scheduleHref}>{estimate.choice === "evaluation" ? "Pick your visit time" : "Pick your start day"}</a>
               </Button>
             )}
           </div>
@@ -231,7 +240,7 @@ export function EstimateView({
             <li>Drainage or grading problems under the surface</li>
             <li>Extra debris or overgrowth to haul away</li>
           </ul>
-          <p>We confirm everything at your visit. If anything changes, you&apos;ll see the new price in writing before any work starts, and your deposit comes off it.</p>
+          <p>We confirm everything on our first visit, before any work starts. If anything changes, you&apos;ll see the new price in writing first, and what you&apos;ve paid comes off it.</p>
         </div>
       </section>
 
@@ -244,8 +253,8 @@ export function EstimateView({
               <div>
                 <h2 className="text-lg font-semibold">Ready to go ahead?</h2>
                 <p className="text-sm text-muted-foreground">
-                  Put down {dollars(estimate.depositCents)} (one third) to hold your spot. Your site evaluation is included, and the
-                  deposit comes off your final price.
+                  Put down {dollars(estimate.depositCents)} (one third) and pick your start day. On the day we walk the spots with you,
+                  confirm the price, and get to work. The deposit comes off your final price.
                 </p>
               </div>
               <Button size="xl" className="w-full" disabled={paying} onClick={() => pay("deposit")}>
