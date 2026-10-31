@@ -62,9 +62,11 @@ export interface TapMapProps {
   /** Their first name, to greet them straight from the details page. */
   firstName: string | null;
   estimateHref: string;
+  /** The newest aerial covering the property (the county's, where there is one), shown over Mapbox's. */
+  imagery?: { tileUrl: string; maxLevel: number; name: string; bounds: [number, number, number, number] } | null;
 }
 
-export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, estimateHref }: TapMapProps) {
+export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, estimateHref, imagery = null }: TapMapProps) {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -107,7 +109,22 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     mapboxgl.accessToken = publicEnv.mapboxToken;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: "mapbox://styles/mapbox/satellite-streets-v12",
+      // The newest aerial on top, where there is one: Mapbox's photos can be
+      // years old, and a client should mark the yard they have now. Mapbox's
+      // satellite stays underneath for anywhere it doesn't reach.
+      style: imagery
+        ? {
+            version: 8,
+            sources: {
+              base: { type: "raster", url: "mapbox://mapbox.satellite", tileSize: 256 },
+              aerial: { type: "raster", tiles: [imagery.tileUrl], tileSize: 256, maxzoom: imagery.maxLevel, bounds: imagery.bounds, attribution: imagery.name },
+            },
+            layers: [
+              { id: "base", type: "raster", source: "base" },
+              { id: "aerial", type: "raster", source: "aerial" },
+            ],
+          }
+        : "mapbox://styles/mapbox/satellite-streets-v12",
       center: home,
       zoom: 19,
       dragRotate: false,
@@ -150,7 +167,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       map.remove();
       mapRef.current = null;
     };
-  }, [step, home, lot, token]);
+  }, [step, home, lot, token, imagery]);
 
   // The numbered pins, redrawn whenever the spots change. Tapping one opens it.
   useEffect(() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { staticImageryPath } from "@/lib/static-imagery";
 import { Loader2, MapPin } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { publicEnv } from "@/lib/public-env";
 import type { GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 
 interface PropertyConfirmDialogProps {
@@ -31,7 +31,8 @@ export function PropertyConfirmDialog({
   onConfirm,
   isPending,
 }: PropertyConfirmDialogProps) {
-  const imageUrl = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+ff3b30(${suggestion.lng},${suggestion.lat})/${suggestion.lng},${suggestion.lat},19,0/480x320@2x?access_token=${publicEnv.mapboxToken}`;
+  // The newest aerial covering the address (the county's, where there is one), Mapbox elsewhere.
+  const imageUrl = staticImageryPath(`pin-s+ff3b30(${suggestion.lng},${suggestion.lat})/${suggestion.lng},${suggestion.lat},19,0/480x320@2x`);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isPending && onOpenChange(next)}>

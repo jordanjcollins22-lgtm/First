@@ -1,5 +1,6 @@
 "use client";
 
+import { staticImageryPath } from "@/lib/static-imagery";
 import {
   useCallback,
   useEffect,
@@ -17,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { publicEnv } from "@/lib/public-env";
 import { autoBearing, describeHeading, normalizeDegrees } from "@/lib/orientation";
 import { coverScale, visibleWidthFeet, zoomAdjustmentFor } from "@/lib/canvas-cover";
 import type { MeasurementKind } from "@/lib/zone-measurement";
@@ -1349,7 +1349,9 @@ export function ImageCanvasBoard({
       coverScale(request, keptHeight, CANVAS_WIDTH, CANVAS_HEIGHT)
     );
 
-    const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},${zoom},${mapBearing}/${request}x${request}@2x?access_token=${publicEnv.mapboxToken}`;
+    // The newest aerial covering the address (the county's own flight, where
+    // there is one), drawn to Mapbox's exact geometry so the scale below holds.
+    const url = staticImageryPath(`${lng},${lat},${zoom},${mapBearing}/${request}x${request}@2x`);
     const res = await fetch(url, fresh ? { cache: "reload" } : undefined);
     if (!res.ok) throw new Error("Couldn't load a satellite photo for that address.");
     const rawBlob = await res.blob();

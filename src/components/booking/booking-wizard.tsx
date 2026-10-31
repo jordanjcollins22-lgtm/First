@@ -1,5 +1,6 @@
 "use client";
 
+import { staticImageryPath } from "@/lib/static-imagery";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck } from "lucide-react";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { readAdClick, type AdClick } from "@/lib/ad-click";
 import { cn } from "@/lib/utils";
-import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
+import { isMapboxConfigured } from "@/lib/public-env";
 import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { recordBookingVisit, recordDetailsShown, recordLocateResult, startPublicLead } from "@/lib/actions/public-booking-actions";
 import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
@@ -405,7 +406,7 @@ export function BookingWizard({
 
   const imageUrl =
     selectedAddress && isMapboxConfigured
-      ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x?access_token=${publicEnv.mapboxToken}`
+      ? staticImageryPath(`pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x`)
       : null;
 
   const pageCount = BOOKING_PAGES.length;
