@@ -28,6 +28,7 @@ import { cleanHeardAbout } from "@/lib/heard-about";
 import { routeForBudget } from "@/lib/photo-quote";
 import { readPhotoQuotes, waitingPhotoQuoteJob } from "@/lib/data/photo-quotes";
 import { sendEvaluationConfirmationNow, sendPhotoQuoteLinkNow } from "@/lib/data/booking-notices";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // The photo-quote columns are newer than the generated types.
@@ -123,6 +124,15 @@ export async function recordBookingVisit(input: {
   }
 }
 
+/** They reached the details page of booking: counted on the admin Funnel page. */
+export async function recordDetailsShown(visitId: string): Promise<void> {
+  if (!UUID_RE.test(visitId)) return;
+  const admin = createAdminClient();
+  const { data: visit } = await admin.from("booking_visits").select("organization_id").eq("id", visitId).maybeSingle();
+  if (!visit?.organization_id) return;
+  await recordFunnelStep(admin, { organizationId: visit.organization_id, step: "details_shown", visitId });
+}
+
 /** What happened when they tapped "Use my location". */
 export async function recordLocateResult(input: { visitId: string; result: LocateResult | "tapped" }): Promise<void> {
   try {
@@ -168,6 +178,12 @@ export async function startPublicLead(input: StartPublicLeadInput): Promise<{ jo
   }
   try {
     const made = await makePublicBooking(full);
+    await recordFunnelStep(admin, {
+      organizationId: input.organizationId,
+      step: "lead",
+      jobId: made.jobId,
+      visitId: input.visitId && UUID_RE.test(input.visitId) ? input.visitId : null,
+    });
     if (!made.prepToken) throw new Error("We have your details, but couldn't open your project. Refresh the page to try again.");
     if (key) await settleClaim(admin, key, made.jobId);
     return { jobId: made.jobId, prepToken: made.prepToken };
@@ -494,6 +510,70 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   });
 
   return { jobId, mode: visit ? mode.mode : "photo_quote", prepToken: intake?.token ?? null };
+}
+
+/**
+ * The visit, booked once they have paid: a deposit (which comes with the
+ * basic evaluation) or a paid evaluation. The same checks as a booking made
+ * the old way, at the moment it is made: the business's notice, and that
+ * the evaluator is still free.
+ */
+export async function bookPaidEvaluationVisit(input: {
+  token: string;
+  date: string;
+  time: string;
+  candidateEvaluatorIds: string[];
+}): Promise<{ ok: true; at: string } | { ok: false; error: string }> {
+  if (!/^[0-9a-f]{24}$/.test(input.token)) return { ok: false, error: "That link has expired or was never ours. Give us a call." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || !/^\d{2}:\d{2}$/.test(input.time)) return { ok: false, error: "Pick a time first." };
+  if (input.candidateEvaluatorIds.length === 0) return { ok: false, error: "That time is no longer available, please pick another." };
+
+  const admin = createAdminClient();
+  const { data: intake } = await admin
+    .from("evaluation_intakes")
+    .select("job_id, organization_id, job:jobs(evaluation_date, property:properties(address, lat, lng))")
+    .eq("token", input.token)
+    .maybeSingle();
+  if (!intake) return { ok: false, error: "That link has expired or was never ours. Give us a call." };
+  const job = intake.job as unknown as { evaluation_date: string | null; property: { address: string; lat: number; lng: number } | null } | null;
+  // Already booked: picking again is a reschedule, which goes through us.
+  if (job?.evaluation_date) return { ok: true, at: job.evaluation_date };
+  if (!job?.property) return { ok: false, error: "We couldn't find your property. Give us a call." };
+
+  const { data: estimate } = await admin.from("job_estimates").select("paid_at").eq("job_id", intake.job_id).maybeSingle();
+  if (!estimate?.paid_at) return { ok: false, error: "Your payment hasn't come through yet. Give it a minute and try again." };
+
+  const notice = await getBookingNotice(intake.organization_id);
+  const at = zonedToUtc(input.date, input.time, notice.timeZone);
+  if (Number.isNaN(at.getTime())) return { ok: false, error: "Pick a time first." };
+  const soon = tooSoon(notice, new Date(), { date: input.date, at });
+  if (soon) return { ok: false, error: soon };
+
+  const end = new Date(at.getTime() + SLOT_MINUTES * 60_000);
+  const blocks = await getBusyBlocksAsAdmin().catch(() => []);
+  const stillFree = freeOf(blocks, input.candidateEvaluatorIds, { start: at, end });
+  if (stillFree.length === 0) return { ok: false, error: "That time was just booked, please pick another." };
+  const { territories } = await loadTerritories(admin, intake.organization_id).catch(() => ({ territories: [] }));
+  const choice = chooseEvaluator(
+    stillFree,
+    await daysFor(admin, stillFree, input.date),
+    { lat: job.property.lat, lng: job.property.lng, zip: zipOf(job.property.address) },
+    territories
+  );
+  if (!choice) return { ok: false, error: "That time was just booked, please pick another." };
+
+  const { error } = await admin
+    .from("jobs")
+    .update({ evaluation_date: at.toISOString(), assigned_to: choice.evaluatorId, evaluation_status: "scheduled" })
+    .eq("id", intake.job_id)
+    .is("evaluation_date", null);
+  if (error) return { ok: false, error: "Couldn't book that time. Try again in a moment." };
+
+  await syncEvaluationToGhl(intake.job_id);
+  await sendEvaluationConfirmationNow(intake.job_id);
+  await recordFunnelStep(admin, { organizationId: intake.organization_id, step: "visit_booked", jobId: intake.job_id });
+  log.info("lead.visit_booked", { jobId: intake.job_id, evaluatorId: choice.evaluatorId, at: at.toISOString() });
+  return { ok: true, at: at.toISOString() };
 }
 
 /**

@@ -11,7 +11,7 @@ import { readAdClick, type AdClick } from "@/lib/ad-click";
 import { cn } from "@/lib/utils";
 import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
 import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { recordBookingVisit, recordLocateResult, startPublicLead } from "@/lib/actions/public-booking-actions";
+import { recordBookingVisit, recordDetailsShown, recordLocateResult, startPublicLead } from "@/lib/actions/public-booking-actions";
 import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
 import type { PublicService } from "@/lib/data/public-booking";
 import { LandingCard } from "@/components/booking/landing-card";
@@ -170,6 +170,14 @@ export function BookingWizard({
       })
       .catch(() => {});
   }, [organizationId, variant, referralCode, linkRef, preview]);
+
+  // Reaching the details page, once, for the admin Funnel page.
+  const detailsRecordedRef = useRef(false);
+  useEffect(() => {
+    if (step !== 1 || preview || detailsRecordedRef.current || !visitIdRef.current) return;
+    detailsRecordedRef.current = true;
+    void recordDetailsShown(visitIdRef.current).catch(() => {});
+  }, [step, preview]);
 
   // The ad they came from, if any. Kept for the tab, because a landing page
   // can send them here without the click id on the address.

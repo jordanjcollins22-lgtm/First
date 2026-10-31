@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { estimatePath, getTapPreEval, tapMapPath } from "@/lib/data/tap-estimate";
 import { settleEstimateIfPaid } from "@/lib/data/estimate-settle";
 import { bookingTimesFor } from "@/lib/data/booking-times";
@@ -46,6 +48,9 @@ export default async function SchedulePage({
     data.intake.evaluationAt && !data.intake.cancelled ? `${dayOnly(data.intake.evaluationAt)} at ${timeOnly(data.intake.evaluationAt).toLowerCase()}` : null;
 
   const orgId = data.organizationId;
+  if (orgId && estimate.paidAt && !booked) {
+    await recordFunnelStep(createAdminClient(), { organizationId: orgId, step: "schedule_viewed", jobId: data.intake.jobId });
+  }
   const [times, notice] =
     !booked && estimate.paidAt && orgId
       ? await Promise.all([
