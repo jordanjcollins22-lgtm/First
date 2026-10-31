@@ -88,7 +88,7 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
 
   // The picture readings already paid for on this estimate, and when the
   // model was last called for it. Read on its own, so a database without
-  // the column (migration 0357) still prices the map, just without reuse.
+  // the column (migration 0383) still prices the map, just without reuse.
   const cache = existing ? await readKeptReadings(form.admin, existing.id) : readAiCache(null);
   const nowDate = new Date();
 
@@ -188,7 +188,7 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
   let { error } = await form.admin.from("job_estimates").upsert(saving, { onConflict: "job_id" });
   for (const column of ["ai_readings", "sizing"] as const) {
     if (!error || !new RegExp(column).test(error.message)) continue;
-    // That column (migration 0356 or 0357) isn't on this database yet. The
+    // That column (migration 0382 or 0383) isn't on this database yet. The
     // price is what the client needs; save it without that column rather
     // than lose their map, and say so in the log so the migration gets run.
     log.warn("estimate.column_missing", { jobId: form.jobId, column, error: error.message });
