@@ -7,6 +7,7 @@ import { Check, CheckCircle2, Loader2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecommendedTimes } from "@/components/booking/recommended-times";
 import { bookPaidEvaluationVisit } from "@/lib/actions/public-booking-actions";
+import { chooseStartDay } from "@/lib/actions/tap-estimate-actions";
 import type { BookingTimes, OfferedTime } from "@/lib/data/booking-times";
 import type { EvaluationTier } from "@/lib/evaluation-tiers";
 import { cn } from "@/lib/utils";
@@ -18,10 +19,14 @@ export interface SchedulePickerProps {
   clientFirstName: string | null;
   paid: boolean;
   choice: "deposit" | "evaluation" | null;
-  /** The visit they get: the one they paid for, or the one with their deposit. */
+  /** The evaluation they paid for. Null after a deposit, whose first visit is the work. */
   tier: EvaluationTier | null;
-  /** "Tuesday, November 3 at 10:00 am", once booked. */
+  /** "Tuesday, November 3 at 10:00 am", once an evaluation is booked. */
   booked: string | null;
+  /** After a deposit: the start day they picked, YYYY-MM-DD. */
+  startDay: string | null;
+  /** After a deposit: the days they can pick to start. */
+  startDays: string[];
   times: BookingTimes | null;
   noticeText: string;
   /** Said when the visit is a video call, before they pick. */
@@ -40,10 +45,14 @@ function timeLabel(time: string): string {
 }
 
 /**
- * The last page of the funnel: they have paid, so now the visit. Recommended
- * times first (the ones next to a visit already nearby), every free time a
- * tap away, and a time is picked then confirmed so a slip of the thumb is
- * not a booking. Once booked, it says so and what happens next.
+ * The last page of the funnel: they have paid, so now the first visit.
+ *
+ * After a deposit that visit is the crew coming to work: they pick the day
+ * they'd like to start, and the team confirms it with them. After a paid
+ * evaluation it is the evaluator: recommended times first (the ones next to
+ * a visit already nearby), every free time a tap away. Either way a choice
+ * is picked then confirmed, so a slip of the thumb is not a booking. Once
+ * done, it says so and what happens next.
  */
 export function SchedulePicker({
   token,
@@ -54,6 +63,8 @@ export function SchedulePicker({
   choice,
   tier,
   booked,
+  startDay,
+  startDays,
   times,
   noticeText,
   digital,
@@ -61,6 +72,7 @@ export function SchedulePicker({
 }: SchedulePickerProps) {
   const router = useRouter();
   const [picked, setPicked] = useState<OfferedTime | null>(null);
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -70,6 +82,16 @@ export function SchedulePicker({
     setError(null);
     startTransition(async () => {
       const result = await bookPaidEvaluationVisit({ token, date: picked.date, time: picked.time, candidateEvaluatorIds: picked.evaluatorIds });
+      if (!result.ok) setError(result.error);
+      else router.refresh();
+    });
+  }
+
+  function confirmStartDay() {
+    if (!pickedDay) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await chooseStartDay({ token, day: pickedDay });
       if (!result.ok) setError(result.error);
       else router.refresh();
     });
@@ -90,6 +112,79 @@ export function SchedulePicker({
         <p className="text-muted-foreground">This usually takes a few seconds.</p>
         <Button size="lg" onClick={() => router.refresh()}>
           Check again
+        </Button>
+      </main>
+    );
+  }
+
+  if (choice === "deposit" && startDay) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-10">
+        {header}
+        <div className="flex flex-col items-center gap-2 text-center">
+          <CheckCircle2 className="size-14 text-primary" />
+          <h1 className="text-3xl font-bold">You&apos;re on the schedule{clientFirstName ? `, ${clientFirstName}` : ""}</h1>
+          <p className="text-lg">You&apos;d like us to start {dayLabel(startDay)}</p>
+          <p className="text-sm text-muted-foreground">We&apos;ll text you to confirm the day and a start time.</p>
+        </div>
+        <section className="rounded-2xl border border-border p-4 text-sm">
+          <h2 className="font-semibold">What happens next</h2>
+          <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-muted-foreground">
+            <li>We confirm your start day with you.</li>
+            <li>On the day, we walk the spots with you and confirm the price before starting.</li>
+            <li>Then we get to work. Your deposit comes off the final price.</li>
+          </ol>
+        </section>
+        <a href={estimateHref} className="text-center text-sm font-semibold text-primary underline-offset-2 hover:underline">
+          See your estimate
+        </a>
+        {businessPhone && (
+          <p className="text-center text-sm text-muted-foreground">
+            Questions? Call or text <a className="font-semibold text-primary" href={`tel:${businessPhone}`}>{businessPhone}</a>
+          </p>
+        )}
+      </main>
+    );
+  }
+
+  if (choice === "deposit") {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-5 px-4 py-8">
+        {header}
+        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
+          <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
+          <div>
+            <p className="font-semibold">Deposit received. Thank you!</p>
+            <p className="text-sm text-muted-foreground">Last step: when should we start?</p>
+          </div>
+        </div>
+        <div>
+          <h1 className="text-xl font-bold">Pick your start day</h1>
+          <p className="text-sm text-muted-foreground">
+            On the day we walk the spots with you, confirm the price, and get to work. We&apos;ll text you to confirm the day.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {startDays.map((day) => {
+            const on = day === pickedDay;
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => setPickedDay(day)}
+                className={cn(
+                  "min-h-12 rounded-lg border px-3 text-left text-sm font-medium",
+                  on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary!"
+                )}
+              >
+                {dayLabel(day)}
+              </button>
+            );
+          })}
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button size="xl" className="w-full" disabled={!pickedDay || isPending} onClick={confirmStartDay}>
+          {isPending ? <Loader2 className="size-6 animate-spin" /> : pickedDay ? `Start ${dayLabel(pickedDay)}` : "Pick a day above"}
         </Button>
       </main>
     );
@@ -123,8 +218,7 @@ export function SchedulePicker({
             <li>We come out at your time and look at everything with you.</li>
             <li>You get your final proposal, and we go over any changes together.</li>
             <li>
-              We schedule the work.{" "}
-              {choice === "evaluation" ? "What you paid today comes off the project." : "Your deposit comes off the final price."}
+              We schedule the work. What you paid today comes off the project.
             </li>
           </ol>
         </section>
@@ -150,7 +244,7 @@ export function SchedulePicker({
       <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
         <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
         <div>
-          <p className="font-semibold">{choice === "evaluation" ? `${tier?.name ?? "Evaluation"} paid. Thank you!` : "Deposit received. Thank you!"}</p>
+          <p className="font-semibold">{`${tier?.name ?? "Evaluation"} paid. Thank you!`}</p>
           <p className="text-sm text-muted-foreground">Last step: pick when we come out.</p>
         </div>
       </div>

@@ -133,6 +133,12 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     const landed = Array.isArray(settled) ? settled[0] : null;
     if (landed) {
       const choice = session.metadata?.estimate_choice;
+      // A deposit is a sale: the first visit is the crew coming to work, so
+      // the job goes to approved and into the scheduler's queue (with the
+      // start day the client picks next). A paid evaluation is not a sale yet.
+      if (choice === "deposit") {
+        await admin.from("jobs").update({ status: "approved" }).eq("id", landed.job_id).in("status", ["estimating", "quoted"]);
+      }
       await recordFunnelStep(admin, {
         organizationId: landed.organization_id,
         step: "paid",

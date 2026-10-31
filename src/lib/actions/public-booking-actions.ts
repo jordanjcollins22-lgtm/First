@@ -269,8 +269,10 @@ export async function bookPaidEvaluationVisit(input: {
   if (job?.evaluation_date) return { ok: true, at: job.evaluation_date };
   if (!job?.property) return { ok: false, error: "We couldn't find your property. Give us a call." };
 
-  const { data: estimate } = await admin.from("job_estimates").select("paid_at").eq("job_id", intake.job_id).maybeSingle();
+  const { data: estimate } = await admin.from("job_estimates").select("paid_at, choice").eq("job_id", intake.job_id).maybeSingle();
   if (!estimate?.paid_at) return { ok: false, error: "Your payment hasn't come through yet. Give it a minute and try again." };
+  // After a deposit the first visit is the crew coming to work, picked as a start day, not an evaluation.
+  if (estimate.choice === "deposit") return { ok: false, error: "Pick the day you'd like us to start instead." };
 
   const notice = await getBookingNotice(intake.organization_id);
   const at = zonedToUtc(input.date, input.time, notice.timeZone);

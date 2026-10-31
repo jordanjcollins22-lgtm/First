@@ -82,7 +82,9 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
         "id, name, status, project_start_date, created_at, " +
           "properties!inner(address, lat, lng), " +
           "job_requested_services(service_type_id), " +
-          "job_proposals(client_chosen_day, status)"
+          "job_proposals(client_chosen_day, status), " +
+          // A deposit off the map estimate: the start day the client picked.
+          "job_estimates(start_day)"
       )
       .eq("status", "approved")
       .is("declined_at", null)
@@ -261,6 +263,8 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
     job_requested_services?: { service_type_id: string }[];
     // One object rather than an array: job_proposals has a UNIQUE on job_id.
     job_proposals?: { client_chosen_day: string | null; status: string }[] | { client_chosen_day: string | null; status: string } | null;
+    // One object too: job_estimates has a UNIQUE on job_id.
+    job_estimates?: { start_day: string | null }[] | { start_day: string | null } | null;
   }): SchedulableJob => {
     const services = embedded(row.job_requested_services).map((s) => s.service_type_id);
     const accepted = embedded(row.job_proposals).find((p) => p.status === "accepted" || p.status === "approved");
@@ -273,7 +277,8 @@ export async function scheduleSuggestions(): Promise<EngineOutput> {
       blockingIssues: standing?.why.get(row.id)?.filter((r) => r.kind === "blocking-issue").length ?? 0,
       lat: row.properties?.lat ?? null,
       lng: row.properties?.lng ?? null,
-      clientPreferredDate: accepted?.client_chosen_day ?? null,
+      // The accepted proposal's chosen day, else the day a deposit client asked to start.
+      clientPreferredDate: accepted?.client_chosen_day ?? embedded(row.job_estimates)[0]?.start_day ?? null,
       soldAt: row.created_at,
       weatherSensitive: services.some((s) => WEATHER_STOPS.some((w) => s.includes(w))),
     };

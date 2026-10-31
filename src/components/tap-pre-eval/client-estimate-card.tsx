@@ -4,14 +4,20 @@ import { needsChecking, officeSourceWords, sizeAmount } from "@/lib/spot-size-wo
 
 /**
  * On the job page: what the client was shown straight after the map
- * pre-evaluation, and how they paid before booking the visit: a third down
- * (with the basic evaluation), or a paid evaluation at one of the tiers. The
- * proposal after the visit is the real price; this is what they expect.
+ * pre-evaluation, and how they paid before the first visit: a third down
+ * (the first visit is the crew coming to work, on the day they'd like to
+ * start, which the team confirms), or a paid evaluation at one of the tiers.
  *
  * Each spot shows the size it was priced at, where that size came from and
  * how sure it is, with what the satellite picture was read as, so the
  * evaluator knows which sizes to measure before the proposal rests on them.
  */
+/** "Tue, Nov 3" from YYYY-MM-DD, without the day slipping across time zones. */
+function startDayLabel(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 export function ClientEstimateCard({
   estimate,
   tierName,
@@ -29,7 +35,7 @@ export function ClientEstimateCard({
   const status = estimate.paidAt
     ? estimate.choice === "evaluation"
       ? `Paid evaluation: ${tierName ?? "evaluation"}, ${paid} (comes off the job)`
-      : `Deposit paid: ${paid}, ${tierName ?? "basic evaluation"} included`
+      : `Deposit paid: ${paid}. ${estimate.startDay ? `Wants to start ${startDayLabel(estimate.startDay)}: confirm with them` : "No start day picked yet"}`
     : estimate.acceptedAt
       ? `Started paying (${estimate.choice === "evaluation" ? `${tierName ?? "evaluation"}` : "deposit"}), not paid yet`
       : "Hasn't paid yet";

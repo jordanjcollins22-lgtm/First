@@ -2436,6 +2436,7 @@ export interface Database {
           choice: "deposit" | "evaluation" | null;
           evaluation_tier: "basic" | "measured" | "design" | null;
           charged_cents: number | null;
+          start_day: string | null;
           created_at: string;
           updated_at: string;
         };
