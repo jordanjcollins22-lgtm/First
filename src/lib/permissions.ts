@@ -181,6 +181,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "rather than on a tab, the tab list lives in the database these tabs exist to repair, and a " +
     "page that could be locked away by the thing it fixes is a trap.",
   "/admin/database": "Redirects to Settings, where it is a tab.",
+  "/admin/funnel":
+    "The client funnel, page by page, with what each page converts. Gated on the owner and admin roles " +
+    "directly, like Pricing health: it is the business's sales numbers.",
   "/admin/pricing-health":
     "Whether the estimate a client gets off the map can be trusted, and what to set so it can. Gated on " +
     "the owner and admin roles directly, like Settings: it is about the rate card and the money charged, " +

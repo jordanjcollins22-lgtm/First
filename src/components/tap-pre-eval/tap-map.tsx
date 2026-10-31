@@ -7,7 +7,7 @@ import { Camera, Check, Loader2, PencilLine, RotateCcw, Sprout, Trash2, X } from
 
 import { Button } from "@/components/ui/button";
 import { removeIntakePhoto } from "@/lib/actions/evaluation-intake-actions";
-import { submitTapPreEval } from "@/lib/actions/tap-estimate-actions";
+import { recordMapTapped, submitTapPreEval } from "@/lib/actions/tap-estimate-actions";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { publicEnv } from "@/lib/public-env";
 import { isHeic, shrinkImage } from "@/lib/shrink-image";
@@ -93,6 +93,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
   }, [spots]);
 
   // Read inside the map's click handler, which is bound once.
+  const tappedRef = useRef(false);
   const openKeyRef = useRef(openKey);
   useEffect(() => {
     openKeyRef.current = openKey;
@@ -135,6 +136,11 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       // Finish the open spot before starting another.
       if (openKeyRef.current) return;
       const key = crypto.randomUUID();
+      // The first tap of this visit, once, for the admin Funnel page.
+      if (!tappedRef.current) {
+        tappedRef.current = true;
+        void recordMapTapped(token).catch(() => {});
+      }
       setError(null);
       setSpots((prev) => (prev.length >= MAX_SPOTS ? prev : [...prev, { key, lng: e.lngLat.lng, lat: e.lngLat.lat, choices: [], photos: [] }]));
       setOpenKey(key);
@@ -144,7 +150,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       map.remove();
       mapRef.current = null;
     };
-  }, [step, home, lot]);
+  }, [step, home, lot, token]);
 
   // The numbered pins, redrawn whenever the spots change. Tapping one opens it.
   useEffect(() => {

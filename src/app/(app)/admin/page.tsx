@@ -111,6 +111,11 @@ export default async function AdminPage() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/admin/funnel" className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary">
+                    Funnel: each page and how it converts
+                  </Link>
+                </li>
+                <li>
                   <Link href="/admin/pricing-health" className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary">
                     Pricing health: is the client estimate right?
                   </Link>

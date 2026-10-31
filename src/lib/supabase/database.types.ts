@@ -2402,6 +2402,23 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]>;
         Relationships: [];
       };
+      funnel_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          visit_id: string | null;
+          job_id: string | null;
+          step: string;
+          detail: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["funnel_events"]["Row"]> & {
+          organization_id: string;
+          step: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["funnel_events"]["Row"]>;
+        Relationships: [];
+      };
       job_estimates: {
         Row: {
           id: string;

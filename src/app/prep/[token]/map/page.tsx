@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { isMapboxConfigured } from "@/lib/public-env";
 import { estimatePath, getTapPreEval } from "@/lib/data/tap-estimate";
 import { intakePath } from "@/lib/data/evaluation-intake";
@@ -37,6 +39,9 @@ export default async function TapMapPage({
   if (!data.home || !isMapboxConfigured) redirect(intakePath(token));
   // Paid is final from here; changes go through a message.
   if (data.estimate?.paidAt) redirect(estimatePath(token));
+  if (data.organizationId) {
+    await recordFunnelStep(createAdminClient(), { organizationId: data.organizationId, step: "map_opened", jobId: data.intake.jobId });
+  }
 
 
   return (

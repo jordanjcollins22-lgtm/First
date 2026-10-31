@@ -22,6 +22,7 @@ import { chooseEvaluator, type EvaluatorDay } from "@/lib/evaluator-choice";
 import { ensureClientAccount } from "@/lib/data/client-accounts";
 import { bookingSource, cleanAdClick, type AdClick } from "@/lib/ad-click";
 import { recordBookingAdClick } from "@/lib/data/meta-report";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 
 /** Who they are and where, from the booking page. The visit time comes later, once they've paid. */
 export interface StartPublicLeadInput {
@@ -79,6 +80,15 @@ export async function recordBookingVisit(input: {
     console.error("recordBookingVisit failed:", err);
     return { visitId: null };
   }
+}
+
+/** They reached the details page of booking: counted on the admin Funnel page. */
+export async function recordDetailsShown(visitId: string): Promise<void> {
+  if (!UUID_RE.test(visitId)) return;
+  const admin = createAdminClient();
+  const { data: visit } = await admin.from("booking_visits").select("organization_id").eq("id", visitId).maybeSingle();
+  if (!visit?.organization_id) return;
+  await recordFunnelStep(admin, { organizationId: visit.organization_id, step: "details_shown", visitId });
 }
 
 /** What happened when they tapped "Use my location". */
@@ -221,6 +231,12 @@ async function makePublicLead(input: StartPublicLeadInput): Promise<{ jobId: str
   await reconcileProspects(admin).catch(() => null);
   await ensureClientAccount({ customerId, email }).catch(() => null);
 
+  await recordFunnelStep(admin, {
+    organizationId: input.organizationId,
+    step: "lead",
+    jobId: job.id,
+    visitId: input.visitId && UUID_RE.test(input.visitId) ? input.visitId : null,
+  });
   log.info("lead.created", { jobId: job.id, customerId, mode: mode.mode, referralCode, services: requestedServiceIds.length });
   return { jobId: job.id, prepToken: intake.token };
 }
@@ -278,6 +294,7 @@ export async function bookPaidEvaluationVisit(input: {
 
   await syncEvaluationToGhl(intake.job_id);
   await sendEvaluationConfirmationNow(intake.job_id);
+  await recordFunnelStep(admin, { organizationId: intake.organization_id, step: "visit_booked", jobId: intake.job_id });
   log.info("lead.visit_booked", { jobId: intake.job_id, evaluatorId: choice.evaluatorId, at: at.toISOString() });
   return { ok: true, at: at.toISOString() };
 }

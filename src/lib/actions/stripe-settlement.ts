@@ -2,6 +2,7 @@
 
 import type Stripe from "stripe";
 import { isTierId } from "@/lib/evaluation-tiers";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { tipFromMetadata } from "@/lib/proposal-tip";
@@ -113,7 +114,7 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
   // job below like any payment, and comes off the job's price.
   const estimateId = session.metadata?.estimate_id ?? null;
   if (estimateId) {
-    await admin
+    const { data: settled } = await admin
       .from("job_estimates")
       .update({
         paid_at: new Date().toISOString(),
@@ -126,7 +127,19 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
         ...(Number(session.metadata?.work_cents) > 0 ? { charged_cents: Number(session.metadata?.work_cents) } : {}),
       })
       .eq("id", estimateId)
-      .is("paid_at", null);
+      .is("paid_at", null)
+      .select("job_id, organization_id");
+    // Counted once, the first time it lands, for the admin Funnel page.
+    const landed = Array.isArray(settled) ? settled[0] : null;
+    if (landed) {
+      const choice = session.metadata?.estimate_choice;
+      await recordFunnelStep(admin, {
+        organizationId: landed.organization_id,
+        step: "paid",
+        jobId: landed.job_id,
+        detail: choice === "deposit" ? "deposit" : (session.metadata?.estimate_tier ?? null),
+      });
+    }
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

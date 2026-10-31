@@ -23,6 +23,7 @@ import { stripeClient, stripeCustomerFor } from "@/lib/stripe-customer";
 import { surchargeCents, SURCHARGE_LABEL } from "@/lib/card-surcharge";
 import { notifyJobTeam } from "@/lib/notifications";
 import { log } from "@/lib/log";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 import type { Json } from "@/lib/supabase/database.types";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -202,6 +203,7 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
     return { ok: false, error: "Could not work out your estimate. Try again in a moment." };
   }
 
+  await recordFunnelStep(form.admin, { organizationId: form.organizationId, step: "map_sent", jobId: form.jobId });
   log.info("estimate.sent", {
     jobId: form.jobId,
     spots: spots.length,
@@ -312,6 +314,12 @@ export async function startEstimatePayment(input: { token: string; pay: string }
       .from("job_estimates")
       .update({ accepted_at: now, choice, evaluation_tier: tierId, charged_cents: amountCents, checkout_session_id: session.id, updated_at: now })
       .eq("id", estimate.id);
+    await recordFunnelStep(form.admin, {
+      organizationId: form.organizationId,
+      step: "pay_started",
+      jobId: form.jobId,
+      detail: choice === "deposit" ? "deposit" : tierId,
+    });
     notifyJobTeam(
       form.jobId,
       "proposal_responses",
@@ -325,6 +333,13 @@ export async function startEstimatePayment(input: { token: string; pay: string }
     log.error("estimate.checkout_failed", { jobId: form.jobId, error: err instanceof Error ? err.message : String(err) });
     return { ok: false, error: "Couldn't open the payment page. Try again, or give us a call." };
   }
+}
+
+/** The first spot tapped on the map: counted on the admin Funnel page, where most of the map's drop-off is before it. */
+export async function recordMapTapped(token: string): Promise<void> {
+  const form = await formFor(token);
+  if (!form) return;
+  await recordFunnelStep(form.admin, { organizationId: form.organizationId, step: "map_tapped", jobId: form.jobId });
 }
 
 /** A question about the estimate, on the job's thread with the client, and to the team. */

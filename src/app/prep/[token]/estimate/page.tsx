@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { publicEnv } from "@/lib/public-env";
 import { getTapPreEval, schedulePath, tapMapPath } from "@/lib/data/tap-estimate";
 import { listExternalMessagesForJob } from "@/lib/data/public-job-messages";
@@ -35,6 +37,9 @@ export default async function EstimatePage({ params }: { params: Promise<{ token
   if (!data) notFound();
   if (!data.estimate) redirect(tapMapPath(token));
   const estimate = data.estimate;
+  if (data.organizationId) {
+    await recordFunnelStep(createAdminClient(), { organizationId: data.organizationId, step: "estimate_viewed", jobId: data.intake.jobId });
+  }
 
   const points = estimate.spots.map((s): LngLat => [s.lng, s.lat]);
   const frame = [...(data.lot?.ring ?? (data.home ? [data.home] : [])), ...points];
