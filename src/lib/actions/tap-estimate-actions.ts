@@ -14,7 +14,7 @@ import { estimateCatalogFor } from "@/lib/data/estimate-catalog";
 import { lotForProperty } from "@/lib/data/lot-map";
 import { estimatePath, schedulePath, tiersForOrganization } from "@/lib/data/tap-estimate";
 import { isTierId, tierById, type TierId } from "@/lib/evaluation-tiers";
-import { answersFromSpots, areaForPoint, depositCents, dollars, outlineAreaSqft, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
+import { trustPictureReadings, answersFromSpots, areaForPoint, depositCents, dollars, outlineAreaSqft, parseTapSpots, regionsFor } from "@/lib/tap-estimate";
 import { isStripeConfigured } from "@/lib/env";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { absolute } from "@/lib/proposal-flow";
@@ -40,7 +40,7 @@ async function formFor(token: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("evaluation_intakes")
-    .select("id, job_id, organization_id, answers, job:jobs(cancelled_at, evaluation_status, property:properties(id, lat, lng))")
+    .select("id, job_id, organization_id, answers, photo_outdated_at, wrong_property_at, job:jobs(cancelled_at, evaluation_status, property:properties(id, lat, lng))")
     .eq("token", token)
     .maybeSingle();
   if (!data) return null;
@@ -57,6 +57,8 @@ async function formFor(token: string) {
     answers: cleanAnswers(data.answers),
     cancelled: Boolean(job?.cancelled_at) || job?.evaluation_status === "cancelled",
     property: job?.property ?? null,
+    /** What the client said about the aerial photo on their map, in one tap. */
+    photoFlags: { outdated: Boolean(data.photo_outdated_at), wrongProperty: Boolean(data.wrong_property_at) },
   };
 }
 
@@ -152,15 +154,17 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
   // of the lot. Sizes are never pooled across spots.
   const [catalog, priors, freshAi] = await Promise.all([estimateCatalogFor(form.admin, form.organizationId), priorsPending, aiPending]);
   const freshByIndex = new Map(freshAi.map((a) => [a.index, a]));
-  const ai: AiSpotSize[] = aiSpots.flatMap((s) => {
+  const read: AiSpotSize[] = aiSpots.flatMap((s) => {
     const read = freshByIndex.get(s.index);
     if (read) return [read];
     const kept = keptByKey.get(s.key);
     return kept ? [{ index: s.index, areaSqft: kept.areaSqft, count: kept.count, confidence: kept.confidence, notes: kept.notes }] : [];
   });
+  // Trusted as much as the client says the photo deserves.
+  const ai = trustPictureReadings(read, form.photoFlags);
   // Kept for next time: this map's readings only, so a moved pin's old one goes.
   const aiReadings: AiReadingCache = {
-    readings: ai.map((a) => ({ key: aiSpots[a.index].key, areaSqft: a.areaSqft, count: a.count, confidence: a.confidence, notes: a.notes })),
+    readings: read.map((a) => ({ key: aiSpots[a.index].key, areaSqft: a.areaSqft, count: a.count, confidence: a.confidence, notes: a.notes })),
     runs,
   };
   const spotInputs: SpotInput[] = spots.map((s, index) => ({
@@ -364,6 +368,42 @@ export async function chooseStartDay(input: { token: string; day: string }): Pro
     dedupeKey: `start-day-${estimate.id}-${input.day}`,
   }).catch(() => {});
   revalidatePath(`/jobs/${form.jobId}`);
+  return { ok: true };
+}
+
+/**
+ * One tap under the map's photo: "Not up to date?" or "Not my property?".
+ * Kept on their form, the team is told, and the estimate leans less on the
+ * picture from then on (trustPictureReadings). Never in their way: it can't
+ * fail loudly, and tapping it twice is the same as once.
+ */
+export async function flagMapPhoto(input: { token: string; kind: "outdated" | "wrong_property"; photo: string | null }): Promise<Result> {
+  if (input.kind !== "outdated" && input.kind !== "wrong_property") return { ok: false, error: "Unknown." };
+  const form = await formFor(input.token);
+  if (!form) return { ok: false, error: LINK_GONE };
+  const column = input.kind === "outdated" ? ("photo_outdated_at" as const) : ("wrong_property_at" as const);
+  const photo = input.photo?.replace(/[^\w ,.()-]/g, "").slice(0, 80) || null;
+  const { data: updated } = await form.admin
+    .from("evaluation_intakes")
+    .update(
+      input.kind === "outdated"
+        ? { photo_outdated_at: new Date().toISOString(), photo_seen: photo }
+        : { wrong_property_at: new Date().toISOString(), photo_seen: photo }
+    )
+    .eq("id", form.id)
+    .is(column, null)
+    .select("id");
+  if (updated && updated.length > 0) {
+    notifyJobTeam(
+      form.jobId,
+      "client_messages",
+      input.kind === "outdated"
+        ? `A client says the aerial photo of their property looks out of date${photo ? ` (${photo})` : ""}. Check the sizes at the visit.`
+        : "A client says the map isn't showing their property. Check the address before the visit.",
+      { dedupeKey: `photo-flag-${form.id}-${input.kind}` }
+    ).catch(() => {});
+    revalidatePath(`/jobs/${form.jobId}`);
+  }
   return { ok: true };
 }
 

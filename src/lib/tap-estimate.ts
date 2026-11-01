@@ -289,3 +289,24 @@ export function answersFromSpots(base: IntakeAnswers, spots: TapSpot[], areaOf: 
     details,
   });
 }
+
+/**
+ * The picture's spot sizes, trusted as much as the client says the picture
+ * deserves. They tapped "Not my property?": none of it is their yard, so
+ * none of it is used. They tapped "Not up to date?": the yard may have
+ * changed since it was flown, so each size is trusted a step less (a wider
+ * cushion, and a low one is measured at the visit). Their own photos and
+ * anything they drew round still count in full.
+ */
+export function trustPictureReadings<T extends { confidence: "high" | "medium" | "low"; notes: string }>(
+  readings: T[],
+  flags: { outdated: boolean; wrongProperty: boolean }
+): T[] {
+  if (flags.wrongProperty) return [];
+  if (!flags.outdated) return readings;
+  return readings.map((r) => ({
+    ...r,
+    confidence: r.confidence === "high" ? "medium" : "low",
+    notes: `${r.notes} (client says the aerial photo is out of date)`.trim(),
+  }));
+}
