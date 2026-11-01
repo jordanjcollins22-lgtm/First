@@ -14,6 +14,8 @@ import {
   Undo2,
 } from "lucide-react";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -240,6 +242,8 @@ function CardItem({
           <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
             Cancel
           </Button>
+          {/* A job's card comes back while the job is open, so it is not deleted here. */}
+          {card.source !== "job" && (
           <Button
             type="button"
             size="sm"
@@ -251,6 +255,7 @@ function CardItem({
           >
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
+          )}
         </div>
       </form>
     );
@@ -268,11 +273,17 @@ function CardItem({
         isFirst && card.stage !== "validate_done" && "border-l-4 border-l-primary"
       )}
     >
-      <p className="font-medium break-words">{card.title}</p>
+      {card.job_id ? (
+        <Link href={`/jobs/${card.job_id}`} className="font-medium break-words hover:text-primary hover:underline">
+          {card.title}
+        </Link>
+      ) : (
+        <p className="font-medium break-words">{card.title}</p>
+      )}
       {(card.asked_by || card.source === "ghl") && (
         <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
           {card.source === "ghl" && <MessageSquare className="h-3 w-3" aria-label="From GoHighLevel" />}
-          {card.asked_by && <span>Asked by {card.asked_by}</span>}
+          {card.asked_by && <span>{card.source === "job" ? "Client: " : "Asked by "}{card.asked_by}</span>}
         </p>
       )}
       {card.details && (

@@ -2442,7 +2442,8 @@ export interface Database {
           title: string;
           details: string | null;
           asked_by: string | null;
-          source: "manual" | "ghl";
+          source: "manual" | "ghl" | "job";
+          job_id: string | null;
           ghl_contact_id: string | null;
           ghl_message_id: string | null;
           completed_at: string | null;
