@@ -28,6 +28,7 @@
  * Pure, so the pricing is tested without a database or a network.
  */
 
+import { forwardRuleWords, priceWorksForward, type ForwardSetup } from "@/lib/spot-forward";
 import {
   AREA_SHARE,
   clamp,
@@ -42,7 +43,7 @@ import {
   type InstantWork,
 } from "@/lib/instant-price";
 import { areaChoiceFor } from "@/lib/ai-spot-size";
-import { productionService } from "@/lib/forward-pricing";
+import { crewRateCents, productionService } from "@/lib/forward-pricing";
 import { choiceLabel } from "@/lib/tap-estimate";
 import type { AiSpotSize, SizeConfidence, SizePriors, SizeSource, SpotSizing } from "@/lib/spot-sizing";
 
@@ -272,6 +273,12 @@ export interface PriceSpotsInput {
   priors: SizePriors;
   lot: { lotSqft: number | null; structureSqft: number | null } | null;
   catalog: InstantCatalog;
+  /**
+   * Price by the proposal's calculator (production rates, supplier
+   * materials, the pricing equation) rather than the rate card's timing and
+   * markup. The sizes are the same either way.
+   */
+  forward?: ForwardSetup;
 }
 
 const RANK: Record<SizeConfidence, number> = { high: 2, medium: 1, low: 0 };
@@ -630,7 +637,11 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
     });
   }
 
-  // ---- Priced.
+  // ---- Priced. By the proposal's calculator when it is given, each piece
+  // of work at once so the job's drive and time off the work are shared
+  // over them; anything it has no service for is priced the old way.
+  const forwardLines = input.forward ? priceWorksForward(built.flatMap((b) => b.entries.map((e) => e.work)), input.forward) : null;
+  let entryAt = 0;
   const lines: InstantLine[] = [];
   const sizing: SpotSizing[] = [];
   let usesTypical = false;
@@ -641,7 +652,9 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
     // weakest size on it, since that is what the price most rests on.
     let spotCents: number | null = null;
     for (const { work, size } of entries) {
-      const priced = priceWork(work, catalog);
+      const viaForward = forwardLines ? forwardLines[entryAt] : null;
+      entryAt += 1;
+      const priced = viaForward ? { line: viaForward, typical: viaForward.materials.some((m) => m.typical) } : priceWork(work, catalog);
       if (priced.typical) usesTypical = true;
       const line = priced.line;
       lines.push(line);
@@ -674,8 +687,8 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
       premiumCents: totalCents - subtotalCents,
       totalCents,
       basis: basisFor(spots.length, sourcesUsed, lot?.lotSqft ? `the county's lot size, ${sqft(lotSqft)}` : `a typical ${sqft(TYPICAL_LOT_SQFT)} lot`),
-      crewRateCents: catalog.crewCostPerHourCents,
-      markup: `× ${m.multiplier}, then ${overhead}`,
+      crewRateCents: input.forward ? crewRateCents(input.forward.equation) : catalog.crewCostPerHourCents,
+      markup: input.forward ? forwardRuleWords(input.forward.equation) : `× ${m.multiplier}, then ${overhead}`,
       usesTypical,
     },
     sizing,

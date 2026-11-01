@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getProductionPricing } from "@/lib/data/production-pricing";
+import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
+import { travelForProperty } from "@/lib/data/job-travel";
+import { zipOf } from "@/lib/material-suppliers";
+import { equationWithTeamPay, type ForwardSetup } from "@/lib/spot-forward";
 import { cleanAnswers } from "@/lib/evaluation-intake";
 import { priceSpots, type SpotInput } from "@/lib/spot-price";
 import { sizePriorsFor } from "@/lib/data/size-priors";
@@ -40,7 +45,7 @@ async function formFor(token: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("evaluation_intakes")
-    .select("id, job_id, organization_id, answers, photo_outdated_at, wrong_property_at, job:jobs(cancelled_at, evaluation_status, is_test, property:properties(id, lat, lng))")
+    .select("id, job_id, organization_id, answers, photo_outdated_at, wrong_property_at, job:jobs(cancelled_at, evaluation_status, is_test, property:properties(id, lat, lng, address))")
     .eq("token", token)
     .maybeSingle();
   if (!data) return null;
@@ -48,7 +53,7 @@ async function formFor(token: string) {
     cancelled_at: string | null;
     evaluation_status: string;
     is_test?: boolean;
-    property: { id: string; lat: number | null; lng: number | null } | null;
+    property: { id: string; lat: number | null; lng: number | null; address: string | null } | null;
   } | null;
   return {
     admin,
@@ -63,6 +68,43 @@ async function formFor(token: string) {
     /** What the client said about the aerial photo on their map, in one tap. */
     photoFlags: { outdated: Boolean(data.photo_outdated_at), wrongProperty: Boolean(data.wrong_property_at) },
   };
+}
+
+/**
+ * What the proposal's calculator needs to price this job: the business's
+ * production rates and pricing equation (with the team's real pay when it
+ * hasn't saved its own), its suppliers, and the drive to the property.
+ * Null when it can't be put together, and the estimate is then priced the
+ * old way rather than not at all.
+ */
+async function forwardSetupFor(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  property: { lat: number | null; lng: number | null; address: string | null }
+): Promise<ForwardSetup | null> {
+  try {
+    const point = property.lat != null && property.lng != null ? { lat: property.lat, lng: property.lng } : null;
+    const [pricing, bulk, team, org, travel] = await Promise.all([
+      getProductionPricing(admin, organizationId),
+      getMaterialSuppliers(admin, organizationId),
+      admin.from("profiles").select("pay_type, pay_rate_per_hour").eq("organization_id", organizationId),
+      admin.from("organizations").select("crew_size").eq("id", organizationId).maybeSingle(),
+      travelForProperty(admin, organizationId, point).catch(() => null),
+    ]);
+    const pay = (team.data ?? []).filter((p) => p.pay_type !== "commission").map((p) => Number(p.pay_rate_per_hour));
+    const equation = pricing.saved ? pricing.equation : equationWithTeamPay(pricing.equation, pay, org.data?.crew_size ?? null);
+    return {
+      equation,
+      services: pricing.services,
+      suppliers: bulk.suppliers,
+      site: point ? { ...point, zip: zipOf(property.address) } : null,
+      // There and back, as a proposal works it out.
+      driveMinutesPerDay: travel?.toSiteMinutes != null && travel.fromSiteMinutes != null ? travel.toSiteMinutes + travel.fromSiteMinutes : null,
+    };
+  } catch (err) {
+    log.warn("estimate.forward_setup_failed", { organizationId, error: err instanceof Error ? err.message : String(err) });
+    return null;
+  }
 }
 
 /** The picture readings kept on an estimate; none when the column isn't there yet or can't be read. */
@@ -155,7 +197,12 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
   // Each spot priced on its own, at its own size: traced if they drew round
   // it, else the picture, else this business's measured jobs, else a share
   // of the lot. Sizes are never pooled across spots.
-  const [catalog, priors, freshAi] = await Promise.all([estimateCatalogFor(form.admin, form.organizationId), priorsPending, aiPending]);
+  const [catalog, priors, freshAi, forward] = await Promise.all([
+    estimateCatalogFor(form.admin, form.organizationId),
+    priorsPending,
+    aiPending,
+    forwardSetupFor(form.admin, form.organizationId, form.property),
+  ]);
   const freshByIndex = new Map(freshAi.map((a) => [a.index, a]));
   const read: AiSpotSize[] = aiSpots.flatMap((s) => {
     const read = freshByIndex.get(s.index);
@@ -176,7 +223,7 @@ export async function submitTapPreEval(input: { token: string; spots: unknown })
     tracedSqft: outlineAreaSqft(s.outline),
     area: areaOf[index] ?? null,
   }));
-  const { price, sizing } = priceSpots({ spots: spotInputs, ai, priors, lot, catalog });
+  const { price, sizing } = priceSpots({ spots: spotInputs, ai, priors, lot, catalog, forward: forward ?? undefined });
   // The picture's own reading is kept with each spot even when a traced
   // outline set the price, so the office sees what to check at the visit.
   const aiByIndex = new Map(ai.map((a) => [a.index, a]));
