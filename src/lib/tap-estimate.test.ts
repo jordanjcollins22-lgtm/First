@@ -5,6 +5,11 @@ import type { AreaKey, LngLat } from "@/lib/lot-map";
 import {
   answersFromSpots,
   areaForPoint,
+  choicesForSpot,
+  hereLabel,
+  SPOT_NOW,
+  TAP_CHOICES,
+  wantLabels,
   cleanOutline,
   depositCents,
   MAX_OUTLINE_POINTS,
@@ -229,5 +234,59 @@ describe("trustPictureReadings", () => {
 
   it("uses none of them when it isn't their property", () => {
     expect(trustPictureReadings(readings, { outdated: true, wrongProperty: true })).toEqual([]);
+  });
+});
+
+describe("the two spot questions", () => {
+  it("never offers more than five things to want, and every one is priced", () => {
+    const priced = new Set(TAP_CHOICES.map((c) => c.value));
+    for (const now of SPOT_NOW) {
+      expect(now.wants.length).toBeLessThanOrEqual(5);
+      for (const want of now.wants) for (const c of want.choices) expect(priced.has(c)).toBe(true);
+    }
+    expect(SPOT_NOW.length).toBeLessThanOrEqual(7);
+  });
+
+  it("can still ask for every priced choice", () => {
+    const reachable = new Set(SPOT_NOW.flatMap((n) => [...(n.choices ?? []), ...n.wants.flatMap((w) => w.choices)]));
+    expect([...reachable].sort()).toEqual(TAP_CHOICES.map((c) => c.value).sort());
+  });
+
+  it("works answers out to the priced choices, in order, with no repeats", () => {
+    expect(choicesForSpot("dirt", ["rock", "mulch"])).toEqual(["mulch", "rock", "weeds"]);
+    expect(choicesForSpot("bushes", ["trim", "remove"])).toEqual(["trim", "remove"]);
+    expect(choicesForSpot("unsure", [])).toEqual(["other"]);
+    expect(choicesForSpot("water", ["fix"])).toEqual(["water"]);
+  });
+
+  it("refuses answers the sheet doesn't offer", () => {
+    expect(choicesForSpot("grass", ["wash"])).toBeNull();
+    expect(choicesForSpot("grass", [])).toBeNull();
+    expect(choicesForSpot("unsure", ["fix"])).toBeNull();
+    expect(choicesForSpot("pool", ["fix"])).toBeNull();
+  });
+
+  it("works the choices out on the server, ignoring the page's", () => {
+    const [s] = parseTapSpots([spot({ here: "grass", wants: ["lawn", "lawn"], choices: ["wash"] })], { jobId, home })!;
+    expect(s).toMatchObject({ here: "grass", wants: ["lawn"], choices: ["lawn"] });
+    expect(parseTapSpots([spot({ here: "grass", wants: ["wash"] })], { jobId, home })).toBeNull();
+    expect(parseTapSpots([spot({ here: "grass", wants: [] })], { jobId, home })).toBeNull();
+  });
+
+  it("still takes spots answered the old way", () => {
+    const [s] = parseTapSpots([spot({ choices: ["trim"] })], { jobId, home })!;
+    expect(s.here).toBeUndefined();
+    expect(s.choices).toEqual(["trim"]);
+  });
+
+  it("reads the answers back, dropping one it doesn't know", () => {
+    expect(readTapSpots([{ ...spot(), here: "bed", wants: ["mulch"] }])[0]).toMatchObject({ here: "bed", wants: ["mulch"] });
+    expect(readTapSpots([{ ...spot(), here: "pool", wants: ["x"] }])[0].here).toBeUndefined();
+  });
+
+  it("names the answers for the office", () => {
+    expect(hereLabel("dirt")).toBe("Dirt or weeds");
+    expect(hereLabel(undefined)).toBeNull();
+    expect(wantLabels("bushes", ["trim", "remove"])).toEqual(["Trimmed", "Taken out"]);
   });
 });

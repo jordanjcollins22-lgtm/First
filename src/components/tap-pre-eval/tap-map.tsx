@@ -17,8 +17,9 @@ import {
   MAX_PHOTOS_PER_SPOT,
   MAX_SPOTS,
   outlineAreaSqft,
+  choicesForSpot,
   regionsFor,
-  TAP_CHOICES,
+  SPOT_NOW,
   type TapSpot,
 } from "@/lib/tap-estimate";
 import type { LngLat, LotData } from "@/lib/lot-map";
@@ -109,6 +110,8 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
 
   const openIndex = spots.findIndex((s) => s.key === openKey);
   const openSpot = openIndex >= 0 ? spots[openIndex] : null;
+  // What is there now, once they've said: the second question shows only its wants.
+  const openNow = openSpot?.here ? (SPOT_NOW.find((n) => n.value === openSpot.here) ?? null) : null;
 
   useEffect(() => {
     if (step !== "map" || !containerRef.current || mapRef.current) return;
@@ -227,12 +230,35 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     setSpots((prev) => prev.map((s) => (s.key === key ? change(s) : s)));
   }
 
-  function toggleChoice(value: string) {
+  /**
+   * The first question: what is there now. Picking it starts the wants
+   * over, since they are only the ones that fit. Where there is only one
+   * thing to want (water: fixed), or nothing to ask (not sure), it is
+   * answered at once.
+   */
+  function pickHere(value: string) {
     if (!openKey) return;
-    updateSpot(openKey, (s) => ({
-      ...s,
-      choices: s.choices.includes(value) ? s.choices.filter((c) => c !== value) : [...s.choices, value],
-    }));
+    const now = SPOT_NOW.find((n) => n.value === value);
+    if (!now) return;
+    const wants = now.wants.length === 1 ? [now.wants[0].value] : [];
+    updateSpot(openKey, (s) => ({ ...s, here: value, wants, choices: choicesForSpot(value, wants) ?? [] }));
+  }
+
+  /** Back to the first question, keeping nothing of the second. */
+  function changeHere() {
+    if (!openKey) return;
+    updateSpot(openKey, (s) => ({ ...s, here: undefined, wants: undefined, choices: [] }));
+  }
+
+  /** The second question: what they want there. More than one is fine. */
+  function toggleWant(value: string) {
+    if (!openKey) return;
+    updateSpot(openKey, (s) => {
+      if (!s.here) return s;
+      const before = s.wants ?? [];
+      const wants = before.includes(value) ? before.filter((w) => w !== value) : [...before, value];
+      return { ...s, wants, choices: choicesForSpot(s.here, wants) ?? [] };
+    });
   }
 
   function startDrawing() {
@@ -352,7 +378,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     startTransition(async () => {
       const result = await submitTapPreEval({
         token,
-        spots: spots.map(({ lng, lat, choices, photos, outline }) => ({ lng, lat, choices, photos, ...(outline ? { outline } : {}) })),
+        spots: spots.map(({ lng, lat, choices, photos, outline, here, wants }) => ({ lng, lat, choices, photos, ...(outline ? { outline } : {}), ...(here ? { here, wants: wants ?? [] } : {}) })),
       });
       if (!result.ok) setError(result.error);
       else router.push(estimateHref);
@@ -442,27 +468,56 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
         </div>
       ) : openSpot ? (
         <div className="absolute inset-x-0 bottom-0 flex max-h-[72%] flex-col gap-4 overflow-y-auto rounded-t-2xl bg-card p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_-8px_30px_rgba(0,0,0,0.25)]">
-          <p className="text-lg font-bold">Spot {openIndex + 1}: what do you want done here?</p>
-
-          <div className="flex flex-wrap gap-2">
-            {TAP_CHOICES.map((choice) => {
-              const on = openSpot.choices.includes(choice.value);
-              return (
-                <button
-                  key={choice.value}
-                  type="button"
-                  onClick={() => toggleChoice(choice.value)}
-                  className={cn(
-                    "flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-base font-medium transition-colors",
-                    on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card"
-                  )}
-                >
-                  {on && <Check className="size-4" />}
-                  {choice.label}
+          {!openNow ? (
+            <>
+              <p className="text-lg font-bold">Spot {openIndex + 1}: what&apos;s here now?</p>
+              <div className="flex flex-wrap gap-2">
+                {SPOT_NOW.map((now) => (
+                  <button
+                    key={now.value}
+                    type="button"
+                    onClick={() => pickHere(now.value)}
+                    className="flex h-12 items-center rounded-full border-2 border-border bg-card px-4 text-base font-medium transition-colors"
+                  >
+                    {now.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-lg font-bold">
+                  Spot {openIndex + 1}: {openNow.wants.length > 0 ? "what do you want here?" : "we'll take a look"}
+                </p>
+                <button type="button" onClick={changeHere} className="shrink-0 text-sm font-medium text-primary underline underline-offset-2">
+                  Change
                 </button>
-              );
-            })}
-          </div>
+              </div>
+              <p className="-mt-3 text-sm text-muted-foreground">Here now: {openNow.label.toLowerCase()}</p>
+              {openNow.wants.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {openNow.wants.map((want) => {
+                    const on = (openSpot.wants ?? []).includes(want.value);
+                    return (
+                      <button
+                        key={want.value}
+                        type="button"
+                        onClick={() => toggleWant(want.value)}
+                        className={cn(
+                          "flex h-12 items-center gap-1.5 rounded-full border-2 px-4 text-base font-medium transition-colors",
+                          on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card"
+                        )}
+                      >
+                        {on && <Check className="size-4" />}
+                        {want.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
 
           {(openSpot.photos.length > 0 || uploading > 0) && (
             <div className="flex flex-wrap gap-2">
@@ -479,14 +534,14 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
           )}
 
           <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => addPhotos(e.target.files)} />
-          {openSpot.photos.length < MAX_PHOTOS_PER_SPOT && (
+          {openNow && openSpot.photos.length < MAX_PHOTOS_PER_SPOT && (
             <Button type="button" size="lg" variant="secondary" disabled={uploading > 0} onClick={() => fileInputRef.current?.click()}>
               <Camera className="size-5" />
               {openSpot.photos.length === 0 ? "Take a photo" : "Add another photo"}
             </Button>
           )}
 
-          {openSpot.outline ? (
+          {!openNow ? null : openSpot.outline ? (
             <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2">
               <PencilLine className="size-5 shrink-0 text-muted-foreground" />
               <span className="flex-1 font-medium">{aboutSqft(outlineAreaSqft(openSpot.outline) ?? 0)}</span>
@@ -526,7 +581,7 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
               disabled={openSpot.choices.length === 0 || uploading > 0}
               onClick={() => setOpenKey(null)}
             >
-              {openSpot.choices.length === 0 ? "Pick at least one" : "Done"}
+              {openSpot.choices.length > 0 ? "Done" : openNow ? "Pick at least one" : "Pick what's here"}
             </Button>
           </div>
         </div>
