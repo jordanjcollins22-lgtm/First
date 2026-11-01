@@ -32,6 +32,8 @@ export interface SchedulePickerProps {
   /** Said when the visit is a video call, before they pick. */
   digital: string | null;
   estimateHref: string;
+  /** A run from a ?test=1 link: nothing was charged and nothing gets booked. */
+  test?: boolean;
 }
 
 function dayLabel(dateKey: string): string {
@@ -69,6 +71,7 @@ export function SchedulePicker({
   noticeText,
   digital,
   estimateHref,
+  test = false,
 }: SchedulePickerProps) {
   const router = useRouter();
   const [picked, setPicked] = useState<OfferedTime | null>(null);
@@ -154,7 +157,7 @@ export function SchedulePicker({
         <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
           <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
           <div>
-            <p className="font-semibold">Deposit received. Thank you!</p>
+            <p className="font-semibold">{test ? "Deposit chosen (test, nothing charged)." : "Deposit received. Thank you!"}</p>
             <p className="text-sm text-muted-foreground">Last step: when should we start?</p>
           </div>
         </div>
@@ -244,7 +247,7 @@ export function SchedulePicker({
       <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
         <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
         <div>
-          <p className="font-semibold">{`${tier?.name ?? "Evaluation"} paid. Thank you!`}</p>
+          <p className="font-semibold">{test ? `${tier?.name ?? "Evaluation"} chosen (test, nothing charged).` : `${tier?.name ?? "Evaluation"} paid. Thank you!`}</p>
           <p className="text-sm text-muted-foreground">Last step: pick when we come out.</p>
         </div>
       </div>

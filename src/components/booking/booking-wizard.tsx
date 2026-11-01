@@ -113,6 +113,7 @@ export function BookingWizard({
   service = null,
   preview = false,
   start = null,
+  test = false,
 }: {
   organizationId: string;
   organizationName: string;
@@ -138,6 +139,12 @@ export function BookingWizard({
   preview?: boolean;
   /** The address the landing page sent along: the booking opens on who they are, with it already in. */
   start?: { address: GeocodeSuggestion; located: boolean } | null;
+  /**
+   * From a ?test=1 link: somebody trying the whole funnel out. It runs as it
+   * would for a client, but the lead is marked as a test, the page opens
+   * aren't counted, and nothing is charged or booked further on.
+   */
+  test?: boolean;
 }) {
   // 0 is the landing card with the address; 1 is who they are. Then they go
   // on to the map pre-evaluation and their estimate; the visit time is picked
@@ -163,14 +170,14 @@ export function BookingWizard({
   const visitIdRef = useRef<string | null>(null);
   const visitRecordedRef = useRef(false);
   useEffect(() => {
-    if (visitRecordedRef.current || preview) return;
+    if (visitRecordedRef.current || preview || test) return;
     visitRecordedRef.current = true;
     recordBookingVisit({ organizationId, variant, referralCode, linkRef })
       .then((r) => {
         visitIdRef.current = r.visitId;
       })
       .catch(() => {});
-  }, [organizationId, variant, referralCode, linkRef, preview]);
+  }, [organizationId, variant, referralCode, linkRef, preview, test]);
 
   // Reaching the details page, once, for the admin Funnel page.
   const detailsRecordedRef = useRef(false);
@@ -382,8 +389,9 @@ export function BookingWizard({
           bookingVariant: variant,
           addressEntry,
           visitId: visitIdRef.current,
-          adClick: adClickRef.current,
+          adClick: test ? null : adClickRef.current,
           notes: service ? `Asked about ${service} in the post we answered.` : "",
+          test,
         });
         // Kept in their own browser so a second request is a tap rather than
         // the same four fields typed again on a phone.
@@ -521,6 +529,11 @@ export function BookingWizard({
         landing && !preview ? "h-[100dvh] py-3" : "py-6 sm:py-10"
       )}
     >
+      {test && (
+        <p className="rounded-xl border-2 border-dashed border-amber-500/60! bg-amber-500/10 px-3 py-2 text-center text-xs font-medium">
+          Test link: go through it like a real booking. Nothing is charged and no visit is booked.
+        </p>
+      )}
       {preview && (
         <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-primary/50 bg-primary/5 p-3">
           <div className="flex items-center justify-between gap-2">

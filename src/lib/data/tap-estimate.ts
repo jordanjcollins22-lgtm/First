@@ -28,6 +28,8 @@ export interface ClientEstimate {
   paidAt: string | null;
   /** After a deposit: the day they'd like the work to start, YYYY-MM-DD, for the team to confirm. */
   startDay: string | null;
+  /** On a test run: the evaluation time they picked, which was never booked. */
+  testVisitAt: string | null;
   createdAt: string;
 }
 
@@ -42,10 +44,12 @@ export interface TapPreEval {
   tiers: EvaluationTier[];
   /** Signed links for the spots' photos, by path. */
   photoUrls: Record<string, string>;
+  /** A run from a ?test=1 link: nothing is charged and nobody's calendar is booked. */
+  test: boolean;
 }
 
 const ESTIMATE_COLUMNS =
-  "id, spots, price, sizing, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, start_day, created_at" as const;
+  "id, spots, price, sizing, total_cents, deposit_cents, accepted_at, choice, evaluation_tier, charged_cents, paid_at, start_day, test_visit_at, created_at" as const;
 
 type EstimateRow = {
   id: string;
@@ -60,6 +64,7 @@ type EstimateRow = {
   charged_cents: number | null;
   paid_at: string | null;
   start_day: string | null;
+  test_visit_at: string | null;
   created_at: string;
 };
 
@@ -77,6 +82,7 @@ function toEstimate(row: EstimateRow): ClientEstimate {
     chargedCents: row.charged_cents,
     paidAt: row.paid_at,
     startDay: row.start_day,
+    testVisitAt: row.test_visit_at ?? null,
     createdAt: row.created_at,
   };
 }
@@ -96,13 +102,14 @@ export async function getTapPreEval(token: string): Promise<TapPreEval | null> {
   const intake = await getIntakeByToken(token);
   if (!intake) return null;
   const admin = createAdminClient();
-  const [{ data: property }, { data: estimate }, { data: intakeRow }, lot] = await Promise.all([
+  const [{ data: property }, { data: estimate }, { data: intakeRow }, lot, { data: jobRow }] = await Promise.all([
     intake.propertyId
       ? admin.from("properties").select("lat, lng").eq("id", intake.propertyId).maybeSingle()
       : Promise.resolve({ data: null }),
     admin.from("job_estimates").select(ESTIMATE_COLUMNS).eq("job_id", intake.jobId).maybeSingle(),
     admin.from("evaluation_intakes").select("organization_id").eq("token", token).maybeSingle(),
     intake.propertyId ? lotForProperty(intake.propertyId) : Promise.resolve(null),
+    admin.from("jobs").select("is_test").eq("id", intake.jobId).maybeSingle(),
   ]);
 
   const home: LngLat | null = property?.lat != null && property?.lng != null ? [property.lng, property.lat] : null;
@@ -114,6 +121,7 @@ export async function getTapPreEval(token: string): Promise<TapPreEval | null> {
     estimate: estimate ? toEstimate(estimate as unknown as EstimateRow) : null,
     tiers: intakeRow ? await tiersForOrganization(intakeRow.organization_id) : readTiers(null),
     photoUrls: Object.fromEntries(intake.photoUrls.map((p) => [p.path, p.url])),
+    test: jobRow?.is_test === true,
   };
 }
 

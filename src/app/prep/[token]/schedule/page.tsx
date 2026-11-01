@@ -47,8 +47,9 @@ export default async function SchedulePage({
   if (!estimate.paidAt && paid !== "1") redirect(estimatePath(token));
 
   const tier = tierById(data.tiers, estimate.evaluationTier);
-  const booked =
-    data.intake.evaluationAt && !data.intake.cancelled ? `${dayOnly(data.intake.evaluationAt)} at ${timeOnly(data.intake.evaluationAt).toLowerCase()}` : null;
+  // A test run's time was never put on the job; it is kept on the estimate.
+  const visitAt = data.test ? estimate.testVisitAt : data.intake.evaluationAt;
+  const booked = visitAt && !data.intake.cancelled ? `${dayOnly(visitAt)} at ${timeOnly(visitAt).toLowerCase()}` : null;
 
   const orgId = data.organizationId;
   // After a deposit the first visit is the work, picked as a preferred start
@@ -84,6 +85,7 @@ export default async function SchedulePage({
       noticeText={notice ? describeNotice(notice) : ""}
       digital={mode?.mode === "digital" ? mode.says : null}
       estimateHref={estimatePath(token)}
+      test={data.test}
     />
   );
 }

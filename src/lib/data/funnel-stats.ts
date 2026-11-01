@@ -27,7 +27,7 @@ export async function getFunnelOverview(days: number): Promise<FunnelOverview> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const problems: string[] = [];
 
-  const [visits, events, estimates, org] = await Promise.all([
+  const [visits, events, estimates, org, tests] = await Promise.all([
     supabase
       .from("booking_visits")
       .select("id, created_at")
@@ -43,26 +43,30 @@ export async function getFunnelOverview(days: number): Promise<FunnelOverview> {
       .limit(50_000),
     supabase
       .from("job_estimates")
-      .select("total_cents, spots, sizing, choice, charged_cents, paid_at, created_at")
+      .select("job_id, total_cents, spots, sizing, choice, charged_cents, paid_at, created_at")
       .eq("organization_id", organizationId)
       .gte("created_at", since)
       .limit(5_000),
     supabase.from("organizations").select("evaluation_tiers").eq("id", organizationId).maybeSingle(),
+    // Runs from a ?test=1 link are tried out, not sold: kept out of every number here.
+    supabase.from("jobs").select("id").eq("is_test", true).limit(5_000),
   ]);
+  const testJobs = new Set((tests.data ?? []).map((j) => j.id));
+  const real = <T extends { job_id: string | null }>(row: T) => !row.job_id || !testJobs.has(row.job_id);
   if (visits.error) problems.push(`Booking page opens couldn't be read: ${visits.error.message}`);
   if (events.error) problems.push(`The funnel's steps couldn't be read (has migration 0384 been run?): ${events.error.message}`);
   if (estimates.error) problems.push(`Estimates couldn't be read (have migrations 0380 to 0383 been run?): ${estimates.error.message}`);
 
   const all: FunnelEvent[] = [
     ...(visits.data ?? []).map((v): FunnelEvent => ({ step: "book_opened", visitId: v.id, jobId: null, detail: null, at: v.created_at })),
-    ...(events.data ?? []).flatMap((e): FunnelEvent[] =>
+    ...(events.data ?? []).filter(real).flatMap((e): FunnelEvent[] =>
       isRecordedStep(e.step) ? [{ step: e.step, visitId: e.visit_id, jobId: e.job_id, detail: e.detail, at: e.created_at }] : []
     ),
   ];
   const tiers = readTiers(org.data?.evaluation_tiers);
   const stats = funnelStats(all, (detail) => (detail === "deposit" ? "Deposit (1/3)" : tierById(tiers, detail)?.name ?? detail));
 
-  const rows = (estimates.data ?? []) as {
+  const rows = (estimates.data ?? []).filter(real) as {
     total_cents: number;
     spots: unknown;
     sizing: unknown;

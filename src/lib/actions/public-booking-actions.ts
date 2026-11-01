@@ -74,6 +74,12 @@ export interface SubmitPublicBookingInput {
    * to the map and the estimate, and a visit is booked only once they pay.
    */
   leadOnly?: boolean;
+  /**
+   * From a ?test=1 link: somebody trying the funnel out. The job is marked
+   * and named as a test; no ad conversion is sent and no client account is
+   * made, and later on nothing is charged and nobody's calendar is booked.
+   */
+  test?: boolean;
 }
 
 /** Who they are and where: the start of the two-option funnel. */
@@ -252,7 +258,8 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   }
 
   const admin = createAdminClient();
-  const adClick = cleanAdClick(input.adClick);
+  const test = input.test === true && input.leadOnly === true;
+  const adClick = test ? null : cleanAdClick(input.adClick);
 
   const { data: org, error: orgError } = await admin
     .from("organizations")
@@ -412,7 +419,8 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
       .from("jobs")
       .insert({
         property_id: propertyId,
-        name: `${address}, Estimate`,
+        name: test ? `TEST · ${address}, Estimate` : `${address}, Estimate`,
+        ...(test ? { is_test: true } : {}),
         // A photo quote has nobody going out and no time: the office prices it.
         assigned_to: visit?.evaluatorId ?? null,
         evaluation_date: visit?.iso ?? null,
@@ -453,6 +461,12 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
       { onConflict: "job_id,service_type_id", ignoreDuplicates: true }
     );
     if (requestedError) throw requestedError;
+  }
+
+  if (test) {
+    const { data: testIntake } = await admin.from("evaluation_intakes").select("token").eq("job_id", jobId).maybeSingle();
+    log.info("lead.test_created", { jobId, customerId });
+    return { jobId, mode: "photo_quote", prepToken: testIntake?.token ?? null };
   }
 
   // Which ad it came from, kept with the job, and the booking told to Meta.
@@ -531,11 +545,15 @@ export async function bookPaidEvaluationVisit(input: {
   const admin = createAdminClient();
   const { data: intake } = await admin
     .from("evaluation_intakes")
-    .select("job_id, organization_id, job:jobs(evaluation_date, property:properties(address, lat, lng))")
+    .select("job_id, organization_id, job:jobs(evaluation_date, is_test, property:properties(address, lat, lng))")
     .eq("token", input.token)
     .maybeSingle();
   if (!intake) return { ok: false, error: "That link has expired or was never ours. Give us a call." };
-  const job = intake.job as unknown as { evaluation_date: string | null; property: { address: string; lat: number; lng: number } | null } | null;
+  const job = intake.job as unknown as {
+    evaluation_date: string | null;
+    is_test?: boolean;
+    property: { address: string; lat: number; lng: number } | null;
+  } | null;
   // Already booked: picking again is a reschedule, which goes through us.
   if (job?.evaluation_date) return { ok: true, at: job.evaluation_date };
   if (!job?.property) return { ok: false, error: "We couldn't find your property. Give us a call." };
@@ -550,6 +568,15 @@ export async function bookPaidEvaluationVisit(input: {
   if (Number.isNaN(at.getTime())) return { ok: false, error: "Pick a time first." };
   const soon = tooSoon(notice, new Date(), { date: input.date, at });
   if (soon) return { ok: false, error: soon };
+
+  // A test run: the time they picked is kept on the estimate, never on the
+  // job, so nobody's day is taken and no confirmation goes out.
+  if (job.is_test) {
+    const { error } = await admin.from("job_estimates").update({ test_visit_at: at.toISOString() }).eq("job_id", intake.job_id);
+    if (error) return { ok: false, error: "Couldn't save that time. Try again in a moment." };
+    await recordFunnelStep(admin, { organizationId: intake.organization_id, step: "visit_booked", jobId: intake.job_id });
+    return { ok: true, at: at.toISOString() };
+  }
 
   const end = new Date(at.getTime() + SLOT_MINUTES * 60_000);
   const blocks = await getBusyBlocksAsAdmin().catch(() => []);
