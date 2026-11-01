@@ -2418,6 +2418,9 @@ export interface Database {
           answer_question: string | null;
           validate_question: string | null;
           goals: string[] | null;
+          team_answer_question: string | null;
+          team_validate_question: string | null;
+          team_goals: string[] | null;
           created_at: string;
           updated_at: string;
         };
@@ -2447,8 +2450,9 @@ export interface Database {
           title: string;
           details: string | null;
           asked_by: string | null;
-          source: "manual" | "ghl" | "job" | "lead" | "customer";
+          source: "manual" | "ghl" | "job" | "lead" | "customer" | "applicant";
           job_id: string | null;
+          applicant_id: string | null;
           prospect_id: string | null;
           customer_id: string | null;
           backlog_group: string | null;

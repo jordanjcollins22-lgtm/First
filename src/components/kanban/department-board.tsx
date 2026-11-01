@@ -4,6 +4,7 @@ import {
   getWipLimits,
   listBoardCards,
   syncMarketingBacklog,
+  syncMarketingTeamBacklog,
   syncOperationsBacklog,
   syncSalesBacklog,
 } from "@/lib/data/kanban";
@@ -13,7 +14,7 @@ import { KanbanBoard } from "./kanban-board";
 
 /** What fills each Backlog, said above the board. */
 const BACKLOG_NOTE: Record<Department, string> = {
-  marketing: "Every new lead from the last 30 days is in the Client Backlog, with whether they booked. Add marketing ideas under Internal. ",
+  marketing: "Every new lead from the last 30 days is in the Client Backlog, with whether they booked. Every job applicant still in the running from the last 30 days is in the Team Backlog. Add marketing ideas under Internal. ",
   sales: "Every lead that needs reaching out to is in the Client Backlog, and comes off once they are contacted. New leads join at the bottom. ",
   operations: "Every job that still needs doing is in the Client Backlog. New jobs join at the bottom. ",
   admin: "Backlog is anything the admin has to do. ",
@@ -27,6 +28,7 @@ export async function DepartmentBoard({ department }: { department: Department }
   }
   if (department === "marketing") {
     await syncMarketingBacklog().catch((err) => console.error("Marketing backlog sync failed:", err));
+    await syncMarketingTeamBacklog().catch((err) => console.error("Marketing team backlog sync failed:", err));
   }
   if (department === "sales") {
     await syncSalesBacklog().catch((err) => console.error("Sales backlog sync failed:", err));

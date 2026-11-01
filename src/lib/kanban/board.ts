@@ -225,9 +225,10 @@ export const DEFAULT_BACKLOG_GROUPS: Record<Department, string[]> = {
 };
 
 /**
- * What each board asks of its Answer and Validate columns, and the goals it
- * shows along the bottom, until the board saves its own. Marketing's come
- * from Jordan's mockup.
+ * What one pipeline of a board asks of its Answer and Validate columns, and
+ * its goals, until the board saves its own. Client and Team ask different
+ * things. Marketing's come from Jordan's mockup: Client leads are closed into
+ * jobs, Team leads into people who join the team.
  */
 export interface BoardText {
   answerQuestion: string | null;
@@ -235,15 +236,26 @@ export interface BoardText {
   goals: string[];
 }
 
-export const DEFAULT_BOARD_TEXT: Record<Department, BoardText> = {
+export type BoardTexts = Record<Pipeline, BoardText>;
+
+const NO_TEXT: BoardText = { answerQuestion: null, validateQuestion: null, goals: [] };
+
+export const DEFAULT_BOARD_TEXT: Record<Department, BoardTexts> = {
   marketing: {
-    answerQuestion: "Did they book?",
-    validateQuestion: "Did we close them?",
-    goals: ["Get project leads", "Get team member leads"],
+    client: {
+      answerQuestion: "Did they book?",
+      validateQuestion: "Did we close them?",
+      goals: ["Get project leads"],
+    },
+    team: {
+      answerQuestion: "Did they book an interview?",
+      validateQuestion: "Did they join the team?",
+      goals: ["Get team member leads"],
+    },
   },
-  sales: { answerQuestion: null, validateQuestion: null, goals: [] },
-  operations: { answerQuestion: null, validateQuestion: null, goals: [] },
-  admin: { answerQuestion: null, validateQuestion: null, goals: [] },
+  sales: { client: NO_TEXT, team: NO_TEXT },
+  operations: { client: NO_TEXT, team: NO_TEXT },
+  admin: { client: NO_TEXT, team: NO_TEXT },
 };
 
 /** A question from a form, or null when left blank. */

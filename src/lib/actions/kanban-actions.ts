@@ -298,10 +298,14 @@ export async function updateBacklogGroups(department: string, formData: FormData
   return {};
 }
 
-/** Save what this board asks of Answer and Validate, and its goals. */
-export async function updateBoardText(department: string, formData: FormData): Promise<ActionResult> {
+/** Save what one pipeline of this board asks of Answer and Validate, and its goals. */
+export async function updateBoardText(department: string, pipeline: string, formData: FormData): Promise<ActionResult> {
   await guard();
   if (!isDepartment(department)) return { error: "Unknown board." };
+  if (!isPipeline(pipeline)) return { error: "Unknown pipeline." };
+  const answer = parseQuestion(formData.get("answer_question"));
+  const validate = parseQuestion(formData.get("validate_question"));
+  const goals = parseGoals(formData.get("goals"));
 
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
@@ -312,9 +316,9 @@ export async function updateBoardText(department: string, formData: FormData): P
     wip_breakdown: limits.breakdown,
     wip_answer: limits.answer,
     wip_validate: limits.validate,
-    answer_question: parseQuestion(formData.get("answer_question")),
-    validate_question: parseQuestion(formData.get("validate_question")),
-    goals: parseGoals(formData.get("goals")),
+    ...(pipeline === "client"
+      ? { answer_question: answer, validate_question: validate, goals }
+      : { team_answer_question: answer, team_validate_question: validate, team_goals: goals }),
   });
   if (error) throw error;
   revalidateBoard(department);

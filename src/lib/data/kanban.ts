@@ -1,16 +1,22 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { listBoardJobs } from "@/lib/data/job-board";
-import { DEFAULT_BACKLOG_GROUPS, DEFAULT_BOARD_TEXT, DEFAULT_WIP_LIMITS, EXTERNAL_GROUP, type BoardText, LEGACY_EXTERNAL_GROUPS, positionAtBottom, type Department, type Pipeline, type Stage, type WipLimits } from "@/lib/kanban/board";
+import { DEFAULT_BACKLOG_GROUPS, DEFAULT_BOARD_TEXT, DEFAULT_WIP_LIMITS, EXTERNAL_GROUP, type BoardTexts, LEGACY_EXTERNAL_GROUPS, positionAtBottom, type Department, type Pipeline, type Stage, type WipLimits } from "@/lib/kanban/board";
 import { planJobSync } from "@/lib/kanban/job-sync";
 import { planLeadSync, type Prospect } from "@/lib/kanban/lead-sync";
 import {
   NEW_LEAD_DAYS,
   leadFacts,
   planCustomerSync,
-  type LeadFacts,
   type LeadJob,
   type NewCustomer,
 } from "@/lib/kanban/customer-sync";
+import {
+  NEW_APPLICANT_DAYS,
+  applicantChecks,
+  planApplicantSync,
+  type Applicant,
+  type CardCheck,
+} from "@/lib/kanban/applicant-sync";
 import { createClient } from "@/lib/supabase/server";
 
 export interface KanbanCard {
@@ -22,11 +28,16 @@ export interface KanbanCard {
   title: string;
   details: string | null;
   asked_by: string | null;
-  source: "manual" | "ghl" | "job" | "lead" | "customer";
+  source: "manual" | "ghl" | "job" | "lead" | "customer" | "applicant";
   job_id: string | null;
   customer_id: string | null;
-  /** For a Marketing lead: whether they booked an evaluation and a job. */
-  facts?: LeadFacts;
+  applicant_id: string | null;
+  /**
+   * Yes/no answers read from the app: for a Marketing client lead, whether
+   * they booked an evaluation and a job; for an applicant, whether they sent
+   * their video, booked an interview and joined the team.
+   */
+  checks?: CardCheck[];
   backlog_group: string | null;
   completed_at: string | null;
   created_at: string;
@@ -69,7 +80,7 @@ export async function listBoardCards(department: Department): Promise<KanbanCard
   const since = new Date(Date.now() - FINISHED_VISIBLE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, pipeline, stage, position, title, details, asked_by, source, job_id, customer_id, backlog_group, completed_at, created_at")
+    .select("id, department, pipeline, stage, position, title, details, asked_by, source, job_id, customer_id, applicant_id, backlog_group, completed_at, created_at")
     .eq("organization_id", organizationId)
     .eq("department", department)
     .or(`stage.neq.validate_done,completed_at.gte.${since}`)
@@ -84,14 +95,33 @@ export async function listBoardCards(department: Department): Promise<KanbanCard
   if (customerIds.length > 0) {
     const facts = await getLeadFacts(customerIds);
     for (const card of cards) {
-      if (card.customer_id) card.facts = facts.get(card.customer_id) ?? { bookedEval: false, bookedJob: false };
+      if (!card.customer_id) continue;
+      const f = facts.get(card.customer_id) ?? { bookedEval: false, bookedJob: false };
+      card.checks = [
+        { label: "Booked eval", yes: f.bookedEval },
+        { label: "Booked job", yes: f.bookedJob },
+      ];
+    }
+  }
+
+  const applicantIds = cards.map((c) => c.applicant_id).filter((id): id is string => Boolean(id));
+  if (applicantIds.length > 0) {
+    const { data: applicants, error: applicantsError } = await supabase
+      .from("job_applicants")
+      .select("id, stage, video_submitted_at, interview_at")
+      .in("id", applicantIds);
+    if (applicantsError) throw applicantsError;
+    const byId = new Map((applicants ?? []).map((a) => [a.id as string, a]));
+    for (const card of cards) {
+      const a = card.applicant_id ? byId.get(card.applicant_id) : undefined;
+      if (a) card.checks = applicantChecks(a as Pick<Applicant, "stage" | "video_submitted_at" | "interview_at">);
     }
   }
   return cards;
 }
 
 /** Whether each lead booked an evaluation and a job, from their properties' jobs. */
-async function getLeadFacts(customerIds: string[]): Promise<Map<string, LeadFacts>> {
+async function getLeadFacts(customerIds: string[]) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("properties")
@@ -105,26 +135,34 @@ async function getLeadFacts(customerIds: string[]): Promise<Map<string, LeadFact
   return new Map(customerIds.map((id) => [id, leadFacts(jobsByCustomer.get(id) ?? [])]));
 }
 
-/** What this board asks of Answer and Validate, and its goals. */
-export async function getBoardText(department: Department): Promise<BoardText> {
+/** What each pipeline of this board asks of Answer and Validate, and its goals. */
+export async function getBoardText(department: Department): Promise<BoardTexts> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
   const { data, error } = await supabase
     .from("kanban_boards")
-    .select("answer_question, validate_question, goals")
+    .select("answer_question, validate_question, goals, team_answer_question, team_validate_question, team_goals")
     .eq("organization_id", organizationId)
     .eq("department", department)
     .maybeSingle();
   if (error) throw error;
   const fallback = DEFAULT_BOARD_TEXT[department];
-  // A board saves all three together, so a saved row speaks for all three.
-  if (!data || (data.answer_question == null && data.validate_question == null && data.goals == null)) {
-    return fallback;
-  }
+  if (!data) return fallback;
+  // A pipeline's text is saved all together (goals as an array, maybe
+  // empty), so goals still null means that pipeline was never saved.
   return {
-    answerQuestion: data.answer_question,
-    validateQuestion: data.validate_question,
-    goals: data.goals ?? [],
+    client:
+      data.goals == null
+        ? fallback.client
+        : { answerQuestion: data.answer_question, validateQuestion: data.validate_question, goals: data.goals },
+    team:
+      data.team_goals == null
+        ? fallback.team
+        : {
+            answerQuestion: data.team_answer_question,
+            validateQuestion: data.team_validate_question,
+            goals: data.team_goals,
+          },
   };
 }
 
@@ -318,6 +356,68 @@ export async function syncSalesBacklog(): Promise<void> {
       position: start + i,
     })),
     { onConflict: "prospect_id", ignoreDuplicates: true }
+  );
+  if (error) throw error;
+}
+
+/**
+ * Give every recent job applicant still in the running a card in the Marketing
+ * board's Team Backlog, and take Backlog cards off for applicants who
+ * withdrew, were screened out or weren't a fit. Run each time the Marketing
+ * board is opened.
+ */
+export async function syncMarketingTeamBacklog(): Promise<void> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const since = new Date(Date.now() - NEW_APPLICANT_DAYS * 86_400_000).toISOString();
+
+  const [applicantsResult, cardsResult] = await Promise.all([
+    supabase
+      .from("job_applicants")
+      .select("id, name, phone, email, zip, position, source, stage, video_submitted_at, interview_at, created_at")
+      .eq("organization_id", organizationId)
+      .gte("created_at", since)
+      .limit(500),
+    supabase
+      .from("kanban_cards")
+      .select("id, applicant_id, stage")
+      .eq("organization_id", organizationId)
+      .not("applicant_id", "is", null),
+  ]);
+  if (applicantsResult.error) throw applicantsResult.error;
+  if (cardsResult.error) throw cardsResult.error;
+
+  const { toAdd, toRemove } = planApplicantSync(
+    (applicantsResult.data ?? []) as unknown as Applicant[],
+    (cardsResult.data ?? []) as { id: string; applicant_id: string; stage: Stage }[]
+  );
+
+  if (toRemove.length > 0) {
+    const { error } = await supabase.from("kanban_cards").delete().in("id", toRemove);
+    if (error) throw error;
+  }
+  if (toAdd.length === 0) return;
+
+  const { data: backlog, error: backlogError } = await supabase
+    .from("kanban_cards")
+    .select("position")
+    .eq("organization_id", organizationId)
+    .eq("department", "marketing")
+    .eq("pipeline", "team")
+    .eq("stage", "backlog");
+  if (backlogError) throw backlogError;
+  const start = positionAtBottom((backlog ?? []).map((r) => r.position));
+
+  const { error } = await supabase.from("kanban_cards").upsert(
+    toAdd.map((card, i) => ({
+      ...card,
+      organization_id: organizationId,
+      department: "marketing" as const,
+      stage: "backlog" as const,
+      source: "applicant" as const,
+      position: start + i,
+    })),
+    { onConflict: "applicant_id", ignoreDuplicates: true }
   );
   if (error) throw error;
 }

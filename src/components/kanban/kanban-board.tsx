@@ -41,6 +41,7 @@ import {
   nextStage,
   previousStage,
   type BoardText,
+  type BoardTexts,
   type Department,
   type Pipeline,
   type Stage,
@@ -54,8 +55,8 @@ interface Props {
   limits: WipLimits;
   /** Groups inside the Backlog, in order. Empty means one plain list. */
   groups: string[];
-  /** The board's questions for Answer and Validate, and its goals. */
-  text: BoardText;
+  /** Each pipeline's questions for Answer and Validate, and its goals. */
+  text: BoardTexts;
 }
 
 export function KanbanBoard({ department, cards, limits, groups, text }: Props) {
@@ -86,14 +87,21 @@ export function KanbanBoard({ department, cards, limits, groups, text }: Props) 
 
       {PIPELINES.map((pipeline) => (
         <section key={pipeline} aria-label={`${PIPELINE_LABELS[pipeline]} pipeline`} className="flex flex-col gap-2">
-          <h2 className="text-lg font-semibold">{PIPELINE_LABELS[pipeline]} pipeline</h2>
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <h2 className="text-lg font-semibold">{PIPELINE_LABELS[pipeline]} pipeline</h2>
+            {text[pipeline].goals.map((goal) => (
+              <span key={goal} className="text-sm text-muted-foreground">
+                Goal: {goal}
+              </span>
+            ))}
+          </div>
           <PipelineLane
             department={department}
             pipeline={pipeline}
             cards={cards.filter((c) => c.pipeline === pipeline)}
             limits={limits}
             groups={groups}
-            text={text}
+            text={text[pipeline]}
             isPending={isPending}
             run={run}
             onWrongLane={() =>
@@ -105,16 +113,23 @@ export function KanbanBoard({ department, cards, limits, groups, text }: Props) 
 
       <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl bg-primary px-4 py-3 text-primary-foreground">
         <p className="text-2xl font-semibold tracking-wide uppercase">{DEPARTMENT_LABELS[department]}</p>
-        {text.goals.length > 0 && (
+        {(text.client.goals.length > 0 || text.team.goals.length > 0) && (
           <ul className="text-sm">
-            {text.goals.map((goal) => (
+            {[...text.client.goals, ...text.team.goals].map((goal) => (
               <li key={goal}>Goal: {goal}</li>
             ))}
           </ul>
         )}
       </div>
 
-      <BoardTextForm text={text} onSubmit={(fd) => run(() => updateBoardText(department, fd))} />
+      {PIPELINES.map((pipeline) => (
+        <BoardTextForm
+          key={pipeline}
+          pipeline={pipeline}
+          text={text[pipeline]}
+          onSubmit={(fd) => run(() => updateBoardText(department, pipeline, fd))}
+        />
+      ))}
       <WipLimitsForm
         limits={limits}
         onSubmit={(fd) => run(() => updateWipLimits(department, fd))}
@@ -428,8 +443,8 @@ function CardItem({
           <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
             Cancel
           </Button>
-          {/* A card made from a job, lead or new client comes back while it is open, so it is not deleted here. */}
-          {card.source !== "job" && card.source !== "lead" && card.source !== "customer" && (
+          {/* A card made from a job, lead, new client or applicant comes back while it is open, so it is not deleted here. */}
+          {card.source === "manual" || card.source === "ghl" ? (
           <Button
             type="button"
             size="sm"
@@ -441,7 +456,7 @@ function CardItem({
           >
             <Trash2 className="h-4 w-4" /> Delete
           </Button>
-          )}
+          ) : null}
         </div>
       </form>
     );
@@ -477,11 +492,14 @@ function CardItem({
           {card.asked_by && <span>{card.source === "job" ? "Client: " : "Asked by "}{card.asked_by}</span>}
         </p>
       )}
-      {card.facts && (
+      {card.checks && (
         <p className="mt-1 text-xs">
-          <span className="font-medium">Booked eval:</span> {card.facts.bookedEval ? "Y" : "N"}
-          {" · "}
-          <span className="font-medium">Booked job:</span> {card.facts.bookedJob ? "Y" : "N"}
+          {card.checks.map((check, i) => (
+            <span key={check.label}>
+              {i > 0 && " · "}
+              <span className="font-medium">{check.label}:</span> {check.yes ? "Y" : "N"}
+            </span>
+          ))}
         </p>
       )}
       {card.details && (
@@ -625,7 +643,15 @@ function BacklogGroupsForm({ groups, onSubmit }: { groups: string[]; onSubmit: (
   );
 }
 
-function BoardTextForm({ text, onSubmit }: { text: BoardText; onSubmit: (fd: FormData) => void }) {
+function BoardTextForm({
+  pipeline,
+  text,
+  onSubmit,
+}: {
+  pipeline: Pipeline;
+  text: BoardText;
+  onSubmit: (fd: FormData) => void;
+}) {
   return (
     <form
       onSubmit={(e) => {
@@ -635,10 +661,10 @@ function BoardTextForm({ text, onSubmit }: { text: BoardText; onSubmit: (fd: For
       className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3 text-sm"
     >
       <div className="basis-full">
-        <p className="font-semibold">Questions and goals</p>
+        <p className="font-semibold">{PIPELINE_LABELS[pipeline]} pipeline: questions and goals</p>
         <p className="text-xs text-muted-foreground">
-          The question each card answers in Answer and in Validate, and the department&apos;s goals shown above.
-          Leave a question blank to hide it. Goals are separated by commas.
+          The question each {PIPELINE_LABELS[pipeline]} card answers in Answer and in Validate, and this
+          pipeline&apos;s goals. Leave a question blank to hide it. Goals are separated by commas.
         </p>
       </div>
       <label className="flex min-w-48 flex-1 flex-col gap-1">
@@ -651,7 +677,7 @@ function BoardTextForm({ text, onSubmit }: { text: BoardText; onSubmit: (fd: For
       </label>
       <label className="flex min-w-64 flex-[2] flex-col gap-1">
         <span className="text-xs font-medium">Goals</span>
-        <Input name="goals" defaultValue={text.goals.join(", ")} key={`g${text.goals.join("|")}`} placeholder="e.g. Get project leads, Get team member leads" />
+        <Input name="goals" defaultValue={text.goals.join(", ")} key={`g${text.goals.join("|")}`} placeholder={pipeline === "team" ? "e.g. Get team member leads" : "e.g. Get project leads"} />
       </label>
       <Button type="submit" size="sm" variant="outline">
         Save
