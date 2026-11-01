@@ -2407,6 +2407,56 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]>;
         Relationships: [];
       };
+      kanban_boards: {
+        Row: {
+          organization_id: string;
+          department: "marketing" | "sales" | "operations" | "admin";
+          wip_breakdown: number;
+          wip_answer: number;
+          wip_validate: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["kanban_boards"]["Row"]> & {
+          organization_id: string;
+          department: "marketing" | "sales" | "operations" | "admin";
+        };
+        Update: Partial<Database["public"]["Tables"]["kanban_boards"]["Row"]>;
+        Relationships: [];
+      };
+      kanban_cards: {
+        Row: {
+          id: string;
+          organization_id: string;
+          department: "marketing" | "sales" | "operations" | "admin";
+          stage:
+            | "backlog"
+            | "breakdown"
+            | "breakdown_done"
+            | "answer"
+            | "answer_track"
+            | "answer_done"
+            | "validate"
+            | "validate_done";
+          position: number;
+          title: string;
+          details: string | null;
+          asked_by: string | null;
+          source: "manual" | "ghl";
+          ghl_contact_id: string | null;
+          ghl_message_id: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["kanban_cards"]["Row"]> & {
+          organization_id: string;
+          department: "marketing" | "sales" | "operations" | "admin";
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["kanban_cards"]["Row"]>;
+        Relationships: [];
+      };
       funnel_events: {
         Row: {
           id: string;

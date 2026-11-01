@@ -105,6 +105,9 @@ export const TABS: readonly TabDefinition[] = [
   { key: "organizations", label: "Organizations", href: "/admin/organizations" },
   // Requests from the quick mow page, from a price seen to a lawn mowed: its own pipeline.
   { key: "mow-orders", label: "Quick Mow Pipeline", href: "/mow-orders" },
+  // One permission for the four department boards; each department shows its
+  // own board as a subtab.
+  { key: "kanban", label: "Department Boards", href: "/boards" },
   // Applicants from the job ads: their answers, their videos, and who gets an interview.
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
   // The crew's pay and each service's production rate: what every forward price is worked out from.
