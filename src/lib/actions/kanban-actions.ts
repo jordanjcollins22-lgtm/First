@@ -8,6 +8,7 @@ import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import {
   isDepartment,
   isStage,
+  parseBacklogGroups,
   parseWipLimit,
   positionAtBottom,
   positionAtTop,
@@ -56,6 +57,7 @@ export async function createCard(department: string, formData: FormData): Promis
     title,
     details: String(formData.get("details") ?? "").trim() || null,
     asked_by: String(formData.get("asked_by") ?? "").trim() || null,
+    backlog_group: String(formData.get("backlog_group") ?? "").trim() || null,
     position: positionAtBottom(await stagePositions(department, "backlog")),
   });
   if (error) throw error;
@@ -74,6 +76,10 @@ export async function updateCard(id: string, formData: FormData): Promise<Action
       title,
       details: String(formData.get("details") ?? "").trim() || null,
       asked_by: String(formData.get("asked_by") ?? "").trim() || null,
+      // Only the edit form of a card that has groups sends this.
+      ...(formData.has("backlog_group")
+        ? { backlog_group: String(formData.get("backlog_group") ?? "").trim() || null }
+        : {}),
     })
     .eq("id", id)
     .select("department")
@@ -147,21 +153,24 @@ export async function reorderCard(id: string, direction: "up" | "down" | "top"):
   const supabase = await createClient();
   const { data: card, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, stage, position")
+    .select("id, department, stage, position, backlog_group")
     .eq("id", id)
     .single();
   if (error) throw error;
 
   const { data: siblings, error: siblingsError } = await supabase
     .from("kanban_cards")
-    .select("id, position")
+    .select("id, position, backlog_group")
     .eq("department", card.department)
     .eq("stage", card.stage)
     .order("position")
     .order("created_at");
   if (siblingsError) throw siblingsError;
 
-  const list = siblings ?? [];
+  // In a grouped Backlog, up, down and top mean within the card's own group.
+  // Other groups keep their positions, so they keep their order too.
+  const all = siblings ?? [];
+  const list = card.stage === "backlog" ? all.filter((c) => c.backlog_group === card.backlog_group) : all;
   const index = list.findIndex((c) => c.id === id);
 
   if (direction === "top") {
@@ -174,14 +183,15 @@ export async function reorderCard(id: string, direction: "up" | "down" | "top"):
   } else {
     const swapWith = list[direction === "up" ? index - 1 : index + 1];
     if (!swapWith) return {};
-    // Renumber the stage so equal positions can't make a swap a no-op.
-    const order = list.map((c) => c.id);
-    const target = order.indexOf(swapWith.id);
-    [order[index], order[target]] = [order[target], order[index]];
-    for (let i = 0; i < order.length; i++) {
-      const { error: e } = await supabase.from("kanban_cards").update({ position: i }).eq("id", order[i]);
-      if (e) throw e;
-    }
+    // Swap the two cards' places. Equal positions would make a swap a no-op,
+    // so ties are broken first by nudging the lower card just below.
+    const a = list[index].position;
+    let b = swapWith.position;
+    if (a === b) b = direction === "up" ? a - 0.5 : a + 0.5;
+    const { error: e1 } = await supabase.from("kanban_cards").update({ position: b }).eq("id", id);
+    if (e1) throw e1;
+    const { error: e2 } = await supabase.from("kanban_cards").update({ position: a }).eq("id", swapWith.id);
+    if (e2) throw e2;
   }
 
   revalidateBoard(card.department);
@@ -205,6 +215,28 @@ export async function updateWipLimits(department: string, formData: FormData): P
     wip_breakdown: breakdown,
     wip_answer: answer,
     wip_validate: validate,
+  });
+  if (error) throw error;
+  revalidateBoard(department);
+  return {};
+}
+
+/** Save the groups inside a department's Backlog, in order. */
+export async function updateBacklogGroups(department: string, formData: FormData): Promise<ActionResult> {
+  await guard();
+  if (!isDepartment(department)) return { error: "Unknown board." };
+  const groups = parseBacklogGroups(formData.get("groups"));
+
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const limits = await getWipLimits(department);
+  const { error } = await supabase.from("kanban_boards").upsert({
+    organization_id: organizationId,
+    department,
+    wip_breakdown: limits.breakdown,
+    wip_answer: limits.answer,
+    wip_validate: limits.validate,
+    backlog_groups: groups,
   });
   if (error) throw error;
   revalidateBoard(department);

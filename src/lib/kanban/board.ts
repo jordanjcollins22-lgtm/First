@@ -194,6 +194,52 @@ export function positionAtTop(positions: number[]): number {
   return positions.length ? Math.min(...positions) - 1 : 0;
 }
 
+/**
+ * Groups inside a department's Backlog, used until the board saves its own.
+ * Sales splits the leads to reach out to from the work of converting them.
+ */
+export const DEFAULT_BACKLOG_GROUPS: Record<Department, string[]> = {
+  marketing: [],
+  sales: ["Leads", "Converting"],
+  operations: [],
+  admin: [],
+};
+
+/** Where cards that came in from the Sales lead list are grouped. */
+export const LEADS_GROUP = "Leads";
+
+/** Group names from a form: one per line or comma-separated, trimmed, no repeats. */
+export function parseBacklogGroups(raw: unknown): string[] {
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const part of String(raw ?? "").split(/[\n,]/)) {
+    const name = part.trim().slice(0, 40);
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    groups.push(name);
+  }
+  return groups.slice(0, 12);
+}
+
+/**
+ * The Backlog split into its groups, in the board's order, each keeping its
+ * cards' order. Cards with no group, or a group since removed, go under Other.
+ */
+export function groupBacklog<T extends { backlog_group: string | null }>(
+  groups: readonly string[],
+  cards: readonly T[]
+): { name: string | null; cards: T[] }[] {
+  const sections = groups.map((name) => ({ name: name as string | null, cards: [] as T[] }));
+  const other: T[] = [];
+  for (const card of cards) {
+    const section = sections.find((s) => s.name === card.backlog_group);
+    if (section) section.cards.push(card);
+    else other.push(card);
+  }
+  if (other.length > 0 || sections.length === 0) sections.push({ name: null, cards: other });
+  return sections;
+}
+
 export function parseWipLimit(raw: unknown): number | null {
   const n = Number(raw);
   return Number.isInteger(n) && n >= 1 && n <= 50 ? n : null;
