@@ -7,7 +7,9 @@ import { getWipLimits } from "@/lib/data/kanban";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import {
   isDepartment,
+  isPipeline,
   isStage,
+  PIPELINE_LABELS,
   parseBacklogGroups,
   parseGoals,
   parseQuestion,
@@ -16,6 +18,7 @@ import {
   positionAtTop,
   wipViolation,
   type Department,
+  type Pipeline,
   type Stage,
 } from "@/lib/kanban/board";
 import { createClient } from "@/lib/supabase/server";
@@ -34,15 +37,29 @@ async function guard() {
   if (!allowed) throw new Error("You don't have access to the department boards.");
 }
 
-async function stagePositions(department: Department, stage: Stage): Promise<number[]> {
+async function stagePositions(department: Department, pipeline: Pipeline, stage: Stage): Promise<number[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("kanban_cards")
     .select("position")
     .eq("department", department)
+    .eq("pipeline", pipeline)
     .eq("stage", stage);
   if (error) throw error;
   return (data ?? []).map((r) => r.position);
+}
+
+/** Stages of the cards still in play on one pipeline, for its WIP counts. */
+async function pipelineStages(department: Department, pipeline: Pipeline): Promise<Stage[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("kanban_cards")
+    .select("stage")
+    .eq("department", department)
+    .eq("pipeline", pipeline)
+    .neq("stage", "validate_done");
+  if (error) throw error;
+  return (data ?? []).map((r) => r.stage);
 }
 
 export async function createCard(department: string, formData: FormData): Promise<ActionResult> {
@@ -50,17 +67,20 @@ export async function createCard(department: string, formData: FormData): Promis
   if (!isDepartment(department)) return { error: "Unknown board." };
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "Write the question or task first." };
+  const pipelineRaw = String(formData.get("pipeline") ?? "client");
+  const pipeline: Pipeline = isPipeline(pipelineRaw) ? pipelineRaw : "client";
 
   const supabase = await createClient();
   const { error } = await supabase.from("kanban_cards").insert({
     organization_id: await getCurrentOrganizationId(),
     department,
+    pipeline,
     stage: "backlog",
     title,
     details: String(formData.get("details") ?? "").trim() || null,
     asked_by: String(formData.get("asked_by") ?? "").trim() || null,
     backlog_group: String(formData.get("backlog_group") ?? "").trim() || null,
-    position: positionAtBottom(await stagePositions(department, "backlog")),
+    position: positionAtBottom(await stagePositions(department, pipeline, "backlog")),
   });
   if (error) throw error;
   revalidateBoard(department);
@@ -72,9 +92,37 @@ export async function updateCard(id: string, formData: FormData): Promise<Action
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return { error: "A card needs a title." };
   const supabase = await createClient();
+
+  // Moving a card to the other pipeline puts it at the bottom of the same
+  // stage there, and counts toward that pipeline's limit.
+  let pipelineMove: { pipeline: Pipeline; position: number } | null = null;
+  const pipelineRaw = formData.get("pipeline");
+  if (typeof pipelineRaw === "string" && isPipeline(pipelineRaw)) {
+    const { data: card, error: cardError } = await supabase
+      .from("kanban_cards")
+      .select("department, pipeline, stage")
+      .eq("id", id)
+      .single();
+    if (cardError) throw cardError;
+    if (card.pipeline !== pipelineRaw) {
+      const violation = wipViolation(
+        "backlog",
+        card.stage,
+        await pipelineStages(card.department, pipelineRaw),
+        await getWipLimits(card.department)
+      );
+      if (violation) return { error: `${PIPELINE_LABELS[pipelineRaw]} pipeline: ${violation}` };
+      pipelineMove = {
+        pipeline: pipelineRaw,
+        position: positionAtBottom(await stagePositions(card.department, pipelineRaw, card.stage)),
+      };
+    }
+  }
+
   const { data, error } = await supabase
     .from("kanban_cards")
     .update({
+      ...pipelineMove,
       title,
       details: String(formData.get("details") ?? "").trim() || null,
       asked_by: String(formData.get("asked_by") ?? "").trim() || null,
@@ -113,33 +161,22 @@ export async function moveCard(id: string, to: string): Promise<ActionResult> {
 
   const { data: card, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, stage")
+    .select("id, department, pipeline, stage")
     .eq("id", id)
     .single();
   if (error) throw error;
   if (card.stage === to) return {};
 
-  const { data: board, error: boardError } = await supabase
-    .from("kanban_cards")
-    .select("stage")
-    .eq("department", card.department)
-    .neq("stage", "validate_done");
-  if (boardError) throw boardError;
-
+  // Each pipeline counts toward its own limits.
   const limits = await getWipLimits(card.department);
-  const violation = wipViolation(
-    card.stage,
-    to,
-    (board ?? []).map((r) => r.stage),
-    limits
-  );
+  const violation = wipViolation(card.stage, to, await pipelineStages(card.department, card.pipeline), limits);
   if (violation) return { error: violation };
 
   const { error: updateError } = await supabase
     .from("kanban_cards")
     .update({
       stage: to,
-      position: positionAtBottom(await stagePositions(card.department, to)),
+      position: positionAtBottom(await stagePositions(card.department, card.pipeline, to)),
       completed_at: to === "validate_done" ? new Date().toISOString() : null,
     })
     .eq("id", id);
@@ -155,7 +192,7 @@ export async function reorderCard(id: string, direction: "up" | "down" | "top"):
   const supabase = await createClient();
   const { data: card, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, stage, position, backlog_group")
+    .select("id, department, pipeline, stage, position, backlog_group")
     .eq("id", id)
     .single();
   if (error) throw error;
@@ -164,6 +201,7 @@ export async function reorderCard(id: string, direction: "up" | "down" | "top"):
     .from("kanban_cards")
     .select("id, position, backlog_group")
     .eq("department", card.department)
+    .eq("pipeline", card.pipeline)
     .eq("stage", card.stage)
     .order("position")
     .order("created_at");

@@ -1,4 +1,5 @@
--- The Marketing board, from Jordan's mockup.
+-- The Marketing board, from Jordan's mockup, and a Client and a Team
+-- pipeline on every board.
 --
 -- Each board asks its own question of the Answer and Validate columns (for
 -- Marketing: "Did they book?" and "Did we close them?") and names the
@@ -20,3 +21,11 @@ create unique index if not exists kanban_cards_customer_idx on kanban_cards (cus
 alter table kanban_cards drop constraint if exists kanban_cards_source_check;
 alter table kanban_cards add constraint kanban_cards_source_check
   check (source in ('manual', 'ghl', 'job', 'lead', 'customer'));
+
+-- Every board runs two pipelines through the same columns: Client (leads,
+-- jobs, clients) and Team (hiring and the people on the team). Each has its
+-- own WIP count. Cards made from jobs, leads and new clients are Client.
+alter table kanban_cards add column if not exists pipeline text not null default 'client';
+alter table kanban_cards drop constraint if exists kanban_cards_pipeline_check;
+alter table kanban_cards add constraint kanban_cards_pipeline_check
+  check (pipeline in ('client', 'team'));

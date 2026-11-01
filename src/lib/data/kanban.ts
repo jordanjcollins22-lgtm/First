@@ -1,6 +1,6 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { listBoardJobs } from "@/lib/data/job-board";
-import { DEFAULT_BACKLOG_GROUPS, DEFAULT_BOARD_TEXT, DEFAULT_WIP_LIMITS, EXTERNAL_GROUP, type BoardText, LEGACY_EXTERNAL_GROUPS, positionAtBottom, type Department, type Stage, type WipLimits } from "@/lib/kanban/board";
+import { DEFAULT_BACKLOG_GROUPS, DEFAULT_BOARD_TEXT, DEFAULT_WIP_LIMITS, EXTERNAL_GROUP, type BoardText, LEGACY_EXTERNAL_GROUPS, positionAtBottom, type Department, type Pipeline, type Stage, type WipLimits } from "@/lib/kanban/board";
 import { planJobSync } from "@/lib/kanban/job-sync";
 import { planLeadSync, type Prospect } from "@/lib/kanban/lead-sync";
 import {
@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/server";
 export interface KanbanCard {
   id: string;
   department: Department;
+  pipeline: Pipeline;
   stage: Stage;
   position: number;
   title: string;
@@ -68,7 +69,7 @@ export async function listBoardCards(department: Department): Promise<KanbanCard
   const since = new Date(Date.now() - FINISHED_VISIBLE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, stage, position, title, details, asked_by, source, job_id, customer_id, backlog_group, completed_at, created_at")
+    .select("id, department, pipeline, stage, position, title, details, asked_by, source, job_id, customer_id, backlog_group, completed_at, created_at")
     .eq("organization_id", organizationId)
     .eq("department", department)
     .or(`stage.neq.validate_done,completed_at.gte.${since}`)

@@ -23,6 +23,19 @@ export function isDepartment(value: string): value is Department {
   return (DEPARTMENTS as readonly string[]).includes(value);
 }
 
+/**
+ * Every board runs two pipelines through the same columns, one above the
+ * other: Client work and Team work. Each counts toward its own WIP limits.
+ */
+export const PIPELINES = ["client", "team"] as const;
+export type Pipeline = (typeof PIPELINES)[number];
+
+export const PIPELINE_LABELS: Record<Pipeline, string> = { client: "Client", team: "Team" };
+
+export function isPipeline(value: string): value is Pipeline {
+  return (PIPELINES as readonly string[]).includes(value);
+}
+
 export const STAGES = [
   "backlog",
   "breakdown",

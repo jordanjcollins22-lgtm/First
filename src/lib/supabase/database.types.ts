@@ -2433,6 +2433,7 @@ export interface Database {
           id: string;
           organization_id: string;
           department: "marketing" | "sales" | "operations" | "admin";
+          pipeline: "client" | "team";
           stage:
             | "backlog"
             | "breakdown"
