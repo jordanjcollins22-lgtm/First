@@ -13,6 +13,8 @@ import {
   positionAtTop,
   previousStage,
   wipViolation,
+  PIPELINES,
+  isPipeline,
 } from "./board";
 
 describe("stage flow", () => {
@@ -118,5 +120,13 @@ describe("backlog groups", () => {
   it("is one plain list when the board has no groups", () => {
     const cards = [{ id: "1", backlog_group: null }];
     expect(groupBacklog([], cards)).toEqual([{ name: null, cards }]);
+  });
+});
+
+describe("pipelines", () => {
+  it("knows Client and Team", () => {
+    expect(PIPELINES).toEqual(["client", "team"]);
+    expect(isPipeline("team")).toBe(true);
+    expect(isPipeline("vendor")).toBe(false);
   });
 });

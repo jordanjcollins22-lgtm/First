@@ -23,6 +23,19 @@ export function isDepartment(value: string): value is Department {
   return (DEPARTMENTS as readonly string[]).includes(value);
 }
 
+/**
+ * Every board runs two pipelines through the same columns, one above the
+ * other: Client work and Team work. Each counts toward its own WIP limits.
+ */
+export const PIPELINES = ["client", "team"] as const;
+export type Pipeline = (typeof PIPELINES)[number];
+
+export const PIPELINE_LABELS: Record<Pipeline, string> = { client: "Client", team: "Team" };
+
+export function isPipeline(value: string): value is Pipeline {
+  return (PIPELINES as readonly string[]).includes(value);
+}
+
 export const STAGES = [
   "backlog",
   "breakdown",
@@ -212,6 +225,51 @@ export const DEFAULT_BACKLOG_GROUPS: Record<Department, string[]> = {
 };
 
 /**
+ * What one pipeline of a board asks of its Answer and Validate columns, and
+ * its goals, until the board saves its own. Client and Team ask different
+ * things. Marketing's come from Jordan's mockup: Client leads are closed into
+ * jobs, Team leads into people who join the team.
+ */
+export interface BoardText {
+  answerQuestion: string | null;
+  validateQuestion: string | null;
+  goals: string[];
+}
+
+export type BoardTexts = Record<Pipeline, BoardText>;
+
+const NO_TEXT: BoardText = { answerQuestion: null, validateQuestion: null, goals: [] };
+
+export const DEFAULT_BOARD_TEXT: Record<Department, BoardTexts> = {
+  marketing: {
+    client: {
+      answerQuestion: "Did they book?",
+      validateQuestion: "Did we close them?",
+      goals: ["Get project leads"],
+    },
+    team: {
+      answerQuestion: "Did they book an interview?",
+      validateQuestion: "Did they join the team?",
+      goals: ["Get team member leads"],
+    },
+  },
+  sales: { client: NO_TEXT, team: NO_TEXT },
+  operations: { client: NO_TEXT, team: NO_TEXT },
+  admin: { client: NO_TEXT, team: NO_TEXT },
+};
+
+/** A question from a form, or null when left blank. */
+export function parseQuestion(raw: unknown): string | null {
+  const q = String(raw ?? "").trim().slice(0, 120);
+  return q || null;
+}
+
+/** Goals from a form, one per line or comma-separated. Same rules as groups. */
+export function parseGoals(raw: unknown): string[] {
+  return parseBacklogGroups(raw);
+}
+
+/**
  * Groups that cards made from jobs and leads were filed under before every
  * Backlog was split into External and Internal. They are moved to External.
  */
@@ -229,6 +287,7 @@ export function parseBacklogGroups(raw: unknown): string[] {
   }
   return groups.slice(0, 12);
 }
+
 
 /**
  * The Backlog split into its groups, in the board's order, each keeping its
