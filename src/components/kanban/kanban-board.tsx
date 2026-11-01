@@ -24,6 +24,7 @@ import {
   deleteCard,
   moveCard,
   reorderCard,
+  updateBacklogGroups,
   updateCard,
   updateWipLimits,
   type ActionResult,
@@ -32,6 +33,7 @@ import type { KanbanCard } from "@/lib/data/kanban";
 import {
   COLUMNS,
   countByColumn,
+  groupBacklog,
   nextStage,
   previousStage,
   type Department,
@@ -44,9 +46,11 @@ interface Props {
   department: Department;
   cards: KanbanCard[];
   limits: WipLimits;
+  /** Groups inside the Backlog, in order. Empty means one plain list. */
+  groups: string[];
 }
 
-export function KanbanBoard({ department, cards, limits }: Props) {
+export function KanbanBoard({ department, cards, limits, groups }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Stage | null>(null);
@@ -143,17 +147,40 @@ export function KanbanBoard({ department, cards, limits }: Props) {
                       </p>
                     )}
                     {stage === "backlog" && (
-                      <AddCardForm onSubmit={(fd) => run(() => createCard(department, fd))} />
+                      <AddCardForm groups={groups} onSubmit={(fd) => run(() => createCard(department, fd))} />
                     )}
-                    {byStage(stage).map((card, i, list) => (
-                      <CardItem
-                        key={card.id}
-                        card={card}
-                        isFirst={i === 0}
-                        isLast={i === list.length - 1}
-                        run={run}
-                      />
-                    ))}
+                    {stage === "backlog" && groups.length > 0
+                      ? groupBacklog(groups, byStage("backlog")).map((section) => (
+                          <div key={section.name ?? "__other"} className="flex flex-col gap-2">
+                            <p className="mt-1 flex items-baseline justify-between border-b border-border px-1 pb-0.5 text-xs font-semibold">
+                              <span>{section.name ?? "Other"}</span>
+                              <span className="font-normal text-muted-foreground">{section.cards.length}</span>
+                            </p>
+                            {section.cards.length === 0 && (
+                              <p className="px-1 text-xs text-muted-foreground">Nothing here yet.</p>
+                            )}
+                            {section.cards.map((card, i, list) => (
+                              <CardItem
+                                key={card.id}
+                                card={card}
+                                groups={groups}
+                                isFirst={i === 0}
+                                isLast={i === list.length - 1}
+                                run={run}
+                              />
+                            ))}
+                          </div>
+                        ))
+                      : byStage(stage).map((card, i, list) => (
+                          <CardItem
+                            key={card.id}
+                            card={card}
+                            groups={groups}
+                            isFirst={i === 0}
+                            isLast={i === list.length - 1}
+                            run={run}
+                          />
+                        ))}
                   </div>
                 ))}
               </div>
@@ -166,11 +193,31 @@ export function KanbanBoard({ department, cards, limits }: Props) {
         limits={limits}
         onSubmit={(fd) => run(() => updateWipLimits(department, fd))}
       />
+      <BacklogGroupsForm groups={groups} onSubmit={(fd) => run(() => updateBacklogGroups(department, fd))} />
     </div>
   );
 }
 
-function AddCardForm({ onSubmit }: { onSubmit: (fd: FormData) => void }) {
+function GroupSelect({ groups, value }: { groups: string[]; value?: string | null }) {
+  if (groups.length === 0) return null;
+  return (
+    <select
+      name="backlog_group"
+      defaultValue={value ?? groups[0]}
+      className="h-10 rounded-md border border-input bg-card px-2 text-sm"
+      aria-label="Group"
+    >
+      {groups.map((g) => (
+        <option key={g} value={g}>
+          {g}
+        </option>
+      ))}
+      <option value="">Other</option>
+    </select>
+  );
+}
+
+function AddCardForm({ groups, onSubmit }: { groups: string[]; onSubmit: (fd: FormData) => void }) {
   const [open, setOpen] = useState(false);
 
   if (!open) {
@@ -192,6 +239,7 @@ function AddCardForm({ onSubmit }: { onSubmit: (fd: FormData) => void }) {
   return (
     <form onSubmit={submit} className="flex flex-col gap-2 rounded-lg border border-border p-2">
       <Input name="title" placeholder="Question or task" required autoFocus />
+      <GroupSelect groups={groups} />
       <Input name="asked_by" placeholder="Who asked? (optional)" />
       <Textarea name="details" placeholder="Details (optional)" rows={2} />
       <div className="flex gap-2">
@@ -208,11 +256,13 @@ function AddCardForm({ onSubmit }: { onSubmit: (fd: FormData) => void }) {
 
 function CardItem({
   card,
+  groups,
   isFirst,
   isLast,
   run,
 }: {
   card: KanbanCard;
+  groups: string[];
   isFirst: boolean;
   isLast: boolean;
   run: (action: () => Promise<ActionResult>) => void;
@@ -233,6 +283,7 @@ function CardItem({
         className="flex flex-col gap-2 rounded-lg border border-border bg-background p-2"
       >
         <Input name="title" defaultValue={card.title} required autoFocus />
+        <GroupSelect groups={groups} value={card.backlog_group} />
         <Input name="asked_by" defaultValue={card.asked_by ?? ""} placeholder="Who asked?" />
         <Textarea name="details" defaultValue={card.details ?? ""} placeholder="Details" rows={3} />
         <div className="flex flex-wrap gap-2">
@@ -242,8 +293,8 @@ function CardItem({
           <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
             Cancel
           </Button>
-          {/* A job's card comes back while the job is open, so it is not deleted here. */}
-          {card.source !== "job" && (
+          {/* A job's or lead's card comes back while it is open, so it is not deleted here. */}
+          {card.source !== "job" && card.source !== "lead" && (
           <Button
             type="button"
             size="sm"
@@ -279,6 +330,11 @@ function CardItem({
         </Link>
       ) : (
         <p className="font-medium break-words">{card.title}</p>
+      )}
+      {card.stage !== "backlog" && card.backlog_group && (
+        <span className="mt-0.5 inline-block rounded bg-muted px-1.5 text-[11px] text-muted-foreground">
+          {card.backlog_group}
+        </span>
       )}
       {(card.asked_by || card.source === "ghl") && (
         <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
@@ -392,6 +448,36 @@ function WipLimitsForm({ limits, onSubmit }: { limits: WipLimits; onSubmit: (fd:
       ))}
       <Button type="submit" size="sm" variant="outline">
         Save limits
+      </Button>
+    </form>
+  );
+}
+
+function BacklogGroupsForm({ groups, onSubmit }: { groups: string[]; onSubmit: (fd: FormData) => void }) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(new FormData(e.currentTarget));
+      }}
+      className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3 text-sm"
+    >
+      <div className="basis-full">
+        <p className="font-semibold">Backlog groups</p>
+        <p className="text-xs text-muted-foreground">
+          Split the Backlog into groups, top to bottom, separated by commas. Leave it empty for one list. Cards
+          whose group is removed show under Other.
+        </p>
+      </div>
+      <Input
+        name="groups"
+        defaultValue={groups.join(", ")}
+        key={groups.join("|")}
+        placeholder="e.g. Leads, Converting"
+        className="max-w-md flex-1"
+      />
+      <Button type="submit" size="sm" variant="outline">
+        Save groups
       </Button>
     </form>
   );

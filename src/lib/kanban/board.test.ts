@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_WIP_LIMITS,
+  groupBacklog,
+  parseBacklogGroups,
   STAGES,
   countByColumn,
   limitedColumnFor,
@@ -90,5 +92,31 @@ describe("positions", () => {
     expect(positionAtBottom([])).toBe(0);
     expect(positionAtBottom([0, 3, 1])).toBe(4);
     expect(positionAtTop([0, 3, 1])).toBe(-1);
+  });
+});
+
+describe("backlog groups", () => {
+  it("parses names from lines or commas, without repeats", () => {
+    expect(parseBacklogGroups("Leads, Converting\nleads\n  \nFollow-ups")).toEqual(["Leads", "Converting", "Follow-ups"]);
+  });
+
+  it("splits the backlog into groups in order, with the rest under Other", () => {
+    const cards = [
+      { id: "1", backlog_group: "Converting" },
+      { id: "2", backlog_group: "Leads" },
+      { id: "3", backlog_group: null },
+      { id: "4", backlog_group: "Old group" },
+      { id: "5", backlog_group: "Leads" },
+    ];
+    expect(groupBacklog(["Leads", "Converting"], cards).map((s) => [s.name, s.cards.map((c) => c.id)])).toEqual([
+      ["Leads", ["2", "5"]],
+      ["Converting", ["1"]],
+      [null, ["3", "4"]],
+    ]);
+  });
+
+  it("is one plain list when the board has no groups", () => {
+    const cards = [{ id: "1", backlog_group: null }];
+    expect(groupBacklog([], cards)).toEqual([{ name: null, cards }]);
   });
 });

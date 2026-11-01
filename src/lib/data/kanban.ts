@@ -1,7 +1,8 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { listBoardJobs } from "@/lib/data/job-board";
-import { DEFAULT_WIP_LIMITS, positionAtBottom, type Department, type Stage, type WipLimits } from "@/lib/kanban/board";
+import { DEFAULT_BACKLOG_GROUPS, DEFAULT_WIP_LIMITS, positionAtBottom, type Department, type Stage, type WipLimits } from "@/lib/kanban/board";
 import { planJobSync } from "@/lib/kanban/job-sync";
+import { planLeadSync, type Prospect } from "@/lib/kanban/lead-sync";
 import { createClient } from "@/lib/supabase/server";
 
 export interface KanbanCard {
@@ -12,8 +13,9 @@ export interface KanbanCard {
   title: string;
   details: string | null;
   asked_by: string | null;
-  source: "manual" | "ghl" | "job";
+  source: "manual" | "ghl" | "job" | "lead";
   job_id: string | null;
+  backlog_group: string | null;
   completed_at: string | null;
   created_at: string;
 }
@@ -35,13 +37,27 @@ export async function getWipLimits(department: Department): Promise<WipLimits> {
   return { breakdown: data.wip_breakdown, answer: data.wip_answer, validate: data.wip_validate };
 }
 
+/** The groups inside this department's Backlog, in order. */
+export async function getBacklogGroups(department: Department): Promise<string[]> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const { data, error } = await supabase
+    .from("kanban_boards")
+    .select("backlog_groups")
+    .eq("organization_id", organizationId)
+    .eq("department", department)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.backlog_groups ?? DEFAULT_BACKLOG_GROUPS[department];
+}
+
 export async function listBoardCards(department: Department): Promise<KanbanCard[]> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
   const since = new Date(Date.now() - FINISHED_VISIBLE_DAYS * 86_400_000).toISOString();
   const { data, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, stage, position, title, details, asked_by, source, job_id, completed_at, created_at")
+    .select("id, department, stage, position, title, details, asked_by, source, job_id, backlog_group, completed_at, created_at")
     .eq("organization_id", organizationId)
     .eq("department", department)
     .or(`stage.neq.validate_done,completed_at.gte.${since}`)
@@ -101,6 +117,67 @@ export async function syncOperationsBacklog(): Promise<void> {
       position: start + i,
     })),
     { onConflict: "job_id", ignoreDuplicates: true }
+  );
+  if (error) throw error;
+}
+
+/**
+ * Give every lead that needs reaching out to a card in the Sales Backlog, and
+ * take Backlog cards off for leads that were contacted, converted, rejected or
+ * asked to be left alone. Run each time the Sales board is opened.
+ */
+export async function syncSalesBacklog(): Promise<void> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+
+  const [prospectsResult, cardsResult] = await Promise.all([
+    supabase
+      .from("lead_prospects")
+      .select("id, owner_name, address, city, phone, email, status, do_not_contact, score, estimated_ticket")
+      .eq("organization_id", organizationId)
+      .in("status", ["new", "queued"])
+      .eq("do_not_contact", false)
+      .limit(2000),
+    supabase
+      .from("kanban_cards")
+      .select("id, prospect_id, stage")
+      .eq("organization_id", organizationId)
+      .eq("department", "sales")
+      .not("prospect_id", "is", null),
+  ]);
+  if (prospectsResult.error) throw prospectsResult.error;
+  if (cardsResult.error) throw cardsResult.error;
+
+  const { toAdd, toRemove } = planLeadSync(
+    (prospectsResult.data ?? []) as unknown as Prospect[],
+    (cardsResult.data ?? []) as { id: string; prospect_id: string; stage: Stage }[]
+  );
+
+  if (toRemove.length > 0) {
+    const { error } = await supabase.from("kanban_cards").delete().in("id", toRemove);
+    if (error) throw error;
+  }
+  if (toAdd.length === 0) return;
+
+  const { data: backlog, error: backlogError } = await supabase
+    .from("kanban_cards")
+    .select("position")
+    .eq("organization_id", organizationId)
+    .eq("department", "sales")
+    .eq("stage", "backlog");
+  if (backlogError) throw backlogError;
+  const start = positionAtBottom((backlog ?? []).map((r) => r.position));
+
+  const { error } = await supabase.from("kanban_cards").upsert(
+    toAdd.map((card, i) => ({
+      ...card,
+      organization_id: organizationId,
+      department: "sales" as const,
+      stage: "backlog" as const,
+      source: "lead" as const,
+      position: start + i,
+    })),
+    { onConflict: "prospect_id", ignoreDuplicates: true }
   );
   if (error) throw error;
 }
