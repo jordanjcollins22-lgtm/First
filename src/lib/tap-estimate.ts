@@ -46,6 +46,114 @@ export function choiceLabel(value: string): string {
   return CHOICE.get(value)?.label ?? value;
 }
 
+/** One answer to "what do you want here?", and the priced choices it stands for. */
+export interface SpotWant {
+  value: string;
+  label: string;
+  /** TAP_CHOICES values. */
+  choices: string[];
+}
+
+/** One answer to "what's here now?", with only the wants that make sense on it. */
+export interface SpotNow {
+  value: string;
+  label: string;
+  /** Empty: the answer is the whole job (a spot they aren't sure about). */
+  wants: SpotWant[];
+  /** The priced choices when there is nothing more to ask. */
+  choices?: string[];
+}
+
+/**
+ * The spot sheet as two short questions instead of one long list: what is
+ * there now, then what they want there, from only the answers that fit what
+ * is there. Every answer comes down to the same priced choices as before,
+ * so pricing is unchanged; what is there now is kept for the office and the
+ * picture reading.
+ */
+export const SPOT_NOW: SpotNow[] = [
+  {
+    value: "bed",
+    label: "A garden bed",
+    wants: [
+      { value: "mulch", label: "Fresh mulch", choices: ["mulch"] },
+      { value: "rock", label: "River rock", choices: ["rock"] },
+      { value: "weeds", label: "Weeds pulled", choices: ["weeds"] },
+      { value: "plants", label: "New plants", choices: ["plants"] },
+    ],
+  },
+  {
+    value: "bushes",
+    label: "Bushes",
+    wants: [
+      { value: "trim", label: "Trimmed", choices: ["trim"] },
+      { value: "remove", label: "Taken out", choices: ["remove"] },
+      { value: "mulch", label: "Fresh mulch around them", choices: ["mulch"] },
+    ],
+  },
+  {
+    value: "grass",
+    label: "Grass",
+    wants: [
+      { value: "lawn", label: "Better grass", choices: ["lawn"] },
+      { value: "bed", label: "A garden bed", choices: ["mulch"] },
+      { value: "patio", label: "A patio or walkway", choices: ["patio"] },
+    ],
+  },
+  {
+    value: "dirt",
+    label: "Dirt or weeds",
+    wants: [
+      { value: "mulch", label: "A mulch bed", choices: ["mulch", "weeds"] },
+      { value: "rock", label: "A rock bed", choices: ["rock", "weeds"] },
+      { value: "lawn", label: "Grass", choices: ["lawn"] },
+      { value: "clean", label: "Just cleaned up", choices: ["weeds"] },
+      { value: "patio", label: "A patio or walkway", choices: ["patio"] },
+    ],
+  },
+  {
+    value: "house",
+    label: "The house",
+    wants: [
+      { value: "wash", label: "Washed", choices: ["wash"] },
+      { value: "bed", label: "A bed along it", choices: ["mulch", "weeds"] },
+    ],
+  },
+  { value: "water", label: "Water sits here", wants: [{ value: "fix", label: "Fixed", choices: ["water"] }] },
+  { value: "unsure", label: "Not sure", wants: [], choices: ["other"] },
+];
+
+const NOW = new Map(SPOT_NOW.map((n) => [n.value, n]));
+
+export function hereLabel(value: string | undefined): string | null {
+  return value ? (NOW.get(value)?.label ?? null) : null;
+}
+
+/** The labels of what they want, for the office, e.g. ["Trimmed", "Taken out"]. */
+export function wantLabels(here: string | undefined, wants: string[] | undefined): string[] {
+  const now = here ? NOW.get(here) : undefined;
+  if (!now || !wants) return [];
+  return wants.flatMap((w) => now.wants.find((x) => x.value === w)?.label ?? []);
+}
+
+/**
+ * The priced choices for an answer to both questions, in TAP_CHOICES order
+ * with no repeats. Null when the answer isn't one the sheet offers.
+ */
+export function choicesForSpot(here: string, wants: string[]): string[] | null {
+  const now = NOW.get(here);
+  if (!now) return null;
+  if (now.wants.length === 0) return wants.length === 0 ? [...(now.choices ?? [])] : null;
+  if (wants.length === 0) return null;
+  const picked = new Set<string>();
+  for (const w of wants) {
+    const want = now.wants.find((x) => x.value === w);
+    if (!want) return null;
+    for (const c of want.choices) picked.add(c);
+  }
+  return TAP_CHOICES.map((c) => c.value).filter((c) => picked.has(c));
+}
+
 /** One spot the client tapped. */
 export interface TapSpot {
   lng: number;
@@ -54,6 +162,10 @@ export interface TapSpot {
   choices: string[];
   /** Storage paths of this spot's photos, in the job-photos bucket. */
   photos: string[];
+  /** What is there now (SPOT_NOW value). Missing on spots from before the two questions. */
+  here?: string;
+  /** What they want there (that SPOT_NOW entry's want values); the choices are worked from these. */
+  wants?: string[];
   /**
    * What the client drew round to show how big the spot is, when they did.
    * A closed lng/lat ring (the last point repeats the first) of 3 to
@@ -203,9 +315,22 @@ export function parseTapSpots(input: unknown, ctx: { jobId: string; home: LngLat
   const spots: TapSpot[] = [];
   for (const raw of input) {
     if (!raw || typeof raw !== "object") return null;
-    const { lng, lat, choices, photos, outline: rawOutline } = raw as Record<string, unknown>;
+    const { lng, lat, choices: rawChoices, photos, outline: rawOutline, here, wants } = raw as Record<string, unknown>;
     if (typeof lng !== "number" || typeof lat !== "number" || !Number.isFinite(lng) || !Number.isFinite(lat)) return null;
     if (metersBetween(ctx.home, [lng, lat]) > MAX_SPOT_METERS) return null;
+    // Answered with the two questions: the choices are worked out here from
+    // the answers, never taken from the page. Otherwise (a spot from before
+    // them) the choices themselves, checked.
+    let choices: unknown = rawChoices;
+    let answered: { here: string; wants: string[] } | null = null;
+    if (here !== undefined) {
+      if (typeof here !== "string" || !Array.isArray(wants) || !wants.every((w) => typeof w === "string")) return null;
+      const unique = [...new Set(wants as string[])];
+      const worked = choicesForSpot(here, unique);
+      if (!worked) return null;
+      choices = worked;
+      answered = { here, wants: unique };
+    }
     if (!Array.isArray(choices) || choices.length === 0 || !choices.every((c) => typeof c === "string" && CHOICE.has(c))) return null;
     if (!Array.isArray(photos) || photos.length > MAX_PHOTOS_PER_SPOT) return null;
     if (!photos.every((p) => typeof p === "string" && photoPath.test(p))) return null;
@@ -217,6 +342,7 @@ export function parseTapSpots(input: unknown, ctx: { jobId: string; home: LngLat
       choices: [...new Set(choices as string[])],
       photos: [...new Set(photos as string[])],
       ...(outline ? { outline } : {}),
+      ...(answered ?? {}),
     });
   }
   return spots;
@@ -227,11 +353,12 @@ export function readTapSpots(value: unknown): TapSpot[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((s): TapSpot[] => {
     if (!s || typeof s !== "object") return [];
-    const { lng, lat, choices, photos, outline: rawOutline } = s as Record<string, unknown>;
+    const { lng, lat, choices, photos, outline: rawOutline, here, wants } = s as Record<string, unknown>;
     if (typeof lng !== "number" || typeof lat !== "number") return [];
     const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
     const outline = readOutline(rawOutline);
-    return [{ lng, lat, choices: strings(choices), photos: strings(photos), ...(outline ? { outline } : {}) }];
+    const answered = typeof here === "string" && NOW.has(here) ? { here, wants: strings(wants) } : {};
+    return [{ lng, lat, choices: strings(choices), photos: strings(photos), ...(outline ? { outline } : {}), ...answered }];
   });
 }
 

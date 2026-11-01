@@ -1,5 +1,5 @@
 import type { ClientEstimate } from "@/lib/data/tap-estimate";
-import { choiceLabel, dollars } from "@/lib/tap-estimate";
+import { choiceLabel, dollars, hereLabel, wantLabels } from "@/lib/tap-estimate";
 import { needsChecking, officeSourceWords, sizeAmount } from "@/lib/spot-size-words";
 
 /**
@@ -72,6 +72,12 @@ export function ClientEstimateCard({
           return (
             <li key={i}>
               {i + 1}. {spot.choices.map(choiceLabel).join(", ")}
+              {hereLabel(spot.here) && (
+                <span className="block pl-4 text-xs">
+                  Here now: {hereLabel(spot.here)!.toLowerCase()}
+                  {wantLabels(spot.here, spot.wants).length > 0 ? ` · wants: ${wantLabels(spot.here, spot.wants).join(", ").toLowerCase()}` : ""}
+                </span>
+              )}
               {spot.photos.length > 0 ? ` (${spot.photos.length} photo${spot.photos.length === 1 ? "" : "s"})` : ""}
               {size && (
                 <span className="block pl-4 text-xs">
