@@ -59,6 +59,7 @@ describe("cardForJob", () => {
       title: "#78 Front beds",
       asked_by: "Michael Dembeck",
       details: "1 Oak St\nStarts Nov 5\nAssigned to Jack",
+      backlog_group: "External",
     });
   });
 });

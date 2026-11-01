@@ -1,6 +1,6 @@
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { listBoardJobs } from "@/lib/data/job-board";
-import { DEFAULT_BACKLOG_GROUPS, DEFAULT_WIP_LIMITS, positionAtBottom, type Department, type Stage, type WipLimits } from "@/lib/kanban/board";
+import { DEFAULT_BACKLOG_GROUPS, DEFAULT_WIP_LIMITS, EXTERNAL_GROUP, LEGACY_EXTERNAL_GROUPS, positionAtBottom, type Department, type Stage, type WipLimits } from "@/lib/kanban/board";
 import { planJobSync } from "@/lib/kanban/job-sync";
 import { planLeadSync, type Prospect } from "@/lib/kanban/lead-sync";
 import { createClient } from "@/lib/supabase/server";
@@ -68,6 +68,24 @@ export async function listBoardCards(department: Department): Promise<KanbanCard
 }
 
 /**
+ * Cards made from jobs and leads before every Backlog had External and
+ * Internal groups had no group, or "Leads". File them under External. Once
+ * they are, this matches nothing.
+ */
+async function fileAutoCardsAsExternal(department: Department, organizationId: string): Promise<void> {
+  const supabase = await createClient();
+  const legacy = LEGACY_EXTERNAL_GROUPS.map((g) => `"${g}"`).join(",");
+  const { error } = await supabase
+    .from("kanban_cards")
+    .update({ backlog_group: EXTERNAL_GROUP })
+    .eq("organization_id", organizationId)
+    .eq("department", department)
+    .in("source", ["job", "lead"])
+    .or(`backlog_group.is.null,backlog_group.in.(${legacy})`);
+  if (error) throw error;
+}
+
+/**
  * Give every job that still needs doing a card in the Operations Backlog, and
  * take Backlog cards off for jobs that are finished, cancelled or declined.
  * Run each time the Operations board is opened, so it needs no webhook.
@@ -75,6 +93,7 @@ export async function listBoardCards(department: Department): Promise<KanbanCard
 export async function syncOperationsBacklog(): Promise<void> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
+  await fileAutoCardsAsExternal("operations", organizationId);
 
   const [jobs, cardsResult] = await Promise.all([
     listBoardJobs(),
@@ -129,6 +148,7 @@ export async function syncOperationsBacklog(): Promise<void> {
 export async function syncSalesBacklog(): Promise<void> {
   const supabase = await createClient();
   const organizationId = await getCurrentOrganizationId();
+  await fileAutoCardsAsExternal("sales", organizationId);
 
   const [prospectsResult, cardsResult] = await Promise.all([
     supabase

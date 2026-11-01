@@ -57,7 +57,7 @@ describe("cardForProspect", () => {
       title: "Reach out: Pat Lee",
       asked_by: null,
       details: "a Main St, Towson\n410-555-0101\nWorth about $2,400",
-      backlog_group: "Leads",
+      backlog_group: "External",
     });
   });
 

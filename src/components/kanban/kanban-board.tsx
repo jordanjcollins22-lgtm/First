@@ -473,7 +473,7 @@ function BacklogGroupsForm({ groups, onSubmit }: { groups: string[]; onSubmit: (
         name="groups"
         defaultValue={groups.join(", ")}
         key={groups.join("|")}
-        placeholder="e.g. Leads, Converting"
+        placeholder="e.g. External, Internal"
         className="max-w-md flex-1"
       />
       <Button type="submit" size="sm" variant="outline">

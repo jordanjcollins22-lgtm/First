@@ -7,7 +7,7 @@
  * starting order is a sensible one to reorder from.
  */
 
-import { LEADS_GROUP, type Stage } from "@/lib/kanban/board";
+import { EXTERNAL_GROUP, type Stage } from "@/lib/kanban/board";
 
 export interface Prospect {
   id: string;
@@ -49,7 +49,7 @@ export function cardForProspect(p: Prospect): NewLeadCard {
   return {
     prospect_id: p.id,
     title: `Reach out: ${p.owner_name?.trim() || where}`,
-    backlog_group: LEADS_GROUP,
+    backlog_group: EXTERNAL_GROUP,
     asked_by: null,
     details: [p.owner_name?.trim() ? where : null, p.phone, p.email, ticket].filter(Boolean).join("\n") || null,
   };
