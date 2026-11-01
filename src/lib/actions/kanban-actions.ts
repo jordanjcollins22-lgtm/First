@@ -153,19 +153,33 @@ export async function deleteCard(id: string): Promise<ActionResult> {
   return {};
 }
 
-/** Move a card to another stage. It lands at the bottom of that stage. */
-export async function moveCard(id: string, to: string): Promise<ActionResult> {
+/**
+ * Move a card to another stage. It lands at the bottom of that stage. A card
+ * moved into the Backlog can name the group it goes in (null is Other).
+ */
+export async function moveCard(id: string, to: string, group?: string | null): Promise<ActionResult> {
   await guard();
   if (!isStage(to)) return { error: "Unknown column." };
   const supabase = await createClient();
 
   const { data: card, error } = await supabase
     .from("kanban_cards")
-    .select("id, department, pipeline, stage")
+    .select("id, department, pipeline, stage, backlog_group")
     .eq("id", id)
     .single();
   if (error) throw error;
-  if (card.stage === to) return {};
+  const regroup = to === "backlog" && group !== undefined ? { backlog_group: group?.trim().slice(0, 40) || null } : {};
+  if (card.stage === to) {
+    // Dragged to another group of the Backlog: same stage, new group.
+    if (!("backlog_group" in regroup) || regroup.backlog_group === card.backlog_group) return {};
+    const { error: e } = await supabase
+      .from("kanban_cards")
+      .update({ ...regroup, position: positionAtBottom(await stagePositions(card.department, card.pipeline, to)) })
+      .eq("id", id);
+    if (e) throw e;
+    revalidateBoard(card.department);
+    return {};
+  }
 
   // Each pipeline counts toward its own limits.
   const limits = await getWipLimits(card.department);
@@ -175,6 +189,7 @@ export async function moveCard(id: string, to: string): Promise<ActionResult> {
   const { error: updateError } = await supabase
     .from("kanban_cards")
     .update({
+      ...regroup,
       stage: to,
       position: positionAtBottom(await stagePositions(card.department, card.pipeline, to)),
       completed_at: to === "validate_done" ? new Date().toISOString() : null,

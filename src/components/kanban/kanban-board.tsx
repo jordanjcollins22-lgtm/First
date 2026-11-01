@@ -147,12 +147,16 @@ function PipelineLane({
   onWrongLane: () => void;
 }) {
   const [dragOver, setDragOver] = useState<Stage | null>(null);
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const counts = countByColumn(cards.filter((c) => c.stage !== "validate_done").map((c) => c.stage));
   const byStage = (stage: Stage) => cards.filter((c) => c.stage === stage);
+  const backlogSections = groups.length > 0 ? groupBacklog(groups, byStage("backlog")) : null;
 
-  function onDrop(e: DragEvent, stage: Stage) {
+  /** `group` is the Backlog group a card was dropped into, if any. */
+  function onDrop(e: DragEvent, stage: Stage, group?: string | null) {
     e.preventDefault();
     setDragOver(null);
+    setDragOverGroup(null);
     const id = e.dataTransfer.getData("text/kanban-card");
     const card = cards.find((c) => c.id === id);
     // A card dragged in from the other pipeline isn't in this lane's list.
@@ -160,7 +164,11 @@ function PipelineLane({
       if (id) onWrongLane();
       return;
     }
-    if (card.stage !== stage) run(() => moveCard(id, stage));
+    if (group !== undefined) {
+      if (card.stage !== stage || card.backlog_group !== group) run(() => moveCard(id, stage, group));
+    } else if (card.stage !== stage) {
+      run(() => moveCard(id, stage));
+    }
   }
 
   return (
@@ -169,11 +177,13 @@ function PipelineLane({
         const limit = col.key === "backlog" ? null : limits[col.key];
         const count = col.key === "backlog" ? byStage("backlog").length : counts[col.key];
         const full = limit !== null && count >= limit;
+        // The Backlog's groups sit side by side, one sub-column each.
+        const width = col.key === "backlog" && backlogSections ? backlogSections.length : col.stages.length;
         return (
           <section
             key={col.key}
             // Each sub-column gets an equal share of the width, never narrower than 10rem.
-            style={{ flex: `${col.stages.length} 1 0`, minWidth: `${col.stages.length * 10}rem` }}
+            style={{ flex: `${width} 1 0`, minWidth: `${width * 10}rem` }}
             className={cn(
               "flex flex-col rounded-xl border bg-card",
               full ? "border-amber-500" : "border-border"
@@ -204,6 +214,49 @@ function PipelineLane({
               )}
             </header>
 
+            {col.key === "backlog" && backlogSections ? (
+              <div className="flex flex-1 divide-x divide-border">
+                {backlogSections.map((section) => {
+                  const key = section.name ?? "__other";
+                  return (
+                    <div
+                      key={key}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragOverGroup(key);
+                      }}
+                      onDragLeave={() => setDragOverGroup((g) => (g === key ? null : g))}
+                      onDrop={(e) => onDrop(e, "backlog", section.name)}
+                      className={cn(
+                        "flex min-h-64 min-w-0 flex-1 flex-col gap-2 p-2",
+                        dragOverGroup === key && "bg-accent/60"
+                      )}
+                    >
+                      <p className="flex items-baseline justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <span>{section.name ?? "Other"}</span>
+                        <span className="normal-case tracking-normal">{section.cards.length}</span>
+                      </p>
+                      <AddCardForm
+                        groups={groups}
+                        group={section.name}
+                        pipeline={pipeline}
+                        onSubmit={(fd) => run(() => createCard(department, fd))}
+                      />
+                      {section.cards.map((card, i, list) => (
+                        <CardItem
+                          key={card.id}
+                          card={card}
+                          groups={groups}
+                          isFirst={i === 0}
+                          isLast={i === list.length - 1}
+                          run={run}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
             <div className="flex flex-1 divide-x divide-border">
               {col.stages.map(({ stage, label }) => (
                 <div
@@ -231,29 +284,7 @@ function PipelineLane({
                   {stage === "backlog" && (
                     <AddCardForm groups={groups} pipeline={pipeline} onSubmit={(fd) => run(() => createCard(department, fd))} />
                   )}
-                  {stage === "backlog" && groups.length > 0
-                    ? groupBacklog(groups, byStage("backlog")).map((section) => (
-                        <div key={section.name ?? "__other"} className="flex flex-col gap-2">
-                          <p className="mt-1 flex items-baseline justify-between border-b border-border px-1 pb-0.5 text-xs font-semibold">
-                            <span>{section.name ?? "Other"}</span>
-                            <span className="font-normal text-muted-foreground">{section.cards.length}</span>
-                          </p>
-                          {section.cards.length === 0 && (
-                            <p className="px-1 text-xs text-muted-foreground">Nothing here yet.</p>
-                          )}
-                          {section.cards.map((card, i, list) => (
-                            <CardItem
-                              key={card.id}
-                              card={card}
-                              groups={groups}
-                              isFirst={i === 0}
-                              isLast={i === list.length - 1}
-                              run={run}
-                            />
-                          ))}
-                        </div>
-                      ))
-                    : byStage(stage).map((card, i, list) => (
+                  {byStage(stage).map((card, i, list) => (
                         <CardItem
                           key={card.id}
                           card={card}
@@ -266,6 +297,7 @@ function PipelineLane({
                 </div>
               ))}
             </div>
+            )}
           </section>
         );
       })}
@@ -294,10 +326,13 @@ function GroupSelect({ groups, value }: { groups: string[]; value?: string | nul
 
 function AddCardForm({
   groups,
+  group,
   pipeline,
   onSubmit,
 }: {
   groups: string[];
+  /** The Backlog group this form adds to, when the Backlog has groups. */
+  group?: string | null;
   pipeline: Pipeline;
   onSubmit: (fd: FormData) => void;
 }) {
@@ -323,7 +358,11 @@ function AddCardForm({
     <form onSubmit={submit} className="flex flex-col gap-2 rounded-lg border border-border p-2">
       <input type="hidden" name="pipeline" value={pipeline} />
       <Input name="title" placeholder="Question or task" required autoFocus />
-      <GroupSelect groups={groups} />
+      {group === undefined ? (
+        <GroupSelect groups={groups} />
+      ) : (
+        <input type="hidden" name="backlog_group" value={group ?? ""} />
+      )}
       <Input name="asked_by" placeholder="Who asked? (optional)" />
       <Textarea name="details" placeholder="Details (optional)" rows={2} />
       <div className="flex gap-2">
@@ -568,7 +607,7 @@ function BacklogGroupsForm({ groups, onSubmit }: { groups: string[]; onSubmit: (
       <div className="basis-full">
         <p className="font-semibold">Backlog groups</p>
         <p className="text-xs text-muted-foreground">
-          Split the Backlog into groups, top to bottom, separated by commas. Leave it empty for one list. Cards
+          Split the Backlog into groups, side by side from left to right, separated by commas. Leave it empty for one list. Cards
           whose group is removed show under Other.
         </p>
       </div>
