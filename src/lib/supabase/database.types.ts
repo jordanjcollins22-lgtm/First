@@ -2808,6 +2808,26 @@ export interface Database {
           },
         ];
       };
+      career_progress: {
+        Row: {
+          organization_id: string;
+          profile_id: string;
+          stage: number;
+          count: number;
+          note: string | null;
+          completed_at: string | null;
+          completed_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["career_progress"]["Row"]> & {
+          organization_id: string;
+          profile_id: string;
+          stage: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["career_progress"]["Row"]>;
+        Relationships: [];
+      };
       custom_field_options: {
         Row: {
           id: string;
