@@ -116,6 +116,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "suppliers", label: "Bulk Suppliers", href: "/admin/suppliers" },
   // The company shirts: the designs, and ordering them by design, colour and size.
   { key: "shirts", label: "Company Shirts", href: "/admin/shirts" },
+  // Each team member's place on the 21-stage career ladder, and signing off their next stage.
+  { key: "career", label: "Career Tracker", href: "/admin/career" },
 ];
 
 export type TabKey = string;
@@ -125,6 +127,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/admin/career/[profileId]":
+    "One team member's career ladder, opened from the Career Tracker list. Checks the career tab itself, " +
+    "and nobody but an admin can sign off their own stages.",
   "/admin/outreach/posts/saved/[seenId]":
     "The saved copy of one answered post, opened from the answered posts list on Posts to Answer. " +
     "Checks the posts-to-answer tab itself, and shows only posts the viewer answered or added, or any to the owner.",
