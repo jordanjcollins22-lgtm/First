@@ -184,6 +184,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/funnel":
     "The client funnel, page by page, with what each page converts. Gated on the owner and admin roles " +
     "directly, like Pricing health: it is the business's sales numbers.",
+  "/admin/test-runs":
+    "Everybody who went through the booking funnel from the test link, with the estimate each got. Gated on " +
+    "the owner and admin roles directly, like the Funnel page.",
   "/admin/pricing-health":
     "Whether the estimate a client gets off the map can be trusted, and what to set so it can. Gated on " +
     "the owner and admin roles directly, like Settings: it is about the rate card and the money charged, " +

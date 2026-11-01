@@ -63,6 +63,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ token
       tiers={data.tiers}
       scheduleHref={schedulePath(token)}
       mapHref={tapMapPath(token)}
+      test={data.test}
     />
   );
 }

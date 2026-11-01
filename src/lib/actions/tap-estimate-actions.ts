@@ -40,13 +40,14 @@ async function formFor(token: string) {
   const admin = createAdminClient();
   const { data } = await admin
     .from("evaluation_intakes")
-    .select("id, job_id, organization_id, answers, photo_outdated_at, wrong_property_at, job:jobs(cancelled_at, evaluation_status, property:properties(id, lat, lng))")
+    .select("id, job_id, organization_id, answers, photo_outdated_at, wrong_property_at, job:jobs(cancelled_at, evaluation_status, is_test, property:properties(id, lat, lng))")
     .eq("token", token)
     .maybeSingle();
   if (!data) return null;
   const job = data.job as unknown as {
     cancelled_at: string | null;
     evaluation_status: string;
+    is_test?: boolean;
     property: { id: string; lat: number | null; lng: number | null } | null;
   } | null;
   return {
@@ -56,6 +57,8 @@ async function formFor(token: string) {
     organizationId: data.organization_id,
     answers: cleanAnswers(data.answers),
     cancelled: Boolean(job?.cancelled_at) || job?.evaluation_status === "cancelled",
+    /** A run from a ?test=1 link: nothing is charged and nobody's calendar is booked. */
+    test: job?.is_test === true,
     property: job?.property ?? null,
     /** What the client said about the aerial photo on their map, in one tap. */
     photoFlags: { outdated: Boolean(data.photo_outdated_at), wrongProperty: Boolean(data.wrong_property_at) },
@@ -243,7 +246,7 @@ export async function startEstimatePayment(input: { token: string; pay: string }
   const form = await formFor(input.token);
   if (!form) return { ok: false, error: LINK_GONE };
   if (form.cancelled) return { ok: false, error: "This visit was cancelled. Give us a call to book again." };
-  if (!isStripeConfigured) return { ok: false, error: "Card payments aren't switched on yet. Give us a call." };
+  if (!form.test && !isStripeConfigured) return { ok: false, error: "Card payments aren't switched on yet. Give us a call." };
 
   const { data: estimate } = await form.admin
     .from("job_estimates")
@@ -272,6 +275,21 @@ export async function startEstimatePayment(input: { token: string; pay: string }
     tierId = tier.id;
     amountCents = tier.priceCents;
     description = `${tier.name} (comes off your project if you go ahead)`;
+  }
+
+  // A test run: the choice is kept as if it were paid, with nothing charged,
+  // and they go straight on to picking the day, as they would after paying.
+  if (form.test) {
+    const now = new Date().toISOString();
+    const { error } = await form.admin
+      .from("job_estimates")
+      .update({ accepted_at: now, choice, evaluation_tier: tierId, charged_cents: amountCents, paid_at: now, updated_at: now })
+      .eq("id", estimate.id);
+    if (error) return { ok: false, error: "Couldn't save that. Try again." };
+    await recordFunnelStep(form.admin, { organizationId: form.organizationId, step: "pay_started", jobId: form.jobId, detail: tierId ?? "deposit" });
+    await recordFunnelStep(form.admin, { organizationId: form.organizationId, step: "paid", jobId: form.jobId, detail: tierId ?? "deposit" });
+    log.info("estimate.test_paid", { jobId: form.jobId, choice, tierId, amountCents, description });
+    return { ok: true, url: schedulePath(input.token) };
   }
 
   const baseUrl = await outboundBaseUrl();

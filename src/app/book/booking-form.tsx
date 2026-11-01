@@ -147,6 +147,7 @@ export function BookingForm() {
       proof={options.proof}
       service={options.service}
       start={readStartAddress(searchParams)}
+      test={searchParams.get("test") === "1"}
     />
   );
 }

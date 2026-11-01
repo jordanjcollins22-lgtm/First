@@ -35,6 +35,8 @@ export interface EstimateViewProps {
   /** Where they pick the visit time once they've paid. */
   scheduleHref: string;
   mapHref: string;
+  /** A run from a ?test=1 link: paying is pretend, and the page says so. */
+  test?: boolean;
 }
 
 /** "Tuesday, Nov 3" from YYYY-MM-DD, without the day slipping across time zones. */
@@ -66,6 +68,7 @@ export function EstimateView({
   tiers,
   scheduleHref,
   mapHref,
+  test = false,
 }: EstimateViewProps) {
   const [error, setError] = useState<string | null>(null);
   const [paying, startPaying] = useTransition();
@@ -248,6 +251,11 @@ export function EstimateView({
 
       {!paid && (
         <section className="flex flex-col gap-4">
+          {test && (
+            <p className="rounded-xl border-2 border-dashed border-amber-500/60! bg-amber-500/10 px-4 py-3 text-sm font-medium">
+              Test link: no card is asked for and nothing is charged. Pick either option to see what comes next.
+            </p>
+          )}
           {hasPrice && (
             <div className="flex flex-col gap-3 rounded-2xl border-2 border-primary! p-4">
               <div>
@@ -303,7 +311,9 @@ export function EstimateView({
             </Button>
           </div>
           <p className="text-center text-xs text-muted-foreground">
-            Card, Apple Pay or Google Pay. A 3.5% card processing fee is added at checkout. You pick your visit time right after.
+            {test
+              ? "On the real link this goes to card payment. You pick your visit time right after."
+              : "Card, Apple Pay or Google Pay. A 3.5% card processing fee is added at checkout. You pick your visit time right after."}
           </p>
         </section>
       )}

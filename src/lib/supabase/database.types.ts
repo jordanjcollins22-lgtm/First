@@ -1903,6 +1903,8 @@ export interface Database {
           evaluation_date: string | null;
           evaluation_end_date: string | null;
           evaluation_mode: string;
+          /** A run through the booking funnel from a ?test=1 link: nothing charged or booked. */
+          is_test: boolean;
           ghl_appointment_id: string | null;
           ghl_push_pending: boolean;
           booking_variant: string | null;
@@ -2440,6 +2442,8 @@ export interface Database {
           evaluation_tier: "basic" | "measured" | "design" | null;
           charged_cents: number | null;
           start_day: string | null;
+          /** The evaluation time a tester picked; never booked. */
+          test_visit_at: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -116,16 +116,18 @@ async function estimatePairs(organizationId: string): Promise<{ pairs: EstimateP
   const jobIds = rows.map((r) => r.job_id);
   const [proposals, jobs] = await Promise.all([
     supabase.from("job_proposals").select("job_id, status, total_cost").in("job_id", jobIds).in("status", ["sent", "accepted"]),
-    supabase.from("jobs").select("id, name, job_number").in("id", jobIds),
+    supabase.from("jobs").select("id, name, job_number, is_test").in("id", jobIds),
   ]);
   if (proposals.error) throw proposals.error;
 
   const proposalByJob = new Map((proposals.data ?? []).map((p) => [p.job_id, p]));
-  const jobById = new Map(((jobs.data ?? []) as { id: string; name: string; job_number: number | null }[]).map((j) => [j.id, j]));
+  const jobById = new Map(((jobs.data ?? []) as { id: string; name: string; job_number: number | null; is_test: boolean }[]).map((j) => [j.id, j]));
 
   const pairs: EstimatePair[] = [];
   let awaiting = 0;
   for (const row of rows) {
+    // Test runs never get a real proposal; counting them as awaiting one would be noise.
+    if (jobById.get(row.job_id)?.is_test) continue;
     const proposal = proposalByJob.get(row.job_id);
     if (!proposal) {
       awaiting += 1;
