@@ -212,6 +212,39 @@ export const DEFAULT_BACKLOG_GROUPS: Record<Department, string[]> = {
 };
 
 /**
+ * What each board asks of its Answer and Validate columns, and the goals it
+ * shows along the bottom, until the board saves its own. Marketing's come
+ * from Jordan's mockup.
+ */
+export interface BoardText {
+  answerQuestion: string | null;
+  validateQuestion: string | null;
+  goals: string[];
+}
+
+export const DEFAULT_BOARD_TEXT: Record<Department, BoardText> = {
+  marketing: {
+    answerQuestion: "Did they book?",
+    validateQuestion: "Did we close them?",
+    goals: ["Get project leads", "Get team member leads"],
+  },
+  sales: { answerQuestion: null, validateQuestion: null, goals: [] },
+  operations: { answerQuestion: null, validateQuestion: null, goals: [] },
+  admin: { answerQuestion: null, validateQuestion: null, goals: [] },
+};
+
+/** A question from a form, or null when left blank. */
+export function parseQuestion(raw: unknown): string | null {
+  const q = String(raw ?? "").trim().slice(0, 120);
+  return q || null;
+}
+
+/** Goals from a form, one per line or comma-separated. Same rules as groups. */
+export function parseGoals(raw: unknown): string[] {
+  return parseBacklogGroups(raw);
+}
+
+/**
  * Groups that cards made from jobs and leads were filed under before every
  * Backlog was split into External and Internal. They are moved to External.
  */
@@ -229,6 +262,7 @@ export function parseBacklogGroups(raw: unknown): string[] {
   }
   return groups.slice(0, 12);
 }
+
 
 /**
  * The Backlog split into its groups, in the board's order, each keeping its

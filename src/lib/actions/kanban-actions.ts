@@ -9,6 +9,8 @@ import {
   isDepartment,
   isStage,
   parseBacklogGroups,
+  parseGoals,
+  parseQuestion,
   parseWipLimit,
   positionAtBottom,
   positionAtTop,
@@ -237,6 +239,29 @@ export async function updateBacklogGroups(department: string, formData: FormData
     wip_answer: limits.answer,
     wip_validate: limits.validate,
     backlog_groups: groups,
+  });
+  if (error) throw error;
+  revalidateBoard(department);
+  return {};
+}
+
+/** Save what this board asks of Answer and Validate, and its goals. */
+export async function updateBoardText(department: string, formData: FormData): Promise<ActionResult> {
+  await guard();
+  if (!isDepartment(department)) return { error: "Unknown board." };
+
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const limits = await getWipLimits(department);
+  const { error } = await supabase.from("kanban_boards").upsert({
+    organization_id: organizationId,
+    department,
+    wip_breakdown: limits.breakdown,
+    wip_answer: limits.answer,
+    wip_validate: limits.validate,
+    answer_question: parseQuestion(formData.get("answer_question")),
+    validate_question: parseQuestion(formData.get("validate_question")),
+    goals: parseGoals(formData.get("goals")),
   });
   if (error) throw error;
   revalidateBoard(department);

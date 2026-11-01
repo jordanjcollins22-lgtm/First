@@ -25,6 +25,7 @@ import {
   moveCard,
   reorderCard,
   updateBacklogGroups,
+  updateBoardText,
   updateCard,
   updateWipLimits,
   type ActionResult,
@@ -32,10 +33,12 @@ import {
 import type { KanbanCard } from "@/lib/data/kanban";
 import {
   COLUMNS,
+  DEPARTMENT_LABELS,
   countByColumn,
   groupBacklog,
   nextStage,
   previousStage,
+  type BoardText,
   type Department,
   type Stage,
   type WipLimits,
@@ -48,9 +51,11 @@ interface Props {
   limits: WipLimits;
   /** Groups inside the Backlog, in order. Empty means one plain list. */
   groups: string[];
+  /** The board's questions for Answer and Validate, and its goals. */
+  text: BoardText;
 }
 
-export function KanbanBoard({ department, cards, limits, groups }: Props) {
+export function KanbanBoard({ department, cards, limits, groups, text }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Stage | null>(null);
@@ -116,6 +121,12 @@ export function KanbanBoard({ department, cards, limits, groups }: Props) {
                     {limit !== null ? `${count} / ${limit}` : `${count}`}
                   </span>
                 </div>
+                {col.key === "answer" && text.answerQuestion && (
+                  <p className="text-sm font-medium">Question: {text.answerQuestion}</p>
+                )}
+                {col.key === "validate" && text.validateQuestion && (
+                  <p className="text-sm font-medium">Question: {text.validateQuestion}</p>
+                )}
                 {col.doneRule && <p className="text-xs text-muted-foreground">Done when: {col.doneRule}</p>}
                 {col.key === "backlog" && (
                   <p className="text-xs text-muted-foreground">Top card is the priority.</p>
@@ -189,6 +200,18 @@ export function KanbanBoard({ department, cards, limits, groups }: Props) {
         })}
       </div>
 
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 rounded-xl bg-primary px-4 py-3 text-primary-foreground">
+        <p className="text-2xl font-semibold tracking-wide uppercase">{DEPARTMENT_LABELS[department]}</p>
+        {text.goals.length > 0 && (
+          <ul className="text-sm">
+            {text.goals.map((goal) => (
+              <li key={goal}>Goal: {goal}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <BoardTextForm text={text} onSubmit={(fd) => run(() => updateBoardText(department, fd))} />
       <WipLimitsForm
         limits={limits}
         onSubmit={(fd) => run(() => updateWipLimits(department, fd))}
@@ -293,8 +316,8 @@ function CardItem({
           <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
             Cancel
           </Button>
-          {/* A job's or lead's card comes back while it is open, so it is not deleted here. */}
-          {card.source !== "job" && card.source !== "lead" && (
+          {/* A card made from a job, lead or new client comes back while it is open, so it is not deleted here. */}
+          {card.source !== "job" && card.source !== "lead" && card.source !== "customer" && (
           <Button
             type="button"
             size="sm"
@@ -340,6 +363,13 @@ function CardItem({
         <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
           {card.source === "ghl" && <MessageSquare className="h-3 w-3" aria-label="From GoHighLevel" />}
           {card.asked_by && <span>{card.source === "job" ? "Client: " : "Asked by "}{card.asked_by}</span>}
+        </p>
+      )}
+      {card.facts && (
+        <p className="mt-1 text-xs">
+          <span className="font-medium">Booked eval:</span> {card.facts.bookedEval ? "Y" : "N"}
+          {" · "}
+          <span className="font-medium">Booked job:</span> {card.facts.bookedJob ? "Y" : "N"}
         </p>
       )}
       {card.details && (
@@ -478,6 +508,41 @@ function BacklogGroupsForm({ groups, onSubmit }: { groups: string[]; onSubmit: (
       />
       <Button type="submit" size="sm" variant="outline">
         Save groups
+      </Button>
+    </form>
+  );
+}
+
+function BoardTextForm({ text, onSubmit }: { text: BoardText; onSubmit: (fd: FormData) => void }) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(new FormData(e.currentTarget));
+      }}
+      className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3 text-sm"
+    >
+      <div className="basis-full">
+        <p className="font-semibold">Questions and goals</p>
+        <p className="text-xs text-muted-foreground">
+          The question each card answers in Answer and in Validate, and the department&apos;s goals shown above.
+          Leave a question blank to hide it. Goals are separated by commas.
+        </p>
+      </div>
+      <label className="flex min-w-48 flex-1 flex-col gap-1">
+        <span className="text-xs font-medium">Answer question</span>
+        <Input name="answer_question" defaultValue={text.answerQuestion ?? ""} key={`a${text.answerQuestion}`} placeholder="e.g. Did they book?" />
+      </label>
+      <label className="flex min-w-48 flex-1 flex-col gap-1">
+        <span className="text-xs font-medium">Validate question</span>
+        <Input name="validate_question" defaultValue={text.validateQuestion ?? ""} key={`v${text.validateQuestion}`} placeholder="e.g. Did we close them?" />
+      </label>
+      <label className="flex min-w-64 flex-[2] flex-col gap-1">
+        <span className="text-xs font-medium">Goals</span>
+        <Input name="goals" defaultValue={text.goals.join(", ")} key={`g${text.goals.join("|")}`} placeholder="e.g. Get project leads, Get team member leads" />
+      </label>
+      <Button type="submit" size="sm" variant="outline">
+        Save
       </Button>
     </form>
   );

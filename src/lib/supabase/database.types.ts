@@ -2415,6 +2415,9 @@ export interface Database {
           wip_answer: number;
           wip_validate: number;
           backlog_groups: string[] | null;
+          answer_question: string | null;
+          validate_question: string | null;
+          goals: string[] | null;
           created_at: string;
           updated_at: string;
         };
@@ -2443,9 +2446,10 @@ export interface Database {
           title: string;
           details: string | null;
           asked_by: string | null;
-          source: "manual" | "ghl" | "job" | "lead";
+          source: "manual" | "ghl" | "job" | "lead" | "customer";
           job_id: string | null;
           prospect_id: string | null;
+          customer_id: string | null;
           backlog_group: string | null;
           ghl_contact_id: string | null;
           ghl_message_id: string | null;
