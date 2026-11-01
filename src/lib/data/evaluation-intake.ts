@@ -13,6 +13,12 @@ export interface Intake {
   submittedBy: "client" | "together" | null;
   /** The photos they sent, signed for an hour. */
   photoUrls: { path: string; url: string }[];
+  /** They tapped "Not up to date?" under the map's aerial photo. */
+  photoOutdatedAt?: string | null;
+  /** They tapped "Not my property?" under it. */
+  wrongPropertyAt?: string | null;
+  /** The photo they were looking at, e.g. "Maryland aerial photo, 2025". */
+  photoSeen?: string | null;
 }
 
 /** What the public page shows around the form. */
@@ -101,7 +107,7 @@ export async function getIntakeForJob(jobId: string): Promise<Intake | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("evaluation_intakes")
-    .select("id, job_id, token, answers, submitted_at, submitted_by")
+    .select("id, job_id, token, answers, submitted_at, submitted_by, photo_outdated_at, wrong_property_at, photo_seen")
     .eq("job_id", jobId)
     .maybeSingle();
   if (!data) return null;
@@ -114,6 +120,9 @@ export async function getIntakeForJob(jobId: string): Promise<Intake | null> {
     photoUrls: await signPhotos(supabase.storage, answers.photos),
     submittedAt: data.submitted_at,
     submittedBy: (data.submitted_by as Intake["submittedBy"]) ?? null,
+    photoOutdatedAt: data.photo_outdated_at ?? null,
+    wrongPropertyAt: data.wrong_property_at ?? null,
+    photoSeen: data.photo_seen ?? null,
   };
 }
 

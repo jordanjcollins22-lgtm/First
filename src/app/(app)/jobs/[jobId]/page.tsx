@@ -799,6 +799,7 @@ export default async function JobPage({
           tierName={tierById(readTiers(organization.evaluation_tiers), clientEstimate.evaluationTier)?.name ?? null}
           clientHref={estimatePath(intake.token)}
           showMoney={seen.jobMoney}
+          photo={{ outdated: Boolean(intake.photoOutdatedAt), wrongProperty: Boolean(intake.wrongPropertyAt), seen: intake.photoSeen ?? null }}
         />
       )}
 

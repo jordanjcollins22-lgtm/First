@@ -23,12 +23,15 @@ export function ClientEstimateCard({
   tierName,
   clientHref,
   showMoney,
+  photo,
 }: {
   estimate: ClientEstimate;
   /** The evaluation visit they get, by name. */
   tierName: string | null;
   clientHref: string;
   showMoney: boolean;
+  /** What the client said about the aerial photo on their map. */
+  photo?: { outdated: boolean; wrongProperty: boolean; seen: string | null };
 }) {
   const sizing = new Map(estimate.sizing.map((s) => [s.index, s]));
   const paid = estimate.chargedCents != null ? dollars(estimate.chargedCents) : "";
@@ -50,6 +53,16 @@ export function ClientEstimateCard({
       {showMoney && (
         <p className="text-sm">
           Estimate <span className="font-semibold">{dollars(estimate.totalCents)}</span> · {status}
+        </p>
+      )}
+      {photo?.wrongProperty && (
+        <p className="mt-2 rounded-md bg-red-500/10 px-2 py-1 text-sm font-semibold text-red-700 dark:text-red-300">
+          The client says the map isn&apos;t showing their property. Check the address before the visit.
+        </p>
+      )}
+      {photo?.outdated && (
+        <p className="mt-2 rounded-md bg-amber-500/10 px-2 py-1 text-sm font-semibold text-amber-700 dark:text-amber-300">
+          The client says the aerial photo is out of date{photo.seen ? ` (${photo.seen})` : ""}. Sizes read off it are trusted less; check them at the visit.
         </p>
       )}
       <ol className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">

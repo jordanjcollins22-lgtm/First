@@ -2392,6 +2392,9 @@ export interface Database {
           answers: Json;
           submitted_at: string | null;
           submitted_by: string | null;
+          photo_outdated_at: string | null;
+          wrong_property_at: string | null;
+          photo_seen: string | null;
           created_at: string;
           updated_at: string;
         };

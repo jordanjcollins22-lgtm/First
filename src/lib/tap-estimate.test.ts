@@ -12,6 +12,7 @@ import {
   outlineAreaSqft,
   parseTapSpots,
   readTapSpots,
+  trustPictureReadings,
   type TapSpot,
 } from "@/lib/tap-estimate";
 
@@ -206,5 +207,27 @@ describe("answersFromSpots", () => {
     expect(answers.services).toEqual(["lawn"]);
     expect(answers.details.lawn_need).toEqual(["redo", "patch"]);
     expect(answers.areas).toEqual([]);
+  });
+});
+
+describe("trustPictureReadings", () => {
+  const readings = [
+    { index: 0, confidence: "high" as const, notes: "Bed by the walk." },
+    { index: 1, confidence: "medium" as const, notes: "" },
+    { index: 2, confidence: "low" as const, notes: "Hard to see." },
+  ];
+
+  it("uses them as they are when the client said nothing", () => {
+    expect(trustPictureReadings(readings, { outdated: false, wrongProperty: false })).toBe(readings);
+  });
+
+  it("trusts each a step less when the photo is out of date", () => {
+    const out = trustPictureReadings(readings, { outdated: true, wrongProperty: false });
+    expect(out.map((r) => r.confidence)).toEqual(["medium", "low", "low"]);
+    expect(out[0].notes).toContain("out of date");
+  });
+
+  it("uses none of them when it isn't their property", () => {
+    expect(trustPictureReadings(readings, { outdated: true, wrongProperty: true })).toEqual([]);
   });
 });

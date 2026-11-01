@@ -7,7 +7,7 @@ import { Camera, Check, Loader2, PencilLine, RotateCcw, Sprout, Trash2, X } from
 
 import { Button } from "@/components/ui/button";
 import { removeIntakePhoto } from "@/lib/actions/evaluation-intake-actions";
-import { recordMapTapped, submitTapPreEval } from "@/lib/actions/tap-estimate-actions";
+import { flagMapPhoto, recordMapTapped, submitTapPreEval } from "@/lib/actions/tap-estimate-actions";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { publicEnv } from "@/lib/public-env";
 import { isHeic, shrinkImage } from "@/lib/shrink-image";
@@ -95,6 +95,12 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
   }, [spots]);
 
   // Read inside the map's click handler, which is bound once.
+  // What they told us about the photo, if anything: one tap, then a thank-you.
+  const [photoFlag, setPhotoFlag] = useState<"outdated" | "wrong_property" | null>(null);
+  function flagPhoto(kind: "outdated" | "wrong_property") {
+    setPhotoFlag(kind);
+    void flagMapPhoto({ token, kind, photo: imagery?.name ?? null }).catch(() => {});
+  }
   const tappedRef = useRef(false);
   const openKeyRef = useRef(openKey);
   useEffect(() => {
@@ -403,6 +409,27 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-5 pb-10 pt-5 text-center text-white">
         <h1 className="text-2xl font-bold drop-shadow">{drawing ? "Draw round the area with your finger" : "Tap where you want work done"}</h1>
         {drawing && <p className="mt-1 text-base drop-shadow">One loop round the edge is plenty. It doesn&apos;t have to be neat.</p>}
+        {/* When the photo is from, and a quiet way to say it's wrong. One tap,
+            nothing to fill in, and the map carries on as it was. */}
+        {!drawing && (
+          <p className="mt-1 text-xs text-white/85 drop-shadow">
+            {imagery ? imagery.name.replace(/aerial photo/i, "photo") : "Satellite photo, date unknown"}
+            {photoFlag ? (
+              <span className="ml-1.5 font-semibold">· Thanks, we&apos;ll check it.</span>
+            ) : (
+              <>
+                {" · "}
+                <button type="button" className="pointer-events-auto underline underline-offset-2" onClick={() => flagPhoto("outdated")}>
+                  Not up to date?
+                </button>
+                {" · "}
+                <button type="button" className="pointer-events-auto underline underline-offset-2" onClick={() => flagPhoto("wrong_property")}>
+                  Not my property?
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </div>
 
       {drawing ? (
