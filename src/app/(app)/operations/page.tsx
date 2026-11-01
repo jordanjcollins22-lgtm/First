@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell } from "@/components/module-shell";
+import { DepartmentBoard } from "@/components/kanban/department-board";
 import { Deferred } from "@/components/deferred";
 import { CalendarTab, WeatherTab } from "@/app/(app)/evaluations/page";
 import SaltPage from "@/app/(app)/admin/salt/page";
@@ -60,6 +61,7 @@ export default async function OperationsPage({ searchParams }: { searchParams: P
   if (shown.has("booking")) content.booking = <Deferred load={() => CalendarTab({ section: "booking" })} />;
   if (shown.has("salt")) content.salt = <SaltPage />;
   if (shown.has("suggestions")) content.suggestions = <Deferred load={() => SuggestionsTab(profile)} />;
+  if (shown.has("board")) content.board = <DepartmentBoard department="operations" />;
 
   return <ModuleShell module="operations" asked={tab} content={content} />;
 }

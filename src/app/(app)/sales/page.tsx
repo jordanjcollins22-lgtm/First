@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell, holdsAny } from "@/components/module-shell";
+import { DepartmentBoard } from "@/components/kanban/department-board";
 
 // The screens that already exist, rendered where the work happens rather than
 // rebuilt. Importing a page's own component is deliberate: every one of these
@@ -34,12 +35,13 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab, price } = await searchParams;
 
-  const [pipeline, leads, proposals, clients, mows] = await Promise.all([
+  const [pipeline, leads, proposals, clients, mows, board] = await Promise.all([
     holdsAny(["pipeline"]),
     holdsAny(["leads"]),
     holdsAny(["proposals", "invoices"]),
     holdsAny(["contacts"]),
     holdsAny(["mow-orders"]),
+    holdsAny(["kanban"]),
   ]);
 
   return (
@@ -53,6 +55,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
         ...(proposals ? { "win-back": <WinBackTab /> } : {}),
         ...(clients ? { clients: <ContactsPage /> } : {}),
         ...(mows ? { mows: <MowOrdersPage /> } : {}),
+        ...(board ? { board: <DepartmentBoard department="sales" /> } : {}),
       }}
     />
   );

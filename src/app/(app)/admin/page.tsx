@@ -4,6 +4,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getAllowedTabs } from "@/lib/data/access";
 import { moduleFor, subtabsFor } from "@/lib/modules";
 import { TABS, type TabDefinition } from "@/lib/permissions";
+import { DepartmentBoard } from "@/components/kanban/department-board";
 
 /**
  * Admin: everything the business runs on, grouped by what it is for.
@@ -43,12 +44,21 @@ function pagesFor(subtab: { tabs: string[] }, allowed: string[]): TabDefinition[
 export default async function AdminPage() {
   const profile = await getCurrentProfile();
   const allowed = [...(await getAllowedTabs())];
-  const groups = subtabsFor("admin", allowed);
+  // The Board is shown on this page itself rather than linked as a group.
+  const groups = subtabsFor("admin", allowed).filter((g) => g.key !== "board");
+  const showBoard = allowed.includes("kanban");
   const question = moduleFor("admin")?.question ?? "";
   const isAdmin = profile?.roles.includes("admin") ?? false;
   const listed = new Set<string>();
 
   return (
+    <>
+    {showBoard && (
+      <section id="board" className="px-4 pt-6 sm:pt-8">
+        <h2 className="mb-1 text-xl font-semibold">Admin board</h2>
+        <DepartmentBoard department="admin" />
+      </section>
+    )}
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="text-xl font-semibold">Admin</h1>
       <p className="mb-5 text-sm text-muted-foreground">{question}</p>
@@ -131,5 +141,6 @@ export default async function AdminPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

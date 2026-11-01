@@ -1,6 +1,7 @@
 import { isSupabaseConfigured } from "@/lib/env";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { ModuleShell, holdsAny } from "@/components/module-shell";
+import { DepartmentBoard } from "@/components/kanban/department-board";
 import { Deferred } from "@/components/deferred";
 
 // Each of these keeps its own address, data loading and permission guard.
@@ -34,13 +35,14 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
   const { tab } = await searchParams;
 
-  const [map, leads, hangers, flyer, content, posts] = await Promise.all([
+  const [map, leads, hangers, flyer, content, posts, board] = await Promise.all([
     holdsAny(["project-data"]),
     holdsAny(["leads"]),
     holdsAny(["door-hangers"]),
     holdsAny(["flyer"]),
     holdsAny(["social"]),
     holdsAny(["posts-to-answer"]),
+    holdsAny(["kanban"]),
   ]);
 
   return (
@@ -72,6 +74,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
           : {}),
         ...(leads ? { "property-managers": <Deferred load={PropertyManagersTab} /> } : {}),
         ...(map || leads ? { attribution: <Deferred load={AttributionTab} /> } : {}),
+        ...(board ? { board: <DepartmentBoard department="marketing" /> } : {}),
       }}
     />
   );

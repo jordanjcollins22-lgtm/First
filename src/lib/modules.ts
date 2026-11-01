@@ -95,6 +95,8 @@ export const MODULES: readonly AppModule[] = [
       // Money the business actually received, traced back to what brought it
       // in -- and, just as plainly, the work that cannot be traced at all.
       { key: "attribution", label: "What worked", tabs: ["project-data", "leads"], blurb: "Where the money came from, and where it honestly cannot be traced." },
+      // The department's Kanban board: questions and tasks from Backlog to Validate.
+      { key: "board", label: "Board", tabs: ["kanban"], blurb: "Questions and tasks, Backlog to Validate. The top card is the priority." },
     ],
   },
   {
@@ -112,6 +114,8 @@ export const MODULES: readonly AppModule[] = [
       { key: "win-back", label: "Win back", tabs: ["proposals"], blurb: "Declined proposals, offered again as a smaller Phase 1." },
       { key: "clients", label: "Clients", tabs: ["contacts"], blurb: "The contact book." },
       { key: "mows", label: "Quick mow pipeline", tabs: ["mow-orders"], blurb: "Requests from the quick mow page, from a price seen to a lawn mowed." },
+      // The department's Kanban board: questions and tasks from Backlog to Validate.
+      { key: "board", label: "Board", tabs: ["kanban"], blurb: "Questions and tasks, Backlog to Validate. The top card is the priority." },
     ],
   },
   {
@@ -141,6 +145,8 @@ export const MODULES: readonly AppModule[] = [
       // Last, and never the opening subtab: the calendar is the thing somebody
       // came for, and a suggestion is an opinion about it.
       { key: "suggestions", label: "Suggestions", tabs: ["evaluations"], blurb: "What the calendar would do, if you agreed with it. It books nothing on its own." },
+      // The department's Kanban board: questions and tasks from Backlog to Validate.
+      { key: "board", label: "Board", tabs: ["kanban"], blurb: "Questions and tasks, Backlog to Validate. The top card is the priority." },
     ],
   },
   {
@@ -167,6 +173,8 @@ export const MODULES: readonly AppModule[] = [
       // shared inbox, both behind the one tab.
       { key: "meta", label: "Facebook & Instagram", tabs: ["meta"] },
       { key: "knowledge", label: "Knowledge graph", tabs: ["knowledge-graph"] },
+      // The department's Kanban board: questions and tasks from Backlog to Validate.
+      { key: "board", label: "Board", tabs: ["kanban"], blurb: "Questions and tasks, Backlog to Validate. The top card is the priority." },
     ],
   },
 ] as const;
