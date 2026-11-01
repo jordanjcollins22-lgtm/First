@@ -11,6 +11,8 @@ import { listProfiles } from "./team";
 import { blendedCrewRateCents, type Markup } from "@/lib/job-costing";
 import { overheadPerCrewHourCents } from "@/lib/data/per-diem";
 import { saltSettingsFrom, type SaltSettings } from "@/lib/salt";
+import { withRealCosts } from "@/lib/material-costs";
+import { supplierPriceList } from "@/lib/data/estimate-catalog";
 import type {
   MeasurementBasis,
   Material,
@@ -88,9 +90,24 @@ export const getCanvasCatalog = cache(async function getCanvasCatalog(): Promise
   if (serviceToolsRes.error) throw serviceToolsRes.error;
   if (serviceMaterialsRes.error) throw serviceMaterialsRes.error;
 
+  // A material switched off in the inventory list is still what a rate card
+  // rule puts on a job (mulch on a mulch bed), so it is priced while a rule
+  // uses it. And a blank cost is read off the supplier price list, so a
+  // material kept only for its coverage still costs what it really costs.
+  const rules = (serviceMaterialsRes.data ?? []) as unknown as ServiceMaterialRule[];
+  const listedIds = new Set(materials.map((m) => m.id));
+  const ruledOff = [...new Set(rules.map((r) => r.material_id))].filter((id) => !listedIds.has(id));
+  const [{ data: offRows }, priceList] = await Promise.all([
+    ruledOff.length > 0
+      ? supabase.from("materials").select("*").in("id", ruledOff).eq("category", "job")
+      : Promise.resolve({ data: [] as unknown[] }),
+    supplierPriceList(supabase, organization.id).catch(() => []),
+  ]);
+  const pricedMaterials = withRealCosts([...materials, ...((offRows ?? []) as unknown as Material[])], priceList);
+
   return {
     tools,
-    materials,
+    materials: pricedMaterials,
     servicePricing,
     customFieldOptions,
     storageLocations: businessLocations.map((location) => location.name),
