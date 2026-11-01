@@ -8,7 +8,7 @@
  */
 
 import { viewOf, type BoardJob } from "@/lib/job-board";
-import type { Stage } from "@/lib/kanban/board";
+import { EXTERNAL_GROUP, type Stage } from "@/lib/kanban/board";
 
 export interface JobCardLink {
   id: string;
@@ -21,6 +21,7 @@ export interface NewJobCard {
   title: string;
   asked_by: string | null;
   details: string | null;
+  backlog_group: string;
 }
 
 /** Whether a job is work that still needs doing. */
@@ -49,6 +50,8 @@ export function cardForJob(job: BoardJob): NewJobCard {
   return {
     job_id: job.id,
     title: `${number}${job.name}`,
+    // A job is work for a client: outside work.
+    backlog_group: EXTERNAL_GROUP,
     asked_by: job.customerName,
     details: parts.join("\n") || null,
   };

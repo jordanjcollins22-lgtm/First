@@ -194,19 +194,28 @@ export function positionAtTop(positions: number[]): number {
   return positions.length ? Math.min(...positions) - 1 : 0;
 }
 
+/** Work for or with somebody outside the business: a client, a lead, a supplier. */
+export const EXTERNAL_GROUP = "External";
+/** Work on the business itself: a funnel, a process, a tool. */
+export const INTERNAL_GROUP = "Internal";
+
 /**
  * Groups inside a department's Backlog, used until the board saves its own.
- * Sales splits the leads to reach out to from the work of converting them.
+ * Every Backlog splits outside work from work on the business. In Sales that
+ * is the leads to reach out to, apart from building what converts them.
  */
 export const DEFAULT_BACKLOG_GROUPS: Record<Department, string[]> = {
-  marketing: [],
-  sales: ["Leads", "Converting"],
-  operations: [],
-  admin: [],
+  marketing: [EXTERNAL_GROUP, INTERNAL_GROUP],
+  sales: [EXTERNAL_GROUP, INTERNAL_GROUP],
+  operations: [EXTERNAL_GROUP, INTERNAL_GROUP],
+  admin: [EXTERNAL_GROUP, INTERNAL_GROUP],
 };
 
-/** Where cards that came in from the Sales lead list are grouped. */
-export const LEADS_GROUP = "Leads";
+/**
+ * Groups that cards made from jobs and leads were filed under before every
+ * Backlog was split into External and Internal. They are moved to External.
+ */
+export const LEGACY_EXTERNAL_GROUPS = ["Leads"];
 
 /** Group names from a form: one per line or comma-separated, trimmed, no repeats. */
 export function parseBacklogGroups(raw: unknown): string[] {
