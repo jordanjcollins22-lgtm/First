@@ -107,6 +107,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "mow-orders", label: "Quick Mow Pipeline", href: "/mow-orders" },
   // Applicants from the job ads: their answers, their videos, and who gets an interview.
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
+  // One record per person from application to offboarding: stages, checklists, training, evaluations.
+  { key: "people", label: "People", href: "/admin/people" },
   // The crew's pay and each service's production rate: what every forward price is worked out from.
   { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
   // Bulk mulch, topsoil and stone suppliers near the work: prices, delivery fees and minimums.
@@ -173,6 +175,14 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/hiring/[id]":
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",
+  "/admin/people/[id]":
+    "One person's full record, opened from People. Checks the people tab itself, and its actions check it again.",
+  "/admin/people/setup":
+    "The editable checklists, definitions and SOPs, a tab within People. Checks the people tab itself, and its actions check it again.",
+  "/admin/people/training":
+    "The training library, a tab within People. Checks the people tab itself, and its actions check it again.",
+  "/admin/people/training/[id]":
+    "One training module, opened from the library. Checks the people tab itself, and its actions check it again.",
   "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
   "/progress/[token]":
     "Opened by a property manager, management company or family member from a link. No account, and " +

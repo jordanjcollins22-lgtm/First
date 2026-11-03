@@ -1,5 +1,6 @@
 "use server";
 
+import { onApplicationReceived, onVideoSubmitted } from "@/lib/data/people";
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -67,6 +68,7 @@ export async function applyForPosition(input: {
     .limit(1)
     .maybeSingle();
   if (earlier) {
+    if (earlier.stage === "needs_review") return { ok: true, passed: false };
     if (earlier.stage === "screened_out" || earlier.stage === "not_a_fit" || earlier.stage === "withdrawn") return { ok: true, passed: false };
     return { ok: true, passed: true, token: earlier.token };
   }
@@ -84,8 +86,8 @@ export async function applyForPosition(input: {
       phone: contact.phone,
       zip: contact.zip,
       answers,
-      screen_reasons: result.reasons,
-      stage: result.passed ? "video_requested" : "screened_out",
+      screen_reasons: [...result.reasons, ...result.review],
+      stage: !result.passed ? "screened_out" : result.review.length ? "needs_review" : "video_requested",
       source,
     })
     .select("id")
@@ -103,6 +105,20 @@ export async function applyForPosition(input: {
     log.warn("hiring.invite_link_failed", { error: err instanceof Error ? err.message : String(err) })
   );
   log.info("hiring.applied", { position: position.key, passed: result.passed, email: maskEmail(contact.email), source });
+  await onApplicationReceived({
+    organizationId: org.id,
+    applicantId: row.id,
+    name: contact.name,
+    email: contact.email,
+    phone: contact.phone,
+    position: position.key,
+    positionTitle: position.title,
+    business: org.name,
+    businessPhone: org.phone,
+    needsReview: result.passed && result.review.length > 0,
+    applicantStage: !result.passed ? "screened_out" : result.review.length ? "needs_review" : "video_requested",
+  }).catch((err) => log.warn("people.application_hook_failed", { error: err instanceof Error ? err.message : String(err) }));
+  if (result.passed && result.review.length > 0) return { ok: true, passed: false };
   revalidatePath("/admin/hiring");
   return result.passed ? { ok: true, passed: true, token } : { ok: true, passed: false };
 }
@@ -199,6 +215,7 @@ async function markVideoIn(
     detail: video.video_link ? { link: true } : { upload: true },
   });
   log.info("hiring.video_in", { applicantId: applicant.id, link: Boolean(video.video_link) });
+  await onVideoSubmitted(applicant.id).catch((err) => log.warn("people.video_hook_failed", { error: err instanceof Error ? err.message : String(err) }));
   revalidatePath("/admin/hiring");
   return { ok: true };
 }

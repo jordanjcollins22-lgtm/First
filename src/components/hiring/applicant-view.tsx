@@ -17,7 +17,7 @@ const EVENT_LABEL: Record<string, string> = {
   email_sent: "Emailed",
 };
 
-export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
+export function ApplicantView({ applicant, personId }: { applicant: ApplicantDetail; personId?: string | null }) {
   const position = positionFor(applicant.position);
   if (!position) return null;
 
@@ -38,6 +38,11 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
           </span>
         </p>
         <div className="flex flex-wrap gap-3 pt-1 text-sm">
+          {personId && (
+            <Link href={`/admin/people/${personId}`} className="font-medium text-primary hover:underline">
+              Open full People record
+            </Link>
+          )}
           <a href={`tel:${applicant.phone}`} className="flex items-center gap-1 text-primary hover:underline">
             <Phone className="h-4 w-4" /> {applicant.phone}
           </a>
@@ -75,7 +80,7 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
         <h2 className="text-base font-semibold">Their answers</h2>
         {applicant.screenReasons.length > 0 && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Didn&apos;t pass: {applicant.screenReasons.join(", ")}
+            Reason: {applicant.screenReasons.join(", ")}
           </p>
         )}
         <dl className="divide-y divide-border rounded-xl border border-border bg-card text-sm">

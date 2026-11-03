@@ -62,6 +62,8 @@ export interface Screened {
   passed: boolean;
   /** Each knockout that was not passed, in our words. Seen by us only. */
   reasons: string[];
+  /** Passed the knockouts, but a person decides. In our words, seen by us only. */
+  review: string[];
 }
 
 /** Every knockout question answered with a passing answer. */
@@ -71,15 +73,18 @@ export function screen(position: Position, answers: Answers): Screened {
     if (!q.passes) continue;
     if (!q.passes.includes(answers[q.key] ?? "")) reasons.push(q.failReason ?? q.label);
   }
-  return { passed: reasons.length === 0, reasons };
+  const review = position.questions.filter((q) => q.reviewIf?.includes(answers[q.key] ?? "")).map((q) => q.reviewReason ?? q.label);
+  return { passed: reasons.length === 0, reasons, review };
 }
 
 /** The stages an application moves through, in order, with what each is called on screen. */
 export const STAGES = {
-  screened_out: "Didn't pass the questions",
+  screened_out: "Not Qualified",
+  needs_review: "Requires Review",
   video_requested: "Waiting for their video",
   video_submitted: "Video to review",
   interview: "Invited to interview",
+  offer: "Job offer",
   hired: "Hired",
   not_a_fit: "Not a fit",
   withdrawn: "Withdrew",
@@ -96,8 +101,12 @@ export function nextStages(stage: Stage): Stage[] {
   switch (stage) {
     case "video_submitted":
       return ["interview", "not_a_fit"];
+    case "needs_review":
+      return ["video_requested", "screened_out"];
     case "interview":
-      return ["hired", "not_a_fit"];
+      return ["offer", "not_a_fit"];
+    case "offer":
+      return ["hired", "withdrawn"];
     case "video_requested":
       return ["not_a_fit", "withdrawn"];
     case "screened_out":

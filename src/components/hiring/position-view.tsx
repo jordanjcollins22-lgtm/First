@@ -44,6 +44,14 @@ export function PositionView({
             ))}
           </ul>
         </div>
+        <div>
+          <h2 className="font-semibold">What doing this job well looks like</h2>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {position.success.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
         {publicPayLine(position) && (
           <div>
             <h2 className="font-semibold">Pay</h2>

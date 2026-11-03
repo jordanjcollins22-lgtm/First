@@ -1,5 +1,6 @@
 "use server";
 
+import { linkTeamMemberToPerson } from "@/lib/data/people";
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
@@ -154,6 +155,10 @@ async function createTeamMemberInner(formData: FormData): Promise<CreateTeamMemb
     if (payError) return { ok: false, message: payError.message };
   }
 
+  // One record per person: an applicant becoming a team member keeps theirs.
+  await linkTeamMemberToPerson({ organizationId: caller.organization_id, profileId: data.user.id, name: `${firstName} ${lastName}`, email, phone: phone || null }).catch((err) =>
+    console.error("linking a new team member to People failed:", err)
+  );
   revalidatePath("/admin/team");
   return { ok: true };
 }

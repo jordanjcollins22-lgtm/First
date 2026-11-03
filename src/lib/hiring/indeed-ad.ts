@@ -46,7 +46,7 @@ export function indeedPayFields(position: Position): string {
   }
   const rate = position.pay?.match(/\$\s?([\d.,]+)/)?.[1];
   const hourly = rate ? `Exact amount, $${Number(rate.replace(/,/g, "")).toFixed(2)} per hour` : PAY_MISSING;
-  return `Pay: ${hourly}.${position.commission ? " Under supplemental pay, tick Commission pay (the description says it's coming soon)." : ""}`;
+  return `Pay: ${hourly}.${position.commission ? " Under supplemental pay, tick Commission pay (the description gives the details)." : ""}`;
 }
 
 /** Indeed's own benefit tick boxes, named as Indeed names them. */

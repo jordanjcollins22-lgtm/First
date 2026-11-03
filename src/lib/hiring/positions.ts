@@ -24,6 +24,9 @@ export interface Question {
   passes?: readonly string[];
   /** What the applicant is told is missing, in our words, when it does not pass. Shown to us, never to them. */
   failReason?: string;
+  /** Answers a person decides on: not a knockout, but not an automatic yes. Sends them to Requires Review. */
+  reviewIf?: readonly string[];
+  reviewReason?: string;
   optional?: boolean;
 }
 
@@ -43,6 +46,8 @@ export interface Position {
   schedule: string;
   duties: readonly string[];
   lookingFor: readonly string[];
+  /** What doing this job well looks like. */
+  success: readonly string[];
   questions: readonly Question[];
   /** What to say in the video, after who they are. */
   videoPrompt: string;
@@ -94,7 +99,17 @@ const ABOUT: readonly Question[] = [
     label: "When could you start?",
     kind: "choice",
     options: ["Right away", "Within 2 weeks", "Within a month", "Later than that"],
+    reviewIf: ["Later than that"],
+    reviewReason: "Can't start within a month",
   },
+  {
+    key: "desired_pay",
+    label: "What pay are you looking for in this job?",
+    hint: "Please don't tell us what you earn now or have earned before.",
+    kind: "text",
+  },
+  { key: "skills", label: "What job-related skills do you have?", kind: "text" },
+  { key: "certifications", label: "Do you have any relevant certifications? List them, or say none.", kind: "text" },
   { key: "why", label: "Why do you want this job? A couple of sentences is plenty.", kind: "text" },
   {
     key: "heard",
@@ -109,8 +124,8 @@ export const POSITIONS: readonly Position[] = [
     key: "project-technician",
     title: "Landscape Project Technician",
     tagline: "Hands-on landscaping work: bed cleanups, mulch, planting, lawn work and installs.",
-    pay: "$20 an hour",
-    commission: "commission on the jobs you complete, coming soon",
+    pay: "$16 an hour base",
+    commission: "pay for performance: 38% of each job's labor revenue goes to the crew, split by hours, and you're paid the higher of that or your base",
     commissionOnly: false,
     benefits: ["Paid training", "Performance bonuses"],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
@@ -127,9 +142,11 @@ export const POSITIONS: readonly Position[] = [
       "Landscaping experience is a plus, not required. We train",
       "Respectful with clients and their property",
     ],
+    success: ["Beds finished to the written standard the first time", "On time, every time", "Photos submitted at every stage", "No callbacks"],
     questions: [
       ...BASICS,
       ...DRIVING,
+      { key: "own_truck", label: "Do you have your own truck you could use for work?", kind: "yesno" },
       { key: "lift50", label: "Can you lift and carry 50 lb repeatedly through the day?", kind: "yesno", passes: YES, failReason: "Can't lift 50 lb" },
       { key: "outdoors", label: "Are you OK working outside in heat, cold and light rain?", kind: "yesno", passes: YES, failReason: "Won't work outdoors in all weather" },
       { key: "early", label: "Can you be at work by 7 AM?", kind: "yesno", passes: YES, failReason: "Can't start at 7 AM" },
@@ -165,6 +182,7 @@ export const POSITIONS: readonly Position[] = [
       "Can tow a trailer and keep a truck organized",
       "Calm, clear and professional with clients",
     ],
+    success: ["Jobs finish on plan and to standard", "Crew stays safe and productive", "Clients get a clear, professional handoff"],
     questions: [
       ...BASICS,
       ...DRIVING,
@@ -206,6 +224,7 @@ export const POSITIONS: readonly Position[] = [
       "Landscaping knowledge is a plus. We train on the rest",
       "Commission only: you're paid on the jobs you evaluate that sell, not hours",
     ],
+    success: ["Complete evaluations handed off the same day", "Accurate measurements and photos", "Clients feel heard"],
     questions: [
       ...BASICS,
       ...DRIVING,
@@ -250,6 +269,7 @@ export const POSITIONS: readonly Position[] = [
       "Clear, friendly writer for texts and emails",
       "Commission only: you're paid on the jobs you close, not hours",
     ],
+    success: ["Clients followed up with on time", "Clear, accurate proposals", "Jobs handed to operations complete"],
     questions: [
       ...BASICS,
       {
@@ -291,6 +311,7 @@ export const POSITIONS: readonly Position[] = [
       "Friendly and genuine online",
       "Commission only: you're paid on jobs, not hours",
     ],
+    success: ["Good-fit leads sent through your link", "Honest conversations about what we do"],
     questions: [
       ...BASICS,
       {

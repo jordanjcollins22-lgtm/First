@@ -10,7 +10,7 @@ import { IndeedAds } from "@/components/hiring/indeed-ads";
 
 /** The Hiring page itself, given what to show. Kept apart from the loading so it can be previewed with sample applicants. */
 
-const BOARD: Stage[] = ["video_submitted", "video_requested", "interview", "hired", "screened_out", "not_a_fit"];
+const BOARD: Stage[] = ["needs_review", "video_submitted", "video_requested", "interview", "offer", "hired", "screened_out", "not_a_fit"];
 
 export type AdCard = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean };
 

@@ -74,7 +74,7 @@ export function ApplyForm({
       <h2 className="text-lg font-semibold">Apply</h2>
 
       <div className="grid gap-3">
-        <Field label="Full name">
+        <Field label="Full legal name">
           <Input autoComplete="name" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} />
         </Field>
         <Field label="Email">

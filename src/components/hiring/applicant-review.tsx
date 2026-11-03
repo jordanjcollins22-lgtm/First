@@ -20,7 +20,9 @@ const EMAIL_FOR: Partial<Record<Stage, { kind: ApplicantEmailKind; label: string
 };
 
 const QUIET_LABEL: Partial<Record<Stage, string>> = {
-  hired: "Mark hired",
+  offer: "Advance to job offer, without a scorecard",
+  hired: "Offer accepted: mark hired",
+  screened_out: "Not Qualified",
   withdrawn: "They withdrew",
   not_a_fit: "Not a fit, without emailing",
   video_requested: "Allow a video, without emailing",
@@ -161,7 +163,7 @@ export function ApplicantReview({ id, stage, next, rating, note }: { id: string;
       )}
 
       {message && <p className={`text-sm ${message.ok ? "text-emerald-700" : "text-destructive"}`}>{message.text}</p>}
-      {stage === "hired" && <p className="text-sm font-medium text-emerald-700">Hired. Add them on Team when they start.</p>}
+      {stage === "hired" && <p className="text-sm font-medium text-emerald-700">Hired. Their onboarding checklist is on their People record. Add their app account on Team when they start.</p>}
     </section>
   );
 }

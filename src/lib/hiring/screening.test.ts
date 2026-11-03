@@ -49,12 +49,18 @@ describe("positions", () => {
 
 describe("screening", () => {
   it("passes an applicant who answers every knockout right", () => {
-    for (const p of POSITIONS) expect(screen(p, goodAnswers(p))).toEqual({ passed: true, reasons: [] });
+    for (const p of POSITIONS) expect(screen(p, goodAnswers(p))).toEqual({ passed: true, reasons: [], review: [] });
   });
 
   it("screens out on a knockout and says which, in our words", () => {
     const answers = { ...goodAnswers(tech), lift50: "no" };
-    expect(screen(tech, answers)).toEqual({ passed: false, reasons: ["Can't lift 50 lb"] });
+    expect(screen(tech, answers)).toEqual({ passed: false, reasons: ["Can't lift 50 lb"], review: [] });
+  });
+
+  it("sends a late start to Requires Review instead of screening them out", () => {
+    const result = screen(tech, { ...goodAnswers(tech), start: "Later than that" });
+    expect(result.passed).toBe(true);
+    expect(result.review).toEqual(["Can't start within a month"]);
   });
 
   it("needs two years for a lead", () => {
@@ -111,7 +117,9 @@ describe("stages", () => {
   it("only lets a person, not the form, decide an interview or a hire", () => {
     expect(nextStages("video_requested")).not.toContain("interview");
     expect(nextStages("video_submitted")).toEqual(["interview", "not_a_fit"]);
-    expect(nextStages("interview")).toEqual(["hired", "not_a_fit"]);
+    expect(nextStages("interview")).toEqual(["offer", "not_a_fit"]);
+    expect(nextStages("offer")).toEqual(["hired", "withdrawn"]);
+    expect(nextStages("needs_review")).toEqual(["video_requested", "screened_out"]);
     expect(nextStages("hired")).toEqual([]);
   });
 
@@ -132,12 +140,12 @@ describe("the Indeed ad", () => {
 
   it("has the pay for every job, hourly for the crew and commission only for the rest", () => {
     for (const p of POSITIONS) expect(needsPay(p)).toBe(false);
-    expect(payLine(positionFor("project-technician")!)).toBe("$20 an hour, plus commission on the jobs you complete, coming soon");
+    expect(payLine(positionFor("project-technician")!)).toBe("$16 an hour base, plus pay for performance: 38% of each job's labor revenue goes to the crew, split by hours, and you're paid the higher of that or your base");
     expect(payLine(lead)).toBe("$30 an hour, plus commission on the jobs you complete, coming soon");
     expect(payLine(positionFor("evaluator")!)).toBe("Commission only, no hourly pay: 4% commission on every job you evaluate that sells");
     expect(payLine(positionFor("account-manager")!)).toBe("Commission only, no hourly pay: 7% commission on every job you close");
     expect(indeedPayFields(lead)).toContain("Exact amount, $30.00 per hour");
-    expect(indeedPayFields(positionFor("project-technician")!)).toContain("$20.00 per hour");
+    expect(indeedPayFields(positionFor("project-technician")!)).toContain("$16.00 per hour");
     expect(indeedPayFields(affiliate)).toContain("commission only");
   });
 

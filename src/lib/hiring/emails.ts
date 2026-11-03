@@ -6,6 +6,15 @@
 
 export type ApplicantEmailKind = "interview" | "not_a_fit" | "video_request";
 
+/** The one email that goes by itself: we got your application. It promises nothing and decides nothing. */
+export function applicationReceivedEmail(input: { firstName: string; positionTitle: string; business: string; phone: string | null }): { subject: string; body: string } {
+  const call = input.phone ? ` If you have a question, call or text ${input.phone}.` : "";
+  return {
+    subject: `We got your application for ${input.positionTitle}`,
+    body: `Hi ${input.firstName},\n\nThanks for applying for the ${input.positionTitle} job with ${input.business}. We review every application against the job's requirements and will contact you about the next step.${call}\n\nThanks,\n${input.business}`,
+  };
+}
+
 export interface ApplicantEmailInput {
   kind: ApplicantEmailKind;
   firstName: string;

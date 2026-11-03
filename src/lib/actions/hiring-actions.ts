@@ -15,6 +15,7 @@ import { parseAsBusinessTime, shortWhen } from "@/lib/time-zone";
 import { positionFor } from "@/lib/hiring/positions";
 import { applicantEmail, stageAfter, type ApplicantEmailKind } from "@/lib/hiring/emails";
 import { isStage, nextStages, type Stage } from "@/lib/hiring/screening";
+import { syncPersonFromApplicant } from "@/lib/data/people";
 
 /**
  * The reviewer's side of hiring: rate and note, move an application along,
@@ -105,6 +106,8 @@ async function moveTo(
     actor: profile.id,
     actor_name: profile.full_name || null,
   });
+  // The person's record follows. A failure here never loses the hiring decision.
+  await syncPersonFromApplicant(id, to, profile).catch((err) => log.warn("people.sync_failed", { error: err instanceof Error ? err.message : String(err) }));
   revalidatePath(`/admin/hiring/${id}`);
   revalidatePath("/admin/hiring");
   return { ok: true };

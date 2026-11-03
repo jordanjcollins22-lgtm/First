@@ -13,6 +13,7 @@ import { canAssign, canMakeLead, canUnassign } from "@/lib/job-crew";
 import { getBusyBlocks } from "@/lib/data/busy";
 import { conflictFor, describeConflict } from "@/lib/busy";
 import { isAccountManager } from "@/lib/affiliate-roles";
+import { assignmentCheck } from "@/lib/data/people";
 import type { JobCrewMember, JobStatus } from "@/types/domain";
 
 export type CrewResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -115,6 +116,11 @@ export async function assignCrewMember(jobId: string, profileId: string): Promis
     // fix.
     const clash = await assignmentClash(supabase, jobId, profileId);
     if (clash) return { ok: false, message: clash };
+
+    // Only people cleared on observed work run a job. Someone still training
+    // can join a job that already has a lead, never start one.
+    const cleared = await assignmentCheck(profileId, loaded.crew.length > 0);
+    if (!cleared.ok) return { ok: false, message: cleared.reason };
 
     const organizationId = await getCurrentOrganizationId();
     const { error } = await supabase.from("job_crew").insert({

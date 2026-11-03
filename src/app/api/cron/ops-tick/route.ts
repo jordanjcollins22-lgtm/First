@@ -1,3 +1,4 @@
+import { sendPeopleDigest } from "@/lib/data/people";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -103,6 +104,10 @@ export async function GET(request: NextRequest) {
         entry.made = 0;
         entry.skipped = !targets.autoRamp ? "auto-ramp is off" : a.plan.mode === "steady" ? "steady" : a.plan.hold ? "holding" : !dueAgain ? "ramped recently" : "nothing to make";
       }
+      entry.people = await sendPeopleDigest(admin, org.id).catch((err) => {
+        console.error(`[ops] people digest for ${org.name}:`, err);
+        return null;
+      });
       report.push(entry);
     } catch (err) {
       console.error(`[ops] tick failed for ${org.name}:`, err);
