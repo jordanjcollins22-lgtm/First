@@ -8,7 +8,7 @@
 - Before recording any team payment for a job with more than one visit, check who was on each visit. If it isn't recorded, ask Jordan.
 - Example: Michael Dembeck (#78) was two visits. Jack was only there for the first, so a 50/50 split of the whole job overpaid him.
 
-## Plants come from Cavano's
+## Plants come from SiteOne
 
-- Cavano's Perennials (Kingsville) is our plant supplier. Price every plant on a proposal from their current list in the app (Admin → Plant Availability, table `plant_availability`), at the sale price while it holds.
-- If a plant isn't on Cavano's list (mums, ornamental cabbage and kale, pansies, boxwoods and other shrubs), say so and ask Jordan where it comes from before pricing it. Don't guess a cost.
+- SiteOne Landscape Supply is our plant supplier (closest branch: Cockeysville, 10822 Williamson Ln, (410) 769-8011). Don't use Cavano's; their list in the app (Admin → Plant Availability) is reference only.
+- SiteOne's trade prices aren't public. Price plants from a SiteOne quote or price Jordan gives; until there is one, ask for it rather than guessing a cost.
