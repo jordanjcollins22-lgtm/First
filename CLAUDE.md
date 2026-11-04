@@ -10,5 +10,6 @@
 
 ## Plants come from SiteOne
 
-- SiteOne Landscape Supply is our plant supplier (closest branch: Cockeysville, 10822 Williamson Ln, (410) 769-8011). Don't use Cavano's; their list in the app (Admin → Plant Availability) is reference only.
-- SiteOne's trade prices aren't public. Price plants from a SiteOne quote or price Jordan gives; until there is one, ask for it rather than guessing a cost.
+- SiteOne Landscape Supply is our plant supplier. Our branch is White Marsh ((410) 335-1990): it carries the nursery stock and rock. Cockeysville ((410) 769-8011) is closer but only stocks hardgoods like fabric. Don't use Cavano's; their list in the app (Admin → Plant Availability) is reference only.
+- SiteOne's trade prices aren't public and vary by branch. Price from the White Marsh price on Jordan's account, a SiteOne quote, or a price Jordan gives; until there is one, ask for it rather than guessing a cost.
+- SiteOne carries no garden mums and no pansies bigger than 6" or 1 gal. Ask Jordan where those come from.
