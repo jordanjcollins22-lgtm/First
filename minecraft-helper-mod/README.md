@@ -19,6 +19,9 @@ ask for. It works out the best way to get it:
   (16 blocks, 32 at the bottom), only in directions that have ore. It takes every ore it can reach from
   the tunnel and follows veins, so you get a tidy mine instead of lots of random holes. When it's done it climbs back
   up the stairs and walks back to you.
+- **Choose where it mines:** `/helper mine marker` gives you a **Helper Mine Marker** (a lodestone). Place it on
+  open ground and the helper digs its staircase right beside it from then on, however far away you are (same
+  dimension). Break the marker to let it choose again.
 - For short distances it digs a tunnel, bridges gaps or pillars up. It plugs lava and water with cobblestone
   instead of giving up.
 - It picks the best tool from its inventory for every block: the fastest one, fortune for ores, never
@@ -236,6 +239,7 @@ The doors keep the water out, so you can walk in without a helmet. `/helper town
 - Near the surface they also leave alone any block within 2 blocks of something built (doors, glass,
   planks, bricks, beds, chests...), so house floors and stone walls are safe even when they're made of
   dirt or stone. Deep underground they won't dig right next to chests, beds or furnaces.
+- They don't pillar up, bridge or plug holes within 3 blocks of anything built either.
 - A new mine is started on open, natural ground at least 5 blocks from anything built, never under a
   roof. If an old mine runs into a build, the helper stops and starts a fresh mine elsewhere next time.
 - They avoid lava, won't drop down big holes, and plug the top of any mineshaft they dig.

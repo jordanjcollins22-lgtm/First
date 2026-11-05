@@ -105,6 +105,8 @@ public final class HelperCommands {
                                                             com.mojang.brigadier.arguments.LongArgumentType.getLong(ctx, "coins"));
                                                     return 1;
                                                 })))))
+                .then(literal("mine")
+                        .then(literal("marker").executes(ctx -> { MineMarker.give(ctx.getSource().getPlayerOrThrow()); return 1; })))
                 .then(literal("town").executes(ctx -> {
                     Town.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
@@ -139,6 +141,7 @@ public final class HelperCommands {
                 "/helper farm [radius]  - harvest and replant ripe crops around you (16 blocks unless you say)",
                 "/helper tycoon  - dropper tycoon: earn coins, /helper tycoon start for a free kit, /helper tycoon shop to spend",
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
+                "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
