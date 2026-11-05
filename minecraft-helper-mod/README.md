@@ -89,6 +89,23 @@ goes back to work.
 `clay_ball`, `obsidian`, `amethyst_shard`... Modded items work too, e.g. `raw_tin` or `create:zinc_ore`.
 Block tags work with `#`, e.g. `#minecraft:logs`.
 
+## More real planets (needs Ad Astra)
+
+If Ad Astra is installed (it is in Prominence II), five more real places show up on the rocket's planet
+list, each with its own orbit for space stations:
+
+| Planet | Rocket tier | Gravity | Ground | Ores and extras | In the sky |
+| --- | --- | --- | --- | --- | --- |
+| Europa (Jupiter) | 4 | 1.3 m/s² | Snow over packed ice | Diamond, lapis, ice shards, brown "crack" streaks, ice spikes | Jupiter |
+| Io (Jupiter) | 4 | 1.8 m/s² | Yellow sulfur over blackstone | Gold, calorite, gilded blackstone, magma, lava lakes | A huge Jupiter |
+| Titan (Saturn) | 4 | 1.35 m/s² | Red dunes over tuff, thick orange haze | Lots of coal, ostrum, diamond | Saturn through the haze |
+| Ceres (asteroid belt) | 3 | 0.28 m/s² | Gravel over deepslate | Iron, desh, ice shards, bright salt patches | Just stars |
+| Pluto | 4 | 0.62 m/s² | Snow over calcite, red patches | Emerald, diamond, calorite | Charon, and a tiny Sun |
+
+All of them have no air and are very cold, so bring a space suit and oxygen. Without Ad Astra the mod
+leaves the planets off. On a dedicated server the planets work for everyone, but players without this
+mod see Ad Astra's plain sky there.
+
 ## Safety on shared worlds
 
 - Helpers only break **natural** blocks: stone, dirt, ores, real trees (logs with natural leaves next to

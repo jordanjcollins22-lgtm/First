@@ -1,0 +1,10 @@
+{
+  "dimension": "helpermod:europa",
+  "gravity": 1.315,
+  "orbit": "helpermod:europa_orbit",
+  "oxygen": false,
+  "solar_power": 4,
+  "solar_system": "ad_astra:solar_system",
+  "temperature": -160,
+  "tier": 4
+}

@@ -1,0 +1,11 @@
+{
+  "type": "helpermod:pluto",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "helpermod:pluto",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "helpermod:pluto"
+    }
+  }
+}
