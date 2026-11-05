@@ -105,6 +105,8 @@ public class Helper {
     private int attackCooldown;
     private int combatScan;
     private int gearTicks;
+    /** Ticks left in the little dance it does after a delivery. */
+    private int danceTicks;
     private int lastProgressTick;
     private double closestSoFar;
     private final Set<UUID> ignoredTargets = new HashSet<>();
@@ -423,6 +425,10 @@ public class Helper {
         if (m.age % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
         if (tickCombat(m, player, entry)) return;
+        if (danceTicks > 0) {
+            Celebrate.danceStep(m, --danceTicks);
+            return;
+        }
         switch (mode) {
             case FOLLOW -> tickFollow(m, player, entry);
             case RETURN -> tickReturn(m, player, entry);
@@ -683,6 +689,9 @@ public class Helper {
             if (sb.length() > 0) sb.append(", ");
             sb.append(count).append(' ').append(name);
         });
+        danceTicks = Celebrate.DANCE_TICKS;
+        m.getNavigation().stop();
+        Celebrate.fireworks((ServerWorld) m.getWorld(), m.getPos());
         say(player, "Here you go: " + sb + "." + xpNote + (droppedAtFeet
                 ? " Your inventory is full, so I dropped the rest at your feet." : ""));
     }
