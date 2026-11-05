@@ -82,6 +82,10 @@ final class Tycoon {
         final Map<UUID, Boolean> started = new HashMap<>();
         /** Level of a dropper that was picked up, given back to the next one its owner places. */
         final Map<UUID, Integer> spare = new HashMap<>();
+        /** Rebirths: each one makes every coin collected worth 50% more, for good. */
+        final Map<UUID, Integer> rebirths = new HashMap<>();
+        /** How many lifetime-earnings milestones a player has been rewarded for. */
+        final Map<UUID, Integer> milestones = new HashMap<>();
         /** "dimension|pos" -> dropper. */
         final Map<String, Dropper> droppers = new LinkedHashMap<>();
 
@@ -98,6 +102,10 @@ final class Tycoon {
             droppers.put(key(world, pos), d);
             markDirty();
             return d;
+        }
+
+        int rebirths(UUID id) {
+            return rebirths.getOrDefault(id, 0);
         }
 
         long coins(UUID id) {
@@ -120,6 +128,8 @@ final class Tycoon {
                 d.earned.put(id, p.getLong("earned"));
                 d.started.put(id, p.getBoolean("started"));
                 if (p.getInt("spare") > 0) d.spare.put(id, p.getInt("spare"));
+                if (p.getInt("rebirths") > 0) d.rebirths.put(id, p.getInt("rebirths"));
+                if (p.getInt("milestones") > 0) d.milestones.put(id, p.getInt("milestones"));
             }
             NbtList list = nbt.getList("droppers", NbtElement.COMPOUND_TYPE);
             for (int i = 0; i < list.size(); i++) {
@@ -135,6 +145,7 @@ final class Tycoon {
             java.util.Set<UUID> ids = new java.util.HashSet<>(coins.keySet());
             ids.addAll(started.keySet());
             ids.addAll(spare.keySet());
+            ids.addAll(rebirths.keySet());
             for (UUID id : ids) {
                 NbtCompound p = new NbtCompound();
                 p.putUuid("id", id);
@@ -142,6 +153,8 @@ final class Tycoon {
                 p.putLong("earned", earned.getOrDefault(id, 0L));
                 p.putBoolean("started", started.getOrDefault(id, false));
                 p.putInt("spare", spare.getOrDefault(id, 0));
+                p.putInt("rebirths", rebirths.getOrDefault(id, 0));
+                p.putInt("milestones", milestones.getOrDefault(id, 0));
                 players.add(p);
             }
             nbt.put("players", players);
@@ -213,11 +226,30 @@ final class Tycoon {
         if (state.isOf(Blocks.LIME_GLAZED_TERRACOTTA)) return 2;
         if (state.isOf(Blocks.CYAN_GLAZED_TERRACOTTA)) return 3;
         if (state.isOf(Blocks.PURPLE_GLAZED_TERRACOTTA)) return 5;
+        if (state.isOf(Blocks.RED_GLAZED_TERRACOTTA)) return 10;
         return 1;
     }
 
+    /** Yellow Lifters hop ore up one block, so lines can climb to a second floor. */
+    private static boolean isLifter(BlockState state) {
+        return state.isOf(Blocks.YELLOW_GLAZED_TERRACOTTA);
+    }
+
     private static boolean isBelt(BlockState state) {
-        return state.isOf(Blocks.MAGENTA_GLAZED_TERRACOTTA) || multiplier(state) > 1;
+        return state.isOf(Blocks.MAGENTA_GLAZED_TERRACOTTA) || isLifter(state) || multiplier(state) > 1;
+    }
+
+    static ItemStack lifter() {
+        return named(Items.YELLOW_GLAZED_TERRACOTTA, 1, "Lifter", Formatting.YELLOW);
+    }
+
+    static ItemStack starUpgrader() {
+        return named(Items.RED_GLAZED_TERRACOTTA, 1, "Star Upgrader x10", Formatting.RED);
+    }
+
+    /** What collected ore is multiplied by: +50% per rebirth. */
+    static double rebirthBonus(int rebirths) {
+        return 1.0 + 0.5 * rebirths;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -391,9 +423,10 @@ final class Tycoon {
         if (tag == null) return true;
 
         if (state.isOf(Blocks.BLACK_GLAZED_TERRACOTTA)) { // a Collector: cash in
-            long value = tag.getLong("value");
             UUID owner = tag.getUuid("owner");
+            long value = Math.max(1, Math.round(tag.getLong("value") * rebirthBonus(data.rebirths(owner))));
             data.add(owner, value);
+            checkMilestones(world.getServer(), data, owner);
             world.spawnParticles(ParticleTypes.HAPPY_VILLAGER, ore.getX(), ore.getY() + 0.3, ore.getZ(), 4, 0.2, 0.2, 0.2, 0);
             world.playSound(null, under, SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.BLOCKS, 0.3f, 1.6f);
             ServerPlayerEntity p = world.getServer().getPlayerManager().getPlayer(owner);
@@ -421,7 +454,9 @@ final class Tycoon {
             double cx = under.getX() + 0.5, cz = under.getZ() + 0.5;
             double vx = dir.getOffsetX() != 0 ? dir.getOffsetX() * BELT_SPEED : (cx - ore.getX()) * 0.2;
             double vz = dir.getOffsetZ() != 0 ? dir.getOffsetZ() * BELT_SPEED : (cz - ore.getZ()) * 0.2;
-            ore.setVelocity(vx, v.y, vz);
+            double vy = v.y;
+            if (isLifter(state) && ore.isOnGround()) vy = 0.42; // hop up a block
+            ore.setVelocity(vx, vy, vz);
             ore.velocityModified = true;
         }
         return false;
@@ -434,14 +469,19 @@ final class Tycoon {
     static void info(ServerPlayerEntity player) {
         Data data = Data.get(player.getServer());
         long mine = data.droppers.values().stream().filter(d -> d.owner.equals(player.getUuid())).count();
+        int rb = data.rebirths(player.getUuid());
         Helper.say(player, "You have " + data.coins(player.getUuid()) + " coins and " + mine + " Tycoon Dropper"
-                + (mine == 1 ? "" : "s") + ". Shop tier: " + tierName(tier(player)) + ".");
+                + (mine == 1 ? "" : "s") + ". Shop tier: " + tierName(tier(player)) + "."
+                + (rb > 0 ? " Rebirths: " + rb + " (coins x" + rebirthBonus(rb) + ")." : ""));
         String[] how = {
                 "/helper tycoon start  - free starter kit (once): a Tycoon Dropper, 16 conveyors and a Collector",
                 "/helper tycoon shop  - spend coins on tycoon parts and useful items",
                 "/helper tycoon upgrade  - look at your Tycoon Dropper to make it faster and its ore worth more",
                 "/helper tycoon fix  - look at a Tycoon Dropper that stopped working after you moved it",
-                "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5) boost it once each.",
+                "/helper tycoon rebirth  - start over for a permanent +50% on every coin",
+                "/helper tycoon top  - the richest tycoons on the server",
+                "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5, red x10) boost it once each.",
+                "Yellow Lifters hop ore up one block so a line can climb. Milestones at 1k, 10k, 100k and 1M coins earned give free parts.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
         };
         for (String line : how) player.sendMessage(Text.literal(line).formatted(Formatting.GRAY), false);
@@ -498,6 +538,91 @@ final class Tycoon {
                 + String.format(java.util.Locale.ROOT, "%.1f", d.interval() / 20.0) + " seconds.");
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Rebirth, milestones and the leaderboard
+    // ---------------------------------------------------------------------------------------
+
+    static long rebirthCost(int rebirths) {
+        return 10_000L * (rebirths + 1) * (rebirths + 1); // 10k, 40k, 90k, ...
+    }
+
+    /** /helper tycoon rebirth shows the deal; /helper tycoon rebirth confirm does it. */
+    static void rebirth(ServerPlayerEntity player, boolean confirm) {
+        Data data = Data.get(player.getServer());
+        UUID id = player.getUuid();
+        int rb = data.rebirths(id);
+        long cost = rebirthCost(rb);
+        long have = data.coins(id);
+        if (!confirm) {
+            Helper.say(player, "Rebirth " + (rb + 1) + ": needs " + cost + " coins (you have " + have + "). You lose all your coins and "
+                    + "your Tycoon Droppers go back to level 1, but every coin you collect is worth x" + rebirthBonus(rb + 1)
+                    + " from then on, for good. Type /helper tycoon rebirth confirm to do it.");
+            return;
+        }
+        if (have < cost) {
+            Helper.say(player, "You need " + cost + " coins to rebirth. You have " + have + ".");
+            return;
+        }
+        data.coins.put(id, 0L);
+        data.rebirths.put(id, rb + 1);
+        data.spare.remove(id);
+        for (Dropper d : data.droppers.values()) {
+            if (d.owner.equals(id)) d.level = 1;
+        }
+        data.markDirty();
+        player.getWorld().playSound(null, player.getBlockPos(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.PLAYERS, 0.8f, 1f);
+        broadcast(player.getServer(), player.getName().getString() + " was reborn as a tycoon (rebirth " + (rb + 1)
+                + ", coins now x" + rebirthBonus(rb + 1) + ")!");
+    }
+
+    private static final long[] MILESTONES = {1_000, 10_000, 100_000, 1_000_000};
+
+    private static void checkMilestones(MinecraftServer server, Data data, UUID owner) {
+        int got = data.milestones.getOrDefault(owner, 0);
+        long earned = data.earned.getOrDefault(owner, 0L);
+        if (got >= MILESTONES.length || earned < MILESTONES[got]) return;
+        data.milestones.put(owner, got + 1);
+        data.markDirty();
+        ServerPlayerEntity p = server.getPlayerManager().getPlayer(owner);
+        String who = p != null ? p.getName().getString() : "Someone";
+        broadcast(server, who + " has earned " + String.format(java.util.Locale.ROOT, "%,d", MILESTONES[got]) + " tycoon coins!");
+        if (p == null) return;
+        ItemStack[] reward = switch (got) {
+            case 0 -> new ItemStack[]{conveyors(16), named(Items.LIME_GLAZED_TERRACOTTA, 1, "Upgrader x2", Formatting.GREEN), lifter()};
+            case 1 -> new ItemStack[]{dropperItem()};
+            case 2 -> new ItemStack[]{named(Items.CYAN_GLAZED_TERRACOTTA, 2, "Super Upgrader x3", Formatting.AQUA)};
+            default -> new ItemStack[]{named(Items.PURPLE_GLAZED_TERRACOTTA, 2, "Mega Upgrader x5", Formatting.LIGHT_PURPLE), starUpgrader()};
+        };
+        for (ItemStack r : reward) p.getInventory().offerOrDrop(r);
+        Helper.say(p, "Milestone reward! I put some free tycoon parts in your inventory.");
+    }
+
+    private static void broadcast(MinecraftServer server, String message) {
+        Text t = Text.literal("[Tycoon] ").formatted(Formatting.GOLD).append(Text.literal(message).formatted(Formatting.YELLOW));
+        for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) p.sendMessage(t, false);
+    }
+
+    /** /helper tycoon top: the five biggest earners. */
+    static void top(ServerPlayerEntity player) {
+        Data data = Data.get(player.getServer());
+        List<Map.Entry<UUID, Long>> rows = new ArrayList<>(data.earned.entrySet());
+        rows.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+        if (rows.isEmpty()) {
+            Helper.say(player, "Nobody has earned any coins yet. /helper tycoon start to get going!");
+            return;
+        }
+        player.sendMessage(Text.literal("Top tycoons (coins earned):").formatted(Formatting.GOLD), false);
+        for (int i = 0; i < Math.min(5, rows.size()); i++) {
+            UUID id = rows.get(i).getKey();
+            String name = player.getServer().getUserCache() == null ? null
+                    : player.getServer().getUserCache().getByUuid(id).map(com.mojang.authlib.GameProfile::getName).orElse(null);
+            int rb = data.rebirths(id);
+            player.sendMessage(Text.literal((i + 1) + ". " + (name == null ? "A player" : name) + "  "
+                    + String.format(java.util.Locale.ROOT, "%,d", rows.get(i).getValue())
+                    + (rb > 0 ? "  (rebirth " + rb + ")" : "")).formatted(id.equals(player.getUuid()) ? Formatting.AQUA : Formatting.GRAY), false);
+        }
+    }
+
     /** For quest rewards and admins: /helper tycoon give <player> <amount>. */
     static void give(ServerPlayerEntity target, long amount) {
         Data data = Data.get(target.getServer());
@@ -532,11 +657,16 @@ final class Tycoon {
     // The shop
     // ---------------------------------------------------------------------------------------
 
-    private record Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item) {}
+    private record Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item, int rebirths) {
+        Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item) {
+            this(tier, price, what, item, 0);
+        }
+    }
 
     private static final Offer[] OFFERS = {
             new Offer(1, 20, "8 Conveyors", () -> conveyors(8)),
             new Offer(1, 40, "Collector", Tycoon::collector),
+            new Offer(1, 60, "Lifter (hops ore up a block)", Tycoon::lifter),
             new Offer(1, 150, "Upgrader (x2)", () -> named(Items.LIME_GLAZED_TERRACOTTA, 1, "Upgrader x2", Formatting.GREEN)),
             new Offer(1, 250, "Tycoon Dropper", Tycoon::dropperItem),
             new Offer(1, 15, "16 Bread", () -> new ItemStack(Items.BREAD, 16)),
@@ -549,10 +679,17 @@ final class Tycoon {
             new Offer(2, 250, "16 Bottles o' Enchanting", () -> new ItemStack(Items.EXPERIENCE_BOTTLE, 16)),
             new Offer(2, 300, "4 Ender Pearls", () -> new ItemStack(Items.ENDER_PEARL, 4)),
             new Offer(3, 5000, "Mega Upgrader (x5)", () -> named(Items.PURPLE_GLAZED_TERRACOTTA, 1, "Mega Upgrader x5", Formatting.LIGHT_PURPLE)),
+            new Offer(3, 25000, "Star Upgrader (x10)", Tycoon::starUpgrader, 1),
             new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
             new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
             new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
     };
+
+    private static String lockReason(Offer o) {
+        String need = o.tier() == 2 ? "visit the Nether" : o.tier() == 3 ? "reach the End" : "";
+        if (o.rebirths() > 0) need = (need.isEmpty() ? "" : need + " and ") + "rebirth at least " + o.rebirths() + " time" + (o.rebirths() == 1 ? "" : "s");
+        return need;
+    }
 
     static void openShop(ServerPlayerEntity player) {
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
@@ -582,9 +719,9 @@ final class Tycoon {
             for (int i = 0; i < OFFERS.length && i < 26; i++) {
                 Offer o = OFFERS[i];
                 ItemStack shown = o.item().get();
-                boolean open = tier >= o.tier();
+                boolean open = tier >= o.tier() && data.rebirths(player.getUuid()) >= o.rebirths();
                 ItemStack button = Storage.Menu.button(open ? shown.getItem() : Items.BARRIER, o.what(),
-                        open ? "Costs " + o.price() + " coins" : "Locked: " + (o.tier() == 2 ? "visit the Nether" : "reach the End"),
+                        open ? "Costs " + o.price() + " coins" : "Locked: " + lockReason(o),
                         open ? "Click to buy" : "Costs " + o.price() + " coins once unlocked");
                 button.setCount(Math.max(1, shown.getCount()));
                 view.setStack(i, button);
@@ -606,9 +743,8 @@ final class Tycoon {
 
         private void buy(Offer o) {
             Data data = Data.get(player.getServer());
-            if (tier(player) < o.tier()) {
-                player.sendMessage(Text.literal("Locked. " + (o.tier() == 2 ? "Visit the Nether" : "Reach the End") + " to unlock it.")
-                        .formatted(Formatting.RED), true);
+            if (tier(player) < o.tier() || data.rebirths(player.getUuid()) < o.rebirths()) {
+                player.sendMessage(Text.literal("Locked: " + lockReason(o) + ".").formatted(Formatting.RED), true);
                 return;
             }
             if (data.coins(player.getUuid()) < o.price()) {

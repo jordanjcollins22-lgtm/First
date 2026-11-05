@@ -188,6 +188,8 @@ Build a little ore factory and spend what it earns.
 4. End the line on a **Collector** (black glazed terracotta). Ore that reaches it turns into coins for you.
 5. Put **Upgraders** in the line to boost ore as it rolls over them, once per block: lime x2, cyan x3, purple x5.
    They carry ore along like conveyors.
+6. **Lifters** (yellow glazed terracotta) hop ore up one block, so a line can climb to a second floor.
+7. The **Star Upgrader** (red glazed terracotta, x10) is in the shop at tier 3 once you've reborn at least once.
 
 | Command | What it does |
 | --- | --- |
@@ -195,12 +197,17 @@ Build a little ore factory and spend what it earns.
 | `/helper tycoon shop` | Buy conveyors, collectors, upgraders, more droppers, and useful items (food, torches, iron, diamonds, ender pearls, totems...) |
 | `/helper tycoon fix` | Look at a Tycoon Dropper that stopped dropping after you moved it, to make it work again |
 | `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
+| `/helper tycoon rebirth` | Start over: lose your coins and dropper levels, but every coin is worth +50% more for good (rebirth 1 costs 10,000 coins, then 40k, 90k...). Add `confirm` to do it |
+| `/helper tycoon top` | The five biggest earners on the server |
 | `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
 
 **Linked to your progress:** the shop has three tiers. Tier 2 (super upgraders, diamonds, golden apples...)
 unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, totems) when you've reached the
 End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
 command reward to a quest: `/helper tycoon give {p} 500`.
+
+**Milestones:** earning 1,000, 10,000, 100,000 and 1,000,000 coins in total gives free parts (conveyors and a
+lifter, a new dropper, super upgraders, then mega and star upgraders) and tells the whole server.
 
 You can pick a Tycoon Dropper up and place it somewhere else: it keeps its level. A redstone signal pauses a dropper. Ore that isn't collected within a minute fizzles out, so it can't pile up.
 
