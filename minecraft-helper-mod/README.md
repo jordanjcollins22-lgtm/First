@@ -200,7 +200,7 @@ Build a little ore factory and spend what it earns.
 | `/helper tycoon shop` | Buy conveyors, collectors, upgraders, more droppers, and useful items (food, torches, iron, diamonds, ender pearls, totems...) |
 | `/helper tycoon fix` | Look at a Tycoon Dropper that stopped dropping after you moved it, to make it work again |
 | `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
-| `/helper tycoon rebirth` | Start over: lose your coins and dropper levels, but every coin is worth +50% more for good (rebirth 1 costs 10,000 coins, then 40k, 90k...). Add `confirm` to do it |
+| `/helper tycoon rebirth` | Pay the price (10,000 coins, then 40k, 90k...) and your droppers go back to level 1, but every coin is worth +50% more for good. Coins above the price are kept, so a rich player can rebirth several times in a row. Add `confirm` to do it |
 | `/helper tycoon top` | The five biggest earners on the server |
 | `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
 
@@ -208,6 +208,9 @@ Build a little ore factory and spend what it earns.
 unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, totems) when you've reached the
 End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
 command reward to a quest: `/helper tycoon give {p} 500`.
+
+**Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
+Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
 **Milestones:** earning 1,000, 10,000, 100,000 and 1,000,000 coins in total gives free parts (conveyors and a
 lifter, a new dropper, super upgraders, then mega and star upgraders) and tells the whole server.

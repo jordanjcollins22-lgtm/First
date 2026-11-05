@@ -557,13 +557,15 @@ final class Tycoon {
             Helper.say(player, "Rebirth " + (rb + 1) + ": needs " + cost + " coins (you have " + have + "). You lose all your coins and "
                     + "your Tycoon Droppers go back to level 1, but every coin you collect is worth x" + rebirthBonus(rb + 1)
                     + " from then on, for good. Type /helper tycoon rebirth confirm to do it.");
+            if (have >= cost) Helper.say(player, "You'd keep " + (have - cost) + " coins after paying, so you can rebirth again "
+                    + "straight away if you have enough. Rich already? Check the top of /helper tycoon shop for big-ticket items.");
             return;
         }
         if (have < cost) {
             Helper.say(player, "You need " + cost + " coins to rebirth. You have " + have + ".");
             return;
         }
-        data.coins.put(id, 0L);
+        data.coins.put(id, have - cost); // the price is spent; anything above it is kept
         data.rebirths.put(id, rb + 1);
         data.spare.remove(id);
         for (Dropper d : data.droppers.values()) {
@@ -657,10 +659,36 @@ final class Tycoon {
     // The shop
     // ---------------------------------------------------------------------------------------
 
-    private record Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item, int rebirths) {
+    /** action, when set, runs instead of giving the item; it returns false (and nothing is charged) if it can't. */
+    private record Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item, int rebirths,
+                         java.util.function.Predicate<ServerPlayerEntity> action) {
         Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item) {
-            this(tier, price, what, item, 0);
+            this(tier, price, what, item, 0, null);
         }
+
+        Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item, int rebirths) {
+            this(tier, price, what, item, rebirths, null);
+        }
+    }
+
+    /** Big-ticket shop item: one more helper level, straight away. */
+    private static boolean trainHelper(ServerPlayerEntity player) {
+        HelperData hd = HelperData.get(player.getServer());
+        HelperData.Entry e = hd.get(player.getUuid());
+        if (e == null) {
+            player.sendMessage(Text.literal("Summon your helper first (/helper summon).").formatted(Formatting.RED), true);
+            return false;
+        }
+        if (e.level >= HelperData.MAX_LEVEL) {
+            player.sendMessage(Text.literal("Your helper is already level " + HelperData.MAX_LEVEL + ".").formatted(Formatting.RED), true);
+            return false;
+        }
+        e.level++;
+        e.work = Math.max(e.work, HelperData.pointsFor(e.level));
+        e.inventory.unlocked = HelperData.pocketsFor(e.level);
+        hd.markDirty();
+        Helper.say(player, "Training done! I'm level " + e.level + " now: I mine faster and have " + e.inventory.unlocked + " pockets.");
+        return true;
     }
 
     private static final Offer[] OFFERS = {
@@ -680,6 +708,15 @@ final class Tycoon {
             new Offer(2, 300, "4 Ender Pearls", () -> new ItemStack(Items.ENDER_PEARL, 4)),
             new Offer(3, 5000, "Mega Upgrader (x5)", () -> named(Items.PURPLE_GLAZED_TERRACOTTA, 1, "Mega Upgrader x5", Formatting.LIGHT_PURPLE)),
             new Offer(3, 25000, "Star Upgrader (x10)", Tycoon::starUpgrader, 1),
+            // Big-ticket items for when you're rich.
+            new Offer(3, 25_000, "Shulker Box", () -> new ItemStack(Items.SHULKER_BOX)),
+            new Offer(3, 50_000, "Mending book", () -> net.minecraft.item.EnchantedBookItem.forEnchantment(
+                    new net.minecraft.enchantment.EnchantmentLevelEntry(net.minecraft.enchantment.Enchantments.MENDING, 1))),
+            new Offer(3, 100_000, "Netherite Ingot", () -> new ItemStack(Items.NETHERITE_INGOT)),
+            new Offer(3, 250_000, "Elytra", () -> new ItemStack(Items.ELYTRA)),
+            new Offer(3, 500_000, "Beacon", () -> new ItemStack(Items.BEACON)),
+            new Offer(3, 1_000_000, "Helper Training (+1 helper level)",
+                    () -> named(Items.EXPERIENCE_BOTTLE, 1, "Helper Training", Formatting.AQUA), 0, Tycoon::trainHelper),
             new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
             new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
             new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
@@ -752,8 +789,12 @@ final class Tycoon {
                         .formatted(Formatting.RED), true);
                 return;
             }
+            if (o.action() != null) {
+                if (!o.action().test(player)) return;
+            } else {
+                player.getInventory().offerOrDrop(o.item().get());
+            }
             data.add(player.getUuid(), -o.price());
-            player.getInventory().offerOrDrop(o.item().get());
             player.playSound(SoundEvents.ENTITY_VILLAGER_YES, SoundCategory.PLAYERS, 0.6f, 1.2f);
             player.sendMessage(Text.literal("Bought " + o.what() + ".").formatted(Formatting.GREEN), true);
         }
