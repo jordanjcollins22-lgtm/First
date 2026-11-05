@@ -118,7 +118,7 @@ It's drawn as a normal chest screen, so nobody else has to install anything. Eac
 
 ## More real planets (needs Ad Astra)
 
-If Ad Astra is installed (it is in Prominence II), five more real places show up on the rocket's planet
+If Ad Astra is installed (it is in Prominence II), five more real places and an ocean planet show up on the rocket's planet
 list, each with its own orbit for space stations:
 
 | Planet | Rocket tier | Gravity | Ground | Ores and extras | In the sky |
@@ -128,8 +128,12 @@ list, each with its own orbit for space stations:
 | Titan (Saturn) | 4 | 1.35 m/s² | Red dunes over tuff, thick orange haze | Lots of coal, ostrum, diamond | Saturn through the haze |
 | Ceres (asteroid belt) | 3 | 0.28 m/s² | Gravel over deepslate | Iron, desh, ice shards, bright salt patches | Just stars |
 | Pluto | 4 | 0.62 m/s² | Snow over calcite, red patches | Emerald, diamond, calorite | Charon, and a tiny Sun |
+| Bikini Bottom | 3 | 9.8 m/s² (like Earth) | A warm ocean with a sand floor and a few islands | Coral reefs, kelp, sea pickles, gold, copper, prismarine; tropical fish, turtles and dolphins | A blue-green planet |
 
-All of them have no air and are very cold, so bring a space suit and oxygen. Without Ad Astra the mod
+The real planets have no air and are very cold, so bring a space suit and oxygen. Bikini Bottom is the
+exception: it has air and is warm, but it's nearly all ocean, so bring water breathing or a conduit to
+explore the reefs. Its boss is the King of the Deep, and it drops a heart of the sea, nautilus shells and
+a trident. Without Ad Astra the mod
 leaves the planets off. On a dedicated server the planets work for everyone, but players without this
 mod see Ad Astra's plain sky there.
 

@@ -105,6 +105,13 @@ final class Planets {
                             "Rare gear and fuel for the trip to Pluto"),
                     new Reward[]{r(2, "minecraft:netherite_ingot"), r(16, "ad_astra:ostrum_ingot", "minecraft:emerald"), r(4, "ad_astra:fuel_bucket", "minecraft:lava_bucket")},
                     "minecraft:red_sandstone", "minecraft:orange_glazed_terracotta")),
+            Map.entry("bikini_bottom", new Theme("Bikini Bottom",
+                    new String[]{"minecraft:drowned", "minecraft:guardian", "minecraft:pufferfish", "minecraft:drowned"},
+                    new Boss("minecraft:drowned", "King of the Deep", 340, 16, "minecraft:trident",
+                            "Treasure from the deep and fuel for the trip home"),
+                    new Reward[]{r(1, "minecraft:heart_of_the_sea"), r(8, "minecraft:nautilus_shell"), r(1, "minecraft:trident"),
+                            r(12, "ad_astra:calorite_ingot", "minecraft:diamond"), FUEL},
+                    "minecraft:prismarine_bricks", "minecraft:sea_lantern")),
             Map.entry("pluto", new Theme("Pluto",
                     new String[]{"minecraft:stray", "minecraft:enderman", "minecraft:phantom", "minecraft:skeleton"},
                     new Boss("minecraft:vindicator", "Pluto Executioner", 400, 20, "minecraft:netherite_axe",
@@ -193,6 +200,9 @@ final class Planets {
             int z = (int) Math.floor(player.getZ() + Math.sin(angle) * dist);
             if (!world.isChunkLoaded(x >> 4, z >> 4)) continue;
             int y = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+            if (world.getFluidState(new BlockPos(x, y - 1, z)).isIn(net.minecraft.registry.tag.FluidTags.WATER)) {
+                y = world.getTopY(Heightmap.Type.OCEAN_FLOOR, x, z); // an ocean planet: spawn on the sea floor
+            }
             BlockPos pos = new BlockPos(x, y, z);
             if (y <= world.getBottomY() + 1 || !world.getBlockState(pos.down()).isSolidBlock(world, pos.down())) continue;
             if (!world.isSpaceEmpty(type.createSimpleBoundingBox(x + 0.5, y, z + 0.5))) continue;
