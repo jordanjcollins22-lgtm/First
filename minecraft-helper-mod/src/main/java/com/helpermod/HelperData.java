@@ -37,6 +37,8 @@ public class HelperData extends PersistentState {
         public net.minecraft.util.math.BlockPos mineOrigin;
         /** How many steps of the staircase are already dug. */
         public int mineDepth;
+        /** Where the owner placed a Mine Marker, if they did. While it stands, the mine always starts there. */
+        public net.minecraft.util.math.BlockPos mineMarker;
         /** Which mob the helper looks like, e.g. "minecraft:creeper". Null means it looks like its owner. */
         public String look;
         /** XP the helper picked up (from ores it mined and mobs it fought), handed over on delivery. */
@@ -141,6 +143,7 @@ public class HelperData extends PersistentState {
                 entry.mineDim = tag.getString("mineDim");
                 entry.mineOrigin = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineOrigin"));
                 entry.mineDepth = tag.getInt("mineDepth");
+                if (tag.contains("mineMarker")) entry.mineMarker = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineMarker"));
             }
             if (tag.contains("look")) entry.look = tag.getString("look");
             entry.xp = tag.getInt("xp");
@@ -164,6 +167,7 @@ public class HelperData extends PersistentState {
                 tag.putString("mineDim", entry.mineDim);
                 tag.putLong("mineOrigin", entry.mineOrigin.asLong());
                 tag.putInt("mineDepth", entry.mineDepth);
+                if (entry.mineMarker != null) tag.putLong("mineMarker", entry.mineMarker.asLong());
             }
             if (entry.look != null) tag.putString("look", entry.look);
             if (entry.xp > 0) tag.putInt("xp", entry.xp);

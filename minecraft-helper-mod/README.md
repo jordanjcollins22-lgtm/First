@@ -19,6 +19,9 @@ ask for. It works out the best way to get it:
   (16 blocks, 32 at the bottom), only in directions that have ore. It takes every ore it can reach from
   the tunnel and follows veins, so you get a tidy mine instead of lots of random holes. When it's done it climbs back
   up the stairs and walks back to you.
+- **Choose where it mines:** `/helper mine marker` gives you a **Helper Mine Marker** (a lodestone). Place it on
+  open ground and the helper digs its staircase right beside it from then on, however far away you are (same
+  dimension). Break the marker to let it choose again.
 - For short distances it digs a tunnel, bridges gaps or pillars up. It plugs lava and water with cobblestone
   instead of giving up.
 - It picks the best tool from its inventory for every block: the fastest one, fortune for ores, never
@@ -197,7 +200,7 @@ Build a little ore factory and spend what it earns.
 | `/helper tycoon shop` | Buy conveyors, collectors, upgraders, more droppers, and useful items (food, torches, iron, diamonds, ender pearls, totems...) |
 | `/helper tycoon fix` | Look at a Tycoon Dropper that stopped dropping after you moved it, to make it work again |
 | `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
-| `/helper tycoon rebirth` | Start over: lose your coins and dropper levels, but every coin is worth +50% more for good (rebirth 1 costs 10,000 coins, then 40k, 90k...). Add `confirm` to do it |
+| `/helper tycoon rebirth` | Pay the price (10,000 coins, then 40k, 90k...) and your droppers go back to level 1, but every coin is worth +50% more for good. Coins above the price are kept, so a rich player can rebirth several times in a row. Add `confirm` to do it |
 | `/helper tycoon top` | The five biggest earners on the server |
 | `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
 
@@ -205,6 +208,9 @@ Build a little ore factory and spend what it earns.
 unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, totems) when you've reached the
 End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
 command reward to a quest: `/helper tycoon give {p} 500`.
+
+**Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
+Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
 **Milestones:** earning 1,000, 10,000, 100,000 and 1,000,000 coins in total gives free parts (conveyors and a
 lifter, a new dropper, super upgraders, then mega and star upgraders) and tells the whole server.
@@ -236,6 +242,9 @@ The doors keep the water out, so you can walk in without a helmet. `/helper town
 - Near the surface they also leave alone any block within 2 blocks of something built (doors, glass,
   planks, bricks, beds, chests...), so house floors and stone walls are safe even when they're made of
   dirt or stone. Deep underground they won't dig right next to chests, beds or furnaces.
+- They don't pillar up, bridge or plug holes within 3 blocks of anything built either.
+- When a wall it mustn't break is in the way, the helper **phases through it** to the open space on the other side
+  (up to 5 blocks) instead. If it's stuck behind a wall while following you for 3 seconds, it pops out next to you.
 - A new mine is started on open, natural ground at least 5 blocks from anything built, never under a
   roof. If an old mine runs into a build, the helper stops and starts a fresh mine elsewhere next time.
 - They avoid lava, won't drop down big holes, and plug the top of any mineshaft they dig.

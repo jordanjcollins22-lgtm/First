@@ -1016,6 +1016,7 @@ public class Helper {
                 m.getNavigation().startMovingTo(player, SPEED);
                 repathCooldown = 10;
             }
+            if (isStuck(m, 60)) teleportNear(m, player); // stuck behind a wall for 3 s: phase through to you
         } else if (d < 2.5 * 2.5) {
             m.getNavigation().stop();
         }
@@ -1080,6 +1081,30 @@ public class Helper {
             repathCooldown = 10;
         }
         if (isStuck(m, 100)) teleportNear(m, player);
+    }
+
+    /**
+     * Step through a wall: find the first open spot (2 tall, with a floor) up to 5 blocks further along
+     * (dx, dz) and pop out there, without breaking anything. False if there's no open spot within reach.
+     */
+    private boolean phaseThrough(MobEntity m, ServerWorld world, BlockPos cur, int dx, int dz) {
+        for (int k = 2; k <= 6; k++) {
+            for (int dy : new int[]{0, 1, -1}) {
+                BlockPos p = cur.add(dx * k, dy, dz * k);
+                if (!world.isChunkLoaded(p)) return false;
+                if (!passable(world, p) || !passable(world, p.up())) continue;
+                if (!world.getFluidState(p).isEmpty()) continue;
+                BlockPos floor = p.down();
+                if (!world.getBlockState(floor).isSideSolidFullSquare(world, floor, Direction.UP)) continue;
+                m.getNavigation().stop();
+                world.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+                m.requestTeleport(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
+                world.playSound(null, p, SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.NEUTRAL, 0.4f, 1.4f);
+                stuckTicks = 0;
+                return true;
+            }
+        }
+        return false;
     }
 
     private void teleportNear(MobEntity m, ServerPlayerEntity player) {
@@ -1543,14 +1568,15 @@ public class Helper {
                            BlockPos target) {
         Job j = job;
         String dim = world.getRegistryKey().getValue().toString();
-        boolean reuse = entry.mineOrigin != null && dim.equals(entry.mineDim)
-                && horizontalDistanceSq(entry.mineOrigin, m.getBlockPos()) < 256 * 256;
+        boolean marked = entry.mineMarker != null && entry.mineOrigin != null && dim.equals(entry.mineDim);
+        boolean reuse = marked || (entry.mineOrigin != null && dim.equals(entry.mineDim)
+                && horizontalDistanceSq(entry.mineOrigin, m.getBlockPos()) < 256 * 256);
         if (!reuse) {
             BlockPos spot = findMineSpot(world, m.getBlockPos());
             if (spot == null) {
                 finishJob(player, entry.inventory, "I'd have to dig a mine to reach " + j.spec.display
                         + ", but there's no open ground nearby that's away from buildings. "
-                        + "Take me somewhere with plain ground and ask again.");
+                        + "Place a Mine Marker (/helper mine marker) where you want my mine, or take me somewhere with plain ground.");
                 return;
             }
             entry.mineOrigin = spot;
@@ -1705,10 +1731,11 @@ public class Helper {
                 }
             }
             if (s.getCollisionShape(world, p).isEmpty()) continue;
-            if (s.hasBlockEntity() || s.getHardness(world, p) < 0 || isProtected(world, p, s)) {
+            if (s.hasBlockEntity() || s.getHardness(world, p) < 0 || protectedHere(world, p, s)) {
                 say(player, "My mine ran into something that looks built or that I can't dig through, at "
                         + p.toShortString() + ", so I left it alone. I'll start a new mine somewhere else next time.");
-                entry.mineOrigin = null;
+                if (entry.mineMarker == null) entry.mineOrigin = null;
+                else say(player, "Move your Mine Marker somewhere clear so I can keep digging.");
                 finishJob(player, inv, "Coming back up.");
                 return false;
             }
@@ -1983,7 +2010,12 @@ public class Helper {
                 return;
             }
             if (!canDigThrough(world, cell, s)) {
-                abandonTarget(m); // someone's build is in the way; try a different one
+                // Something built (or unbreakable) is in the way: phase through it instead of digging.
+                if ((sx != 0 || sz != 0) && phaseThrough(m, world, cur, sx, sz)) {
+                    j.targetTicks = 0;
+                    return;
+                }
+                abandonTarget(m); // can't get past; try a different one
                 return;
             }
             j.targetTicks = 0; // still making progress toward it
@@ -2001,6 +2033,10 @@ public class Helper {
                 abandonTarget(m);
                 return;
             }
+            if (nearBuild(world, cur, 3, true)) { // never pillar up inside or beside someone's build
+                abandonTarget(m);
+                return;
+            }
             m.getNavigation().stop();
             m.requestTeleport(cur.getX() + 0.5, cur.getY() + 1.0, cur.getZ() + 0.5);
             placeBlock(world, inv, slot, cur);
@@ -2013,7 +2049,10 @@ public class Helper {
             boolean fluid = !floorState.getFluidState().isEmpty();
             if (floorState.isReplaceable() && (fluid || passable(world, floor))) {
                 int slot = buildingBlockSlot(inv);
-                if (slot >= 0) {
+                if (slot >= 0 && nearBuild(world, floor, 3, true)) {
+                    abandonTarget(m); // don't bridge through someone's build
+                    return;
+                } else if (slot >= 0) {
                     placeBlock(world, inv, slot, floor); // bridge over the gap, water or lava
                 } else if (floorState.getFluidState().isIn(FluidTags.LAVA)
                         || (!fluid && !hasGroundWithin(world, floor, 3))) {
@@ -2034,6 +2073,7 @@ public class Helper {
         for (BlockPos top : job.shaftTops) {
             if (!world.isChunkLoaded(top) || !world.getBlockState(top).isAir()) continue;
             if (mob != null && mob.getBoundingBox().intersects(new net.minecraft.util.math.Box(top))) continue;
+            if (nearBuild(world, top, 2, true)) continue; // leave holes next to builds for the owner to deal with
             int slot = buildingBlockSlot(inv);
             if (slot < 0) break;
             placeBlock(world, inv, slot, top);
@@ -2064,7 +2104,7 @@ public class Helper {
      * nobody builds) anything that isn't obviously player-made is fine too, e.g. modded stone or sculk.
      */
     private boolean canDigThrough(ServerWorld world, BlockPos pos, BlockState s) {
-        if (isProtected(world, pos, s)) return false;
+        if (protectedHere(world, pos, s)) return false;
         if (Materials.isTerrain(s) || job.spec.matches(s)) return true;
         if (s.hasBlockEntity()) return false;
         float hardness = s.getHardness(world, pos);
@@ -2084,6 +2124,22 @@ public class Helper {
      * block within two blocks of one, so house floors and stone walls are safe too. Deep underground
      * only blocks next to chests, beds, furnaces and similar are protected, so caves stay minable.
      */
+    /**
+     * isProtected, except right around the owner's Mine Marker: there the player chose the spot, so only
+     * blocks that are themselves built (planks, glass, chests...) are off limits, not their neighbours.
+     */
+    private boolean protectedHere(ServerWorld world, BlockPos pos, BlockState s) {
+        HelperData.Entry e = currentEntry;
+        if (e != null && e.mineMarker != null && e.mineOrigin != null
+                && world.getRegistryKey().getValue().toString().equals(e.mineDim)
+                && Math.abs(pos.getX() - e.mineOrigin.getX()) <= 3 && Math.abs(pos.getZ() - e.mineOrigin.getZ()) <= 3) {
+            if (pos.equals(e.mineMarker)) return true; // never dig up the marker itself
+            if (s.isOf(net.minecraft.block.Blocks.SPAWNER)) return false;
+            return s.hasBlockEntity() || isBuildEvidence(s);
+        }
+        return isProtected(world, pos, s);
+    }
+
     static boolean isProtected(ServerWorld world, BlockPos pos, BlockState s) {
         if (s.isAir() || s.isOf(net.minecraft.block.Blocks.SPAWNER)) return false;
         if (s.hasBlockEntity()) return true;
@@ -2224,7 +2280,7 @@ public class Helper {
                                BlockPos pos, boolean isTarget) {
         Job j = job;
         BlockState state = world.getBlockState(pos);
-        if (isProtected(world, pos, state)) { // part of someone's build: never break it
+        if (protectedHere(world, pos, state)) { // part of someone's build: never break it
             abandonTarget(m);
             return;
         }
