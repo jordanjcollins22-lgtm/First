@@ -36,6 +36,8 @@ ask for. It works out the best way to get it:
 | `/helper guard on` / `off` | Turn fighting on or off (on by default) |
 | `/helper collect spawner` | Dig up a monster spawner. It keeps its mob, so you can place it anywhere |
 | `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
+| `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
+| `/helper look me` | Make your helper look like you again |
 | `/helper dismiss` | Send your helper away. It keeps your items for next time |
 
 **Right-click your helper** to open its inventory. Put tools (pickaxe, axe, shovel), a weapon (sword or

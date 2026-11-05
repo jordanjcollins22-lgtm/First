@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Makes the player disguise work: announce the fake player before it spawns, only send
+ * Makes the disguise work (as the owner, or as a mob picked with /helper look): announce the fake player before it spawns, only send
  * the entity data a player understands, and clean up when it stops being visible.
  */
 @Mixin(EntityTrackerEntry.class)
@@ -31,32 +31,32 @@ public abstract class EntityTrackerEntryMixin {
     @Inject(method = "sendPackets", at = @At("HEAD"))
     private void helpermod$announcePlayer(ServerPlayerEntity player,
                                           Consumer<Packet<ClientPlayPacketListener>> sender, CallbackInfo ci) {
-        if (Disguise.isHelper(entity)) sender.accept(Disguise.playerListAdd(entity));
+        if (Disguise.looksLikePlayer(entity)) sender.accept(Disguise.playerListAdd(entity));
     }
 
     @Inject(method = "stopTracking", at = @At("TAIL"))
     private void helpermod$forgetPlayer(ServerPlayerEntity player, CallbackInfo ci) {
-        if (Disguise.isHelper(entity)) player.networkHandler.sendPacket(Disguise.playerListRemove(entity));
+        if (Disguise.looksLikePlayer(entity)) player.networkHandler.sendPacket(Disguise.playerListRemove(entity));
     }
 
     @ModifyArg(method = "sendPackets", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/network/packet/s2c/play/EntityTrackerUpdateS2CPacket;<init>(ILjava/util/List;)V"),
             index = 1)
     private List<DataTracker.SerializedEntry<?>> helpermod$initialData(List<DataTracker.SerializedEntry<?>> list) {
-        return Disguise.isHelper(entity) ? Disguise.filterData(list, true) : list;
+        return Disguise.isHelper(entity) ? Disguise.filterData(entity, list, true) : list;
     }
 
     @ModifyArg(method = "syncEntityData", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/network/packet/s2c/play/EntityTrackerUpdateS2CPacket;<init>(ILjava/util/List;)V"),
             index = 1)
     private List<DataTracker.SerializedEntry<?>> helpermod$syncData(List<DataTracker.SerializedEntry<?>> list) {
-        return Disguise.isHelper(entity) ? Disguise.filterData(list, false) : list;
+        return Disguise.isHelper(entity) ? Disguise.filterData(entity, list, false) : list;
     }
 
     @ModifyArg(method = {"sendPackets", "syncEntityData"}, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/network/packet/s2c/play/EntityAttributesS2CPacket;<init>(ILjava/util/Collection;)V"),
             index = 1)
     private Collection<EntityAttributeInstance> helpermod$attributes(Collection<EntityAttributeInstance> attributes) {
-        return Disguise.isHelper(entity) ? Disguise.filterAttributes(attributes) : attributes;
+        return Disguise.isHelper(entity) ? Disguise.filterAttributes(entity, attributes) : attributes;
     }
 }

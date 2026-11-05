@@ -31,6 +31,8 @@ public class HelperData extends PersistentState {
         public net.minecraft.util.math.BlockPos mineOrigin;
         /** How many steps of the staircase are already dug. */
         public int mineDepth;
+        /** Which mob the helper looks like, e.g. "minecraft:creeper". Null means it looks like its owner. */
+        public String look;
 
         Entry() {
             inventory.addListener(inv -> markDirty());
@@ -75,6 +77,7 @@ public class HelperData extends PersistentState {
                 entry.mineOrigin = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineOrigin"));
                 entry.mineDepth = tag.getInt("mineDepth");
             }
+            if (tag.contains("look")) entry.look = tag.getString("look");
             data.entries.put(owner, entry);
         }
         return data;
@@ -95,6 +98,7 @@ public class HelperData extends PersistentState {
                 tag.putLong("mineOrigin", entry.mineOrigin.asLong());
                 tag.putInt("mineDepth", entry.mineDepth);
             }
+            if (entry.look != null) tag.putString("look", entry.look);
             list.add(tag);
         });
         nbt.put("helpers", list);
