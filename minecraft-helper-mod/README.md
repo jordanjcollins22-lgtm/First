@@ -52,6 +52,7 @@ ask for. It works out the best way to get it:
 | `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
 | `/helper farm [radius]` | Look after the crops around you (16 blocks unless you say): harvest ripe wheat, carrots, potatoes, beetroot, nether wart and modded crops, plant them again, and bring you the harvest. `/helper stop` ends it |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
+| `/helper golf` | Fairway golf: where's the club, how to play. `/helper golf shop` opens the Pro Shop, `/helper golf ball` picks your ball up |
 | `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
@@ -136,6 +137,7 @@ list, each with its own orbit for space stations:
 | Ceres (asteroid belt) | 3 | 0.28 m/s² | Gravel over deepslate | Iron, desh, ice shards, bright salt patches | Just stars |
 | Pluto | 4 | 0.62 m/s² | Snow over calcite, red patches | Emerald, diamond, calorite | Charon, and a tiny Sun |
 | Bikini Bottom | 3 | 9.8 m/s² (like Earth) | A warm ocean with a sand floor and a few islands | Coral reefs, kelp, sea pickles, gold, copper, prismarine; tropical fish, turtles and dolphins | A blue-green planet |
+| Fairway | 1 | 9.8 m/s² (like Earth) | Rolling grassland with flowers and a few trees | Normal ores; sheep, rabbits and cows, no monsters | A green planet |
 
 The real planets have no air and are very cold, so bring a space suit and oxygen. Bikini Bottom is the
 exception: it has air and is warm, but it's nearly all ocean, so bring water breathing or a conduit to
@@ -233,6 +235,26 @@ The first time you reach the sea floor on Bikini Bottom, an undersea town is bui
   Coral (librarian) and Chef Marlo (butcher). They can breathe underwater if they wander outside.
 
 The doors keep the water out, so you can walk in without a helmet. `/helper town` tells you where it is.
+
+## Fairway Golf Club (Fairway planet)
+
+Fairway is a grassy, peaceful planet (tier 1 rocket, it has air). The first time you land, the Fairway Golf
+Club is built about 66 blocks south of you:
+
+- A clubhouse with the Golf Pro. Right-click the Pro (or `/helper golf shop`) to open the Pro Shop.
+- Holes 1-3: mini golf lanes with walls and bumpers.
+- Holes 4-5: short holes (par 3). Holes 6-7: middle holes (par 4) with sand traps.
+- Holes 8-9: long holes (par 5) with sand and water.
+
+On your first visit you get a free Putter and 3 Golf Balls. To play: right-click the ground with a ball to
+place it, stand next to it, look where you want it to go and right-click with a club (sneak for half power).
+Putter rolls, Wedge chips high, Iron is a mid shot, Driver is a long tee shot. A ball in the water comes back.
+
+Sinking the ball pays tycoon coins: hole in one 5000, eagle 2000, birdie 1000, par 500, bogey 200, anything
+else 50. Everyone on the planet sees your score.
+
+The Pro Shop sells clubs (200-1000), balls, a golf cap, a Golf Cart (a fast tame horse, 5000), a Cottage Deed
+(20,000) and a Villa Deed (100,000). Right-click the ground with a deed to build the house there.
 
 ## Safety on shared worlds
 

@@ -111,6 +111,9 @@ public final class HelperCommands {
                     Town.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("golf").executes(ctx -> { Golf.info(ctx.getSource().getPlayerOrThrow()); return 1; })
+                        .then(literal("shop").executes(ctx -> { Golf.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("ball").executes(ctx -> { Golf.pickUp(ctx.getSource().getPlayerOrThrow()); return 1; })))
                 .then(literal("update").executes(ctx -> {
                     ctx.getSource().sendFeedback(() -> Text.literal("Auto-update: " + Updater.status()).formatted(Formatting.AQUA), false);
                     return 1;
@@ -142,6 +145,7 @@ public final class HelperCommands {
                 "/helper tycoon  - dropper tycoon: earn coins, /helper tycoon start for a free kit, /helper tycoon shop to spend",
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
+                "/helper golf  - Fairway golf planet: where's the club, your round, /helper golf shop, /helper golf ball (pick up your ball)",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
