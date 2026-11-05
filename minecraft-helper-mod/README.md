@@ -173,3 +173,7 @@ The mod jar ends up in `build/libs/`.
 - A helper is its own chunk loader: its chunk and the ones around it stay loaded while its owner is online,
   so it keeps working when you walk away. If you go to another dimension, it pops back next to you.
 - Mining speed follows the normal player rules. Better tools and Efficiency make your helper faster.
+- **Levels:** your helper gets better the more it works. It earns 1 point for every block it mines and 5 for
+  every mob it beats. Level 2 comes at 50 points, level 3 at 200, and so on up to level 10. Each level makes it
+  mine 10% faster (90% faster at level 10) and unlocks 3 more pockets: 27 at level 1, up to 54 at level 10.
+  `/helper status` shows its level and how close it is to the next one.

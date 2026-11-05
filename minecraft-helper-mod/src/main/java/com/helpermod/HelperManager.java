@@ -93,8 +93,8 @@ public final class HelperManager {
         }
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
                 (syncId, playerInventory, p) ->
-                        GenericContainerScreenHandler.createGeneric9x3(syncId, playerInventory, entry.inventory),
-                Text.literal("Your Helper (put tools here)")));
+                        GenericContainerScreenHandler.createGeneric9x6(syncId, playerInventory, entry.inventory),
+                Text.literal("Your Helper: level " + entry.level + ", " + entry.inventory.unlocked + " pockets")));
         return ActionResult.SUCCESS;
     }
 }
