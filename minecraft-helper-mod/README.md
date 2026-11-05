@@ -166,6 +166,10 @@ Your helper understands plain chat. Start a message with "helper" (or "buddy"):
 - "helper, get 20 iron", "helper mine some coal", "helper find 64 oak"
 - "helper go fishing", "helper farm", "helper ride", "helper bring it to me"
 - "helper follow me", "helper stop", "helper what are you doing?", "helper how are you?"
+- Ending with it works too: "hi helper", "thanks buddy".
+
+On a server everyone sees the conversation: other players get the reply as "[name's Helper] ...". It also
+works with chat mods that replace the normal chat.
 
 It also acts on its own:
 

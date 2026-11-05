@@ -13,7 +13,8 @@
     "LivingEntityAccessor",
     "PassiveEntityAccessor",
     "ZombieEntityAccessor",
-    "PiglinEntityAccessor"
+    "PiglinEntityAccessor",
+    "ChatPacketMixin"
   ],
   "injectors": { "defaultRequire": 1 }
 }
