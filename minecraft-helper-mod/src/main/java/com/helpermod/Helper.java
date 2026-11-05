@@ -2404,6 +2404,7 @@ public class Helper {
     static void say(ServerPlayerEntity player, String message) {
         MutableText text = Text.literal("[Helper] ").formatted(Formatting.GOLD)
                 .append(Text.literal(message).formatted(Formatting.WHITE));
+        if (Mind.sayToAll(player, text, message)) return; // answering chat: everyone sees the reply
         player.sendMessage(text, false);
     }
 }

@@ -36,6 +36,16 @@ final class Mind {
 
     private static final Pattern NUMBER = Pattern.compile("\\b(\\d{1,4})\\b");
     private static final Pattern WAKE = Pattern.compile("^\\s*(hey\\s+|ok\\s+|okay\\s+)?(helper|buddy)\\b[\\s,:!.-]*", Pattern.CASE_INSENSITIVE);
+    /** "hi helper", "thanks buddy", "good job helper!" */
+    private static final Pattern WAKE_END = Pattern.compile("[\\s,]+(my\\s+)?(helper|buddy)[\\s?!.]*$", Pattern.CASE_INSENSITIVE);
+
+    /** Who the helper is answering right now; while set, its replies go to everyone so others see the conversation. */
+    private static ServerPlayerEntity talkingTo;
+    /** Last chat line handled per player, so a message seen twice (event and fallback) is answered once. */
+    private static final Map<UUID, String> LAST_CHAT = new HashMap<>();
+    private static final Map<UUID, Long> LAST_CHAT_AT = new HashMap<>();
+    /** Answers wait a few ticks so they show up after the player's own chat line. */
+    private static final java.util.List<Object[]> PENDING = new java.util.ArrayList<>();
 
     /** Per player: what it last said about each thing, so it doesn't repeat itself. */
     private static final class Memory {
@@ -50,6 +60,11 @@ final class Mind {
 
     static void reset() {
         MEMORY.clear();
+        LAST_CHAT.clear();
+        LAST_CHAT_AT.clear();
+        synchronized (PENDING) {
+            PENDING.clear();
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -57,13 +72,74 @@ final class Mind {
     // ---------------------------------------------------------------------------------------
 
     static void onChat(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
-        String text = message.getContent().getString();
+        heard(player, message.getSignedContent());
+    }
+
+    /**
+     * Every chat line a player sends. Called from the Fabric chat event and, as a fallback for chat mods
+     * that replace the normal chat broadcast, straight from the chat packet (see ChatPacketMixin).
+     */
+    static void heard(ServerPlayerEntity player, String text) {
+        if (player == null || text == null || text.startsWith("/")) return;
+        String ask;
         Matcher wake = WAKE.matcher(text);
-        if (!wake.find()) return;
-        String ask = text.substring(wake.end()).trim().toLowerCase(Locale.ROOT).replaceAll("[?!.]+$", "");
+        Matcher end = WAKE_END.matcher(text);
+        if (wake.find()) ask = text.substring(wake.end());
+        else if (end.find()) ask = text.substring(0, end.start());
+        else return;
+        String clean = ask.trim().toLowerCase(Locale.ROOT).replaceAll("[?!.,]+$", "");
         MinecraftServer server = player.getServer();
         if (server == null) return;
-        server.execute(() -> answer(player, ask));
+        long now = System.currentTimeMillis();
+        synchronized (LAST_CHAT) {
+            Long at = LAST_CHAT_AT.get(player.getUuid());
+            if (text.equals(LAST_CHAT.get(player.getUuid())) && at != null && now - at < 1500) return; // already handled
+            LAST_CHAT.put(player.getUuid(), text);
+            LAST_CHAT_AT.put(player.getUuid(), now);
+        }
+        synchronized (PENDING) {
+            PENDING.add(new Object[]{player, clean, 3});
+        }
+    }
+
+    private static void runPending() {
+        java.util.List<Object[]> ready = new java.util.ArrayList<>();
+        synchronized (PENDING) {
+            for (java.util.Iterator<Object[]> it = PENDING.iterator(); it.hasNext(); ) {
+                Object[] p = it.next();
+                int left = (Integer) p[2] - 1;
+                p[2] = left;
+                if (left <= 0) {
+                    ready.add(p);
+                    it.remove();
+                }
+            }
+        }
+        for (Object[] p : ready) {
+            ServerPlayerEntity player = (ServerPlayerEntity) p[0];
+            if (player.isRemoved()) continue;
+            talkingTo = player;
+            try {
+                answer(player, (String) p[1]);
+            } catch (Exception e) {
+                HelperMod.LOG.warn("Helper chat answer failed", e);
+                Helper.say(player, "Sorry, something went wrong there. Try /helper help.");
+            } finally {
+                talkingTo = null;
+            }
+        }
+    }
+
+    /** While answering chat, the helper speaks so everyone can see it (others saw the question too). */
+    static boolean sayToAll(ServerPlayerEntity player, net.minecraft.text.Text text, String message) {
+        if (talkingTo == null || talkingTo != player || player.getServer() == null) return false;
+        net.minecraft.text.Text named = net.minecraft.text.Text.literal("[" + player.getName().getString() + "'s Helper] ")
+                .formatted(net.minecraft.util.Formatting.GOLD)
+                .append(net.minecraft.text.Text.literal(message).formatted(net.minecraft.util.Formatting.WHITE));
+        for (ServerPlayerEntity p : player.getServer().getPlayerManager().getPlayerList()) {
+            p.sendMessage(p == player ? text : named, false);
+        }
+        return true;
     }
 
     private static void run(ServerPlayerEntity player, String command) {
@@ -113,7 +189,8 @@ final class Mind {
             Helper.say(player, pick(player, "Coming!", "Right behind you.", "On my way."));
         } else if (has(ask, "summon", "appear")) {
             run(player, "helper summon");
-        } else if (has(ask, "how are you", "you ok", "you good", "feeling")) {
+        } else if (has(ask, "how are you", "how is it going", "how's it going", "hows it going", "how you doing",
+                "how are you doing", "you ok", "you good", "feeling", "what's up", "whats up")) {
             HelperData.Entry e = HelperData.get(player.getServer()).get(player.getUuid());
             int level = e == null ? 1 : HelperData.levelFor(e.work);
             Helper.say(player, level >= 5
@@ -142,6 +219,7 @@ final class Mind {
     // ---------------------------------------------------------------------------------------
 
     static void tick(MinecraftServer server) {
+        runPending();
         if (server.getTicks() % 20 != 7) return;
         HelperData data = HelperData.get(server);
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
