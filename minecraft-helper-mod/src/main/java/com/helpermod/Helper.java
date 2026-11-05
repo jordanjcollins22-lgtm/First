@@ -403,7 +403,8 @@ public class Helper {
         if (combatTarget != null) doing = "Fighting " + combatTarget.getName().getString() + " (" + doing + ")";
         String items = summarize(inv, false);
         int xp = currentEntry == null ? 0 : currentEntry.xp;
-        return doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + "."
+        String level = currentEntry == null ? "" : levelText(currentEntry) + ", " + currentEntry.inventory.unlocked + " pockets. ";
+        return level + doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + "."
                 + (xp > 0 ? " Holding " + xp + " XP for you." : "");
     }
 
@@ -514,9 +515,43 @@ public class Helper {
             attackCooldown = Combat.attack(m, target, entry.inventory, name -> say(player,
                     "My " + name + " is about to break, so I've stopped using it. Give me a new one or repair it."));
             lastProgressTick = combatTicks;
-            if (!target.isAlive()) combatTarget = null;
+            if (!target.isAlive()) {
+                combatTarget = null;
+                addWork(player, 5);
+            }
         }
         return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Levels: the helper gets better the more it works
+    // ---------------------------------------------------------------------------------------
+
+    private void addWork(ServerPlayerEntity player, int points) {
+        HelperData.Entry e = currentEntry;
+        if (e == null || e.level >= HelperData.MAX_LEVEL) return;
+        e.work += points;
+        int level = HelperData.levelFor(e.work);
+        HelperData.get(player.getServer()).markDirty();
+        if (level <= e.level) return;
+        e.level = level;
+        e.inventory.unlocked = HelperData.pocketsFor(level);
+        MobEntity m = mob;
+        if (m != null) {
+            ServerWorld w = (ServerWorld) m.getWorld();
+            w.playSound(null, m.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.NEUTRAL, 0.8f, 1.2f);
+            w.spawnParticles(net.minecraft.particle.ParticleTypes.HAPPY_VILLAGER,
+                    m.getX(), m.getY() + m.getHeight(), m.getZ(), 15, 0.4, 0.4, 0.4, 0.1);
+        }
+        say(player, "I leveled up! I'm level " + level + " now: I mine "
+                + Math.round((HelperData.speedFor(level) - 1) * 100) + "% faster and have "
+                + e.inventory.unlocked + " pockets." + (level >= HelperData.MAX_LEVEL ? " That's the top level!" : ""));
+    }
+
+    static String levelText(HelperData.Entry e) {
+        if (e.level >= HelperData.MAX_LEVEL) return "Level " + e.level + " (top level)";
+        return "Level " + e.level + " (" + (e.work - HelperData.pointsFor(e.level)) + "/"
+                + (HelperData.pointsFor(e.level + 1) - HelperData.pointsFor(e.level)) + " to the next)";
     }
 
     /**
@@ -1682,6 +1717,9 @@ public class Helper {
         int slot = Mining.bestToolSlot(inv, state, world, pos, isTarget, j.spec.preferSilk);
         ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
         int ticks = Mining.breakTicks(tool, state, world, pos);
+        if (ticks > 0 && currentEntry != null) { // a higher level helper mines faster
+            ticks = Math.max(1, Math.round(ticks / HelperData.speedFor(currentEntry.level)));
+        }
         if (ticks < 0) {
             abandonTarget(m);
             return;
@@ -1742,6 +1780,7 @@ public class Helper {
         }
         boolean wasTarget = j.breakingTarget;
         j.breaking = null;
+        addWork(player, 1);
         for (ItemStack drop : drops) {
             if (wasTarget && j.spec.counts(drop)) j.collected += drop.getCount();
             ItemStack rest = inv.addStack(drop);
@@ -1795,7 +1834,8 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     private static boolean isFull(SimpleInventory inv) {
-        for (int i = 0; i < inv.size(); i++) if (inv.getStack(i).isEmpty()) return false;
+        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.size();
+        for (int i = 0; i < room; i++) if (inv.getStack(i).isEmpty()) return false;
         return true;
     }
 
