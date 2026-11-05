@@ -1,0 +1,937 @@
+package com.helpermod;
+
+import com.helpermod.mixin.MobEntityAccessor;
+import net.minecraft.block.Block;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.ai.goal.LookAtEntityGoal;
+import net.minecraft.entity.ai.pathing.Path;
+import net.minecraft.entity.attribute.EntityAttributeInstance;
+import net.minecraft.entity.attribute.EntityAttributes;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.passive.WanderingTraderEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.inventory.SimpleInventory;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.registry.tag.BlockTags;
+import net.minecraft.registry.tag.FluidTags;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkSectionPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
+import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.chunk.WorldChunk;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/** The brain of one player's helper. */
+public class Helper {
+    public static final String TAG = "helpermod.helper";
+    public static final String OWNER_TAG = "helpermod.owner:";
+
+    private static final double REACH_SQ = 4.75 * 4.75;
+    private static final double SPEED = 0.6;
+    private static final int[][] SCAN_RADII = {{24, 16}, {48, 32}, {80, 48}, {48, 384}};
+    private static final int MAX_CANDIDATES = 4000;
+    private static final int PATH_CHECKS = 6;
+    /** Building blocks the helper keeps after a delivery so it can bridge and climb next time. */
+    private static final int KEEP_BUILDING_BLOCKS = 16;
+
+    enum Mode { FOLLOW, COLLECT, RETURN }
+
+    private final UUID owner;
+    private MobEntity mob;
+    private int missingTicks;
+    private int repathCooldown;
+    private int stuckTicks;
+    private Vec3d lastPos = Vec3d.ZERO;
+    Mode mode = Mode.FOLLOW;
+    Job job;
+
+    static final class Job {
+        final Materials.Spec spec;
+        final int wanted;
+        int collected;
+        boolean done;
+
+        final List<BlockPos> candidates = new ArrayList<>();
+        int scanStage = -1;
+        final Deque<BlockPos> vein = new ArrayDeque<>();
+        final Set<BlockPos> blacklist = new HashSet<>();
+
+        BlockPos target;
+        boolean tunneling;
+        int targetTicks;
+        int pathFailures;
+
+        BlockPos stepCell;
+        int stepTicks;
+
+        BlockPos breaking;
+        int breakTotal;
+        int breakProgress;
+        int breakSlot;
+        int lastStage;
+        boolean breakingTarget;
+
+        boolean toldAboutHands;
+        /** Openings of shafts we dug from the surface, plugged afterwards so nobody falls in. */
+        final Set<BlockPos> shaftTops = new HashSet<>();
+
+        Job(Materials.Spec spec, int wanted) {
+            this.spec = spec;
+            this.wanted = wanted;
+        }
+
+        void resetSearch() {
+            candidates.clear();
+            scanStage = -1;
+            vein.clear();
+            target = null;
+            stepCell = null;
+            breaking = null;
+        }
+    }
+
+    public Helper(UUID owner) {
+        this.owner = owner;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Entity handling
+    // ---------------------------------------------------------------------------------------
+
+    public static UUID ownerOf(Entity entity) {
+        for (String tag : entity.getCommandTags()) {
+            if (tag.startsWith(OWNER_TAG)) {
+                try {
+                    return UUID.fromString(tag.substring(OWNER_TAG.length()));
+                } catch (IllegalArgumentException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Strip the vanilla AI so only this mod moves the helper. Called on spawn and on every load. */
+    public static void applyBrain(MobEntity mob) {
+        MobEntityAccessor accessor = (MobEntityAccessor) mob;
+        accessor.helpermod$getGoalSelector().clear(goal -> true);
+        accessor.helpermod$getTargetSelector().clear(goal -> true);
+        accessor.helpermod$getGoalSelector().add(8, new LookAtEntityGoal(mob, PlayerEntity.class, 8f));
+        mob.getNavigation().setCanSwim(true);
+        mob.setPersistent();
+        mob.setInvulnerable(true);
+        mob.setSilent(true);
+        if (mob instanceof WanderingTraderEntity trader) trader.setDespawnDelay(0);
+        for (EquipmentSlot slot : EquipmentSlot.values()) mob.setEquipmentDropChance(slot, 0f);
+        EntityAttributeInstance range = mob.getAttributeInstance(EntityAttributes.GENERIC_FOLLOW_RANGE);
+        if (range != null) range.setBaseValue(64);
+    }
+
+    MobEntity findEntity(MinecraftServer server, HelperData.Entry entry) {
+        if (entry.entity == null) return null;
+        if (mob != null && !mob.isRemoved() && mob.getUuid().equals(entry.entity)) return mob;
+        mob = null;
+        for (ServerWorld world : server.getWorlds()) {
+            Entity e = world.getEntity(entry.entity);
+            if (e instanceof MobEntity m && !m.isRemoved()) {
+                mob = m;
+                break;
+            }
+        }
+        return mob;
+    }
+
+    /** Spawn (or move) the helper right next to the player. */
+    void spawnNear(ServerPlayerEntity player, HelperData.Entry entry) {
+        MinecraftServer server = player.getServer();
+        MobEntity existing = findEntity(server, entry);
+        ServerWorld world = player.getServerWorld();
+        Vec3d spot = findSpotNear(world, player.getBlockPos());
+        if (existing != null && existing.getWorld() == world) {
+            clearBreaking(existing);
+            existing.getNavigation().stop();
+            existing.requestTeleport(spot.x, spot.y, spot.z);
+            entry.active = true;
+            if (job != null) job.resetSearch();
+            return;
+        }
+        if (existing != null) {
+            clearBreaking(existing);
+            existing.discard();
+        }
+        WanderingTraderEntity helper = EntityType.WANDERING_TRADER.create(world);
+        if (helper == null) return;
+        helper.refreshPositionAndAngles(spot.x, spot.y, spot.z, player.getYaw() + 180f, 0f);
+        helper.setCustomName(Text.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.setCustomNameVisible(true);
+        helper.addCommandTag(TAG);
+        helper.addCommandTag(OWNER_TAG + owner);
+        applyBrain(helper);
+        entry.entity = helper.getUuid();
+        entry.active = true;
+        HelperData.get(server).markDirty();
+        mob = helper;
+        world.spawnEntity(helper);
+        world.playSound(null, helper.getBlockPos(), SoundEvents.ENTITY_ILLUSIONER_MIRROR_MOVE, SoundCategory.NEUTRAL,
+                0.6f, 1.4f);
+        if (job != null) job.resetSearch();
+    }
+
+    void dismiss(MinecraftServer server, HelperData.Entry entry) {
+        MobEntity m = findEntity(server, entry);
+        if (m != null) {
+            clearBreaking(m);
+            m.discard();
+        }
+        mob = null;
+        job = null;
+        mode = Mode.FOLLOW;
+        entry.active = false;
+        HelperData.get(server).markDirty();
+    }
+
+    private static Vec3d findSpotNear(ServerWorld world, BlockPos center) {
+        for (int r = 1; r <= 3; r++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    for (int dy = -1; dy <= 1; dy++) {
+                        BlockPos p = center.add(dx, dy, dz);
+                        if (canStand(world, p)) return Vec3d.ofBottomCenter(p);
+                    }
+                }
+            }
+        }
+        return Vec3d.ofBottomCenter(center);
+    }
+
+    private static boolean canStand(World world, BlockPos p) {
+        return passable(world, p) && passable(world, p.up())
+                && world.getBlockState(p.down()).isSideSolidFullSquare(world, p.down(), Direction.UP);
+    }
+
+    private static boolean passable(World world, BlockPos p) {
+        BlockState s = world.getBlockState(p);
+        return s.getCollisionShape(world, p).isEmpty() && !s.getFluidState().isIn(FluidTags.LAVA);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Commands
+    // ---------------------------------------------------------------------------------------
+
+    void startJob(ServerPlayerEntity player, Materials.Spec spec, int amount) {
+        if (mob != null) clearBreaking(mob);
+        job = new Job(spec, amount);
+        mode = Mode.COLLECT;
+        say(player, "On it! Going to collect " + amount + " " + spec.display + ".");
+    }
+
+    void stop(ServerPlayerEntity player) {
+        if (mob != null && job != null && mob.getWorld() instanceof ServerWorld w) {
+            plugShafts(w, HelperData.get(player.getServer()).getOrCreate(owner).inventory);
+        }
+        if (mob != null) {
+            clearBreaking(mob);
+            mob.getNavigation().stop();
+        }
+        job = null;
+        mode = Mode.FOLLOW;
+    }
+
+    void deliverNow() {
+        if (mob != null) clearBreaking(mob);
+        mode = Mode.RETURN;
+    }
+
+    String status(SimpleInventory inv) {
+        String doing;
+        if (mode == Mode.COLLECT && job != null) {
+            doing = "Collecting " + job.spec.display + ": " + job.collected + "/" + job.wanted;
+        } else if (mode == Mode.RETURN) {
+            doing = job != null && !job.done
+                    ? "Bringing you my haul, then back to collecting " + job.spec.display
+                    : "Bringing you my haul";
+        } else {
+            doing = "Following you";
+        }
+        String items = summarize(inv, false);
+        return doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + ".";
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Ticking
+    // ---------------------------------------------------------------------------------------
+
+    void tick(MinecraftServer server, ServerPlayerEntity player, HelperData.Entry entry) {
+        MobEntity m = findEntity(server, entry);
+        if (m == null) {
+            // Unloaded (owner walked or teleported away) or gone. Bring a fresh one to the owner.
+            if (++missingTicks > 40) {
+                missingTicks = 0;
+                spawnNear(player, entry);
+            }
+            return;
+        }
+        if (!((ServerWorld) m.getWorld()).shouldTickEntity(m.getBlockPos())) {
+            // Too far from every player to be simulated: it would just stand frozen. Bring it back.
+            if (++missingTicks > 40) {
+                missingTicks = 0;
+                spawnNear(player, entry);
+            }
+            return;
+        }
+        missingTicks = 0;
+        switch (mode) {
+            case FOLLOW -> tickFollow(m, player, entry);
+            case RETURN -> tickReturn(m, player, entry);
+            case COLLECT -> {
+                if (job == null) mode = Mode.FOLLOW;
+                else tickCollect(m, player, entry);
+            }
+        }
+    }
+
+    private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        if (m.getWorld() != player.getWorld()) {
+            spawnNear(player, entry);
+            return;
+        }
+        double d = m.squaredDistanceTo(player);
+        if (d > 32 * 32) {
+            teleportNear(m, player);
+        } else if (d > 4 * 4) {
+            if (--repathCooldown <= 0) {
+                m.getNavigation().startMovingTo(player, SPEED);
+                repathCooldown = 10;
+            }
+        } else if (d < 2.5 * 2.5) {
+            m.getNavigation().stop();
+        }
+    }
+
+    private void tickReturn(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        if (m.getWorld() != player.getWorld()) {
+            spawnNear(player, entry);
+            return;
+        }
+        double d = m.squaredDistanceTo(player);
+        if (d <= 3 * 3) {
+            m.getNavigation().stop();
+            if (job != null) plugShafts((ServerWorld) m.getWorld(), entry.inventory);
+            deliver(m, player, entry.inventory);
+            if (job != null && !job.done) {
+                job.resetSearch();
+                mode = Mode.COLLECT;
+            } else {
+                job = null;
+                mode = Mode.FOLLOW;
+            }
+            return;
+        }
+        if (d > 48 * 48) {
+            teleportNear(m, player);
+            return;
+        }
+        if (--repathCooldown <= 0) {
+            m.getNavigation().startMovingTo(player, SPEED);
+            repathCooldown = 10;
+        }
+        if (isStuck(m, 100)) teleportNear(m, player);
+    }
+
+    private void teleportNear(MobEntity m, ServerPlayerEntity player) {
+        Vec3d spot = findSpotNear(player.getServerWorld(), player.getBlockPos());
+        m.getNavigation().stop();
+        m.requestTeleport(spot.x, spot.y, spot.z);
+        stuckTicks = 0;
+    }
+
+    private boolean isStuck(MobEntity m, int limit) {
+        if (m.getPos().squaredDistanceTo(lastPos) > 0.04) {
+            lastPos = m.getPos();
+            stuckTicks = 0;
+            return false;
+        }
+        return ++stuckTicks > limit;
+    }
+
+    private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv) {
+        Map<String, Integer> given = new LinkedHashMap<>();
+        int keptBuilding = 0;
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack stack = inv.getStack(i);
+            if (stack.isEmpty() || stack.isDamageable()) continue; // keep tools
+            if (isBuildingBlock(stack) && (job == null || !job.spec.counts(stack))
+                    && keptBuilding < KEEP_BUILDING_BLOCKS) {
+                int keep = Math.min(stack.getCount(), KEEP_BUILDING_BLOCKS - keptBuilding);
+                keptBuilding += keep;
+                if (keep == stack.getCount()) continue;
+                ItemStack give = stack.split(stack.getCount() - keep);
+                given.merge(give.getName().getString(), give.getCount(), Integer::sum);
+                player.getInventory().offerOrDrop(give);
+                continue;
+            }
+            given.merge(stack.getName().getString(), stack.getCount(), Integer::sum);
+            player.getInventory().offerOrDrop(stack.copy());
+            inv.setStack(i, ItemStack.EMPTY);
+        }
+        inv.markDirty();
+        if (given.isEmpty()) {
+            say(player, "I don't have anything new for you.");
+            return;
+        }
+        m.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
+                0.4f, 1.2f);
+        StringBuilder sb = new StringBuilder();
+        given.forEach((name, count) -> {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(count).append(' ').append(name);
+        });
+        say(player, "Here you go: " + sb + ".");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Collecting
+    // ---------------------------------------------------------------------------------------
+
+    private void tickCollect(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        Job j = job;
+        ServerWorld world = (ServerWorld) m.getWorld();
+        SimpleInventory inv = entry.inventory;
+
+        if (j.breaking != null) {
+            tickBreaking(m, player, world, inv);
+            return;
+        }
+        if (isFull(inv)) {
+            say(player, "My pockets are full. Bringing everything to you, then I'll keep going.");
+            mode = Mode.RETURN;
+            return;
+        }
+        if (j.target != null && !j.spec.matches(world.getBlockState(j.target))) j.target = null;
+        if (j.target == null && !pickTarget(m, player, world, inv)) return;
+
+        BlockPos target = j.target;
+        if (++j.targetTicks > 900) { // 45 seconds without getting it: give up on that one
+            abandonTarget(m);
+            return;
+        }
+        m.getLookControl().lookAt(Vec3d.ofCenter(target));
+
+        boolean inReach = m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(target)) <= REACH_SQ;
+        if (inReach && (isExposed(world, target) || isAdjacent(m, target))) {
+            m.getNavigation().stop();
+            j.stepCell = null;
+            startBreaking(m, player, world, inv, target, true);
+            return;
+        }
+        if (j.tunneling) tickTunnel(m, player, world, inv);
+        else tickWalk(m, world);
+    }
+
+    private static boolean isAdjacent(MobEntity m, BlockPos target) {
+        BlockPos feet = m.getBlockPos();
+        int dx = Math.abs(target.getX() - feet.getX());
+        int dz = Math.abs(target.getZ() - feet.getZ());
+        int dy = target.getY() - feet.getY();
+        return dx + dz <= 1 && dy >= -1 && dy <= 2;
+    }
+
+    private void tickWalk(MobEntity m, ServerWorld world) {
+        Job j = job;
+        boolean stuck = isStuck(m, 40);
+        if (m.getNavigation().isIdle() || stuck) {
+            stuckTicks = 0;
+            if (++j.pathFailures > 2) {
+                j.tunneling = true; // walking isn't working; dig a way there instead
+                return;
+            }
+            Path path = m.getNavigation().findPathTo(j.target, 2);
+            if (path == null || !m.getNavigation().startMovingAlong(path, SPEED)) j.tunneling = true;
+        }
+    }
+
+    private boolean pickTarget(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+        Job j = job;
+        j.targetTicks = 0;
+        j.pathFailures = 0;
+        j.stepCell = null;
+        stuckTicks = 0;
+
+        // 1. Keep going along the vein / tree we're already on.
+        while (!j.vein.isEmpty()) {
+            BlockPos p = j.vein.pollFirst();
+            if (isValidTarget(world, p, false)) {
+                if (!checkTool(player, world, inv, p)) return false;
+                j.target = p;
+                Path path = m.getNavigation().findPathTo(p, 2);
+                j.tunneling = path == null || !path.reachesTarget();
+                if (!j.tunneling) m.getNavigation().startMovingAlong(path, SPEED);
+                return true;
+            }
+        }
+
+        // 2. Nearest blocks around us, widening the search when we run out.
+        j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+        while (j.candidates.isEmpty()) {
+            if (++j.scanStage >= SCAN_RADII.length) {
+                finishJob(player, inv, "I can't find any more " + j.spec.display + " nearby.");
+                return false;
+            }
+            scan(world, m.getBlockPos(), SCAN_RADII[j.scanStage][0], SCAN_RADII[j.scanStage][1], j);
+            j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+        }
+        Vec3d here = m.getPos();
+        j.candidates.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(here)));
+
+        // 3. Of the closest few, pick the cheapest: walk if there's a path, otherwise dig.
+        BlockPos best = null;
+        Path bestPath = null;
+        double bestCost = Double.MAX_VALUE;
+        for (int i = 0; i < Math.min(PATH_CHECKS, j.candidates.size()); i++) {
+            BlockPos p = j.candidates.get(i);
+            double dist = Math.sqrt(Vec3d.ofCenter(p).squaredDistanceTo(here));
+            double cost;
+            Path path = null;
+            if (m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(p)) <= REACH_SQ && isExposed(world, p)) {
+                cost = 0;
+            } else {
+                if (isExposed(world, p)) path = m.getNavigation().findPathTo(p, 2);
+                if (path != null && path.reachesTarget()) cost = path.getLength();
+                else {
+                    path = null;
+                    cost = dist * 3 + 4; // digging is slower than walking
+                }
+            }
+            if (cost < bestCost) {
+                bestCost = cost;
+                best = p;
+                bestPath = path;
+            }
+            if (cost == 0) break;
+        }
+        if (best == null) return false;
+        if (!checkTool(player, world, inv, best)) return false;
+        j.target = best;
+        j.candidates.remove(best);
+        j.tunneling = bestPath == null && bestCost > 0;
+        if (bestPath != null) m.getNavigation().startMovingAlong(bestPath, SPEED);
+        return true;
+    }
+
+    /** Make sure we can actually harvest this block; otherwise tell the owner what we need. */
+    private boolean checkTool(ServerPlayerEntity player, ServerWorld world, SimpleInventory inv, BlockPos p) {
+        BlockState state = world.getBlockState(p);
+        int slot = Mining.bestToolSlot(inv, state, world, p, true, job.spec.preferSilk);
+        ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
+        if (!Mining.canHarvest(tool, state)) {
+            finishJob(player, inv, "I need " + Mining.requiredToolName(state) + " to mine "
+                    + Mining.blockName(state.getBlock()) + ". Right-click me and put one in my inventory.");
+            return false;
+        }
+        if (tool.isEmpty() && !job.toldAboutHands && Mining.breakTicks(tool, state, world, p) > 20) {
+            job.toldAboutHands = true;
+            say(player, "I'm doing this by hand. Put a tool in my inventory (right-click me) and I'll be faster.");
+        }
+        return true;
+    }
+
+    private boolean isValidTarget(ServerWorld world, BlockPos p, boolean checkTree) {
+        Job j = job;
+        if (j.blacklist.contains(p) || !world.isChunkLoaded(p)) return false;
+        BlockState state = world.getBlockState(p);
+        if (!j.spec.matches(state)) return false;
+        if (checkTree && state.isIn(BlockTags.LOGS)) return isPartOfTree(world, p);
+        return true;
+    }
+
+    /** Logs only count if they're part of a real tree (natural leaves nearby), so cabins are safe. */
+    private static boolean isPartOfTree(ServerWorld world, BlockPos p) {
+        BlockPos.Mutable q = new BlockPos.Mutable();
+        for (int dy = -1; dy <= 8; dy++) {
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    q.set(p.getX() + dx, p.getY() + dy, p.getZ() + dz);
+                    BlockState s = world.getBlockState(q);
+                    if (s.isIn(BlockTags.LEAVES) && Materials.isGatherable(s)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isExposed(World world, BlockPos p) {
+        for (Direction dir : Direction.values()) {
+            BlockPos n = p.offset(dir);
+            if (!world.getBlockState(n).isOpaqueFullCube(world, n)) return true;
+        }
+        return false;
+    }
+
+    private static void scan(ServerWorld world, BlockPos center, int radius, int vertical, Job j) {
+        int minY = Math.max(world.getBottomY(), center.getY() - vertical);
+        int maxY = Math.min(world.getTopY() - 1, center.getY() + vertical);
+        int r2 = radius * radius;
+        Set<BlockPos> seen = new HashSet<>(j.candidates);
+        for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
+            for (int cz = (center.getZ() - radius) >> 4; cz <= (center.getZ() + radius) >> 4; cz++) {
+                WorldChunk chunk = world.getChunkManager().getWorldChunk(cx, cz);
+                if (chunk == null) continue;
+                ChunkSection[] sections = chunk.getSectionArray();
+                for (int si = 0; si < sections.length; si++) {
+                    int baseY = ChunkSectionPos.getBlockCoord(world.getBottomSectionCoord() + si);
+                    if (baseY + 15 < minY || baseY > maxY) continue;
+                    ChunkSection section = sections[si];
+                    if (section == null || section.isEmpty() || !section.hasAny(j.spec::matches)) continue;
+                    for (int y = 0; y < 16; y++) {
+                        int wy = baseY + y;
+                        if (wy < minY || wy > maxY) continue;
+                        for (int z = 0; z < 16; z++) {
+                            for (int x = 0; x < 16; x++) {
+                                if (!j.spec.matches(section.getBlockState(x, y, z))) continue;
+                                int wx = (cx << 4) + x, wz = (cz << 4) + z;
+                                int ddx = wx - center.getX(), ddz = wz - center.getZ();
+                                if (ddx * ddx + ddz * ddz > r2) continue;
+                                BlockPos p = new BlockPos(wx, wy, wz);
+                                if (seen.add(p)) j.candidates.add(p);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (j.candidates.size() > MAX_CANDIDATES) {
+            j.candidates.sort(Comparator.comparingDouble(p -> p.getSquaredDistance(center)));
+            j.candidates.subList(MAX_CANDIDATES, j.candidates.size()).clear();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Digging a path (staircases, tunnels, bridging, pillaring)
+    // ---------------------------------------------------------------------------------------
+
+    private void tickTunnel(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+        Job j = job;
+        if (j.stepCell != null) {
+            BlockPos cell = j.stepCell;
+            Vec3d center = Vec3d.ofBottomCenter(cell);
+            if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(center) < 0.15) {
+                j.stepCell = null;
+            } else if (++j.stepTicks > 25) {
+                m.requestTeleport(center.x, center.y, center.z); // nudge into the freshly dug spot
+                j.stepCell = null;
+            } else {
+                // Step straight into the freshly dug cell (pathfinding is unreliable in 1-wide tunnels).
+                m.getMoveControl().moveTo(center.x, center.y, center.z, SPEED);
+            }
+            return;
+        }
+
+        BlockPos cur = m.getBlockPos();
+        BlockPos target = j.target;
+        int dx = target.getX() - cur.getX();
+        int dy = target.getY() - cur.getY();
+        int dz = target.getZ() - cur.getZ();
+        int sx = 0, sz = 0;
+        if (Math.abs(dx) >= Math.abs(dz) && dx != 0) sx = Integer.signum(dx);
+        else if (dz != 0) sz = Integer.signum(dz);
+        int sy = dy >= 2 ? 1 : (dy <= -1 ? -1 : 0);
+        if (dy < -2 && -dy > Math.abs(dx) + Math.abs(dz) + 2) {
+            sx = 0; // far below: dig straight down instead of a long staircase
+            sz = 0;
+        }
+        if (sx == 0 && sz == 0 && sy == 0) { // target is in our body space; just mine it
+            startBreaking(m, player, world, inv, target, true);
+            return;
+        }
+        BlockPos next = cur.add(sx, sy, sz);
+        boolean pillar = sx == 0 && sz == 0 && sy == 1;
+
+        List<BlockPos> toClear = new ArrayList<>();
+        if (sy == 1) toClear.add(cur.up(2));
+        if (sy == -1) toClear.add(next.up(2));
+        toClear.add(next.up());
+        toClear.add(next);
+        for (BlockPos cell : toClear) {
+            if (cell.equals(cur) || cell.equals(cur.up())) continue;
+            BlockState s = world.getBlockState(cell);
+            if (passable(world, cell)) continue;
+            if (s.getFluidState().isIn(FluidTags.LAVA) || lavaNear(world, cell)) {
+                abandonTarget(m);
+                return;
+            }
+            if (!Materials.isTerrain(s) && !j.spec.matches(s)) {
+                abandonTarget(m); // someone's build is in the way; try a different one
+                return;
+            }
+            j.targetTicks = 0; // still making progress toward it
+            if (sx == 0 && sz == 0 && sy == -1 && cell.equals(next) && world.isSkyVisible(cur)) {
+                j.shaftTops.add(next.toImmutable());
+            }
+            startBreaking(m, player, world, inv, cell, j.spec.matches(s));
+            return;
+        }
+
+        j.targetTicks = 0;
+        if (pillar) {
+            int slot = buildingBlockSlot(inv);
+            if (slot < 0) {
+                abandonTarget(m);
+                return;
+            }
+            m.getNavigation().stop();
+            m.requestTeleport(cur.getX() + 0.5, cur.getY() + 1.0, cur.getZ() + 0.5);
+            placeBlock(world, inv, slot, cur);
+            return;
+        }
+
+        BlockPos floor = next.down();
+        if (!world.getBlockState(floor).isSideSolidFullSquare(world, floor, Direction.UP)) {
+            if (passable(world, floor) && world.getBlockState(floor).isReplaceable()) {
+                int slot = buildingBlockSlot(inv);
+                if (slot >= 0) {
+                    placeBlock(world, inv, slot, floor);
+                } else if (!hasGroundWithin(world, floor, 3)) {
+                    abandonTarget(m); // too far to drop and nothing to bridge with
+                    return;
+                }
+            } else if (!passable(world, floor)) {
+                // Something odd (slab, fence...) under the next step. Fine to walk on.
+            } else {
+                abandonTarget(m);
+                return;
+            }
+        }
+        j.stepCell = next;
+        j.stepTicks = 0;
+        m.getNavigation().stop();
+        Vec3d c = Vec3d.ofBottomCenter(next);
+        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+    }
+
+    private void plugShafts(ServerWorld world, SimpleInventory inv) {
+        for (BlockPos top : job.shaftTops) {
+            if (!world.isChunkLoaded(top) || !world.getBlockState(top).isAir()) continue;
+            if (mob != null && mob.getBoundingBox().intersects(new net.minecraft.util.math.Box(top))) continue;
+            int slot = buildingBlockSlot(inv);
+            if (slot < 0) break;
+            placeBlock(world, inv, slot, top);
+        }
+        job.shaftTops.clear();
+    }
+
+    private static boolean hasGroundWithin(World world, BlockPos from, int depth) {
+        for (int i = 1; i <= depth; i++) {
+            BlockPos p = from.down(i);
+            BlockState s = world.getBlockState(p);
+            if (s.getFluidState().isIn(FluidTags.LAVA)) return false;
+            if (s.isSideSolidFullSquare(world, p, Direction.UP)) return true;
+        }
+        return false;
+    }
+
+    private static boolean lavaNear(World world, BlockPos cell) {
+        for (Direction dir : Direction.values()) {
+            if (world.getFluidState(cell.offset(dir)).isIn(FluidTags.LAVA)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isBuildingBlock(ItemStack stack) {
+        if (!(stack.getItem() instanceof BlockItem bi)) return false;
+        BlockState s = bi.getBlock().getDefaultState();
+        if (s.hasBlockEntity() || bi.getBlock() instanceof net.minecraft.block.FallingBlock) return false;
+        Item item = stack.getItem();
+        String path = net.minecraft.registry.Registries.ITEM.getId(item).getPath();
+        return s.isIn(BlockTags.BASE_STONE_OVERWORLD) || s.isIn(BlockTags.BASE_STONE_NETHER)
+                || s.isIn(BlockTags.DIRT) || path.equals("cobblestone") || path.equals("cobbled_deepslate");
+    }
+
+    private int buildingBlockSlot(SimpleInventory inv) {
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack stack = inv.getStack(i);
+            if (!stack.isEmpty() && isBuildingBlock(stack) && !job.spec.counts(stack)) return i;
+        }
+        return -1;
+    }
+
+    private static void placeBlock(ServerWorld world, SimpleInventory inv, int slot, BlockPos pos) {
+        ItemStack stack = inv.getStack(slot);
+        Block block = ((BlockItem) stack.getItem()).getBlock();
+        BlockState state = block.getDefaultState();
+        world.setBlockState(pos, state);
+        world.playSound(null, pos, state.getSoundGroup().getPlaceSound(), SoundCategory.BLOCKS, 0.8f, 1f);
+        stack.decrement(1);
+        inv.markDirty();
+    }
+
+    private void abandonTarget(MobEntity m) {
+        Job j = job;
+        if (j.target != null) j.blacklist.add(j.target);
+        j.target = null;
+        j.stepCell = null;
+        m.getNavigation().stop();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Breaking blocks
+    // ---------------------------------------------------------------------------------------
+
+    private void startBreaking(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+                               BlockPos pos, boolean isTarget) {
+        Job j = job;
+        BlockState state = world.getBlockState(pos);
+        int slot = Mining.bestToolSlot(inv, state, world, pos, isTarget, j.spec.preferSilk);
+        ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
+        int ticks = Mining.breakTicks(tool, state, world, pos);
+        if (ticks < 0) {
+            abandonTarget(m);
+            return;
+        }
+        if (isTarget && !Mining.canHarvest(tool, state)) {
+            checkTool(player, world, inv, pos);
+            return;
+        }
+        j.breaking = pos.toImmutable();
+        j.breakTotal = ticks;
+        j.breakProgress = 0;
+        j.breakSlot = slot;
+        j.lastStage = -1;
+        j.breakingTarget = isTarget;
+        m.equipStack(EquipmentSlot.MAINHAND, tool.copy());
+    }
+
+    private void tickBreaking(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+        Job j = job;
+        BlockPos pos = j.breaking;
+        BlockState state = world.getBlockState(pos);
+        if (state.isAir() || (!j.breakingTarget && passable(world, pos))) {
+            clearBreaking(m);
+            return;
+        }
+        m.getLookControl().lookAt(Vec3d.ofCenter(pos));
+        j.breakProgress++;
+        if (j.breakProgress % 4 == 1) {
+            m.swingHand(Hand.MAIN_HAND);
+            world.playSound(null, pos, state.getSoundGroup().getHitSound(), SoundCategory.NEUTRAL, 0.25f, 0.6f);
+        }
+        int stage = Math.min(9, (int) (10f * j.breakProgress / j.breakTotal));
+        if (stage != j.lastStage) {
+            world.setBlockBreakingInfo(m.getId(), pos, stage);
+            j.lastStage = stage;
+        }
+        if (j.breakProgress < j.breakTotal) return;
+
+        // Done: harvest it.
+        ItemStack tool = j.breakSlot >= 0 ? inv.getStack(j.breakSlot) : ItemStack.EMPTY;
+        if (!tool.isEmpty() && !Mining.isUsableTool(tool)) tool = ItemStack.EMPTY;
+        boolean harvest = Mining.canHarvest(tool, state);
+        float hardness = state.getHardness(world, pos);
+        BlockEntity be = world.getBlockEntity(pos);
+        List<ItemStack> drops = harvest ? Block.getDroppedStacks(state, world, pos, be, m, tool) : List.of();
+        if (harvest) state.onStacksDropped(world, pos, tool, true);
+        world.setBlockBreakingInfo(m.getId(), pos, -1);
+        world.breakBlock(pos, false, m);
+        if (!tool.isEmpty() && tool.isDamageable() && hardness != 0) {
+            tool.damage(1, m, e -> {});
+            inv.markDirty();
+        }
+        boolean wasTarget = j.breakingTarget;
+        j.breaking = null;
+        for (ItemStack drop : drops) {
+            if (wasTarget && j.spec.counts(drop)) j.collected += drop.getCount();
+            ItemStack rest = inv.addStack(drop);
+            if (!rest.isEmpty()) Block.dropStack(world, pos, rest);
+        }
+        if (wasTarget) {
+            if (pos.equals(j.target)) j.target = null;
+            for (int ox = -1; ox <= 1; ox++)
+                for (int oy = -1; oy <= 1; oy++)
+                    for (int oz = -1; oz <= 1; oz++) {
+                        if (ox == 0 && oy == 0 && oz == 0) continue;
+                        BlockPos n = pos.add(ox, oy, oz);
+                        if (j.spec.matches(world.getBlockState(n)) && !j.blacklist.contains(n)) j.vein.addLast(n);
+                    }
+        }
+        if (j.collected >= j.wanted) {
+            j.done = true;
+            say(player, "Done! Got " + j.collected + " " + j.spec.display + ". Coming back to you.");
+            mode = Mode.RETURN;
+        }
+    }
+
+    private void clearBreaking(MobEntity m) {
+        if (job != null && job.breaking != null) {
+            m.getWorld().setBlockBreakingInfo(m.getId(), job.breaking, -1);
+            job.breaking = null;
+        }
+    }
+
+    private void finishJob(ServerPlayerEntity player, SimpleInventory inv, String message) {
+        say(player, message);
+        if (mob != null) clearBreaking(mob);
+        if (!summarize(inv, true).isEmpty()) {
+            job.done = true;
+            mode = Mode.RETURN;
+        } else {
+            job = null;
+            mode = Mode.FOLLOW;
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Utilities
+    // ---------------------------------------------------------------------------------------
+
+    private static boolean isFull(SimpleInventory inv) {
+        for (int i = 0; i < inv.size(); i++) if (inv.getStack(i).isEmpty()) return false;
+        return true;
+    }
+
+    static String summarize(SimpleInventory inv, boolean skipTools) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack s = inv.getStack(i);
+            if (s.isEmpty() || (skipTools && s.isDamageable())) continue;
+            counts.merge(s.getName().getString(), s.getCount(), Integer::sum);
+        }
+        StringBuilder sb = new StringBuilder();
+        counts.forEach((name, count) -> {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(count).append(' ').append(name);
+        });
+        return sb.toString();
+    }
+
+    static void say(ServerPlayerEntity player, String message) {
+        MutableText text = Text.literal("[Helper] ").formatted(Formatting.GOLD)
+                .append(Text.literal(message).formatted(Formatting.WHITE));
+        player.sendMessage(text, false);
+    }
+}
