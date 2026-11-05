@@ -87,6 +87,19 @@ public final class HelperCommands {
                     Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("tycoon")
+                        .executes(ctx -> { Tycoon.info(ctx.getSource().getPlayerOrThrow()); return 1; })
+                        .then(literal("start").executes(ctx -> { Tycoon.start(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("upgrade").executes(ctx -> { Tycoon.upgrade(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("give").requires(src -> src.hasPermissionLevel(2))
+                                .then(argument("player", net.minecraft.command.argument.EntityArgumentType.player())
+                                        .then(argument("coins", com.mojang.brigadier.arguments.LongArgumentType.longArg(1))
+                                                .executes(ctx -> {
+                                                    Tycoon.give(net.minecraft.command.argument.EntityArgumentType.getPlayer(ctx, "player"),
+                                                            com.mojang.brigadier.arguments.LongArgumentType.getLong(ctx, "coins"));
+                                                    return 1;
+                                                })))))
                 .then(literal("town").executes(ctx -> {
                     Town.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
@@ -119,6 +132,7 @@ public final class HelperCommands {
                 "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
                 "/helper farm [radius]  - harvest and replant ripe crops around you (16 blocks unless you say)",
+                "/helper tycoon  - dropper tycoon: earn coins, /helper tycoon start for a free kit, /helper tycoon shop to spend",
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
