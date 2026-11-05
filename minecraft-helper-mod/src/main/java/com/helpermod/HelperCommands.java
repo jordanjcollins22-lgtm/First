@@ -35,6 +35,9 @@ public final class HelperCommands {
                 .then(literal("stop").executes(HelperCommands::stop))
                 .then(literal("deliver").executes(HelperCommands::deliver))
                 .then(literal("status").executes(HelperCommands::status))
+                .then(literal("guard")
+                        .then(literal("on").executes(ctx -> guard(ctx, true)))
+                        .then(literal("off").executes(ctx -> guard(ctx, false))))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -45,8 +48,9 @@ public final class HelperCommands {
                 "/helper deliver  - bring me what you have now",
                 "/helper stop  - stop and follow me",
                 "/helper status  - what are you doing?",
+                "/helper guard on|off  - fight mobs that come after you (on by default)",
                 "/helper dismiss  - send your helper away (it keeps your items)",
-                "Right-click your helper to give it tools or take items.",
+                "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
         ctx.getSource().sendFeedback(() -> Text.literal("Helper commands:").formatted(Formatting.GOLD), false);
         for (String line : lines) ctx.getSource().sendFeedback(() -> Text.literal(line), false);
@@ -121,6 +125,17 @@ public final class HelperCommands {
             return 0;
         }
         Helper.say(player, HelperManager.helperFor(player.getUuid()).status(entry.inventory));
+        return 1;
+    }
+
+    private static int guard(CommandContext<ServerCommandSource> ctx, boolean on) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        HelperData data = HelperData.get(player.getServer());
+        data.getOrCreate(player.getUuid()).guard = on;
+        data.markDirty();
+        Helper.say(player, on
+                ? "I'll protect you! I fight monsters that come after you, and anything you attack."
+                : "Okay, no fighting. I'll stay out of trouble.");
         return 1;
     }
 

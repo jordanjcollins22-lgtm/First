@@ -3,8 +3,9 @@
 A light Fabric mod for **Minecraft 1.20.1**, built to drop into the **Prominence II: Hasturian Era**
 modpack, though it works with any Fabric 1.20.1 setup that has Fabric API.
 
-Every player on the world can summon their own little helper and tell it what to collect. The helper
-works out the best way to get it:
+Every player on the world can summon their own little helper. **It looks like the player who summoned
+it** (same skin, with "Jordan's Helper" over its head), **fights for them**, and collects whatever they
+ask for. It works out the best way to get it:
 
 - It searches nearby for the closest blocks that give you that material. It knows about deepslate and
   modded variants.
@@ -23,10 +24,25 @@ works out the best way to get it:
 | `/helper deliver` | Bring me what you have right now, then keep going |
 | `/helper stop` | Stop the current job and follow me |
 | `/helper status` | What are you doing, and what are you carrying? |
+| `/helper guard on` / `off` | Turn fighting on or off (on by default) |
 | `/helper dismiss` | Send your helper away. It keeps your items for next time |
 
-**Right-click your helper** to open its inventory. Put tools in there (pickaxe, axe, shovel) and take out
-anything you like. Helpers won't use a tool that's about to break, so you won't lose your gear.
+**Right-click your helper** to open its inventory. Put tools (pickaxe, axe, shovel), a weapon (sword or
+axe) and armor in there, and take out anything you like. Helpers won't use a tool that's about to break, so
+you won't lose your gear.
+
+### Combat
+
+With guard on, your helper:
+
+- fights monsters that go after you or after the helper itself,
+- jumps in on whatever you attack (hit a mob and it helps you finish it off),
+- clears out always-hostile mobs (zombies, skeletons, spiders, ...) that get close to you.
+
+It uses the best weapon in its inventory (damage, attack speed, Sharpness, Smite, Fire Aspect and
+Knockback all count) and wears the best armor it has. It never attacks players, other helpers or pets,
+and leaves creepers alone unless you hit one first. While it's out collecting it only defends itself, then
+goes back to work.
 
 ### Material examples
 
@@ -69,8 +85,10 @@ The mod jar ends up in `build/libs/`.
 
 ## Notes
 
-- A helper looks like a wandering trader with a name tag ("Jordan's Helper"). It's a vanilla mob, which is
-  why nobody else has to install anything.
+- A helper is a mob on the server that every player's game is told to draw as a player with the owner's
+  skin. That's why nobody else has to install anything. If the server can't get the owner's skin (for
+  example on an offline-mode server), the helper uses the default Steve/Alex skin.
+- Helpers can't be hurt, so they make strong bodyguards. They don't use bows (melee only).
 - Helpers only work while they're within simulation distance of their owner. If you walk or teleport far
   away, your helper pops back next to you and starts searching again from there.
 - Mining speed follows the normal player rules. Better tools and Efficiency make your helper faster.

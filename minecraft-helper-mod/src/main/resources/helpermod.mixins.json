@@ -3,6 +3,12 @@
   "minVersion": "0.8",
   "package": "com.helpermod.mixin",
   "compatibilityLevel": "JAVA_17",
-  "mixins": ["MobEntityAccessor"],
+  "mixins": [
+    "MobEntityAccessor",
+    "DataTrackerAccessor",
+    "PlayerEntityAccessor",
+    "EntitySpawnPacketMixin",
+    "EntityTrackerEntryMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }

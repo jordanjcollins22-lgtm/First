@@ -23,6 +23,8 @@ public class HelperData extends PersistentState {
     public final class Entry {
         public UUID entity;
         public boolean active;
+        /** Fight mobs that threaten the owner. */
+        public boolean guard = true;
         public final SimpleInventory inventory = new SimpleInventory(INVENTORY_SIZE);
 
         Entry() {
@@ -61,6 +63,7 @@ public class HelperData extends PersistentState {
             UUID owner = tag.getUuid("owner");
             if (tag.containsUuid("entity")) entry.entity = tag.getUuid("entity");
             entry.active = tag.getBoolean("active");
+            entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
             entry.inventory.readNbtList(tag.getList("items", NbtElement.COMPOUND_TYPE));
             data.entries.put(owner, entry);
         }
@@ -75,6 +78,7 @@ public class HelperData extends PersistentState {
             tag.putUuid("owner", owner);
             if (entry.entity != null) tag.putUuid("entity", entry.entity);
             tag.putBoolean("active", entry.active);
+            tag.putBoolean("guard", entry.guard);
             tag.put("items", entry.inventory.toNbtList());
             list.add(tag);
         });

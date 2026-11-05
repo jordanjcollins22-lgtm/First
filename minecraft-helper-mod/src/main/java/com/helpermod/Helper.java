@@ -7,6 +7,7 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
@@ -52,6 +53,8 @@ import java.util.UUID;
 public class Helper {
     public static final String TAG = "helpermod.helper";
     public static final String OWNER_TAG = "helpermod.owner:";
+    public static final String NAME_TAG = "helpermod.name:";
+    private static final boolean DEBUG = Boolean.getBoolean("helpermod.debug");
 
     private static final double REACH_SQ = 4.75 * 4.75;
     private static final double SPEED = 0.6;
@@ -67,6 +70,15 @@ public class Helper {
     private MobEntity mob;
     private int missingTicks;
     private int repathCooldown;
+    private LivingEntity combatTarget;
+    private int combatTicks;
+    private int attackCooldown;
+    private int combatScan;
+    private int gearTicks;
+    private int lastProgressTick;
+    private double closestSoFar;
+    private final Set<UUID> ignoredTargets = new HashSet<>();
+    private int ignoreClearTicks;
     private int stuckTicks;
     private Vec3d lastPos = Vec3d.ZERO;
     Mode mode = Mode.FOLLOW;
@@ -125,6 +137,14 @@ public class Helper {
     // Entity handling
     // ---------------------------------------------------------------------------------------
 
+    public static String ownerNameOf(Entity entity) {
+        for (String tag : entity.getCommandTags()) {
+            if (tag.startsWith(NAME_TAG)) return tag.substring(NAME_TAG.length());
+        }
+        String name = entity.getName().getString();
+        return name.endsWith("'s Helper") ? name.substring(0, name.length() - 9) : "Helper";
+    }
+
     public static UUID ownerOf(Entity entity) {
         for (String tag : entity.getCommandTags()) {
             if (tag.startsWith(OWNER_TAG)) {
@@ -171,6 +191,7 @@ public class Helper {
     /** Spawn (or move) the helper right next to the player. */
     void spawnNear(ServerPlayerEntity player, HelperData.Entry entry) {
         MinecraftServer server = player.getServer();
+        Disguise.prepare(player);
         MobEntity existing = findEntity(server, entry);
         ServerWorld world = player.getServerWorld();
         Vec3d spot = findSpotNear(world, player.getBlockPos());
@@ -193,6 +214,7 @@ public class Helper {
         helper.setCustomNameVisible(true);
         helper.addCommandTag(TAG);
         helper.addCommandTag(OWNER_TAG + owner);
+        helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
         applyBrain(helper);
         entry.entity = helper.getUuid();
         entry.active = true;
@@ -202,6 +224,33 @@ public class Helper {
         world.playSound(null, helper.getBlockPos(), SoundEvents.ENTITY_ILLUSIONER_MIRROR_MOVE, SoundCategory.NEUTRAL,
                 0.6f, 1.4f);
         if (job != null) job.resetSearch();
+    }
+
+    /** Replace the helper entity with a fresh one in the same spot (used to refresh its skin). */
+    void respawnInPlace(MinecraftServer server, HelperData.Entry entry) {
+        MobEntity old = findEntity(server, entry);
+        ServerPlayerEntity player = server.getPlayerManager().getPlayer(owner);
+        if (old == null || player == null) return;
+        clearBreaking(old);
+        ServerWorld world = (ServerWorld) old.getWorld();
+        Vec3d pos = old.getPos();
+        float yaw = old.getYaw();
+        old.discard();
+        mob = null;
+        WanderingTraderEntity helper = EntityType.WANDERING_TRADER.create(world);
+        if (helper == null) return;
+        helper.refreshPositionAndAngles(pos.x, pos.y, pos.z, yaw, 0f);
+        helper.setCustomName(Text.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.setCustomNameVisible(true);
+        helper.addCommandTag(TAG);
+        helper.addCommandTag(OWNER_TAG + owner);
+        helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
+        applyBrain(helper);
+        entry.entity = helper.getUuid();
+        HelperData.get(server).markDirty();
+        mob = helper;
+        world.spawnEntity(helper);
+        gearTicks = 0;
     }
 
     void dismiss(MinecraftServer server, HelperData.Entry entry) {
@@ -280,6 +329,7 @@ public class Helper {
         } else {
             doing = "Following you";
         }
+        if (combatTarget != null) doing = "Fighting " + combatTarget.getName().getString() + " (" + doing + ")";
         String items = summarize(inv, false);
         return doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + ".";
     }
@@ -307,6 +357,8 @@ public class Helper {
             return;
         }
         missingTicks = 0;
+        if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
+        if (tickCombat(m, player, entry)) return;
         switch (mode) {
             case FOLLOW -> tickFollow(m, player, entry);
             case RETURN -> tickReturn(m, player, entry);
@@ -315,6 +367,69 @@ public class Helper {
                 else tickCollect(m, player, entry);
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Combat: protect the owner and itself, and help with whatever the owner attacks
+    // ---------------------------------------------------------------------------------------
+
+    private boolean tickCombat(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        if (!entry.guard) {
+            combatTarget = null;
+            return false;
+        }
+        if (combatTarget != null && !Combat.stillWorthFighting(m, player, combatTarget, ++combatTicks)) {
+            combatTarget = null;
+            m.getNavigation().stop();
+        }
+        if (combatTarget == null) {
+            if (++combatScan < 10) return false;
+            combatScan = 0;
+            if (++ignoreClearTicks > 60) { // forget unreachable mobs every ~30 seconds
+                ignoreClearTicks = 0;
+                ignoredTargets.clear();
+            }
+            combatTarget = Combat.findThreat(m, player, mode == Mode.COLLECT, ignoredTargets);
+            if (combatTarget == null) return false;
+            if (DEBUG) HelperMod.LOG.info("[helper debug] target {} at {}", combatTarget, combatTarget.getBlockPos());
+            combatTicks = 0;
+            lastProgressTick = 0;
+            closestSoFar = Double.MAX_VALUE;
+            clearBreaking(m);
+            if (job != null) {
+                job.target = null; // re-plan the route after the fight
+                job.stepCell = null;
+            }
+        }
+        LivingEntity target = combatTarget;
+        m.getLookControl().lookAt(target, 30f, 30f);
+        double d = m.squaredDistanceTo(target);
+        if (d < closestSoFar - 0.5) {
+            closestSoFar = d;
+            lastProgressTick = combatTicks;
+        }
+        if (combatTicks - lastProgressTick > 80) { // can't get to it (behind walls, in a cave...): skip it
+            if (DEBUG) HelperMod.LOG.info("[helper debug] giving up on {}", target);
+            ignoredTargets.add(target.getUuid());
+            combatTarget = null;
+            m.getNavigation().stop();
+            return false;
+        }
+        if (d > Combat.REACH_SQ) {
+            if (--repathCooldown <= 0) {
+                m.getNavigation().startMovingTo(target, Combat.CHASE_SPEED);
+                repathCooldown = 5;
+            }
+        } else {
+            m.getNavigation().stop();
+        }
+        if (attackCooldown > 0) attackCooldown--;
+        if (attackCooldown <= 0 && d <= Combat.REACH_SQ && m.canSee(target)) {
+            attackCooldown = Combat.attack(m, target, entry.inventory);
+            lastProgressTick = combatTicks;
+            if (!target.isAlive()) combatTarget = null;
+        }
+        return true;
     }
 
     private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {

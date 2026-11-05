@@ -53,6 +53,13 @@ public final class HelperManager {
         }
     }
 
+    /** The owner's skin just arrived: re-show their helper so everyone sees it. */
+    public static void refreshDisguise(MinecraftServer server, UUID owner) {
+        HelperData.Entry entry = HelperData.get(server).get(owner);
+        if (entry == null || !entry.active) return;
+        helperFor(owner).respawnInPlace(server, entry);
+    }
+
     /** Re-apply the helper brain when a helper loads, and clean up stale duplicates. */
     public static void onEntityLoad(Entity entity, ServerWorld world) {
         if (!(entity instanceof MobEntity mob) || !entity.getCommandTags().contains(Helper.TAG)) return;
