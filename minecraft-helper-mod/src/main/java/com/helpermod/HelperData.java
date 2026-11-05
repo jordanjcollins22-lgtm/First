@@ -35,6 +35,8 @@ public class HelperData extends PersistentState {
         public String look;
         /** XP the helper picked up (from ores it mined and mobs it fought), handed over on delivery. */
         public int xp;
+        /** How big the helper is: 1 is normal, 0.5 half height, 2 double. */
+        public float size = 1f;
 
         Entry() {
             inventory.addListener(inv -> markDirty());
@@ -81,6 +83,7 @@ public class HelperData extends PersistentState {
             }
             if (tag.contains("look")) entry.look = tag.getString("look");
             entry.xp = tag.getInt("xp");
+            if (tag.contains("size")) entry.size = tag.getFloat("size");
             data.entries.put(owner, entry);
         }
         return data;
@@ -103,6 +106,7 @@ public class HelperData extends PersistentState {
             }
             if (entry.look != null) tag.putString("look", entry.look);
             if (entry.xp > 0) tag.putInt("xp", entry.xp);
+            if (entry.size != 1f) tag.putFloat("size", entry.size);
             list.add(tag);
         });
         nbt.put("helpers", list);

@@ -273,6 +273,7 @@ public class Helper {
         helper.addCommandTag(OWNER_TAG + owner);
         helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
         applyBrain(helper);
+        if (entry.size != 1f) Size.apply(helper, entry.size);
         entry.entity = helper.getUuid();
         entry.active = true;
         HelperData.get(server).markDirty();
@@ -303,6 +304,7 @@ public class Helper {
         helper.addCommandTag(OWNER_TAG + owner);
         helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
         applyBrain(helper);
+        if (entry.size != 1f) Size.apply(helper, entry.size);
         entry.entity = helper.getUuid();
         HelperData.get(server).markDirty();
         mob = helper;

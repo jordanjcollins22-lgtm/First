@@ -41,6 +41,7 @@ ask for. It works out the best way to get it:
 | `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
+| `/helper size small` / `normal` / `big` | Make your helper shorter or taller, or give a number from 0.25 to 4 (1 is normal). With the [Pehkui](https://modrinth.com/mod/pehkui) mod on the server it truly resizes, whatever it looks like. Without Pehkui, small makes it the baby version of its mob look (zombie, villager, fox, cow...) |
 | `/helper dismiss` | Send your helper away. It keeps your items for next time |
 
 **Right-click your helper** to open its inventory. Put tools (pickaxe, axe, shovel), a weapon (sword or

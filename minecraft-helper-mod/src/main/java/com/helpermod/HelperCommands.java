@@ -56,6 +56,12 @@ public final class HelperCommands {
                                     return CommandSource.suggestMatching(options, builder);
                                 })
                                 .executes(HelperCommands::look)))
+                .then(literal("size")
+                        .executes(HelperCommands::sizeHelp)
+                        .then(argument("size", StringArgumentType.word())
+                                .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                                        List.of("small", "normal", "big", "tiny", "giant", "0.5", "1.5"), builder))
+                                .executes(HelperCommands::size)))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -69,6 +75,7 @@ public final class HelperCommands {
                 "/helper guard on|off  - fight mobs that come after you (on by default)",
                 "/helper look <mob>  - make your helper look like any mob, e.g. /helper look creeper",
                 "/helper look me  - make your helper look like you again",
+                "/helper size small|normal|big  - make your helper shorter or taller (or a number like 0.5)",
                 "/helper dismiss  - send your helper away (it keeps your items)",
                 "/helper collect spawner  - dig up a monster spawner you can place anywhere",
                 "/helper harvester  - turn the hopper in your hand into a Monster Harvester",
@@ -201,6 +208,57 @@ public final class HelperCommands {
         data.markDirty();
         if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUuid());
         Helper.say(player, entry.active ? reply : reply + " You'll see it when you /helper summon me.");
+        return 1;
+    }
+
+    private static int sizeHelp(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        Helper.say(player, "Pick a size: /helper size small, normal or big, or a number from "
+                + Size.MIN + " to " + Size.MAX + " (1 is normal).");
+        return 1;
+    }
+
+    private static int size(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        String raw = StringArgumentType.getString(ctx, "size").toLowerCase(java.util.Locale.ROOT);
+        float size;
+        switch (raw) {
+            case "tiny" -> size = 0.25f;
+            case "small", "short", "baby", "little" -> size = 0.5f;
+            case "normal", "default", "reset" -> size = 1f;
+            case "big", "tall" -> size = 1.5f;
+            case "giant", "huge" -> size = 2.5f;
+            default -> {
+                try {
+                    size = Float.parseFloat(raw.replace("x", "").replace("%", ""));
+                    if (raw.endsWith("%")) size /= 100f;
+                } catch (NumberFormatException e) {
+                    Helper.say(player, "I don't know the size \"" + raw + "\". Try small, normal, big or a number like 0.5.");
+                    return 0;
+                }
+            }
+        }
+        if (Float.isNaN(size) || size < Size.MIN || size > Size.MAX) {
+            Helper.say(player, "I can only be between " + Size.MIN + " and " + Size.MAX + " times my normal size.");
+            return 0;
+        }
+        HelperData data = HelperData.get(player.getServer());
+        HelperData.Entry entry = data.getOrCreate(player.getUuid());
+        entry.size = size;
+        data.markDirty();
+        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUuid());
+        String reply;
+        if (size == 1f) {
+            reply = "Back to normal size!";
+        } else if (Size.hasPehkui()) {
+            reply = "Okay! I'm " + Size.describe(size) + " now.";
+        } else if (size < 1f) {
+            reply = "I'll be the baby version of my look (try /helper look zombie or /helper look fox). "
+                    + "To change size exactly, or to look like you and be smaller, the server needs the Pehkui mod.";
+        } else {
+            reply = "I can't get bigger without the Pehkui mod on the server. I saved the size, so it works once Pehkui is added.";
+        }
+        Helper.say(player, entry.active || size == 1f ? reply : reply + " You'll see it when you /helper summon me.");
         return 1;
     }
 
