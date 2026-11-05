@@ -33,6 +33,8 @@ public class HelperData extends PersistentState {
         public int mineDepth;
         /** Which mob the helper looks like, e.g. "minecraft:creeper". Null means it looks like its owner. */
         public String look;
+        /** XP the helper picked up (from ores it mined and mobs it fought), handed over on delivery. */
+        public int xp;
 
         Entry() {
             inventory.addListener(inv -> markDirty());
@@ -78,6 +80,7 @@ public class HelperData extends PersistentState {
                 entry.mineDepth = tag.getInt("mineDepth");
             }
             if (tag.contains("look")) entry.look = tag.getString("look");
+            entry.xp = tag.getInt("xp");
             data.entries.put(owner, entry);
         }
         return data;
@@ -99,6 +102,7 @@ public class HelperData extends PersistentState {
                 tag.putInt("mineDepth", entry.mineDepth);
             }
             if (entry.look != null) tag.putString("look", entry.look);
+            if (entry.xp > 0) tag.putInt("xp", entry.xp);
             list.add(tag);
         });
         nbt.put("helpers", list);

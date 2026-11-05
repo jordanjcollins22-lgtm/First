@@ -23,6 +23,9 @@ ask for. It works out the best way to get it:
   silk touch unless that's what you want.
 - It mines out the whole vein or tree before moving on.
 - It brings everything back to you when it's done or its pockets are full.
+- Mobs it kills count as your kills, so they drop XP (and loot only players get, like blaze rods).
+- It picks up the XP from the ores it mines and the mobs it fights, and gives it to you when it brings
+  your items back (or as soon as it's next to you). `/helper status` shows how much it's holding.
 
 ## Commands
 

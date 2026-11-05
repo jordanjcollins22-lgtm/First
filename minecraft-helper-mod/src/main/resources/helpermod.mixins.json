@@ -9,7 +9,8 @@
     "PlayerEntityAccessor",
     "EntitySpawnPacketMixin",
     "EntityTrackerEntryMixin",
-    "ExperienceOrbAccessor"
+    "ExperienceOrbAccessor",
+    "LivingEntityAccessor"
   ],
   "injectors": { "defaultRequire": 1 }
 }
