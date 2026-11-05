@@ -153,6 +153,19 @@ public final class Combat {
     // Hitting
     // ---------------------------------------------------------------------------------------
 
+    /**
+     * Mobs only drop XP when a player hurt them recently. Count the helper's hit as its owner's,
+     * so what it kills drops XP for the helper to bring back.
+     */
+    private static void creditOwner(MobEntity helper, LivingEntity target) {
+        java.util.UUID owner = Helper.ownerOf(helper);
+        if (owner == null || helper.getServer() == null) return;
+        net.minecraft.server.network.ServerPlayerEntity player = helper.getServer().getPlayerManager().getPlayer(owner);
+        if (player == null) return;
+        ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setAttackingPlayer(player);
+        ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setPlayerHitTimer(100);
+    }
+
     /** Swing at the target with the best weapon. Returns the cooldown in ticks before the next swing. */
     public static int attack(MobEntity helper, LivingEntity target, SimpleInventory inv,
                              java.util.function.Consumer<String> onWornOut) {
@@ -163,6 +176,7 @@ public final class Combat {
         }
         float damage = damageOf(weapon) + EnchantmentHelper.getAttackDamage(weapon, target.getGroup());
         helper.swingHand(net.minecraft.util.Hand.MAIN_HAND);
+        creditOwner(helper, target);
         boolean hit = target.damage(helper.getDamageSources().mobAttack(helper), damage);
         if (hit) {
             int knockback = EnchantmentHelper.getLevel(Enchantments.KNOCKBACK, weapon);
