@@ -80,11 +80,24 @@ final class Tycoon {
         final Map<UUID, Long> coins = new HashMap<>();
         final Map<UUID, Long> earned = new HashMap<>();
         final Map<UUID, Boolean> started = new HashMap<>();
+        /** Level of a dropper that was picked up, given back to the next one its owner places. */
+        final Map<UUID, Integer> spare = new HashMap<>();
         /** "dimension|pos" -> dropper. */
         final Map<String, Dropper> droppers = new LinkedHashMap<>();
 
         static Data get(MinecraftServer server) {
             return server.getOverworld().getPersistentStateManager().getOrCreate(Data::fromNbt, Data::new, ID);
+        }
+
+        /** Register a Tycoon Dropper. If its owner picked one up earlier, it gets that one's level back. */
+        Dropper register(World world, BlockPos pos, UUID owner) {
+            Dropper existing = droppers.get(key(world, pos));
+            if (existing != null) return existing;
+            Integer level = spare.remove(owner);
+            Dropper d = new Dropper(owner, level == null ? 1 : level);
+            droppers.put(key(world, pos), d);
+            markDirty();
+            return d;
         }
 
         long coins(UUID id) {
@@ -106,6 +119,7 @@ final class Tycoon {
                 d.coins.put(id, p.getLong("coins"));
                 d.earned.put(id, p.getLong("earned"));
                 d.started.put(id, p.getBoolean("started"));
+                if (p.getInt("spare") > 0) d.spare.put(id, p.getInt("spare"));
             }
             NbtList list = nbt.getList("droppers", NbtElement.COMPOUND_TYPE);
             for (int i = 0; i < list.size(); i++) {
@@ -120,12 +134,14 @@ final class Tycoon {
             NbtList players = new NbtList();
             java.util.Set<UUID> ids = new java.util.HashSet<>(coins.keySet());
             ids.addAll(started.keySet());
+            ids.addAll(spare.keySet());
             for (UUID id : ids) {
                 NbtCompound p = new NbtCompound();
                 p.putUuid("id", id);
                 p.putLong("coins", coins.getOrDefault(id, 0L));
                 p.putLong("earned", earned.getOrDefault(id, 0L));
                 p.putBoolean("started", started.getOrDefault(id, false));
+                p.putInt("spare", spare.getOrDefault(id, 0));
                 players.add(p);
             }
             nbt.put("players", players);
@@ -229,6 +245,46 @@ final class Tycoon {
         return ActionResult.PASS;
     }
 
+    /** A Tycoon Dropper that turns up somewhere the mod doesn't know (moved by a carrying mod, for example). */
+    static void onBlockEntityLoad(net.minecraft.block.entity.BlockEntity be, ServerWorld world) {
+        if (!(be instanceof net.minecraft.block.entity.DropperBlockEntity dropper) || !dropper.hasCustomName()) return;
+        if (!DROPPER_NAME.equals(dropper.getCustomName().getString())) return;
+        BlockPos pos = be.getPos().toImmutable();
+        world.getServer().execute(() -> {
+            Data data = Data.get(world.getServer());
+            if (data.droppers.containsKey(key(world, pos))) return;
+            PlayerEntity near = world.getClosestPlayer(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, 48, false);
+            if (near == null) return;
+            Dropper d = data.register(world, pos, near.getUuid());
+            if (near instanceof ServerPlayerEntity sp) Helper.say(sp, "Tycoon Dropper is working again (level " + d.level + ").");
+        });
+    }
+
+    /** /helper tycoon fix: make the dropper you're looking at work as your Tycoon Dropper. */
+    static void fix(ServerPlayerEntity player) {
+        HitResult hit = player.raycast(6, 0, false);
+        if (!(hit instanceof BlockHitResult bh) || hit.getType() != HitResult.Type.BLOCK
+                || !player.getWorld().getBlockState(bh.getBlockPos()).isOf(Blocks.DROPPER)) {
+            Helper.say(player, "Look at your Tycoon Dropper and run /helper tycoon fix again.");
+            return;
+        }
+        BlockPos pos = bh.getBlockPos();
+        if (!(player.getWorld().getBlockEntity(pos) instanceof net.minecraft.block.entity.DropperBlockEntity be)
+                || !be.hasCustomName() || !DROPPER_NAME.equals(be.getCustomName().getString())) {
+            Helper.say(player, "That's a plain dropper. Only Tycoon Droppers (from the starter kit or the shop) drop ore.");
+            return;
+        }
+        Data data = Data.get(player.getServer());
+        Dropper existing = data.droppers.get(key(player.getWorld(), pos));
+        if (existing != null) {
+            Helper.say(player, "That Tycoon Dropper is already working (level " + existing.level + "). Make sure its front isn't blocked "
+                    + "and it isn't getting a redstone signal.");
+            return;
+        }
+        Dropper d = data.register(player.getWorld(), pos, player.getUuid());
+        Helper.say(player, "Fixed! Your Tycoon Dropper is working again (level " + d.level + ").");
+    }
+
     /** Old ore left over from before a restart has no dropper to pay out to: remove it. */
     static void onEntityLoad(Entity entity, ServerWorld world) {
         if (entity instanceof ItemEntity && entity.getCommandTags().contains(ORE_TAG) && !ORES.containsKey(entity.getUuid())) {
@@ -246,11 +302,10 @@ final class Tycoon {
             Pending pd = PENDING.get(i);
             ServerWorld world = server.getWorld(pd.world());
             if (world != null && world.getBlockState(pd.pos()).isOf(Blocks.DROPPER)) {
-                data.droppers.put(key(world, pd.pos()), new Dropper(pd.player(), 1));
-                data.markDirty();
+                Dropper placed = data.register(world, pd.pos(), pd.player());
                 ServerPlayerEntity player = server.getPlayerManager().getPlayer(pd.player());
-                if (player != null) Helper.say(player, "Tycoon Dropper placed! It drops ore out of its front. "
-                        + "Lead conveyors from there to a Collector to earn coins.");
+                if (player != null) Helper.say(player, "Tycoon Dropper placed" + (placed.level > 1 ? " (level " + placed.level + ")" : "")
+                        + "! It drops ore out of its front. Lead conveyors from there to a Collector to earn coins.");
                 PENDING.remove(i);
             } else if (pd.ticks() > 5) {
                 PENDING.remove(i);
@@ -268,12 +323,16 @@ final class Tycoon {
             BlockPos pos = BlockPos.fromLong(Long.parseLong(parts[1]));
             if (!world.isChunkLoaded(pos)) continue;
             BlockState state = world.getBlockState(pos);
-            if (!state.isOf(Blocks.DROPPER)) { // broken
+            Dropper d = e.getValue();
+            if (!state.isOf(Blocks.DROPPER)) { // picked up or broken: remember its level for the next one
                 it.remove();
+                data.spare.merge(d.owner, d.level, Math::max);
                 data.markDirty();
+                ServerPlayerEntity owner = server.getPlayerManager().getPlayer(d.owner);
+                if (owner != null) Helper.say(owner, "Your Tycoon Dropper was picked up. Place it again anywhere and it keeps its level ("
+                        + d.level + ").");
                 continue;
             }
-            Dropper d = e.getValue();
             if (++d.timer < d.interval() || d.live >= MAX_ORES_PER_DROPPER) continue;
             d.timer = 0;
             if (world.isReceivingRedstonePower(pos)) continue; // a redstone signal pauses it
@@ -381,6 +440,7 @@ final class Tycoon {
                 "/helper tycoon start  - free starter kit (once): a Tycoon Dropper, 16 conveyors and a Collector",
                 "/helper tycoon shop  - spend coins on tycoon parts and useful items",
                 "/helper tycoon upgrade  - look at your Tycoon Dropper to make it faster and its ore worth more",
+                "/helper tycoon fix  - look at a Tycoon Dropper that stopped working after you moved it",
                 "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5) boost it once each.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
         };

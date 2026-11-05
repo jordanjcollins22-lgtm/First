@@ -189,6 +189,7 @@ Build a little ore factory and spend what it earns.
 | --- | --- |
 | `/helper tycoon` | Your coins, droppers and shop tier |
 | `/helper tycoon shop` | Buy conveyors, collectors, upgraders, more droppers, and useful items (food, torches, iron, diamonds, ender pearls, totems...) |
+| `/helper tycoon fix` | Look at a Tycoon Dropper that stopped dropping after you moved it, to make it work again |
 | `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
 | `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
 
@@ -197,7 +198,7 @@ unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, t
 End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
 command reward to a quest: `/helper tycoon give {p} 500`.
 
-A redstone signal pauses a dropper. Ore that isn't collected within a minute fizzles out, so it can't pile up.
+You can pick a Tycoon Dropper up and place it somewhere else: it keeps its level. A redstone signal pauses a dropper. Ore that isn't collected within a minute fizzles out, so it can't pile up.
 
 ## Torches in the mine
 
