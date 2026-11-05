@@ -214,6 +214,11 @@ command reward to a quest: `/helper tycoon give {p} 500`.
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
+**Rockets (with Ad Astra):** the shop sells Ad Astra rockets that are ready to fly, each with a full tank of
+cryo fuel (3 buckets, enough for 3 launches): Tier 1 (50k), Tier 2 (150k, needs tier 2), Tier 3 (400k) and
+Tier 4 (1M, the max rocket, reaches every planet; both need tier 3). It also sells Launch Pads (5k) and 4 cryo
+fuel buckets for refills (20k). Place the rocket on a launch pad, get in and press space. The shop now has 6 rows.
+
 **Milestones:** earning 1,000, 10,000, 100,000 and 1,000,000 coins in total gives free parts (conveyors and a
 lifter, a new dropper, super upgraders, then mega and star upgraders) and tells the whole server.
 
