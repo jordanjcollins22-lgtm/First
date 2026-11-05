@@ -34,6 +34,8 @@ public class HelperMod implements ModInitializer {
         ServerEntityEvents.ENTITY_LOAD.register(Bosses::onEntityLoad);
         ServerTickEvents.END_SERVER_TICK.register(Town::tick);
         ServerTickEvents.END_SERVER_TICK.register(Tycoon::tick); // dropper tycoon
+        ServerTickEvents.END_SERVER_TICK.register(Mind::tick); // the helper notices things and acts on its own
+        net.fabricmc.fabric.api.message.v1.ServerMessageEvents.CHAT_MESSAGE.register(Mind::onChat); // "helper, get 20 iron"
         ServerEntityEvents.ENTITY_LOAD.register(Tycoon::onEntityLoad);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Tycoon::onUseBlock); // Reef Town on the Bikini Bottom planet
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
@@ -49,6 +51,7 @@ public class HelperMod implements ModInitializer {
             Bosses.reset();
             Town.reset();
             Tycoon.reset();
+            Mind.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
