@@ -7,7 +7,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 /**
- * Extra real planets (Europa, Io, Titan, Ceres, Pluto) for Ad Astra.
+ * Extra planets for Ad Astra: the real Europa, Io, Titan, Ceres and Pluto, plus Bikini Bottom, a warm ocean planet.
  *
  * The planets are plain Ad Astra data: planet files, dimensions, terrain, ores and sky renderers,
  * kept in the built-in pack resourcepacks/space. The pack is only switched on when Ad Astra is
@@ -25,7 +25,7 @@ final class Space {
             boolean ok = ResourceManagerHelper.registerBuiltinResourcePack(
                     new Identifier(HelperMod.MOD_ID, "space"), mod,
                     Text.literal("Helper Buddies: real planets"), ResourcePackActivationType.ALWAYS_ENABLED);
-            HelperMod.LOG.info(ok ? "Added Europa, Io, Titan, Ceres and Pluto to Ad Astra" : "Could not add the extra planets");
+            HelperMod.LOG.info(ok ? "Added Europa, Io, Titan, Ceres, Pluto and Bikini Bottom to Ad Astra" : "Could not add the extra planets");
         });
     }
 }

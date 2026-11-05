@@ -8,5 +8,7 @@
   "planet.helpermod.ceres": "Ceres",
   "planet.helpermod.ceres_orbit": "Ceres Orbit",
   "planet.helpermod.pluto": "Pluto",
-  "planet.helpermod.pluto_orbit": "Pluto Orbit"
+  "planet.helpermod.pluto_orbit": "Pluto Orbit",
+  "planet.helpermod.bikini_bottom": "Bikini Bottom",
+  "planet.helpermod.bikini_bottom_orbit": "Bikini Bottom Orbit"
 }
