@@ -41,6 +41,10 @@ public class HelperMod implements ModInitializer {
         ServerEntityEvents.ENTITY_LOAD.register(Tycoon::onEntityLoad);
         net.fabricmc.fabric.api.event.lifecycle.v1.ServerBlockEntityEvents.BLOCK_ENTITY_LOAD.register(Tycoon::onBlockEntityLoad);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Tycoon::onUseBlock); // Reef Town on the Bikini Bottom planet
+        ServerTickEvents.END_SERVER_TICK.register(Golf::tick); // Fairway golf planet
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Golf::onUseItem);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Golf::onUseBlock);
+        UseEntityCallback.EVENT.register(Golf::onUseEntity);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Updater.onJoin(handler.player));
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
@@ -56,6 +60,7 @@ public class HelperMod implements ModInitializer {
             Tycoon.reset();
             Mind.reset();
             MineMarker.reset();
+            Golf.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
