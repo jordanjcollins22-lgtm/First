@@ -81,7 +81,7 @@ public class Helper {
     private static final ChunkTicketType<ChunkPos> KEEP_LOADED_TICKET =
             ChunkTicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
 
-    enum Mode { FOLLOW, COLLECT, RETURN }
+    enum Mode { FOLLOW, COLLECT, RETURN, FISH }
 
     enum MineState { NONE, DESCEND, WORK }
 
@@ -166,6 +166,10 @@ public class Helper {
         int doneLanding = -1;
         /** Branch mining off the current landing: directions still to dig, and the tunnel being dug now. */
         final Deque<Direction> branchQueue = new ArrayDeque<>();
+        /** Out of ore at the bottom of the mine: strip-mine further out (longer, blind branches) instead of giving up. */
+        int stripRounds;
+        int lengthBonus;
+        boolean blind;
         Direction branchDir;
         int branchLen;
         int branchTicks;
@@ -375,7 +379,142 @@ public class Helper {
         say(player, "On it! Going to collect " + amount + " " + spec.display + ".");
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Fishing: /helper fish [amount]. Needs a fishing rod in its inventory.
+    // ---------------------------------------------------------------------------------------
+
+    private int fishWanted, fishCaught, fishTimer, fishWalkTicks;
+    private BlockPos fishSpot, fishStand;
+
+    void startFishing(ServerPlayerEntity player, int amount) {
+        if (mob != null) clearBreaking(mob);
+        job = null;
+        fishWanted = amount;
+        fishCaught = 0;
+        fishSpot = null;
+        fishStand = null;
+        fishTimer = 0;
+        mode = Mode.FISH;
+        say(player, "Gone fishing! I'll catch " + amount + " things for you. Make sure I have a fishing rod "
+                + "(right-click me to give me one).");
+    }
+
+    private static int rodSlot(SimpleInventory inv) {
+        for (int i = 0; i < inv.size(); i++) {
+            ItemStack s = inv.getStack(i);
+            if (s.getItem() instanceof net.minecraft.item.FishingRodItem && s.getDamage() < s.getMaxDamage() - 1) return i;
+        }
+        return -1;
+    }
+
+    /** The nearest open water (a water block with air above), and a dry spot right next to it to stand on. */
+    private static BlockPos[] findWater(ServerWorld world, BlockPos from) {
+        BlockPos best = null, stand = null;
+        double bestD = Double.MAX_VALUE;
+        BlockPos.Mutable p = new BlockPos.Mutable();
+        for (int dx = -24; dx <= 24; dx++) for (int dz = -24; dz <= 24; dz++) for (int dy = -6; dy <= 4; dy++) {
+            p.set(from.getX() + dx, from.getY() + dy, from.getZ() + dz);
+            if (!world.getFluidState(p).isIn(net.minecraft.registry.tag.FluidTags.WATER)
+                    || !world.getFluidState(p).isStill() || !world.getBlockState(p.up()).isAir()) continue;
+            double d = dx * dx + dz * dz + dy * dy * 4;
+            if (d >= bestD) continue;
+            for (Direction side : Direction.Type.HORIZONTAL) {
+                BlockPos land = p.offset(side); // stand on the bank, level with the water's surface
+                BlockPos feet = land.up();
+                if (world.getBlockState(land).isSolidBlock(world, land) && world.getBlockState(feet).isAir()
+                        && world.getBlockState(feet.up()).isAir()) {
+                    best = p.toImmutable();
+                    stand = feet.toImmutable();
+                    bestD = d;
+                    break;
+                }
+            }
+        }
+        return best == null ? null : new BlockPos[]{best, stand};
+    }
+
+    private void tickFish(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        ServerWorld world = (ServerWorld) m.getWorld();
+        SimpleInventory inv = entry.inventory;
+        int slot = rodSlot(inv);
+        if (slot < 0) {
+            say(player, "I need a fishing rod to fish. Right-click me and put one in my inventory, then ask me again.");
+            mode = Mode.FOLLOW;
+            return;
+        }
+        if (fishCaught >= fishWanted || isFull(inv)) {
+            if (fishCaught < fishWanted) say(player, "My pockets are full of fish, so I'm bringing them over. Then I'll go back to fishing.");
+            m.equipStack(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            mode = Mode.RETURN;
+            return;
+        }
+        if (fishSpot == null || !world.getFluidState(fishSpot).isIn(net.minecraft.registry.tag.FluidTags.WATER)) {
+            BlockPos[] w = findWater(world, m.getBlockPos());
+            if (w == null) w = findWater(world, player.getBlockPos());
+            if (w == null) {
+                say(player, "I can't see any open water within 24 blocks. Take me to a lake, river or the sea and ask me again.");
+                mode = Mode.FOLLOW;
+                return;
+            }
+            fishSpot = w[0];
+            fishStand = w[1];
+            fishWalkTicks = 0;
+            fishTimer = 0;
+        }
+        Vec3d stand = Vec3d.ofBottomCenter(fishStand);
+        if (m.getPos().squaredDistanceTo(stand) > 1.5 * 1.5) { // walk to the bank
+            if (m.getNavigation().isIdle() || ++fishWalkTicks % 40 == 0) m.getNavigation().startMovingTo(stand.x, stand.y, stand.z, SPEED);
+            if (fishWalkTicks > 300) m.requestTeleport(stand.x, stand.y, stand.z);
+            fishWalkTicks++;
+            return;
+        }
+        m.getNavigation().stop();
+        ItemStack rod = inv.getStack(slot);
+        if (!ItemStack.areEqual(m.getMainHandStack(), rod)) m.equipStack(EquipmentSlot.MAINHAND, rod.copy());
+        m.getLookControl().lookAt(Vec3d.ofCenter(fishSpot));
+        if (fishTimer <= 0) { // cast: wait 5 to 30 seconds like a player, less with Lure
+            int lure = net.minecraft.enchantment.EnchantmentHelper.getLure(rod);
+            fishTimer = Math.max(40, 100 + world.getRandom().nextInt(500) - lure * 100);
+            m.swingHand(Hand.MAIN_HAND);
+            world.playSound(null, fishSpot, SoundEvents.ENTITY_FISHING_BOBBER_THROW, SoundCategory.NEUTRAL, 0.5f, 0.4f);
+            return;
+        }
+        if (fishTimer % 20 == 0) {
+            world.spawnParticles(net.minecraft.particle.ParticleTypes.FISHING, fishSpot.getX() + 0.5, fishSpot.getY() + 0.9,
+                    fishSpot.getZ() + 0.5, 2, 0.2, 0, 0.2, 0.02);
+        }
+        if (--fishTimer > 0) return;
+        // A bite: reel it in.
+        world.playSound(null, fishSpot, SoundEvents.ENTITY_FISHING_BOBBER_SPLASH, SoundCategory.NEUTRAL, 0.6f, 1f);
+        world.spawnParticles(net.minecraft.particle.ParticleTypes.SPLASH, fishSpot.getX() + 0.5, fishSpot.getY() + 1,
+                fishSpot.getZ() + 0.5, 12, 0.3, 0.1, 0.3, 0.1);
+        m.swingHand(Hand.MAIN_HAND);
+        float luck = net.minecraft.enchantment.EnchantmentHelper.getLuckOfTheSea(rod);
+        net.minecraft.loot.context.LootContextParameterSet params = new net.minecraft.loot.context.LootContextParameterSet.Builder(world)
+                .add(net.minecraft.loot.context.LootContextParameters.ORIGIN, Vec3d.ofCenter(fishSpot))
+                .add(net.minecraft.loot.context.LootContextParameters.TOOL, rod)
+                .luck(luck)
+                .build(net.minecraft.loot.context.LootContextTypes.FISHING);
+        List<ItemStack> loot = world.getServer().getLootManager()
+                .getLootTable(net.minecraft.loot.LootTables.FISHING_GAMEPLAY).generateLoot(params);
+        for (ItemStack caught : loot) {
+            fishCaught += caught.getCount();
+            ItemStack rest = inv.addStack(caught);
+            if (!rest.isEmpty()) Block.dropStack(world, m.getBlockPos(), rest);
+        }
+        if (currentEntry != null) currentEntry.xp += 1 + world.getRandom().nextInt(6); // fishing XP, handed over on delivery
+        addWork(player, 2);
+        rod.damage(1, m, e -> {});
+        inv.markDirty();
+        if (rod.isEmpty() || rodSlot(inv) < 0) {
+            say(player, "My fishing rod is about to break, so I stopped. Give me a new one and ask me again.");
+            m.equipStack(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            mode = Mode.RETURN;
+        }
+    }
+
     void stop(ServerPlayerEntity player) {
+        fishWanted = 0;
         if (mob != null && job != null && mob.getWorld() instanceof ServerWorld w) {
             plugShafts(w, HelperData.get(player.getServer()).getOrCreate(owner).inventory);
         }
@@ -400,6 +539,8 @@ public class Helper {
             doing = job != null && !job.done
                     ? "Bringing you my haul, then back to collecting " + job.spec.display
                     : "Bringing you my haul";
+        } else if (mode == Mode.FISH) {
+            doing = "Fishing: " + fishCaught + "/" + fishWanted + " caught";
         } else {
             doing = "Following you";
         }
@@ -470,6 +611,7 @@ public class Helper {
             tickRide(m, player);
             return;
         }
+        if (m.hasNoGravity() && !m.hasPassengers()) m.setNoGravity(false); // got off a flying helper
         if (m.age % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
         if (tickCombat(m, player, entry)) return;
@@ -484,6 +626,7 @@ public class Helper {
                 if (job == null) mode = Mode.FOLLOW;
                 else tickCollect(m, player, entry);
             }
+            case FISH -> tickFish(m, player, entry);
         }
     }
 
@@ -613,6 +756,19 @@ public class Helper {
         return player.startRiding(m, true);
     }
 
+    private static final Set<String> FLYERS = Set.of("minecraft:phantom", "minecraft:bat", "minecraft:parrot",
+            "minecraft:ghast", "minecraft:allay", "minecraft:bee", "minecraft:blaze", "minecraft:vex",
+            "minecraft:ender_dragon", "minecraft:wither");
+
+    /** Does the helper look like a mob that flies? Then it flies when you ride it. */
+    private boolean looksLikeFlyer() {
+        String look = currentEntry == null ? null : currentEntry.look;
+        if (look == null) return false;
+        if (FLYERS.contains(look)) return true;
+        String path = look.substring(look.indexOf(':') + 1);
+        return path.contains("dragon") || path.contains("bird") || path.contains("bat") || path.contains("wyvern");
+    }
+
     private void tickRide(MobEntity m, ServerPlayerEntity rider) {
         m.getNavigation().stop();
         combatTarget = null;
@@ -621,16 +777,48 @@ public class Helper {
         m.setBodyYaw(yaw);
         m.setHeadYaw(yaw);
         float forward = rider.forwardSpeed, side = rider.sidewaysSpeed; // the rider's W/A/S/D, sent by the game
-        if (Math.abs(forward) < 0.01f && Math.abs(side) < 0.01f) {
-            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
-            return;
-        }
+        boolean jump = ((com.helpermod.mixin.LivingEntityAccessor) rider).helpermod$isJumping(); // the rider's space bar
         double rad = Math.toRadians(yaw);
         double dx = side * Math.cos(rad) - forward * Math.sin(rad);
         double dz = forward * Math.cos(rad) + side * Math.sin(rad);
         double len = Math.sqrt(dx * dx + dz * dz);
+        boolean moving = len > 0.01;
+        if (moving) {
+            dx /= len;
+            dz /= len;
+        }
+        boolean flyer = looksLikeFlyer();
+        m.setNoGravity(flyer);
+        if (flyer) { // fly where the rider looks: W goes that way (up or down too), space bar climbs
+            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+            Vec3d look = rider.getRotationVec(1f);
+            double speed = rider.isSprinting() ? 0.9 : 0.6;
+            Vec3d v = moving ? new Vec3d(dx * speed, forward > 0 ? look.y * speed : 0, dz * speed) : Vec3d.ZERO;
+            if (jump) v = v.add(0, 0.4, 0);
+            m.setVelocity(m.getVelocity().multiply(0.5).add(v.multiply(0.5)));
+            m.velocityModified = true;
+            m.fallDistance = 0;
+            return;
+        }
+        if (m.isTouchingWater()) { // swim properly: full speed through water, space bar swims up
+            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+            double speed = rider.isSprinting() ? 0.45 : 0.3;
+            Vec3d v = moving ? new Vec3d(dx * speed, 0, dz * speed) : Vec3d.ZERO;
+            double up = jump ? 0.3 : m.isSubmergedInWater() ? 0.05 : 0; // float up gently
+            m.setVelocity(new Vec3d(v.x, Math.max(m.getVelocity().y, up), v.z));
+            m.velocityModified = true;
+            return;
+        }
+        if (jump && m.isOnGround()) { // jump like a horse: a good hop, more while moving
+            m.setVelocity(m.getVelocity().x + dx * 0.2, 0.6, m.getVelocity().z + dz * 0.2);
+            m.velocityModified = true;
+        }
+        if (!moving) {
+            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+            return;
+        }
         double speed = forward < 0 ? 0.8 : rider.isSprinting() ? 2.2 : 1.6;
-        m.getMoveControl().moveTo(m.getX() + dx / len * 3, m.getY(), m.getZ() + dz / len * 3, speed);
+        m.getMoveControl().moveTo(m.getX() + dx * 3, m.getY(), m.getZ() + dz * 3, speed);
     }
 
     private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
@@ -687,7 +875,11 @@ public class Helper {
             if (job != null && !job.done) {
                 job.resetSearch();
                 mode = Mode.COLLECT;
+            } else if (job == null && fishWanted > 0 && fishCaught < fishWanted && rodSlot(entry.inventory) >= 0
+                    && !isFull(entry.inventory)) {
+                mode = Mode.FISH; // back to the water for the rest
             } else {
+                fishWanted = 0;
                 job = null;
                 mode = Mode.FOLLOW;
             }
@@ -1006,7 +1198,7 @@ public class Helper {
         Job j = job;
         BlockPos landing = stepPos(entry, branchFrom);
         boolean atBottom = landing.getY() <= j.mineTargetY;
-        int length = atBottom ? BRANCH_LENGTH * 2 : BRANCH_LENGTH;
+        int length = (atBottom ? BRANCH_LENGTH * 2 : BRANCH_LENGTH) + j.lengthBonus;
         if (!j.landingScanned) {
             j.landingScanned = true;
             scan(world, landing, length + BRANCH_REACH, 6, j);
@@ -1053,7 +1245,11 @@ public class Helper {
                 if (along >= 1 && along <= length + 1 && side <= BRANCH_REACH) counts[k]++;
             }
         }
-        if (counts[0] >= counts[1]) {
+        if (j.blind) { // strip-mining for more: dig both ways whether or not ore shows up yet
+            j.blind = false;
+            j.branchQueue.add(counts[1] > counts[0] ? out[1] : out[0]);
+            j.branchQueue.add(counts[1] > counts[0] ? out[0] : out[1]);
+        } else if (counts[0] >= counts[1]) {
             if (counts[0] > 0) j.branchQueue.add(out[0]);
             if (counts[1] > 0) j.branchQueue.add(out[1]);
         } else {
@@ -1082,7 +1278,7 @@ public class Helper {
         if (j.branchDir == null) {
             if (j.branchQueue.isEmpty()) {
                 if (atBottom) {
-                    finishJob(player, inv, "I've mined out all the " + j.spec.display + " I could find around my mine.");
+                    stripMineFurther(player, inv, entry, branchFrom);
                 } else {
                     j.mineState = MineState.DESCEND; // back to the stairs, next landing down
                 }
@@ -1225,7 +1421,7 @@ public class Helper {
             return;
         }
         if (atDepth) {
-            finishJob(player, entry.inventory, "I've mined out all the " + j.spec.display + " I could find around my mine.");
+            stripMineFurther(player, entry.inventory, entry, mineStep);
             return;
         }
         goToStep(m, player, world, entry, mineStep + 1);
@@ -1846,6 +2042,39 @@ public class Helper {
             m.getWorld().setBlockBreakingInfo(m.getId(), job.breaking, -1);
             job.breaking = null;
         }
+    }
+
+    private static final int STRIP_ROUNDS = 4;
+    private static final int STRIP_STEP = 32;
+
+    /**
+     * Nothing left near the bottom of the mine. Don't give up yet: strip-mine further out from the bottom
+     * landing, 32 blocks longer each time, until enough is found (or after a few rounds).
+     */
+    private void stripMineFurther(ServerPlayerEntity player, SimpleInventory inv, HelperData.Entry entry, int step) {
+        Job j = job;
+        if (j.collected >= j.wanted || j.stripRounds >= STRIP_ROUNDS || step < 0) {
+            int dug = BRANCH_LENGTH * 2 + j.lengthBonus;
+            finishJob(player, inv, j.stripRounds > 0
+                    ? "I strip-mined " + dug + " blocks out from the bottom of my mine and there's no more "
+                    + j.spec.display + " down there."
+                    : "I've mined out all the " + j.spec.display + " I could find around my mine.");
+            return;
+        }
+        j.stripRounds++;
+        j.lengthBonus += STRIP_STEP;
+        j.blind = true;
+        if (j.stripRounds == 1) {
+            say(player, "No more " + j.spec.display + " right around my mine, so I'm strip-mining further out to find some.");
+        }
+        j.mineState = MineState.WORK;
+        j.landingScanned = false;
+        j.doneLanding = step;
+        branchFrom = step;
+        mineStep = -1;
+        j.target = null;
+        j.branchDir = null;
+        j.branchQueue.clear();
     }
 
     private void finishJob(ServerPlayerEntity player, SimpleInventory inv, String message) {

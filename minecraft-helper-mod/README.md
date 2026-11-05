@@ -46,7 +46,8 @@ ask for. It works out the best way to get it:
 | `/helper storage` | Turn the barrel in your hand into a **Helper Storage** (no size limit, see below) |
 | `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
 | `/helper boss` | On an Ad Astra planet: where is this planet's boss arena? |
-| `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, sprint to go faster, sneak to get off |
+| `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
+| `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
 | `/helper size small` / `normal` / `big` | Make your helper shorter or taller, or give a number from 0.25 to 4 (1 is normal). With the [Pehkui](https://modrinth.com/mod/pehkui) mod on the server it truly resizes, whatever it looks like. Without Pehkui, small makes it the baby version of its mob look (zombie, villager, fox, cow...) |
@@ -196,6 +197,9 @@ The mod jar ends up in `build/libs/`.
 - A helper is its own chunk loader: its chunk and the ones around it stay loaded while its owner is online,
   so it keeps working when you walk away. If you go to another dimension, it pops back next to you.
 - Mining speed follows the normal player rules. Better tools and Efficiency make your helper faster.
+- **Running out of ore:** when there's nothing left near the bottom of its mine, the helper doesn't give up.
+  It strip-mines further out from the bottom, 32 blocks longer each round (up to 4 rounds), until it has
+  what you asked for.
 - **Levels:** your helper gets better the more it works. It earns 1 point for every block it mines and 5 for
   every mob it beats. Level 2 comes at 50 points, level 3 at 200, and so on up to level 10. Each level makes it
   mine 10% faster (90% faster at level 10) and unlocks 3 more pockets: 27 at level 1, up to 54 at level 10.
