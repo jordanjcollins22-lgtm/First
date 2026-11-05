@@ -47,6 +47,18 @@ public final class HelperCommands {
                     Devices.craftHarvester(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("storage")
+                        .executes(ctx -> {
+                            Storage.craft(ctx.getSource().getPlayerOrThrow());
+                            return 1;
+                        })
+                        .then(literal("find")
+                                .then(argument("name", StringArgumentType.greedyString())
+                                        .executes(ctx -> {
+                                            Storage.find(ctx.getSource().getPlayerOrThrow(),
+                                                    StringArgumentType.getString(ctx, "name"));
+                                            return 1;
+                                        }))))
                 .then(literal("look")
                         .executes(HelperCommands::lookHelp)
                         .then(argument("mob", StringArgumentType.greedyString())
@@ -79,6 +91,8 @@ public final class HelperCommands {
                 "/helper dismiss  - send your helper away (it keeps your items)",
                 "/helper collect spawner  - dig up a monster spawner you can place anywhere",
                 "/helper harvester  - turn the hopper in your hand into a Monster Harvester",
+                "/helper storage  - turn the barrel in your hand into a Helper Storage (no size limit)",
+                "/helper storage find <name>  - search your storage",
                 "  (kills monsters around it, loot goes into a chest below, sneak + right-click for XP)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };

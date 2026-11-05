@@ -30,11 +30,14 @@ public class HelperMod implements ModInitializer {
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
         ServerTickEvents.END_SERVER_TICK.register(Devices::tick);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
+        // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
+        ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             HelperManager.reset();
             Materials.reset();
             Disguise.reset();
             Devices.reset();
+            Storage.reset();
         });
         Space.register();
         LOG.info("Helper Buddies loaded");
