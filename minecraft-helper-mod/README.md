@@ -15,7 +15,9 @@ ask for. It works out the best way to get it:
 - It walks there if it can, through caves or over land. Only if there's no way in does it dig.
 - To get deep underground it digs **its own mine**: a spiral staircase near your base, 3 blocks tall so you
   can use it too. It reuses the same mine every time and digs it deeper as needed. Every 4 blocks down it
-  stops at a landing and mines the ore around that layer before going deeper. When it's done it climbs back
+  stops at a landing and branch-mines like a player would: straight 2-tall tunnels out from the stairs
+  (16 blocks, 32 at the bottom), only in directions that have ore. It takes every ore it can reach from
+  the tunnel and follows veins, so you get a tidy mine instead of lots of random holes. When it's done it climbs back
   up the stairs and walks back to you.
 - For short distances it digs a tunnel, bridges gaps or pillars up. It plugs lava and water with cobblestone
   instead of giving up.

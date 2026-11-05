@@ -87,7 +87,10 @@ public class Helper {
     /** Spiral staircase: 2x2 footprint, one block down per step, 3 blocks of headroom. */
     private static final int[][] SPIRAL = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     private static final int LANDING_EVERY = 4;
-    private static final int LANDING_RADIUS = 12;
+    /** Branch tunnels off each landing: straight, 2 tall, this long (twice as long at the bottom). */
+    private static final int BRANCH_LENGTH = 16;
+    /** Ore this close to a branch's line counts toward digging that branch. */
+    private static final int BRANCH_REACH = 4;
 
     private final UUID owner;
     private MobEntity mob;
@@ -158,6 +161,11 @@ public class Helper {
         int mineTargetY;
         boolean landingScanned;
         int doneLanding = -1;
+        /** Branch mining off the current landing: directions still to dig, and the tunnel being dug now. */
+        final Deque<Direction> branchQueue = new ArrayDeque<>();
+        Direction branchDir;
+        int branchLen;
+        int branchTicks;
         /** Openings of shafts we dug from the surface, plugged afterwards so nobody falls in. */
         final Set<BlockPos> shaftTops = new HashSet<>();
 
@@ -181,6 +189,8 @@ public class Helper {
             mineState = MineState.NONE;
             landingScanned = false;
             doneLanding = -1;
+            branchQueue.clear();
+            branchDir = null;
         }
     }
 
@@ -810,39 +820,9 @@ public class Helper {
             }
         }
 
-        // 2. Working off a mine landing: only take ore near this landing, then go back to the stairs.
+        // 2. Working off a mine landing: dig straight branch tunnels and take the ore they uncover.
         if (j.mineState == MineState.WORK && currentEntry != null && branchFrom >= 0) {
-            BlockPos landing = stepPos(currentEntry, branchFrom);
-            boolean atBottom = landing.getY() <= j.mineTargetY;
-            if (!j.landingScanned) {
-                j.landingScanned = true;
-                scan(world, landing, LANDING_RADIUS, 6, j);
-            }
-            j.candidates.removeIf(p -> !isValidTarget(world, p, true));
-            List<BlockPos> local = new ArrayList<>();
-            for (BlockPos p : j.candidates) {
-                if (atBottom || nearLanding(p, landing)) local.add(p);
-            }
-            if (DEBUG) HelperMod.LOG.info("[helper debug] landing {} step {} targetY {} candidates {} local {}",
-                    landing, branchFrom, j.mineTargetY, j.candidates, local.size());
-            if (local.isEmpty()) {
-                if (atBottom) {
-                    finishJob(player, inv, "I've mined out all the " + j.spec.display + " I could find around my mine.");
-                } else {
-                    j.mineState = MineState.DESCEND; // nothing left here: back to the stairs, next layer down
-                }
-                return false;
-            }
-            Vec3d here = m.getPos();
-            local.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(here)));
-            BlockPos next = local.get(0);
-            if (!checkTool(player, world, inv, next)) return false;
-            j.target = next;
-            j.candidates.remove(next);
-            Path path = isExposed(world, next) ? m.getNavigation().findPathTo(next, 2) : null;
-            j.tunneling = path == null || !path.reachesTarget();
-            if (!j.tunneling) m.getNavigation().startMovingAlong(path, SPEED);
-            return true;
+            return pickFromBranch(m, player, world, inv, currentEntry);
         }
 
         // 3. Nearest blocks around us, widening the search when we run out.
@@ -904,14 +884,157 @@ public class Helper {
     // The mine: a reusable spiral staircase from the base, with landings every few blocks
     // ---------------------------------------------------------------------------------------
 
-    private static boolean nearLanding(BlockPos p, BlockPos landing) {
-        int dx = p.getX() - landing.getX(), dz = p.getZ() - landing.getZ();
-        return dx * dx + dz * dz <= LANDING_RADIUS * LANDING_RADIUS && Math.abs(p.getY() - landing.getY()) <= 6;
+    /*
+     * Branch mining. At each landing the helper digs straight 2-tall tunnels out from the staircase, like
+     * a player strip-mining, instead of a separate tunnel to every ore. It only digs branches that have
+     * ore along them, takes any ore it can reach from the tunnel (following veins), and then goes back
+     * to the stairs. Branches always leave the stairs' 2x2 footprint on the outside, so they never cut
+     * into the steps above or below.
+     */
+    private boolean pickFromBranch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+                                   HelperData.Entry entry) {
+        Job j = job;
+        BlockPos landing = stepPos(entry, branchFrom);
+        boolean atBottom = landing.getY() <= j.mineTargetY;
+        int length = atBottom ? BRANCH_LENGTH * 2 : BRANCH_LENGTH;
+        if (!j.landingScanned) {
+            j.landingScanned = true;
+            scan(world, landing, length + BRANCH_REACH, 6, j);
+            planBranches(world, entry, landing, length);
+        }
+        j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+
+        // Ore we can reach from where we stand in the tunnel: take it (short pokes into the wall are fine).
+        Vec3d eye = m.getEyePos();
+        BlockPos reachable = null;
+        double best = Double.MAX_VALUE;
+        for (BlockPos p : j.candidates) {
+            double d = eye.squaredDistanceTo(Vec3d.ofCenter(p));
+            if (d <= REACH_SQ && d < best && Math.abs(p.getY() - landing.getY()) <= 3) {
+                best = d;
+                reachable = p;
+            }
+        }
+        if (reachable != null) {
+            if (!checkTool(player, world, inv, reachable)) return false;
+            j.target = reachable;
+            j.candidates.remove(reachable);
+            j.tunneling = !isExposed(world, reachable);
+            return true;
+        }
+        tickBranch(m, player, world, inv, entry, landing, length, atBottom);
+        return false;
+    }
+
+    /** Which ways to dig from this landing: the two outward directions, most ore first, skipping empty ones. */
+    private void planBranches(ServerWorld world, HelperData.Entry entry, BlockPos landing, int length) {
+        Job j = job;
+        j.branchQueue.clear();
+        j.branchDir = null;
+        int cx = landing.getX() - entry.mineOrigin.getX(), cz = landing.getZ() - entry.mineOrigin.getZ();
+        Direction[] out = {cx == 0 ? Direction.WEST : Direction.EAST, cz == 0 ? Direction.NORTH : Direction.SOUTH};
+        int[] counts = new int[2];
+        for (BlockPos p : j.candidates) {
+            int rx = p.getX() - landing.getX(), rz = p.getZ() - landing.getZ(), ry = p.getY() - landing.getY();
+            if (Math.abs(ry) > 3) continue;
+            for (int k = 0; k < 2; k++) {
+                int along = rx * out[k].getOffsetX() + rz * out[k].getOffsetZ();
+                int side = Math.abs(rx * out[k].getOffsetZ() - rz * out[k].getOffsetX());
+                if (along >= 1 && along <= length + 1 && side <= BRANCH_REACH) counts[k]++;
+            }
+        }
+        if (counts[0] >= counts[1]) {
+            if (counts[0] > 0) j.branchQueue.add(out[0]);
+            if (counts[1] > 0) j.branchQueue.add(out[1]);
+        } else {
+            j.branchQueue.add(out[1]);
+            if (counts[0] > 0) j.branchQueue.add(out[0]);
+        }
+        if (DEBUG) HelperMod.LOG.info("[helper debug] landing {} branches {} counts {} {}", landing, j.branchQueue,
+                counts[0], counts[1]);
+    }
+
+    /** Dig the current branch one block further, or start the next one, or head back to the stairs. */
+    private void tickBranch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+                            HelperData.Entry entry, BlockPos landing, int length, boolean atBottom) {
+        Job j = job;
+        if (j.stepCell != null) { // stepping into the block we just opened
+            BlockPos cell = j.stepCell;
+            Vec3d c = Vec3d.ofBottomCenter(cell);
+            if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(c) < 0.15) j.stepCell = null;
+            else if (++j.stepTicks > 25) {
+                m.requestTeleport(c.x, c.y, c.z);
+                j.stepCell = null;
+            } else m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+            return;
+        }
+        if (j.branchDir != null && j.branchLen >= length) j.branchDir = null; // this branch is finished
+        if (j.branchDir == null) {
+            if (j.branchQueue.isEmpty()) {
+                if (atBottom) {
+                    finishJob(player, inv, "I've mined out all the " + j.spec.display + " I could find around my mine.");
+                } else {
+                    j.mineState = MineState.DESCEND; // back to the stairs, next landing down
+                }
+                return;
+            }
+            j.branchDir = j.branchQueue.pollFirst();
+            j.branchLen = 0;
+            j.branchTicks = 0;
+        }
+        Direction d = j.branchDir;
+        BlockPos head = landing.offset(d, j.branchLen); // where we should be standing
+        BlockPos next = head.offset(d);
+        // Get back to the end of the tunnel first (e.g. after mining a bit of ore off to the side).
+        if (!m.getBlockPos().equals(head) && m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(head)) > 0.5) {
+            if (m.getNavigation().isIdle() || isStuck(m, 40)) {
+                Path path = m.getNavigation().findPathTo(head, 0);
+                if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+            }
+            if (++j.branchTicks > 200) {
+                m.requestTeleport(head.getX() + 0.5, head.getY(), head.getZ() + 0.5);
+                j.branchTicks = 0;
+            }
+            return;
+        }
+        j.branchTicks = 0;
+        j.targetTicks = 0;
+        for (BlockPos cell : new BlockPos[]{next.up(), next}) {
+            BlockState s = world.getBlockState(cell);
+            if (s.getFluidState().isIn(FluidTags.LAVA) || lavaNear(world, cell)) {
+                if (!sealLava(world, inv, cell, head)) j.branchDir = null; // can't make it safe: stop this branch
+                return;
+            }
+            if (passable(world, cell)) continue;
+            if (!canDigThrough(world, cell, s)) {
+                j.branchDir = null; // something built or unbreakable: end the branch here
+                return;
+            }
+            startBreaking(m, player, world, inv, cell, j.spec.matches(s));
+            return;
+        }
+        // Keep the tunnel floor solid so it stays a straight, walkable line.
+        BlockPos floor = next.down();
+        BlockState fs = world.getBlockState(floor);
+        if (!fs.isSideSolidFullSquare(world, floor, Direction.UP)) {
+            int slot = buildingBlockSlot(inv);
+            if (slot >= 0 && fs.isReplaceable()) placeBlock(world, inv, slot, floor);
+            else if (!hasGroundWithin(world, floor, 1)) {
+                j.branchDir = null; // a drop into a cave and nothing to bridge with
+                return;
+            }
+        }
+        j.branchLen++;
+        j.stepCell = next;
+        j.stepTicks = 0;
+        m.getNavigation().stop();
+        Vec3d c = Vec3d.ofBottomCenter(next);
+        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
     }
 
     private static boolean isDeepUnderground(ServerWorld world, MobEntity m, BlockPos target) {
         int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ());
-        return target.getY() < m.getBlockY() - 6 && target.getY() < surface - 6;
+        return target.getY() < m.getBlockY() - 3 && target.getY() < surface - 4;
     }
 
     static BlockPos stepPos(HelperData.Entry entry, int i) {
@@ -955,6 +1078,8 @@ public class Helper {
         j.mineState = MineState.DESCEND;
         j.landingScanned = false;
         j.doneLanding = -1;
+        j.branchQueue.clear();
+        j.branchDir = null;
         j.target = null;
     }
 
