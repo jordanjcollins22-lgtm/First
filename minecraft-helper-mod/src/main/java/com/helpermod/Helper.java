@@ -81,7 +81,7 @@ public class Helper {
     private static final ChunkTicketType<ChunkPos> KEEP_LOADED_TICKET =
             ChunkTicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
 
-    enum Mode { FOLLOW, COLLECT, RETURN, FISH }
+    enum Mode { FOLLOW, COLLECT, RETURN, FISH, FARM }
 
     enum MineState { NONE, DESCEND, WORK }
 
@@ -513,8 +513,178 @@ public class Helper {
         }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Torches: while mining, light up dark tunnels so monsters don't spawn in them.
+    // Uses torches it carries, or makes them from coal (or charcoal) and sticks.
+    // ---------------------------------------------------------------------------------------
+
+    private int torchTicks;
+    private boolean toldNoTorches;
+
+    private void lightUp(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+        BlockPos feet = m.getBlockPos();
+        if (world.getLightLevel(net.minecraft.world.LightType.SKY, feet) > 7) return; // out in the open
+        if (world.getLightLevel(net.minecraft.world.LightType.BLOCK, feet) > 4) return; // already lit
+        if (!world.getBlockState(feet).isAir()) return;
+        net.minecraft.block.BlockState torch = net.minecraft.block.Blocks.TORCH.getDefaultState();
+        if (!torch.canPlaceAt(world, feet)) return;
+        if (!takeTorch(inv)) {
+            if (!toldNoTorches) {
+                toldNoTorches = true;
+                say(player, "It's dark down here. Give me torches, or coal and sticks, and I'll light up the tunnels so monsters can't spawn.");
+            }
+            return;
+        }
+        world.setBlockState(feet, torch);
+        world.playSound(null, feet, SoundEvents.BLOCK_WOOD_PLACE, SoundCategory.BLOCKS, 0.6f, 1.2f);
+        inv.markDirty();
+    }
+
+    /** Take one torch, crafting four from a coal and a stick if it has none. */
+    private static boolean takeTorch(SimpleInventory inv) {
+        int torch = slotOf(inv, net.minecraft.item.Items.TORCH);
+        if (torch < 0) {
+            int coal = slotOf(inv, net.minecraft.item.Items.COAL);
+            if (coal < 0) coal = slotOf(inv, net.minecraft.item.Items.CHARCOAL);
+            int stick = slotOf(inv, net.minecraft.item.Items.STICK);
+            if (coal < 0 || stick < 0) return false;
+            inv.getStack(coal).decrement(1);
+            inv.getStack(stick).decrement(1);
+            ItemStack rest = inv.addStack(new ItemStack(net.minecraft.item.Items.TORCH, 4));
+            if (!rest.isEmpty()) return true; // no room for them, but it can still place the one in its hand
+            torch = slotOf(inv, net.minecraft.item.Items.TORCH);
+            if (torch < 0) return false;
+        }
+        inv.getStack(torch).decrement(1);
+        return true;
+    }
+
+    private static int slotOf(SimpleInventory inv, Item item) {
+        for (int i = 0; i < inv.size(); i++) if (inv.getStack(i).isOf(item)) return i;
+        return -1;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Farming: /helper farm [radius]. Harvests ripe crops around where you asked and replants them.
+    // ---------------------------------------------------------------------------------------
+
+    private BlockPos farmCentre, farmTarget;
+    private int farmRadius, farmHarvested, farmIdle, farmWalkTicks, farmSinceDelivery;
+
+    void startFarming(ServerPlayerEntity player, int radius) {
+        if (mob != null) clearBreaking(mob);
+        job = null;
+        fishWanted = 0;
+        farmCentre = player.getBlockPos();
+        farmRadius = radius;
+        farmHarvested = 0;
+        farmSinceDelivery = 0;
+        farmTarget = null;
+        farmIdle = 0;
+        mode = Mode.FARM;
+        say(player, "I'll look after the crops within " + radius + " blocks of here: harvest them when they're ripe and "
+                + "plant them again. I'll bring you the harvest. Use /helper stop when you want me back.");
+    }
+
+    private static boolean isRipe(BlockState state) {
+        if (state.getBlock() instanceof net.minecraft.block.CropBlock crop) return crop.isMature(state);
+        if (state.getBlock() instanceof net.minecraft.block.NetherWartBlock)
+            return state.get(net.minecraft.block.NetherWartBlock.AGE) >= 3;
+        return false;
+    }
+
+    private BlockPos findRipe(ServerWorld world) {
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        BlockPos from = mob != null ? mob.getBlockPos() : farmCentre;
+        BlockPos.Mutable p = new BlockPos.Mutable();
+        for (int dx = -farmRadius; dx <= farmRadius; dx++) for (int dz = -farmRadius; dz <= farmRadius; dz++) for (int dy = -4; dy <= 4; dy++) {
+            p.set(farmCentre.getX() + dx, farmCentre.getY() + dy, farmCentre.getZ() + dz);
+            if (!world.isChunkLoaded(p.getX() >> 4, p.getZ() >> 4)) continue;
+            if (!isRipe(world.getBlockState(p))) continue;
+            double d = p.getSquaredDistance(from);
+            if (d < bestD) {
+                bestD = d;
+                best = p.toImmutable();
+            }
+        }
+        return best;
+    }
+
+    private void tickFarm(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        ServerWorld world = (ServerWorld) m.getWorld();
+        SimpleInventory inv = entry.inventory;
+        if (farmCentre == null) {
+            mode = Mode.FOLLOW;
+            return;
+        }
+        if (isFull(inv)) {
+            say(player, "My pockets are full of crops. Bringing them to you, then I'll go back to the farm.");
+            mode = Mode.RETURN;
+            return;
+        }
+        if (farmTarget == null || !isRipe(world.getBlockState(farmTarget))) {
+            farmTarget = null;
+            if (++farmIdle % 40 != 1) return; // look for ripe crops every 2 seconds
+            farmTarget = findRipe(world);
+            farmWalkTicks = 0;
+            if (farmTarget == null) {
+                if (farmSinceDelivery > 0) { // finished a round: hand it over
+                    farmSinceDelivery = 0;
+                    mode = Mode.RETURN;
+                    return;
+                }
+                Vec3d c = Vec3d.ofBottomCenter(farmCentre);
+                if (m.getPos().squaredDistanceTo(c) > 6 * 6 && m.getNavigation().isIdle())
+                    m.getNavigation().startMovingTo(c.x, c.y, c.z, SPEED);
+                return;
+            }
+        }
+        m.getLookControl().lookAt(Vec3d.ofCenter(farmTarget));
+        if (m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(farmTarget)) > REACH_SQ) {
+            if (m.getNavigation().isIdle() || ++farmWalkTicks % 40 == 0)
+                m.getNavigation().startMovingTo(farmTarget.getX() + 0.5, farmTarget.getY(), farmTarget.getZ() + 0.5, SPEED);
+            if (++farmWalkTicks > 400) farmTarget = null; // can't get there, try another
+            return;
+        }
+        m.getNavigation().stop();
+        m.swingHand(Hand.MAIN_HAND);
+        BlockState ripe = world.getBlockState(farmTarget);
+        List<ItemStack> drops = Block.getDroppedStacks(ripe, world, farmTarget, world.getBlockEntity(farmTarget), m, m.getMainHandStack());
+        // Replant with one of the seeds it just harvested (or one it was carrying).
+        ItemStack seed = ripe.getBlock().getPickStack(world, farmTarget, ripe);
+        boolean replanted = false;
+        for (ItemStack d : drops) {
+            if (!seed.isEmpty() && d.isOf(seed.getItem()) && !replanted) {
+                d.decrement(1);
+                replanted = true;
+            }
+        }
+        if (!replanted && !seed.isEmpty()) {
+            int s = slotOf(inv, seed.getItem());
+            if (s >= 0) {
+                inv.getStack(s).decrement(1);
+                replanted = true;
+            }
+        }
+        world.syncWorldEvent(net.minecraft.world.WorldEvents.BLOCK_BROKEN, farmTarget, Block.getRawIdFromState(ripe));
+        world.setBlockState(farmTarget, replanted ? ripe.getBlock().getDefaultState() : net.minecraft.block.Blocks.AIR.getDefaultState());
+        for (ItemStack d : drops) {
+            if (d.isEmpty()) continue;
+            ItemStack rest = inv.addStack(d);
+            if (!rest.isEmpty()) Block.dropStack(world, farmTarget, rest);
+        }
+        inv.markDirty();
+        farmHarvested++;
+        farmSinceDelivery++;
+        addWork(player, 1);
+        farmTarget = null;
+        farmIdle = 0;
+    }
+
     void stop(ServerPlayerEntity player) {
         fishWanted = 0;
+        farmCentre = null;
         if (mob != null && job != null && mob.getWorld() instanceof ServerWorld w) {
             plugShafts(w, HelperData.get(player.getServer()).getOrCreate(owner).inventory);
         }
@@ -541,6 +711,8 @@ public class Helper {
                     : "Bringing you my haul";
         } else if (mode == Mode.FISH) {
             doing = "Fishing: " + fishCaught + "/" + fishWanted + " caught";
+        } else if (mode == Mode.FARM) {
+            doing = "Farming the crops around " + farmCentre.getX() + ", " + farmCentre.getZ() + " (" + farmHarvested + " harvested)";
         } else {
             doing = "Following you";
         }
@@ -627,6 +799,7 @@ public class Helper {
                 else tickCollect(m, player, entry);
             }
             case FISH -> tickFish(m, player, entry);
+            case FARM -> tickFarm(m, player, entry);
         }
     }
 
@@ -878,7 +1051,11 @@ public class Helper {
             } else if (job == null && fishWanted > 0 && fishCaught < fishWanted && rodSlot(entry.inventory) >= 0
                     && !isFull(entry.inventory)) {
                 mode = Mode.FISH; // back to the water for the rest
+            } else if (job == null && farmCentre != null && !isFull(entry.inventory)) {
+                farmTarget = null;
+                mode = Mode.FARM; // back to the fields
             } else {
+                farmCentre = null;
                 fishWanted = 0;
                 job = null;
                 mode = Mode.FOLLOW;
@@ -1016,6 +1193,7 @@ public class Helper {
         Job j = job;
         ServerWorld world = (ServerWorld) m.getWorld();
         SimpleInventory inv = entry.inventory;
+        if (++torchTicks % 10 == 0) lightUp(m, player, world, inv);
 
         if (j.breaking != null) {
             tickBreaking(m, player, world, inv);
