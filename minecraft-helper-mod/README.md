@@ -159,6 +159,20 @@ mod see Ad Astra's plain sky there.
   on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
   mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
 
+## Talk to your helper
+
+Your helper understands plain chat. Start a message with "helper" (or "buddy"):
+
+- "helper, get 20 iron", "helper mine some coal", "helper find 64 oak"
+- "helper go fishing", "helper farm", "helper ride", "helper bring it to me"
+- "helper follow me", "helper stop", "helper what are you doing?", "helper how are you?"
+
+It also acts on its own:
+
+- It speaks up when night falls, when it starts raining, when you're badly hurt, and when you go somewhere new.
+- When you're hungry, it hands you food it's carrying.
+- While it follows you, it picks up items lying around nearby.
+
 ## Dropper Tycoon
 
 Build a little ore factory and spend what it earns.

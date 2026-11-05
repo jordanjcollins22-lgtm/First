@@ -122,6 +122,15 @@ public class Helper {
     Mode mode = Mode.FOLLOW;
     Job job;
 
+    /** The helper's mob while it's out in the world, or null. */
+    MobEntity mobEntity() {
+        return mob;
+    }
+
+    boolean isFighting() {
+        return combatTarget != null;
+    }
+
     static final class Job {
         final Materials.Spec spec;
         final int wanted;
