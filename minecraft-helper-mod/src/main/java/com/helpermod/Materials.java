@@ -198,7 +198,7 @@ public final class Materials {
         dropsByBlock = null;
     }
 
-    private static void ensureIndex(MinecraftServer server) {
+    static void ensureIndex(MinecraftServer server) {
         if (blocksByDrop != null) return;
         long start = System.currentTimeMillis();
         Map<Item, Set<Block>> byDrop = new HashMap<>();
