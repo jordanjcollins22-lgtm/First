@@ -222,6 +222,11 @@ The doors keep the water out, so you can walk in without a helmet. `/helper town
 - Helpers only break **natural** blocks: stone, dirt, ores, real trees (logs with natural leaves next to
   them), and so on. They refuse to collect crafted blocks like planks, and they never tunnel through anything
   a player placed (cobblestone, planks, chests, ...).
+- Near the surface they also leave alone any block within 2 blocks of something built (doors, glass,
+  planks, bricks, beds, chests...), so house floors and stone walls are safe even when they're made of
+  dirt or stone. Deep underground they won't dig right next to chests, beds or furnaces.
+- A new mine is started on open, natural ground at least 5 blocks from anything built, never under a
+  roof. If an old mine runs into a build, the helper stops and starts a fresh mine elsewhere next time.
 - They avoid lava, won't drop down big holes, and plug the top of any mineshaft they dig.
 - Helpers can't be hurt and never despawn. Their inventory is saved with the world, so nothing is lost if
   one gets unloaded.

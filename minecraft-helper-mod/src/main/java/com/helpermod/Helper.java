@@ -1546,8 +1546,14 @@ public class Helper {
         boolean reuse = entry.mineOrigin != null && dim.equals(entry.mineDim)
                 && horizontalDistanceSq(entry.mineOrigin, m.getBlockPos()) < 256 * 256;
         if (!reuse) {
-            BlockPos base = m.getBlockPos();
-            entry.mineOrigin = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, base);
+            BlockPos spot = findMineSpot(world, m.getBlockPos());
+            if (spot == null) {
+                finishJob(player, entry.inventory, "I'd have to dig a mine to reach " + j.spec.display
+                        + ", but there's no open ground nearby that's away from buildings. "
+                        + "Take me somewhere with plain ground and ask again.");
+                return;
+            }
+            entry.mineOrigin = spot;
             entry.mineDim = dim;
             entry.mineDepth = 0;
             HelperData.get(world.getServer()).markDirty();
@@ -1699,9 +1705,9 @@ public class Helper {
                 }
             }
             if (s.getCollisionShape(world, p).isEmpty()) continue;
-            if (s.hasBlockEntity() || s.getHardness(world, p) < 0) {
-                say(player, "Something I can't dig through is blocking my mine at " + p.toShortString()
-                        + ". I'll start a new mine next time.");
+            if (s.hasBlockEntity() || s.getHardness(world, p) < 0 || isProtected(world, p, s)) {
+                say(player, "My mine ran into something that looks built or that I can't dig through, at "
+                        + p.toShortString() + ", so I left it alone. I'll start a new mine somewhere else next time.");
                 entry.mineOrigin = null;
                 finishJob(player, inv, "Coming back up.");
                 return false;
@@ -2058,6 +2064,7 @@ public class Helper {
      * nobody builds) anything that isn't obviously player-made is fine too, e.g. modded stone or sculk.
      */
     private boolean canDigThrough(ServerWorld world, BlockPos pos, BlockState s) {
+        if (isProtected(world, pos, s)) return false;
         if (Materials.isTerrain(s) || job.spec.matches(s)) return true;
         if (s.hasBlockEntity()) return false;
         float hardness = s.getHardness(world, pos);
@@ -2065,6 +2072,95 @@ public class Helper {
         int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
         if (pos.getY() > surface - 8) return false;
         return !Materials.looksPlayerMade(s);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Not breaking people's builds
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * True when a block is probably part of something a player built, so a helper must leave it alone.
+     * Near the surface that means anything that looks placed (planks, glass, bricks, doors...) and any
+     * block within two blocks of one, so house floors and stone walls are safe too. Deep underground
+     * only blocks next to chests, beds, furnaces and similar are protected, so caves stay minable.
+     */
+    static boolean isProtected(ServerWorld world, BlockPos pos, BlockState s) {
+        if (s.isAir() || s.isOf(net.minecraft.block.Blocks.SPAWNER)) return false;
+        if (s.hasBlockEntity()) return true;
+        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
+        boolean shallow = pos.getY() > surface - 8;
+        if (shallow && isBuildEvidence(s)) return true;
+        return nearBuild(world, pos, 2, shallow);
+    }
+
+    /** Is there a placed-looking block (or, when deep, a chest/bed/furnace) within radius? */
+    static boolean nearBuild(ServerWorld world, BlockPos center, int radius, boolean shallow) {
+        BlockPos.Mutable p = new BlockPos.Mutable();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    p.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
+                    BlockState s = world.getBlockState(p);
+                    if (s.isAir()) continue;
+                    if (s.hasBlockEntity()) {
+                        if (!s.isOf(net.minecraft.block.Blocks.SPAWNER)) return true;
+                        continue;
+                    }
+                    if (shallow && isBuildEvidence(s)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Placed-looking blocks, minus torches (helpers light their own mines) and logs (trees). */
+    private static boolean isBuildEvidence(BlockState s) {
+        if (s.isIn(BlockTags.LOGS) || s.isIn(BlockTags.LEAVES)) return false;
+        if (s.isOf(net.minecraft.block.Blocks.TORCH) || s.isOf(net.minecraft.block.Blocks.WALL_TORCH)) return false;
+        if (Materials.isTerrain(s)) return false;
+        return Materials.looksPlayerMade(s);
+    }
+
+    private static final int[][] MINE_SPOT_OFFSETS = buildMineSpotOffsets();
+
+    private static int[][] buildMineSpotOffsets() {
+        List<int[]> list = new ArrayList<>();
+        for (int dx = -30; dx <= 30; dx += 3) {
+            for (int dz = -30; dz <= 30; dz += 3) {
+                if (dx * dx + dz * dz <= 30 * 30) list.add(new int[]{dx, dz});
+            }
+        }
+        list.sort(Comparator.comparingInt(o -> o[0] * o[0] + o[1] * o[1]));
+        return list.toArray(new int[0][]);
+    }
+
+    /** The nearest open, natural ground with nothing built close by, for a new staircase mine. */
+    private static BlockPos findMineSpot(ServerWorld world, BlockPos near) {
+        for (int[] o : MINE_SPOT_OFFSETS) {
+            int x = near.getX() + o[0], z = near.getZ() + o[1];
+            if (!world.getChunkManager().isChunkLoaded(x >> 4, z >> 4)
+                    || !world.getChunkManager().isChunkLoaded((x + 2) >> 4, (z + 2) >> 4)
+                    || !world.getChunkManager().isChunkLoaded((x - 1) >> 4, (z - 1) >> 4)) continue;
+            BlockPos top = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z));
+            if (goodMineSpot(world, top)) return top;
+        }
+        return null;
+    }
+
+    private static boolean goodMineSpot(ServerWorld world, BlockPos top) {
+        // The staircase uses a 2x2 column; check a ring around it too.
+        for (int dx = -1; dx <= 2; dx++) {
+            for (int dz = -1; dz <= 2; dz++) {
+                int x = top.getX() + dx, z = top.getZ() + dz;
+                int ty = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+                if (Math.abs(ty - top.getY()) > 2) return false; // roofs, walls or a cliff
+                BlockPos ground = new BlockPos(x, ty - 1, z);
+                if (!world.getFluidState(ground).isEmpty() || !world.getFluidState(ground.up()).isEmpty()) return false;
+                if (!Materials.isTerrain(world.getBlockState(ground))) return false;
+            }
+        }
+        return !nearBuild(world, top.down(), 5, true);
     }
 
     private static boolean hasGroundWithin(World world, BlockPos from, int depth) {
@@ -2128,6 +2224,10 @@ public class Helper {
                                BlockPos pos, boolean isTarget) {
         Job j = job;
         BlockState state = world.getBlockState(pos);
+        if (isProtected(world, pos, state)) { // part of someone's build: never break it
+            abandonTarget(m);
+            return;
+        }
         int slot = Mining.bestToolSlot(inv, state, world, pos, isTarget, j.spec.preferSilk);
         ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
         int ticks = Mining.breakTicks(tool, state, world, pos);
