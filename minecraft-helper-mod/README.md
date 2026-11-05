@@ -47,6 +47,7 @@ ask for. It works out the best way to get it:
 | `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
 | `/helper boss` | On an Ad Astra planet: where is this planet's boss arena? |
 | `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
+| `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
@@ -171,8 +172,18 @@ mod see Ad Astra's plain sky there.
 ## Installing (CurseForge / Prominence II)
 
 1. In CurseForge, open the Prominence II instance, click the **⋮** menu → **Open Folder**.
-2. Put `helper-mod-1.0.0.jar` into the `mods` folder.
+2. Put the `helper-mod-<version>.jar` file into the `mods` folder (only one version at a time).
 3. Launch the game.
+
+### Updates install themselves
+
+From 1.16.0 on, you only install the jar by hand once. Each time the game starts, the mod checks this
+repo's GitHub releases in the background. When a newer version is there, it downloads it and tells you
+in chat. When you close Minecraft, a small script waits for the game to exit, removes the old jar from
+`mods` and puts the new one in. The next launch runs the new version. A new release is published as soon
+as a version reaches Validate on the flow board.
+
+To turn this off, set `auto_update=false` in `config/helpermod-updater.properties`.
 
 **Playing together:**
 - **Open to LAN, or the host's single-player world:** only the host needs the mod.
