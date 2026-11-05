@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Helpers are sent to clients as players, so they show up with their owner's skin. */
+/** Helpers are sent to clients as players (their owner's skin) or as the mob their owner picked. */
 @Mixin(Entity.class)
 public abstract class EntitySpawnPacketMixin {
     @Inject(method = "createSpawnPacket", at = @At("HEAD"), cancellable = true)

@@ -5,15 +5,20 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.command.CommandSource;
+import net.minecraft.entity.EntityType;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static net.minecraft.server.command.CommandManager.argument;
 import static net.minecraft.server.command.CommandManager.literal;
 
-/** /helper summon | collect <material> [amount] | stop | deliver | status | dismiss */
+/** /helper summon | collect <material> [amount] | stop | deliver | status | look <mob|me> | dismiss */
 public final class HelperCommands {
     private HelperCommands() {}
 
@@ -42,6 +47,15 @@ public final class HelperCommands {
                     Devices.craftHarvester(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("look")
+                        .executes(HelperCommands::lookHelp)
+                        .then(argument("mob", StringArgumentType.greedyString())
+                                .suggests((ctx, builder) -> {
+                                    List<String> options = new ArrayList<>(Disguise.lookSuggestions());
+                                    options.add(0, "me");
+                                    return CommandSource.suggestMatching(options, builder);
+                                })
+                                .executes(HelperCommands::look)))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -53,6 +67,8 @@ public final class HelperCommands {
                 "/helper stop  - stop and follow me",
                 "/helper status  - what are you doing?",
                 "/helper guard on|off  - fight mobs that come after you (on by default)",
+                "/helper look <mob>  - make your helper look like any mob, e.g. /helper look creeper",
+                "/helper look me  - make your helper look like you again",
                 "/helper dismiss  - send your helper away (it keeps your items)",
                 "/helper collect spawner  - dig up a monster spawner you can place anywhere",
                 "/helper harvester  - turn the hopper in your hand into a Monster Harvester",
@@ -148,6 +164,43 @@ public final class HelperCommands {
         Helper.say(player, on
                 ? "I'll protect you! I fight monsters that come after you, and anything you attack."
                 : "Okay, no fighting. I'll stay out of trouble.");
+        return 1;
+    }
+
+    private static int lookHelp(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        Helper.say(player, "Pick a mob for me to look like, e.g. /helper look creeper. "
+                + "Use /helper look me to make me look like you again.");
+        return 1;
+    }
+
+    private static int look(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        String raw = StringArgumentType.getString(ctx, "mob").trim();
+        HelperData data = HelperData.get(player.getServer());
+        HelperData.Entry entry = data.getOrCreate(player.getUuid());
+        String lower = raw.toLowerCase(java.util.Locale.ROOT);
+        String newLook;
+        String reply;
+        if (lower.equals("me") || lower.equals("player") || lower.equals("reset") || lower.equals("default")) {
+            newLook = null;
+            reply = "Back to looking like you!";
+        } else {
+            EntityType<?> type = Disguise.resolveLook(raw);
+            if (type == null) {
+                Helper.say(player, "I don't know a mob called \"" + raw + "\". Press Tab after /helper look "
+                        + "to see the ones I can be.");
+                return 0;
+            }
+            newLook = Registries.ENTITY_TYPE.getId(type).toString();
+            String mobName = type.getName().getString();
+            String article = "AEIOUaeiou".indexOf(mobName.isEmpty() ? 'x' : mobName.charAt(0)) >= 0 ? "an " : "a ";
+            reply = "Ta-da! I'm " + article + mobName + " now. I'll still follow you and help.";
+        }
+        entry.look = newLook;
+        data.markDirty();
+        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUuid());
+        Helper.say(player, entry.active ? reply : reply + " You'll see it when you /helper summon me.");
         return 1;
     }
 
