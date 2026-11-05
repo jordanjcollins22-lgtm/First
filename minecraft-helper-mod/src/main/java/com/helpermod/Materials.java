@@ -61,7 +61,8 @@ public final class Materials {
             Map.entry("log", "#minecraft:logs"), Map.entry("logs", "#minecraft:logs"),
             Map.entry("tree", "#minecraft:logs"), Map.entry("trees", "#minecraft:logs"),
             Map.entry("leaves", "#minecraft:leaves"), Map.entry("ores", "#c:ores"),
-            Map.entry("cobble", "minecraft:cobblestone"), Map.entry("lapis", "minecraft:lapis_lazuli"),
+            Map.entry("cobble", "minecraft:cobblestone"), Map.entry("spawners", "minecraft:spawner"),
+            Map.entry("mob_spawner", "minecraft:spawner"), Map.entry("monster_spawner", "minecraft:spawner"), Map.entry("lapis", "minecraft:lapis_lazuli"),
             Map.entry("netherite", "minecraft:ancient_debris"), Map.entry("debris", "minecraft:ancient_debris"),
             Map.entry("quartz", "minecraft:quartz"), Map.entry("glowstone", "minecraft:glowstone_dust"));
 
@@ -71,7 +72,7 @@ public final class Materials {
             "stone", "cobblestone", "cobbled_deepslate", "dirt", "sand", "red_sand", "gravel", "flint", "clay_ball",
             "netherrack", "obsidian", "amethyst_shard", "glowstone", "deepslate", "andesite", "granite", "diorite",
             "tuff", "calcite", "ice", "snowball", "pumpkin", "melon_slice", "sugar_cane", "cactus", "bamboo", "leaves",
-            "ores");
+            "ores", "spawner");
 
     // ---------------------------------------------------------------------------------------
     // Natural-block checks
@@ -98,12 +99,89 @@ public final class Materials {
 
     /** Anything a helper may gather: terrain plus trees, plants, ice and similar. */
     public static boolean isGatherable(BlockState state) {
+        if (state.isOf(Blocks.SPAWNER)) return true; // helpers carefully dig spawners out (see Devices)
         if (state.hasBlockEntity()) return false;
         if (state.isIn(BlockTags.LEAVES)) return isNaturalLeaves(state);
         if (isTerrain(state)) return true;
         if (GATHER_BLOCKS.contains(state.getBlock())) return true;
         for (TagKey<Block> tag : GATHER_TAGS) if (state.isIn(tag)) return true;
         return false;
+    }
+
+    private static final List<String> BUILD_WORDS = List.of(
+            "planks", "brick", "glass", "wool", "concrete", "door", "bed", "stairs", "slab", "fence", "wall",
+            "carpet", "torch", "lantern", "rail", "ladder", "chest", "barrel", "sign", "banner", "pane", "bars",
+            "polished", "smooth", "cut_", "chiseled", "tile", "lamp", "glazed", "pillar", "button", "lever",
+            "pressure_plate", "trapdoor", "candle", "shulker", "bookshelf", "crafting", "furnace", "bricks");
+
+    /** A rough "did a player probably place this" check, used for blocks that aren't known terrain. */
+    public static boolean looksPlayerMade(BlockState state) {
+        if (state.isIn(BlockTags.PLANKS) || state.isIn(BlockTags.WOOL) || state.isIn(BlockTags.LOGS)) return true;
+        String path = Registries.BLOCK.getId(state.getBlock()).getPath();
+        for (String word : BUILD_WORDS) if (path.contains(word)) return true;
+        return false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Where ores generate: read from each dimension's world-gen, so modded ores and dimensions
+    // are covered as long as they use the normal ore feature.
+    // ---------------------------------------------------------------------------------------
+
+    private static Map<Block, Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>>> oreDimensions;
+
+    private static void ensureOreDimensions(MinecraftServer server) {
+        if (oreDimensions != null) return;
+        Map<Block, Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>>> map = new HashMap<>();
+        for (ServerWorld world : server.getWorlds()) {
+            try {
+                var biomes = world.getChunkManager().getChunkGenerator().getBiomeSource().getBiomes();
+                for (var biome : biomes) {
+                    for (var step : biome.value().getGenerationSettings().getFeatures()) {
+                        for (var placed : step) {
+                            placed.value().getDecoratedFeatures().forEach(feature -> {
+                                if (feature.config() instanceof net.minecraft.world.gen.feature.OreFeatureConfig ore) {
+                                    for (var target : ore.targets) {
+                                        map.computeIfAbsent(target.state.getBlock(), k -> new HashSet<>())
+                                                .add(world.getRegistryKey());
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (Throwable t) {
+                HelperMod.LOG.warn("Helper Buddies couldn't read ore generation for {}", world.getRegistryKey(), t);
+            }
+        }
+        oreDimensions = map;
+    }
+
+    /**
+     * If what's being collected is an ore that only generates in other dimensions, returns a message
+     * saying where to find it. Null when it's fine (or we can't tell).
+     */
+    public static String wrongDimension(MinecraftServer server, Spec spec, ServerWorld here) {
+        ensureOreDimensions(server);
+        Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>> dims = new HashSet<>();
+        for (Block block : spec.blocks) dims.addAll(oreDimensions.getOrDefault(block, Set.of()));
+        if (dims.isEmpty() || dims.contains(here.getRegistryKey())) return null;
+        List<String> names = new ArrayList<>();
+        for (var dim : dims) names.add(dimensionName(dim));
+        names.sort(null);
+        return spec.display + " doesn't generate in " + dimensionName(here.getRegistryKey())
+                + ". You can find it in " + String.join(" or ", names)
+                + ". Take me there and ask again.";
+    }
+
+    public static String dimensionName(net.minecraft.registry.RegistryKey<net.minecraft.world.World> key) {
+        Identifier id = key.getValue();
+        if (id.equals(net.minecraft.world.World.OVERWORLD.getValue())) return "the Overworld";
+        if (id.equals(net.minecraft.world.World.NETHER.getValue())) return "the Nether";
+        if (id.equals(net.minecraft.world.World.END.getValue())) return "the End";
+        String[] words = id.getPath().split("_");
+        StringBuilder sb = new StringBuilder("the");
+        for (String w : words) if (!w.isEmpty()) sb.append(' ').append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
+        return sb.toString();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -115,6 +193,7 @@ public final class Materials {
     private static Map<Block, Set<Item>> dropsByBlock;
 
     public static void reset() {
+        oreDimensions = null;
         blocksByDrop = null;
         dropsByBlock = null;
     }

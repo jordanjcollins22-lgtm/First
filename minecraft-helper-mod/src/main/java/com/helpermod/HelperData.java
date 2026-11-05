@@ -26,6 +26,11 @@ public class HelperData extends PersistentState {
         /** Fight mobs that threaten the owner. */
         public boolean guard = true;
         public final SimpleInventory inventory = new SimpleInventory(INVENTORY_SIZE);
+        /** The helper's mine: a spiral staircase it digs once and reuses every time it goes underground. */
+        public String mineDim;
+        public net.minecraft.util.math.BlockPos mineOrigin;
+        /** How many steps of the staircase are already dug. */
+        public int mineDepth;
 
         Entry() {
             inventory.addListener(inv -> markDirty());
@@ -65,6 +70,11 @@ public class HelperData extends PersistentState {
             entry.active = tag.getBoolean("active");
             entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
             entry.inventory.readNbtList(tag.getList("items", NbtElement.COMPOUND_TYPE));
+            if (tag.contains("mineDim")) {
+                entry.mineDim = tag.getString("mineDim");
+                entry.mineOrigin = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineOrigin"));
+                entry.mineDepth = tag.getInt("mineDepth");
+            }
             data.entries.put(owner, entry);
         }
         return data;
@@ -80,6 +90,11 @@ public class HelperData extends PersistentState {
             tag.putBoolean("active", entry.active);
             tag.putBoolean("guard", entry.guard);
             tag.put("items", entry.inventory.toNbtList());
+            if (entry.mineDim != null && entry.mineOrigin != null) {
+                tag.putString("mineDim", entry.mineDim);
+                tag.putLong("mineOrigin", entry.mineOrigin.asLong());
+                tag.putInt("mineDepth", entry.mineDepth);
+            }
             list.add(tag);
         });
         nbt.put("helpers", list);

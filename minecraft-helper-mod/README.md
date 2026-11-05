@@ -8,8 +8,17 @@ it** (same skin, with "Jordan's Helper" over its head), **fights for them**, and
 ask for. It works out the best way to get it:
 
 - It searches nearby for the closest blocks that give you that material. It knows about deepslate and
-  modded variants.
-- It walks there if it can. If not, it digs a staircase or tunnel, bridges gaps or pillars up.
+  modded variants. If there's none nearby, it keeps searching further out, loading chunks a few at a time
+  until it finds some (up to 1,000 blocks away). It keeps its own area loaded while it works.
+- If you ask for an ore that doesn't generate in your dimension (diamonds in the Nether, quartz in the
+  Overworld), it tells you which dimension to go to.
+- It walks there if it can, through caves or over land. Only if there's no way in does it dig.
+- To get deep underground it digs **its own mine**: a spiral staircase near your base, 3 blocks tall so you
+  can use it too. It reuses the same mine every time and digs it deeper as needed. Every 4 blocks down it
+  stops at a landing and mines the ore around that layer before going deeper. When it's done it climbs back
+  up the stairs and walks back to you.
+- For short distances it digs a tunnel, bridges gaps or pillars up. It plugs lava and water with cobblestone
+  instead of giving up.
 - It picks the best tool from its inventory for every block: the fastest one, fortune for ores, never
   silk touch unless that's what you want.
 - It mines out the whole vein or tree before moving on.
@@ -25,11 +34,32 @@ ask for. It works out the best way to get it:
 | `/helper stop` | Stop the current job and follow me |
 | `/helper status` | What are you doing, and what are you carrying? |
 | `/helper guard on` / `off` | Turn fighting on or off (on by default) |
+| `/helper collect spawner` | Dig up a monster spawner. It keeps its mob, so you can place it anywhere |
+| `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
 | `/helper dismiss` | Send your helper away. It keeps your items for next time |
 
 **Right-click your helper** to open its inventory. Put tools (pickaxe, axe, shovel), a weapon (sword or
 axe) and armor in there, and take out anything you like. Helpers won't use a tool that's about to break, so
 you won't lose your gear.
+
+### It tells you when something's wrong
+
+- A tool or weapon is about to break (it stops using it so you never lose it).
+- It can't mine something because its tools are worn out, or it needs a better one.
+- Its pockets are full (it brings everything back and keeps going), or its inventory is so full of gear
+  that it has no room at all.
+- Your inventory is full when it delivers (the rest is dropped at your feet).
+
+### Spawners and the Monster Harvester
+
+1. `/helper collect spawner`: your helper finds a dungeon spawner, digs it out and brings it back. The item
+   is named after its mob ("Zombie Spawner"), and placing it gives you that spawner back.
+2. Hold a hopper and run `/helper harvester` to turn it into a Monster Harvester.
+3. Place the harvester near the spawner (monsters within 4 blocks of it get harvested), with a chest
+   under it.
+4. The harvester kills monsters around it. Their loot goes into the hopper and down into the chest, and their
+   XP is stored in the harvester. **Sneak + right-click it** (empty hand) to collect the XP and level up.
+   If the harvester is broken, the stored XP drops as orbs so nothing is lost.
 
 ### Combat
 

@@ -8,7 +8,8 @@
     "DataTrackerAccessor",
     "PlayerEntityAccessor",
     "EntitySpawnPacketMixin",
-    "EntityTrackerEntryMixin"
+    "EntityTrackerEntryMixin",
+    "ExperienceOrbAccessor"
   ],
   "injectors": { "defaultRequire": 1 }
 }

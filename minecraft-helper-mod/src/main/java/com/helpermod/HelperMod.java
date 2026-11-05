@@ -27,11 +27,14 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(HelperManager::tick);
         ServerEntityEvents.ENTITY_LOAD.register(HelperManager::onEntityLoad);
         UseEntityCallback.EVENT.register(HelperManager::onUseEntity);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
+        ServerTickEvents.END_SERVER_TICK.register(Devices::tick);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             HelperManager.reset();
             Materials.reset();
             Disguise.reset();
+            Devices.reset();
         });
         LOG.info("Helper Buddies loaded");
     }

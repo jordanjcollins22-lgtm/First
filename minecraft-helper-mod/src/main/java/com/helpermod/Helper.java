@@ -37,6 +37,10 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.Heightmap;
+import net.minecraft.server.world.ChunkTicketType;
+import net.minecraft.server.world.ServerChunkManager;
+import net.minecraft.util.math.ChunkPos;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -62,12 +66,36 @@ public class Helper {
     private static final int MAX_CANDIDATES = 4000;
     private static final int PATH_CHECKS = 6;
     /** Building blocks the helper keeps after a delivery so it can bridge and climb next time. */
-    private static final int KEEP_BUILDING_BLOCKS = 16;
+    private static final int KEEP_BUILDING_BLOCKS = 32;
+    /** Far search: chunk rings (16 blocks each) beyond what's already loaded. */
+    private static final int FAR_START_RING = 4;
+    private static final int FAR_MAX_RING = 64;
+    private static final int FAR_PARALLEL = 8;
+    /** Past this horizontal distance the helper walks over land toward the target before digging. */
+    private static final double TRAVEL_DISTANCE = 40;
+    private static final ChunkTicketType<ChunkPos> SEARCH_TICKET =
+            ChunkTicketType.create("helpermod_search", Comparator.comparingLong(ChunkPos::toLong), 300);
+    private static final ChunkTicketType<ChunkPos> KEEP_LOADED_TICKET =
+            ChunkTicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
 
     enum Mode { FOLLOW, COLLECT, RETURN }
 
+    enum MineState { NONE, DESCEND, WORK }
+
+    /** Spiral staircase: 2x2 footprint, one block down per step, 3 blocks of headroom. */
+    private static final int[][] SPIRAL = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    private static final int LANDING_EVERY = 4;
+    private static final int LANDING_RADIUS = 12;
+
     private final UUID owner;
     private MobEntity mob;
+    private HelperData.Entry currentEntry;
+    /** Which stair step the helper is standing on (-1 = not in the mine). */
+    private int mineStep = -1;
+    /** The stair step it left from to mine off a landing (-1 = not in a side tunnel). */
+    private int branchFrom = -1;
+    private int stairTicks;
+    private int returnTicks;
     private int missingTicks;
     private int repathCooldown;
     private LivingEntity combatTarget;
@@ -111,6 +139,21 @@ public class Helper {
         boolean breakingTarget;
 
         boolean toldAboutHands;
+
+        int farRing = -1;
+        ChunkPos farOrigin;
+        final Deque<ChunkPos> farQueue = new ArrayDeque<>();
+        final Set<ChunkPos> farPending = new HashSet<>();
+        boolean toldFarSearch;
+
+        int travelFailures;
+        Vec3d travelFrom;
+
+        /** Using the mine: NONE = normal gathering; DESCEND = on the stairs; WORK = mining off a landing. */
+        MineState mineState = MineState.NONE;
+        int mineTargetY;
+        boolean landingScanned;
+        int doneLanding = -1;
         /** Openings of shafts we dug from the surface, plugged afterwards so nobody falls in. */
         final Set<BlockPos> shaftTops = new HashSet<>();
 
@@ -126,6 +169,14 @@ public class Helper {
             target = null;
             stepCell = null;
             breaking = null;
+            farRing = -1;
+            farQueue.clear();
+            farPending.clear();
+            travelFailures = 0;
+            travelFrom = null;
+            mineState = MineState.NONE;
+            landingScanned = false;
+            doneLanding = -1;
         }
     }
 
@@ -199,6 +250,8 @@ public class Helper {
             clearBreaking(existing);
             existing.getNavigation().stop();
             existing.requestTeleport(spot.x, spot.y, spot.z);
+            mineStep = -1;
+            branchFrom = -1;
             entry.active = true;
             if (job != null) job.resetSearch();
             return;
@@ -209,6 +262,8 @@ public class Helper {
         }
         WanderingTraderEntity helper = EntityType.WANDERING_TRADER.create(world);
         if (helper == null) return;
+        mineStep = -1;
+        branchFrom = -1;
         helper.refreshPositionAndAngles(spot.x, spot.y, spot.z, player.getYaw() + 180f, 0f);
         helper.setCustomName(Text.literal(player.getGameProfile().getName() + "'s Helper"));
         helper.setCustomNameVisible(true);
@@ -339,6 +394,7 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     void tick(MinecraftServer server, ServerPlayerEntity player, HelperData.Entry entry) {
+        currentEntry = entry;
         MobEntity m = findEntity(server, entry);
         if (m == null) {
             // Unloaded (owner walked or teleported away) or gone. Bring a fresh one to the owner.
@@ -348,6 +404,7 @@ public class Helper {
             }
             return;
         }
+        if (mode != Mode.FOLLOW && m.age % 20 == 0) keepLoaded((ServerWorld) m.getWorld(), m);
         if (!((ServerWorld) m.getWorld()).shouldTickEntity(m.getBlockPos())) {
             // Too far from every player to be simulated: it would just stand frozen. Bring it back.
             if (++missingTicks > 40) {
@@ -425,11 +482,22 @@ public class Helper {
         }
         if (attackCooldown > 0) attackCooldown--;
         if (attackCooldown <= 0 && d <= Combat.REACH_SQ && m.canSee(target)) {
-            attackCooldown = Combat.attack(m, target, entry.inventory);
+            attackCooldown = Combat.attack(m, target, entry.inventory, name -> say(player,
+                    "My " + name + " is about to break, so I've stopped using it. Give me a new one or repair it."));
             lastProgressTick = combatTicks;
             if (!target.isAlive()) combatTarget = null;
         }
         return true;
+    }
+
+    /** Keep the helper (and what it's heading for) loaded and ticking while it works, like a chunk loader. */
+    private void keepLoaded(ServerWorld world, MobEntity m) {
+        ChunkPos here = new ChunkPos(m.getBlockPos());
+        world.getChunkManager().addTicket(KEEP_LOADED_TICKET, here, 2, here);
+        if (job != null && job.target != null) {
+            ChunkPos there = new ChunkPos(job.target);
+            world.getChunkManager().addTicket(KEEP_LOADED_TICKET, there, 1, there);
+        }
     }
 
     private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
@@ -455,11 +523,34 @@ public class Helper {
             spawnNear(player, entry);
             return;
         }
+        if (job != null && job.breaking != null) {
+            tickBreaking(m, player, (ServerWorld) m.getWorld(), entry.inventory); // e.g. gravel fell on the stairs
+            return;
+        }
+        if (mineStep >= 0 || branchFrom >= 0) {
+            // Walk back up the mine's staircase to the surface.
+            if (goToStep(m, player, (ServerWorld) m.getWorld(), entry, 0)) {
+                mineStep = -1;
+                stuckTicks = 0;
+            }
+            return;
+        }
         double d = m.squaredDistanceTo(player);
+        if (d > 3 * 3 && ++returnTicks > 600) { // 30 s and still can't reach you: hop over
+            returnTicks = 0;
+            teleportNear(m, player);
+            d = m.squaredDistanceTo(player);
+        }
         if (d <= 3 * 3) {
+            returnTicks = 0;
             m.getNavigation().stop();
             if (job != null) plugShafts((ServerWorld) m.getWorld(), entry.inventory);
             deliver(m, player, entry.inventory);
+            if (job != null && !job.done && isFull(entry.inventory)) {
+                say(player, "I'm still out of space: my inventory is full of tools and gear. Right-click me and "
+                        + "take some things out, then ask me again.");
+                job = null;
+            }
             if (job != null && !job.done) {
                 job.resetSearch();
                 mode = Mode.COLLECT;
@@ -481,6 +572,8 @@ public class Helper {
     }
 
     private void teleportNear(MobEntity m, ServerPlayerEntity player) {
+        mineStep = -1;
+        branchFrom = -1;
         Vec3d spot = findSpotNear(player.getServerWorld(), player.getBlockPos());
         m.getNavigation().stop();
         m.requestTeleport(spot.x, spot.y, spot.z);
@@ -498,6 +591,7 @@ public class Helper {
 
     private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv) {
         Map<String, Integer> given = new LinkedHashMap<>();
+        boolean droppedAtFeet = false;
         int keptBuilding = 0;
         for (int i = 0; i < inv.size(); i++) {
             ItemStack stack = inv.getStack(i);
@@ -513,7 +607,12 @@ public class Helper {
                 continue;
             }
             given.merge(stack.getName().getString(), stack.getCount(), Integer::sum);
-            player.getInventory().offerOrDrop(stack.copy());
+            ItemStack give = stack.copy();
+            player.getInventory().insertStack(give);
+            if (!give.isEmpty()) {
+                player.dropItem(give, false, false);
+                droppedAtFeet = true;
+            }
             inv.setStack(i, ItemStack.EMPTY);
         }
         inv.markDirty();
@@ -528,7 +627,8 @@ public class Helper {
             if (sb.length() > 0) sb.append(", ");
             sb.append(count).append(' ').append(name);
         });
-        say(player, "Here you go: " + sb + ".");
+        say(player, "Here you go: " + sb + "." + (droppedAtFeet
+                ? " Your inventory is full, so I dropped the rest at your feet." : ""));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -549,6 +649,10 @@ public class Helper {
             mode = Mode.RETURN;
             return;
         }
+        if (j.mineState == MineState.DESCEND) {
+            tickDescend(m, player, world, entry);
+            return;
+        }
         if (j.target != null && !j.spec.matches(world.getBlockState(j.target))) j.target = null;
         if (j.target == null && !pickTarget(m, player, world, inv)) return;
 
@@ -566,8 +670,37 @@ public class Helper {
             startBreaking(m, player, world, inv, target, true);
             return;
         }
+        if (j.tunneling && tickTravel(m, world)) return;
         if (j.tunneling) tickTunnel(m, player, world, inv);
         else tickWalk(m, world);
+    }
+
+    /** Far away: walk over land toward the target in hops, then dig the rest. Returns false when done. */
+    private boolean tickTravel(MobEntity m, ServerWorld world) {
+        Job j = job;
+        Vec3d here = m.getPos();
+        double hx = j.target.getX() + 0.5 - here.x;
+        double hz = j.target.getZ() + 0.5 - here.z;
+        double h = Math.sqrt(hx * hx + hz * hz);
+        if (h <= TRAVEL_DISTANCE || j.travelFailures >= 3) return false;
+        if (j.travelFrom == null || here.squaredDistanceTo(j.travelFrom) > 8 * 8) {
+            j.travelFrom = here; // making progress
+            j.travelFailures = 0;
+            j.targetTicks = 0;
+        }
+        boolean stuck = isStuck(m, 60);
+        if (m.getNavigation().isIdle() || stuck) {
+            stuckTicks = 0;
+            if (stuck) j.travelFailures++;
+            int wx = (int) Math.floor(here.x + hx / h * 24);
+            int wz = (int) Math.floor(here.z + hz / h * 24);
+            int wy = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, wx, wz);
+            Path path = m.getNavigation().findPathTo(new BlockPos(wx, wy, wz), 3);
+            if (path == null || path.getLength() <= 1 || !m.getNavigation().startMovingAlong(path, SPEED)) {
+                j.travelFailures++;
+            }
+        }
+        return true;
     }
 
     private static boolean isAdjacent(MobEntity m, BlockPos target) {
@@ -612,13 +745,50 @@ public class Helper {
             }
         }
 
-        // 2. Nearest blocks around us, widening the search when we run out.
-        j.candidates.removeIf(p -> !isValidTarget(world, p, true));
-        while (j.candidates.isEmpty()) {
-            if (++j.scanStage >= SCAN_RADII.length) {
-                finishJob(player, inv, "I can't find any more " + j.spec.display + " nearby.");
+        // 2. Working off a mine landing: only take ore near this landing, then go back to the stairs.
+        if (j.mineState == MineState.WORK && currentEntry != null && branchFrom >= 0) {
+            BlockPos landing = stepPos(currentEntry, branchFrom);
+            boolean atBottom = landing.getY() <= j.mineTargetY;
+            if (!j.landingScanned) {
+                j.landingScanned = true;
+                scan(world, landing, LANDING_RADIUS, 6, j);
+            }
+            j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+            List<BlockPos> local = new ArrayList<>();
+            for (BlockPos p : j.candidates) {
+                if (atBottom || nearLanding(p, landing)) local.add(p);
+            }
+            if (DEBUG) HelperMod.LOG.info("[helper debug] landing {} step {} targetY {} candidates {} local {}",
+                    landing, branchFrom, j.mineTargetY, j.candidates, local.size());
+            if (local.isEmpty()) {
+                if (atBottom) {
+                    finishJob(player, inv, "I've mined out all the " + j.spec.display + " I could find around my mine.");
+                } else {
+                    j.mineState = MineState.DESCEND; // nothing left here: back to the stairs, next layer down
+                }
                 return false;
             }
+            Vec3d here = m.getPos();
+            local.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(here)));
+            BlockPos next = local.get(0);
+            if (!checkTool(player, world, inv, next)) return false;
+            j.target = next;
+            j.candidates.remove(next);
+            Path path = isExposed(world, next) ? m.getNavigation().findPathTo(next, 2) : null;
+            j.tunneling = path == null || !path.reachesTarget();
+            if (!j.tunneling) m.getNavigation().startMovingAlong(path, SPEED);
+            return true;
+        }
+
+        // 3. Nearest blocks around us, widening the search when we run out.
+        j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+        while (j.candidates.isEmpty()) {
+            if (j.scanStage + 1 >= SCAN_RADII.length) {
+                // Nothing in the loaded area: load chunks further out until we find some.
+                if (!farSearch(m, player, world, inv)) return false;
+                break;
+            }
+            j.scanStage++;
             scan(world, m.getBlockPos(), SCAN_RADII[j.scanStage][0], SCAN_RADII[j.scanStage][1], j);
             j.candidates.removeIf(p -> !isValidTarget(world, p, true));
         }
@@ -653,11 +823,256 @@ public class Helper {
         }
         if (best == null) return false;
         if (!checkTool(player, world, inv, best)) return false;
+        if (bestPath == null && bestCost > 0 && currentEntry != null && isDeepUnderground(world, m, best)) {
+            // No way to walk there (no cave or open access): use our mine instead of digging a random hole.
+            startMine(m, player, world, currentEntry, best);
+            return false;
+        }
         j.target = best;
         j.candidates.remove(best);
         j.tunneling = bestPath == null && bestCost > 0;
         if (bestPath != null) m.getNavigation().startMovingAlong(bestPath, SPEED);
         return true;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The mine: a reusable spiral staircase from the base, with landings every few blocks
+    // ---------------------------------------------------------------------------------------
+
+    private static boolean nearLanding(BlockPos p, BlockPos landing) {
+        int dx = p.getX() - landing.getX(), dz = p.getZ() - landing.getZ();
+        return dx * dx + dz * dz <= LANDING_RADIUS * LANDING_RADIUS && Math.abs(p.getY() - landing.getY()) <= 6;
+    }
+
+    private static boolean isDeepUnderground(ServerWorld world, MobEntity m, BlockPos target) {
+        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ());
+        return target.getY() < m.getBlockY() - 6 && target.getY() < surface - 6;
+    }
+
+    static BlockPos stepPos(HelperData.Entry entry, int i) {
+        int[] c = SPIRAL[i & 3];
+        return entry.mineOrigin.add(c[0], -i, c[1]);
+    }
+
+    private int bottomStep(ServerWorld world, HelperData.Entry entry) {
+        return Math.max(0, entry.mineOrigin.getY() - (world.getBottomY() + 6));
+    }
+
+    private void startMine(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+                           BlockPos target) {
+        Job j = job;
+        String dim = world.getRegistryKey().getValue().toString();
+        boolean reuse = entry.mineOrigin != null && dim.equals(entry.mineDim)
+                && horizontalDistanceSq(entry.mineOrigin, m.getBlockPos()) < 256 * 256;
+        if (!reuse) {
+            BlockPos base = m.getBlockPos();
+            entry.mineOrigin = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, base);
+            entry.mineDim = dim;
+            entry.mineDepth = 0;
+            HelperData.get(world.getServer()).markDirty();
+            say(player, "There's no cave I can walk through to get there, so I'm digging a mine at "
+                    + entry.mineOrigin.getX() + ", " + entry.mineOrigin.getY() + ", " + entry.mineOrigin.getZ()
+                    + ". It's a staircase you can use too, and I'll use it every time I go underground.");
+        } else if (mineStep < 0) {
+            say(player, "Heading down my mine for " + j.spec.display + ".");
+        }
+        if (DEBUG) HelperMod.LOG.info("[helper debug] start mine for {} candidates {}", target, j.candidates.size());
+        // Aim for the depth where the nearest few targets are.
+        List<Integer> ys = new ArrayList<>();
+        ys.add(target.getY());
+        BlockPos o = entry.mineOrigin;
+        j.candidates.stream()
+                .sorted(Comparator.comparingDouble(p -> horizontalDistanceSq(p, o)))
+                .limit(20).forEach(p -> ys.add(p.getY()));
+        ys.sort(null);
+        int median = ys.get(ys.size() / 2);
+        j.mineTargetY = Math.max(world.getBottomY() + 6, median);
+        j.mineState = MineState.DESCEND;
+        j.landingScanned = false;
+        j.doneLanding = -1;
+        j.target = null;
+    }
+
+    private static double horizontalDistanceSq(BlockPos a, BlockPos b) {
+        double dx = a.getX() - b.getX(), dz = a.getZ() - b.getZ();
+        return dx * dx + dz * dz;
+    }
+
+    /** Down the stairs, stopping at every landing to mine what's around. */
+    private void tickDescend(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry) {
+        Job j = job;
+        if (entry.mineOrigin == null) {
+            j.mineState = MineState.NONE;
+            return;
+        }
+        if (mineStep < 0 && branchFrom < 0) {
+            if (!goToStep(m, player, world, entry, 0)) return;
+        }
+        if (branchFrom >= 0) { // came back from a side tunnel
+            if (!goToStep(m, player, world, entry, branchFrom)) return;
+        }
+        BlockPos here = stepPos(entry, mineStep);
+        boolean landing = mineStep > 0 && mineStep % LANDING_EVERY == 0;
+        boolean atDepth = here.getY() <= j.mineTargetY || mineStep >= bottomStep(world, entry);
+        if ((landing || atDepth) && j.doneLanding != mineStep) {
+            // Stop at this layer and look for ore around it.
+            j.mineState = MineState.WORK;
+            j.doneLanding = mineStep;
+            j.landingScanned = false;
+            branchFrom = mineStep;
+            mineStep = -1;
+            j.target = null;
+            return;
+        }
+        if (atDepth) {
+            finishJob(player, entry.inventory, "I've mined out all the " + j.spec.display + " I could find around my mine.");
+            return;
+        }
+        goToStep(m, player, world, entry, mineStep + 1);
+    }
+
+    /**
+     * Move one step at a time along the staircase toward step {@code goal}, digging new steps when
+     * going deeper than the mine has been dug. Returns true once standing on the goal step.
+     */
+    private boolean goToStep(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+                             int goal) {
+        if (entry.mineOrigin == null) return true;
+        // Out in a side tunnel: walk back to the landing we came from.
+        if (branchFrom >= 0) {
+            BlockPos landing = stepPos(entry, branchFrom);
+            if (m.getBlockPos().equals(landing) || m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(landing)) < 0.5) {
+                mineStep = branchFrom;
+                branchFrom = -1;
+                stairTicks = 0;
+            } else {
+                if (m.getNavigation().isIdle() || isStuck(m, 40)) {
+                    Path path = m.getNavigation().findPathTo(landing, 0);
+                    if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+                }
+                if (++stairTicks > 200) { // tunnel got blocked somehow: hop back
+                    m.requestTeleport(landing.getX() + 0.5, landing.getY(), landing.getZ() + 0.5);
+                    stairTicks = 0;
+                }
+                return false;
+            }
+        }
+        // Not on the stairs yet: walk to the entrance.
+        if (mineStep < 0) {
+            BlockPos top = stepPos(entry, 0);
+            if (m.getBlockPos().equals(top) || m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(top)) < 0.6) {
+                mineStep = 0;
+                stairTicks = 0;
+            } else {
+                if (m.getNavigation().isIdle() || isStuck(m, 60)) {
+                    Path path = m.getNavigation().findPathTo(top, 0);
+                    if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+                }
+                if (++stairTicks > 400) {
+                    m.requestTeleport(top.getX() + 0.5, top.getY(), top.getZ() + 0.5);
+                    stairTicks = 0;
+                }
+                return false;
+            }
+        }
+        if (mineStep == goal) return true;
+        int next = mineStep + Integer.signum(goal - mineStep);
+        BlockPos cell = stepPos(entry, next);
+        if (!prepareStep(m, player, world, entry, cell)) return false; // digging / sealing this tick
+        Vec3d c = Vec3d.ofBottomCenter(cell);
+        if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(c) < 0.15) {
+            mineStep = next;
+            stairTicks = 0;
+            if (next > entry.mineDepth) {
+                entry.mineDepth = next;
+                HelperData.get(world.getServer()).markDirty();
+            }
+            return mineStep == goal;
+        }
+        m.getNavigation().stop();
+        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+        if (++stairTicks > 25) {
+            m.requestTeleport(c.x, c.y, c.z);
+            stairTicks = 0;
+        }
+        return false;
+    }
+
+    /** Make sure a stair step is open, sealed from lava and water, and has a floor. False while working on it. */
+    private boolean prepareStep(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+                                BlockPos cell) {
+        if (job == null) return true; // nothing to dig with; just walk (and hop if blocked)
+        SimpleInventory inv = entry.inventory;
+        for (int dy = 2; dy >= 0; dy--) {
+            BlockPos p = cell.up(dy);
+            BlockState s = world.getBlockState(p);
+            if (!s.getFluidState().isEmpty() || fluidNear(world, p, entry)) {
+                if (sealFluids(world, inv, p, entry)) return false;
+                if (!s.getFluidState().isEmpty()) {
+                    say(player, "There's water or lava in the way of my mine and I have nothing to block it with. "
+                            + "Give me some cobblestone or dirt.");
+                    finishJob(player, inv, "I'll come back up for now.");
+                    return false;
+                }
+            }
+            if (s.getCollisionShape(world, p).isEmpty()) continue;
+            if (s.hasBlockEntity() || s.getHardness(world, p) < 0) {
+                say(player, "Something I can't dig through is blocking my mine at " + p.toShortString()
+                        + ". I'll start a new mine next time.");
+                entry.mineOrigin = null;
+                finishJob(player, inv, "Coming back up.");
+                return false;
+            }
+            job.targetTicks = 0;
+            startBreaking(m, player, world, inv, p, job.spec.matches(s));
+            return false;
+        }
+        BlockPos floor = cell.down();
+        BlockState fs = world.getBlockState(floor);
+        if (!fs.isSideSolidFullSquare(world, floor, Direction.UP) && fs.isReplaceable()) {
+            int slot = buildingBlockSlot(inv);
+            if (slot >= 0) placeBlock(world, inv, slot, floor);
+        }
+        return true;
+    }
+
+    private boolean isMineCell(HelperData.Entry entry, BlockPos p) {
+        BlockPos o = entry.mineOrigin;
+        int dx = p.getX() - o.getX(), dz = p.getZ() - o.getZ();
+        if (dx < 0 || dx > 1 || dz < 0 || dz > 1) return false;
+        for (int i = 0; i < 4; i++) {
+            if (SPIRAL[i][0] != dx || SPIRAL[i][1] != dz) continue;
+            int step = o.getY() - p.getY();
+            // Each column is open for its step's feet and the two blocks above.
+            for (int k = 0; k <= 2; k++) if (Math.floorMod(step + k - i, 4) == 0) return true;
+        }
+        return false;
+    }
+
+    private boolean fluidNear(ServerWorld world, BlockPos p, HelperData.Entry entry) {
+        for (Direction dir : Direction.values()) {
+            BlockPos n = p.offset(dir);
+            if (!world.getFluidState(n).isEmpty() && !isMineCell(entry, n)) return true;
+        }
+        return false;
+    }
+
+    /** Plug water and lava touching the mine. True if it placed something (call again next tick). */
+    private boolean sealFluids(ServerWorld world, SimpleInventory inv, BlockPos p, HelperData.Entry entry) {
+        boolean placed = false;
+        List<BlockPos> spots = new ArrayList<>();
+        if (!world.getFluidState(p).isEmpty()) spots.add(p);
+        for (Direction dir : Direction.values()) {
+            BlockPos n = p.offset(dir);
+            if (!world.getFluidState(n).isEmpty() && !isMineCell(entry, n)) spots.add(n);
+        }
+        for (BlockPos spot : spots) {
+            int slot = buildingBlockSlot(inv);
+            if (slot < 0) return placed;
+            placeBlock(world, inv, slot, spot);
+            placed = true;
+        }
+        return placed;
     }
 
     /** Make sure we can actually harvest this block; otherwise tell the owner what we need. */
@@ -666,6 +1081,14 @@ public class Helper {
         int slot = Mining.bestToolSlot(inv, state, world, p, true, job.spec.preferSilk);
         ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
         if (!Mining.canHarvest(tool, state)) {
+            for (int i = 0; i < inv.size(); i++) {
+                ItemStack worn = inv.getStack(i);
+                if (!worn.isEmpty() && !Mining.isUsableTool(worn) && worn.isSuitableFor(state)) {
+                    finishJob(player, inv, "My " + worn.getName().getString() + " is worn out (it would break). "
+                            + "Give me a new one or repair it, and I'll mine " + Mining.blockName(state.getBlock()) + ".");
+                    return false;
+                }
+            }
             finishJob(player, inv, "I need " + Mining.requiredToolName(state) + " to mine "
                     + Mining.blockName(state.getBlock()) + ". Right-click me and put one in my inventory.");
             return false;
@@ -712,38 +1135,105 @@ public class Helper {
     private static void scan(ServerWorld world, BlockPos center, int radius, int vertical, Job j) {
         int minY = Math.max(world.getBottomY(), center.getY() - vertical);
         int maxY = Math.min(world.getTopY() - 1, center.getY() + vertical);
-        int r2 = radius * radius;
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
             for (int cz = (center.getZ() - radius) >> 4; cz <= (center.getZ() + radius) >> 4; cz++) {
                 WorldChunk chunk = world.getChunkManager().getWorldChunk(cx, cz);
                 if (chunk == null) continue;
-                ChunkSection[] sections = chunk.getSectionArray();
-                for (int si = 0; si < sections.length; si++) {
-                    int baseY = ChunkSectionPos.getBlockCoord(world.getBottomSectionCoord() + si);
-                    if (baseY + 15 < minY || baseY > maxY) continue;
-                    ChunkSection section = sections[si];
-                    if (section == null || section.isEmpty() || !section.hasAny(j.spec::matches)) continue;
-                    for (int y = 0; y < 16; y++) {
-                        int wy = baseY + y;
-                        if (wy < minY || wy > maxY) continue;
-                        for (int z = 0; z < 16; z++) {
-                            for (int x = 0; x < 16; x++) {
-                                if (!j.spec.matches(section.getBlockState(x, y, z))) continue;
-                                int wx = (cx << 4) + x, wz = (cz << 4) + z;
-                                int ddx = wx - center.getX(), ddz = wz - center.getZ();
-                                if (ddx * ddx + ddz * ddz > r2) continue;
-                                BlockPos p = new BlockPos(wx, wy, wz);
-                                if (seen.add(p)) j.candidates.add(p);
-                            }
-                        }
-                    }
-                }
+                scanChunk(world, chunk, minY, maxY, j, seen, center, radius);
             }
         }
         if (j.candidates.size() > MAX_CANDIDATES) {
             j.candidates.sort(Comparator.comparingDouble(p -> p.getSquaredDistance(center)));
             j.candidates.subList(MAX_CANDIDATES, j.candidates.size()).clear();
+        }
+    }
+
+    /** Add every matching block in this chunk (within the radius of center, if given) to the candidates. */
+    private static void scanChunk(ServerWorld world, WorldChunk chunk, int minY, int maxY, Job j,
+                                  Set<BlockPos> seen, BlockPos center, int radius) {
+        int r2 = radius * radius;
+        int cx = chunk.getPos().x, cz = chunk.getPos().z;
+        ChunkSection[] sections = chunk.getSectionArray();
+        for (int si = 0; si < sections.length; si++) {
+            int baseY = ChunkSectionPos.getBlockCoord(world.getBottomSectionCoord() + si);
+            if (baseY + 15 < minY || baseY > maxY) continue;
+            ChunkSection section = sections[si];
+            if (section == null || section.isEmpty() || !section.hasAny(j.spec::matches)) continue;
+            for (int y = 0; y < 16; y++) {
+                int wy = baseY + y;
+                if (wy < minY || wy > maxY) continue;
+                for (int z = 0; z < 16; z++) {
+                    for (int x = 0; x < 16; x++) {
+                        if (!j.spec.matches(section.getBlockState(x, y, z))) continue;
+                        int wx = (cx << 4) + x, wz = (cz << 4) + z;
+                        if (center != null) {
+                            int ddx = wx - center.getX(), ddz = wz - center.getZ();
+                            if (ddx * ddx + ddz * ddz > r2) continue;
+                        }
+                        BlockPos p = new BlockPos(wx, wy, wz);
+                        if (seen.add(p)) j.candidates.add(p);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Nothing in the loaded area: load chunks ring by ring around where we are (a few at a time, so the
+     * server doesn't lag) and scan each one as it arrives. Returns true once there are candidates.
+     */
+    private boolean farSearch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+        Job j = job;
+        if (j.farRing < 0) {
+            j.farOrigin = new ChunkPos(m.getBlockPos());
+            j.farRing = FAR_START_RING;
+            j.farQueue.clear();
+            j.farPending.clear();
+            queueRing(j);
+            if (!j.toldFarSearch) {
+                j.toldFarSearch = true;
+                say(player, "There's no " + j.spec.display + " close by, so I'm searching further out. "
+                        + "This can take a little while.");
+            }
+        }
+        ServerChunkManager chunks = world.getChunkManager();
+        Set<BlockPos> seen = new HashSet<>(j.candidates);
+        for (java.util.Iterator<ChunkPos> it = j.farPending.iterator(); it.hasNext(); ) {
+            ChunkPos cp = it.next();
+            WorldChunk chunk = chunks.getWorldChunk(cp.x, cp.z);
+            if (chunk == null) continue; // still loading / generating
+            it.remove();
+            scanChunk(world, chunk, world.getBottomY(), world.getTopY() - 1, j, seen, null, 0);
+        }
+        while (j.farPending.size() < FAR_PARALLEL) {
+            if (j.farQueue.isEmpty()) {
+                if (!j.farPending.isEmpty() || !j.candidates.isEmpty()) break; // finish this ring first
+                if (++j.farRing > FAR_MAX_RING) {
+                    finishJob(player, inv, "I searched " + FAR_MAX_RING * 16 + " blocks in every direction and "
+                            + "couldn't find any " + j.spec.display + ". It might not exist in this dimension.");
+                    return false;
+                }
+                if (j.farRing % 8 == 0) {
+                    say(player, "Still looking for " + j.spec.display + " (" + j.farRing * 16 + " blocks out)...");
+                }
+                queueRing(j);
+            }
+            ChunkPos cp = j.farQueue.pollFirst();
+            chunks.addTicket(SEARCH_TICKET, cp, 0, cp);
+            j.farPending.add(cp);
+        }
+        j.candidates.removeIf(p -> !isValidTarget(world, p, true));
+        return !j.candidates.isEmpty();
+    }
+
+    private static void queueRing(Job j) {
+        int r = j.farRing;
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
+                j.farQueue.add(new ChunkPos(j.farOrigin.x + dx, j.farOrigin.z + dz));
+            }
         }
     }
 
@@ -798,10 +1288,12 @@ public class Helper {
             BlockState s = world.getBlockState(cell);
             if (passable(world, cell)) continue;
             if (s.getFluidState().isIn(FluidTags.LAVA) || lavaNear(world, cell)) {
-                abandonTarget(m);
+                // Plug the lava with a building block (like a player would), then dig on.
+                if (!sealLava(world, inv, cell, cur)) abandonTarget(m);
+                j.targetTicks = 0;
                 return;
             }
-            if (!Materials.isTerrain(s) && !j.spec.matches(s)) {
+            if (!canDigThrough(world, cell, s)) {
                 abandonTarget(m); // someone's build is in the way; try a different one
                 return;
             }
@@ -827,21 +1319,20 @@ public class Helper {
         }
 
         BlockPos floor = next.down();
-        if (!world.getBlockState(floor).isSideSolidFullSquare(world, floor, Direction.UP)) {
-            if (passable(world, floor) && world.getBlockState(floor).isReplaceable()) {
+        BlockState floorState = world.getBlockState(floor);
+        if (!floorState.isSideSolidFullSquare(world, floor, Direction.UP)) {
+            boolean fluid = !floorState.getFluidState().isEmpty();
+            if (floorState.isReplaceable() && (fluid || passable(world, floor))) {
                 int slot = buildingBlockSlot(inv);
                 if (slot >= 0) {
-                    placeBlock(world, inv, slot, floor);
-                } else if (!hasGroundWithin(world, floor, 3)) {
-                    abandonTarget(m); // too far to drop and nothing to bridge with
+                    placeBlock(world, inv, slot, floor); // bridge over the gap, water or lava
+                } else if (floorState.getFluidState().isIn(FluidTags.LAVA)
+                        || (!fluid && !hasGroundWithin(world, floor, 3))) {
+                    abandonTarget(m); // too dangerous and nothing to bridge with
                     return;
                 }
-            } else if (!passable(world, floor)) {
-                // Something odd (slab, fence...) under the next step. Fine to walk on.
-            } else {
-                abandonTarget(m);
-                return;
             }
+            // Otherwise it's something odd (slab, fence...) under the next step. Fine to walk on.
         }
         j.stepCell = next;
         j.stepTicks = 0;
@@ -859,6 +1350,38 @@ public class Helper {
             placeBlock(world, inv, slot, top);
         }
         job.shaftTops.clear();
+    }
+
+    /** Cover any lava in or next to the cell we're about to open. False if we ran out of blocks. */
+    private boolean sealLava(ServerWorld world, SimpleInventory inv, BlockPos cell, BlockPos cur) {
+        List<BlockPos> spots = new ArrayList<>();
+        if (world.getFluidState(cell).isIn(FluidTags.LAVA)) spots.add(cell);
+        for (Direction dir : Direction.values()) {
+            BlockPos n = cell.offset(dir);
+            if (n.equals(cur) || n.equals(cur.up())) continue;
+            if (world.getFluidState(n).isIn(FluidTags.LAVA)) spots.add(n);
+        }
+        if (spots.isEmpty()) return false; // the lava is where we're standing; go a different way
+        for (BlockPos spot : spots) {
+            int slot = buildingBlockSlot(inv);
+            if (slot < 0) return false;
+            placeBlock(world, inv, slot, spot);
+        }
+        return true;
+    }
+
+    /**
+     * Natural terrain is always fine to dig through. Deep underground (well below the surface, where
+     * nobody builds) anything that isn't obviously player-made is fine too, e.g. modded stone or sculk.
+     */
+    private boolean canDigThrough(ServerWorld world, BlockPos pos, BlockState s) {
+        if (Materials.isTerrain(s) || job.spec.matches(s)) return true;
+        if (s.hasBlockEntity()) return false;
+        float hardness = s.getHardness(world, pos);
+        if (hardness < 0 || hardness >= 30) return false;
+        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
+        if (pos.getY() > surface - 8) return false;
+        return !Materials.looksPlayerMade(s);
     }
 
     private static boolean hasGroundWithin(World world, BlockPos from, int depth) {
@@ -969,20 +1492,33 @@ public class Helper {
         boolean harvest = Mining.canHarvest(tool, state);
         float hardness = state.getHardness(world, pos);
         BlockEntity be = world.getBlockEntity(pos);
-        List<ItemStack> drops = harvest ? Block.getDroppedStacks(state, world, pos, be, m, tool) : List.of();
+        List<ItemStack> drops = !harvest ? List.of()
+                : state.isOf(net.minecraft.block.Blocks.SPAWNER) ? List.of(Devices.spawnerItem(be)) // keeps its mob
+                : Block.getDroppedStacks(state, world, pos, be, m, tool);
         if (harvest) state.onStacksDropped(world, pos, tool, true);
         world.setBlockBreakingInfo(m.getId(), pos, -1);
         world.breakBlock(pos, false, m);
         if (!tool.isEmpty() && tool.isDamageable() && hardness != 0) {
             tool.damage(1, m, e -> {});
             inv.markDirty();
+            if (!Mining.isUsableTool(tool)) {
+                say(player, "My " + tool.getName().getString() + " is about to break, so I've stopped using it. "
+                        + "Give me a new one, or take it out and repair it.");
+            }
         }
         boolean wasTarget = j.breakingTarget;
         j.breaking = null;
         for (ItemStack drop : drops) {
             if (wasTarget && j.spec.counts(drop)) j.collected += drop.getCount();
             ItemStack rest = inv.addStack(drop);
-            if (!rest.isEmpty()) Block.dropStack(world, pos, rest);
+            if (!rest.isEmpty()) {
+                Block.dropStack(world, pos, rest);
+                if (mode == Mode.COLLECT) {
+                    say(player, "I'm out of space, so I had to drop " + rest.getCount() + " "
+                            + rest.getName().getString() + ". Bringing everything back to you.");
+                    mode = Mode.RETURN;
+                }
+            }
         }
         if (wasTarget) {
             if (pos.equals(j.target)) j.target = null;
@@ -994,7 +1530,7 @@ public class Helper {
                         if (j.spec.matches(world.getBlockState(n)) && !j.blacklist.contains(n)) j.vein.addLast(n);
                     }
         }
-        if (j.collected >= j.wanted) {
+        if (j.collected >= j.wanted && !j.done) {
             j.done = true;
             say(player, "Done! Got " + j.collected + " " + j.spec.display + ". Coming back to you.");
             mode = Mode.RETURN;

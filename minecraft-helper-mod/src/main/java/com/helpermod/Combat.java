@@ -154,7 +154,8 @@ public final class Combat {
     // ---------------------------------------------------------------------------------------
 
     /** Swing at the target with the best weapon. Returns the cooldown in ticks before the next swing. */
-    public static int attack(MobEntity helper, LivingEntity target, SimpleInventory inv) {
+    public static int attack(MobEntity helper, LivingEntity target, SimpleInventory inv,
+                             java.util.function.Consumer<String> onWornOut) {
         int slot = bestWeaponSlot(inv);
         ItemStack weapon = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
         if (!ItemStack.areEqual(helper.getMainHandStack(), weapon)) {
@@ -172,6 +173,7 @@ public final class Combat {
             if (!weapon.isEmpty() && weapon.isDamageable()) {
                 weapon.damage(1, helper, e -> {});
                 inv.markDirty();
+                if (!Mining.isUsableTool(weapon)) onWornOut.accept(weapon.getName().getString());
             }
             helper.getWorld().playSound(null, helper.getX(), helper.getY(), helper.getZ(),
                     SoundEvents.ENTITY_PLAYER_ATTACK_STRONG, SoundCategory.NEUTRAL, 0.8f, 1f);

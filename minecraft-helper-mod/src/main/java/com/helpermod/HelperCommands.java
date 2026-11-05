@@ -38,6 +38,10 @@ public final class HelperCommands {
                 .then(literal("guard")
                         .then(literal("on").executes(ctx -> guard(ctx, true)))
                         .then(literal("off").executes(ctx -> guard(ctx, false))))
+                .then(literal("harvester").executes(ctx -> {
+                    Devices.craftHarvester(ctx.getSource().getPlayerOrThrow());
+                    return 1;
+                }))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -50,6 +54,9 @@ public final class HelperCommands {
                 "/helper status  - what are you doing?",
                 "/helper guard on|off  - fight mobs that come after you (on by default)",
                 "/helper dismiss  - send your helper away (it keeps your items)",
+                "/helper collect spawner  - dig up a monster spawner you can place anywhere",
+                "/helper harvester  - turn the hopper in your hand into a Monster Harvester",
+                "  (kills monsters around it, loot goes into a chest below, sneak + right-click for XP)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
         ctx.getSource().sendFeedback(() -> Text.literal("Helper commands:").formatted(Formatting.GOLD), false);
@@ -95,6 +102,11 @@ public final class HelperCommands {
             spec = Materials.resolve(player.getServer(), raw);
         } catch (Materials.ResolveException e) {
             Helper.say(player, e.getMessage());
+            return 0;
+        }
+        String wrongDim = Materials.wrongDimension(player.getServer(), spec, player.getServerWorld());
+        if (wrongDim != null) {
+            Helper.say(player, wrongDim);
             return 0;
         }
         ensureSummoned(player);
