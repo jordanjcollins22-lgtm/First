@@ -48,6 +48,7 @@ ask for. It works out the best way to get it:
 | `/helper boss` | On an Ad Astra planet: where is this planet's boss arena? |
 | `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
+| `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
@@ -156,6 +157,17 @@ mod see Ad Astra's plain sky there.
 - **Your helper comes too:** while you fly a rocket or lander it waits, then appears next to you when you land
   on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
   mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
+
+## Reef Town (Bikini Bottom planet)
+
+The first time you reach the sea floor on Bikini Bottom, an undersea town is built about 48 blocks away:
+
+- Four glass dome houses full of air, joined by sandstone paths. Each has a bed, a chest and a work block.
+- A diner in the middle with tables and a cook.
+- Townsfolk you can trade with: Old Finn (fisherman), Shelly (cartographer), Barnaby (armorer),
+  Coral (librarian) and Chef Marlo (butcher). They can breathe underwater if they wander outside.
+
+The doors keep the water out, so you can walk in without a helmet. `/helper town` tells you where it is.
 
 ## Safety on shared worlds
 

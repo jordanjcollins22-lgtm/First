@@ -83,6 +83,10 @@ public final class HelperCommands {
                     Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("town").executes(ctx -> {
+                    Town.tellWhere(ctx.getSource().getPlayerOrThrow());
+                    return 1;
+                }))
                 .then(literal("update").executes(ctx -> {
                     ctx.getSource().sendFeedback(() -> Text.literal("Auto-update: " + Updater.status()).formatted(Formatting.AQUA), false);
                     return 1;
@@ -110,6 +114,7 @@ public final class HelperCommands {
                 "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
                 "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
+                "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
