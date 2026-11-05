@@ -195,6 +195,10 @@ public final class Disguise {
         if (list != null) {
             for (DataTracker.SerializedEntry<?> entry : list) if (entry.id() <= lastLivingId) out.add(entry);
         }
+        if (initial) {
+            DataTracker.SerializedEntry<Boolean> baby = Size.babyEntry(entity, lookOf(entity));
+            if (baby != null) out.add(baby);
+        }
         if (initial && lookOf(entity) == null) {
             out.add(DataTracker.SerializedEntry.of(PlayerEntityAccessor.helpermod$getModelParts(), ALL_SKIN_LAYERS));
         }

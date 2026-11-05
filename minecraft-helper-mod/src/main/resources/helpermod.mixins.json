@@ -10,7 +10,10 @@
     "EntitySpawnPacketMixin",
     "EntityTrackerEntryMixin",
     "ExperienceOrbAccessor",
-    "LivingEntityAccessor"
+    "LivingEntityAccessor",
+    "PassiveEntityAccessor",
+    "ZombieEntityAccessor",
+    "PiglinEntityAccessor"
   ],
   "injectors": { "defaultRequire": 1 }
 }
