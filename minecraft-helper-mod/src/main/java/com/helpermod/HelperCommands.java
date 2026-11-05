@@ -92,6 +92,7 @@ public final class HelperCommands {
                         .then(literal("start").executes(ctx -> { Tycoon.start(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("upgrade").executes(ctx -> { Tycoon.upgrade(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("fix").executes(ctx -> { Tycoon.fix(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("give").requires(src -> src.hasPermissionLevel(2))
                                 .then(argument("player", net.minecraft.command.argument.EntityArgumentType.player())
                                         .then(argument("coins", com.mojang.brigadier.arguments.LongArgumentType.longArg(1))
