@@ -170,6 +170,10 @@ public final class Devices {
             }
             return ActionResult.SUCCESS;
         }
+        if ((!player.isSneaking() || stack.isEmpty()) && Storage.isStorageBlock(world, clicked)) {
+            if (hand == Hand.MAIN_HAND) Storage.open(player);
+            return ActionResult.SUCCESS;
+        }
         if (stack.isOf(Items.SPAWNER) && stack.hasNbt() && stack.getNbt().contains(SPAWNER_MOB_KEY)) {
             return placeSpawner(player, world, hand, stack, hit);
         }

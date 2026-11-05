@@ -43,6 +43,8 @@ ask for. It works out the best way to get it:
 | `/helper guard on` / `off` | Turn fighting on or off (on by default) |
 | `/helper collect spawner` | Dig up a monster spawner. It keeps its mob, so you can place it anywhere |
 | `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
+| `/helper storage` | Turn the barrel in your hand into a **Helper Storage** (no size limit, see below) |
+| `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
 | `/helper size small` / `normal` / `big` | Make your helper shorter or taller, or give a number from 0.25 to 4 (1 is normal). With the [Pehkui](https://modrinth.com/mod/pehkui) mod on the server it truly resizes, whatever it looks like. Without Pehkui, small makes it the baby version of its mob look (zombie, villager, fox, cow...) |
@@ -90,6 +92,24 @@ goes back to work.
 (ancient debris), `wood` (any logs), `oak_log`, `stone`, `cobblestone`, `dirt`, `sand`, `gravel`, `flint`,
 `clay_ball`, `obsidian`, `amethyst_shard`... Modded items work too, e.g. `raw_tin` or `create:zinc_ore`.
 Block tags work with `#`, e.g. `#minecraft:logs`.
+
+### Helper Storage
+
+1. Hold a barrel and run `/helper storage` (or rename a barrel to "Helper Storage" in an anvil). Place it.
+2. Right-click it. It holds **as much as you want** of everything. Every Helper Storage you place opens the
+   same storage (your own, like an ender chest), so put one in every base. Breaking one never loses anything.
+3. **Putting things in:** click an item onto the storage area, shift-click items in your inventory, or press
+   the chest button to put in everything from your inventory (your hotbar and armor stay put).
+4. **Taking things out:** click to take a stack, right-click for half, shift-click to send a stack to your
+   inventory, or press a number key to drop it into that hotbar slot.
+5. **Organizing:** items are always sorted (by name, amount or mod; click the hopper to switch) and shown in
+   pages. The tab button shows just blocks, tools and armor, food or other items. Search with
+   `/helper storage find <name>`, and click the spyglass to clear it.
+6. **Crafting:** click the crafting table to see everything you can make from what's stored (any recipe in
+   the modpack). Click one to make it, or shift-click to make a stack. The ingredients come straight out of
+   storage (empty buckets go back in) and the result goes into your inventory.
+
+It's drawn as a normal chest screen, so nobody else has to install anything. Each player has their own storage.
 
 ## More real planets (needs Ad Astra)
 

@@ -35,6 +35,7 @@ public class HelperMod implements ModInitializer {
             Materials.reset();
             Disguise.reset();
             Devices.reset();
+            Storage.reset();
         });
         Space.register();
         LOG.info("Helper Buddies loaded");
