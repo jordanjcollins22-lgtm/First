@@ -45,7 +45,8 @@ public final class Materials {
             Blocks.GRAVEL, Blocks.CLAY, Blocks.SANDSTONE, Blocks.RED_SANDSTONE, Blocks.SNOW_BLOCK, Blocks.SNOW,
             Blocks.CALCITE, Blocks.DRIPSTONE_BLOCK, Blocks.SMOOTH_BASALT, Blocks.SOUL_SAND, Blocks.SOUL_SOIL,
             Blocks.END_STONE, Blocks.MAGMA_BLOCK, Blocks.MOSS_BLOCK, Blocks.MOSS_CARPET, Blocks.GLOW_LICHEN,
-            Blocks.POINTED_DRIPSTONE, Blocks.ANCIENT_DEBRIS, Blocks.AMETHYST_BLOCK, Blocks.MUD);
+            Blocks.POINTED_DRIPSTONE, Blocks.ANCIENT_DEBRIS, Blocks.AMETHYST_BLOCK, Blocks.MUD,
+            Blocks.PACKED_ICE, Blocks.BLUE_ICE, Blocks.BLACKSTONE); // ice and blackstone: the ground on Europa and Io
 
     /** Extra things a helper may gather on purpose (but won't tunnel through). */
     private static final List<TagKey<Block>> GATHER_TAGS = List.of(
@@ -72,7 +73,7 @@ public final class Materials {
             "stone", "cobblestone", "cobbled_deepslate", "dirt", "sand", "red_sand", "gravel", "flint", "clay_ball",
             "netherrack", "obsidian", "amethyst_shard", "glowstone", "deepslate", "andesite", "granite", "diorite",
             "tuff", "calcite", "ice", "snowball", "pumpkin", "melon_slice", "sugar_cane", "cactus", "bamboo", "leaves",
-            "ores", "spawner");
+            "ores", "spawner", "desh", "ostrum", "calorite", "ice_shard", "cheese");
 
     // ---------------------------------------------------------------------------------------
     // Natural-block checks
@@ -88,11 +89,24 @@ public final class Materials {
         return path.endsWith("_ore") || path.startsWith("ore_") || path.contains("_ore_");
     }
 
+    private static final List<String> SPACE_GROUND = List.of(
+            "stone", "cobblestone", "sand", "deepslate", "permafrost", "conglomerate", "regolith", "soil", "dust", "ice");
+
+    /** Planet ground from Ad Astra (moon stone, mars sand, venus stone, permafrost...), so the helper can mine in space. */
+    private static boolean isSpaceGround(Block block) {
+        Identifier id = Registries.BLOCK.getId(block);
+        if (!id.getNamespace().equals("ad_astra")) return false;
+        String path = id.getPath();
+        for (String word : BUILD_WORDS) if (path.contains(word)) return false;
+        for (String word : SPACE_GROUND) if (path.endsWith(word)) return true;
+        return false;
+    }
+
     /** Natural terrain a helper may dig through to reach a target. */
     public static boolean isTerrain(BlockState state) {
         if (state.hasBlockEntity()) return false;
         Block block = state.getBlock();
-        if (TERRAIN_BLOCKS.contains(block) || isOreLike(block) || isNaturalLeaves(state)) return true;
+        if (TERRAIN_BLOCKS.contains(block) || isOreLike(block) || isNaturalLeaves(state) || isSpaceGround(block)) return true;
         for (TagKey<Block> tag : TERRAIN_TAGS) if (state.isIn(tag)) return true;
         return false;
     }

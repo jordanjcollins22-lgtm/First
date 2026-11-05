@@ -29,6 +29,9 @@ public class HelperMod implements ModInitializer {
         UseEntityCallback.EVENT.register(HelperManager::onUseEntity);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
         ServerTickEvents.END_SERVER_TICK.register(Devices::tick);
+        ServerTickEvents.END_SERVER_TICK.register(Planets::tick); // themed monsters on every planet
+        ServerTickEvents.END_SERVER_TICK.register(Bosses::tick); // a boss arena on every planet
+        ServerEntityEvents.ENTITY_LOAD.register(Bosses::onEntityLoad);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
@@ -38,6 +41,7 @@ public class HelperMod implements ModInitializer {
             Disguise.reset();
             Devices.reset();
             Storage.reset();
+            Bosses.reset();
         });
         Space.register();
         LOG.info("Helper Buddies loaded");
