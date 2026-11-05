@@ -720,7 +720,46 @@ final class Tycoon {
             new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
             new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
             new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
+            // Ad Astra rockets, fully fueled (only shown when Ad Astra is installed)
+            new Offer(1, 50_000, "Tier 1 Rocket, full of cryo fuel (Moon, Fairway)", () -> rocket(1)),
+            new Offer(2, 150_000, "Tier 2 Rocket, full of cryo fuel (Mars)", () -> rocket(2)),
+            new Offer(3, 400_000, "Tier 3 Rocket, full of cryo fuel (Venus, Mercury, Bikini Bottom, Ceres)", () -> rocket(3)),
+            new Offer(3, 1_000_000, "Tier 4 Rocket, full of cryo fuel (every planet: Glacio, Europa, Io, Titan, Pluto)", () -> rocket(4)),
+            new Offer(1, 5_000, "Launch Pad", () -> adAstra("launch_pad", 1)),
+            new Offer(1, 20_000, "4 Cryo Fuel buckets (refills)", () -> adAstra("cryo_fuel_bucket", 4)),
     };
+
+    /** Offers that can be sold here (rockets need Ad Astra). */
+    private static List<Offer> offers() {
+        List<Offer> list = new ArrayList<>();
+        for (Offer o : OFFERS) if (o.action() != null || !o.item().get().isEmpty()) list.add(o);
+        return list;
+    }
+
+    private static ItemStack adAstra(String id, int count) {
+        Identifier key = new Identifier("ad_astra", id);
+        if (!net.minecraft.registry.Registries.ITEM.containsId(key)) return ItemStack.EMPTY;
+        return new ItemStack(net.minecraft.registry.Registries.ITEM.get(key), count);
+    }
+
+    /**
+     * An Ad Astra rocket with a full tank (3 buckets) of cryo fuel, the best fuel: it only burns 1 bucket a launch,
+     * so that's 3 launches. Ad Astra keeps an item's fuel in Botarium's NBT: BotariumData.StoredFluids[{Fluid, Amount}],
+     * Amount in Fabric droplets (81 per millibucket).
+     */
+    static ItemStack rocket(int tier) {
+        ItemStack stack = adAstra("tier_" + tier + "_rocket", 1);
+        if (stack.isEmpty()) return stack;
+        NbtCompound fluid = new NbtCompound();
+        fluid.putString("Fluid", "ad_astra:cryo_fuel");
+        fluid.putLong("Amount", 3000L * 81L);
+        NbtList fluids = new NbtList();
+        fluids.add(fluid);
+        NbtCompound data = new NbtCompound();
+        data.put("StoredFluids", fluids);
+        stack.getOrCreateNbt().put("BotariumData", data);
+        return stack;
+    }
 
     private static String lockReason(Offer o) {
         String need = o.tier() == 2 ? "visit the Nether" : o.tier() == 3 ? "reach the End" : "";
@@ -736,25 +775,28 @@ final class Tycoon {
 
     static final class Shop extends GenericContainerScreenHandler {
         private final ServerPlayerEntity player;
+        private static final int SIZE = 54;
         private final SimpleInventory view;
+        private final List<Offer> list;
 
         Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player) {
-            this(syncId, inv, player, new SimpleInventory(27));
+            this(syncId, inv, player, new SimpleInventory(SIZE));
         }
 
         private Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player, SimpleInventory view) {
-            super(ScreenHandlerType.GENERIC_9X3, syncId, inv, view, 3);
+            super(ScreenHandlerType.GENERIC_9X6, syncId, inv, view, 6);
             this.player = player;
             this.view = view;
+            this.list = offers();
             refresh();
         }
 
         private void refresh() {
             Data data = Data.get(player.getServer());
             int tier = tier(player);
-            for (int i = 0; i < 27; i++) view.setStack(i, ItemStack.EMPTY);
-            for (int i = 0; i < OFFERS.length && i < 26; i++) {
-                Offer o = OFFERS[i];
+            for (int i = 0; i < SIZE; i++) view.setStack(i, ItemStack.EMPTY);
+            for (int i = 0; i < list.size() && i < SIZE - 1; i++) {
+                Offer o = list.get(i);
                 ItemStack shown = o.item().get();
                 boolean open = tier >= o.tier() && data.rebirths(player.getUuid()) >= o.rebirths();
                 ItemStack button = Storage.Menu.button(open ? shown.getItem() : Items.BARRIER, o.what(),
@@ -763,18 +805,18 @@ final class Tycoon {
                 button.setCount(Math.max(1, shown.getCount()));
                 view.setStack(i, button);
             }
-            view.setStack(26, Storage.Menu.button(Items.GOLD_INGOT, data.coins(player.getUuid()) + " coins",
+            view.setStack(SIZE - 1, Storage.Menu.button(Items.GOLD_INGOT, data.coins(player.getUuid()) + " coins",
                     "Earn coins with Tycoon Droppers", "Tier " + tierName(tier)));
             sendContentUpdates();
         }
 
         @Override
         public void onSlotClick(int slotIndex, int button, SlotActionType action, PlayerEntity p) {
-            if (slotIndex < 0 || slotIndex >= 27) {
+            if (slotIndex < 0 || slotIndex >= SIZE) {
                 if (action != SlotActionType.QUICK_MOVE) super.onSlotClick(slotIndex, button, action, p);
                 return;
             }
-            if (action == SlotActionType.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
+            if (action == SlotActionType.PICKUP && slotIndex < list.size() && slotIndex < SIZE - 1) buy(list.get(slotIndex));
             refresh();
         }
 
