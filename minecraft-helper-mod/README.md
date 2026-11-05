@@ -159,6 +159,32 @@ mod see Ad Astra's plain sky there.
   on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
   mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
 
+## Dropper Tycoon
+
+Build a little ore factory and spend what it earns.
+
+1. `/helper tycoon start` gives you a free starter kit (once): a **Tycoon Dropper**, 16 **Conveyors** and a **Collector**.
+2. Place the Tycoon Dropper. Every few seconds it drops ore out of its front.
+3. Lay **Conveyors** (magenta glazed terracotta) from the dropper. They carry ore the way their arrow points
+   (away from you when you place them).
+4. End the line on a **Collector** (black glazed terracotta). Ore that reaches it turns into coins for you.
+5. Put **Upgraders** in the line to boost ore as it rolls over them, once per block: lime x2, cyan x3, purple x5.
+   They carry ore along like conveyors.
+
+| Command | What it does |
+| --- | --- |
+| `/helper tycoon` | Your coins, droppers and shop tier |
+| `/helper tycoon shop` | Buy conveyors, collectors, upgraders, more droppers, and useful items (food, torches, iron, diamonds, ender pearls, totems...) |
+| `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
+| `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
+
+**Linked to your progress:** the shop has three tiers. Tier 2 (super upgraders, diamonds, golden apples...)
+unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, totems) when you've reached the
+End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
+command reward to a quest: `/helper tycoon give {p} 500`.
+
+A redstone signal pauses a dropper. Ore that isn't collected within a minute fizzles out, so it can't pile up.
+
 ## Torches in the mine
 
 While it mines, the helper lights up dark tunnels and caves with torches so monsters can't spawn in them.

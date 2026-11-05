@@ -1,0 +1,575 @@
+package com.helpermod;
+
+import net.fabricmc.fabric.api.entity.FakePlayer;
+import net.minecraft.advancement.Advancement;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.DispenserBlock;
+import net.minecraft.block.GlazedTerracottaBlock;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.ItemEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.inventory.SimpleInventory;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemPlacementContext;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.screen.GenericContainerScreenHandler;
+import net.minecraft.screen.ScreenHandlerType;
+import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
+import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Hand;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.PersistentState;
+import net.minecraft.world.World;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Dropper Tycoon.
+ *
+ * A Tycoon Dropper drops ore every few seconds. Conveyors (magenta glazed terracotta) carry it the way
+ * their arrow points. Upgraders multiply its value as it rolls over them, once each. A Collector (black
+ * glazed terracotta) turns it into coins for whoever owns the dropper. Coins buy more tycoon parts and
+ * useful items in /helper tycoon shop. Better items unlock as you progress through the modpack: the
+ * Nether, then the End. Quest rewards can also pay coins with /helper tycoon give.
+ */
+final class Tycoon {
+    private Tycoon() {}
+
+    static final String DROPPER_NAME = "Tycoon Dropper";
+    private static final String ORE_TAG = "helpermod_ore";
+    private static final String ORE_NBT = "HelperTycoonOre";
+    private static final int MAX_LEVEL = 10;
+    private static final int MAX_ORES_PER_DROPPER = 24;
+    private static final int ORE_LIFETIME = 1200; // one minute, then it fizzles out
+    private static final double BELT_SPEED = 0.14;
+
+    // ---------------------------------------------------------------------------------------
+    // Saved state: coins per player, and every placed Tycoon Dropper
+    // ---------------------------------------------------------------------------------------
+
+    static final class Data extends PersistentState {
+        private static final String ID = "helpermod_tycoon";
+        final Map<UUID, Long> coins = new HashMap<>();
+        final Map<UUID, Long> earned = new HashMap<>();
+        final Map<UUID, Boolean> started = new HashMap<>();
+        /** "dimension|pos" -> dropper. */
+        final Map<String, Dropper> droppers = new LinkedHashMap<>();
+
+        static Data get(MinecraftServer server) {
+            return server.getOverworld().getPersistentStateManager().getOrCreate(Data::fromNbt, Data::new, ID);
+        }
+
+        long coins(UUID id) {
+            return coins.getOrDefault(id, 0L);
+        }
+
+        void add(UUID id, long amount) {
+            coins.merge(id, amount, Long::sum);
+            if (amount > 0) earned.merge(id, amount, Long::sum);
+            markDirty();
+        }
+
+        private static Data fromNbt(NbtCompound nbt) {
+            Data d = new Data();
+            NbtList players = nbt.getList("players", NbtElement.COMPOUND_TYPE);
+            for (int i = 0; i < players.size(); i++) {
+                NbtCompound p = players.getCompound(i);
+                UUID id = p.getUuid("id");
+                d.coins.put(id, p.getLong("coins"));
+                d.earned.put(id, p.getLong("earned"));
+                d.started.put(id, p.getBoolean("started"));
+            }
+            NbtList list = nbt.getList("droppers", NbtElement.COMPOUND_TYPE);
+            for (int i = 0; i < list.size(); i++) {
+                NbtCompound t = list.getCompound(i);
+                d.droppers.put(t.getString("key"), new Dropper(t.getUuid("owner"), t.getInt("level")));
+            }
+            return d;
+        }
+
+        @Override
+        public NbtCompound writeNbt(NbtCompound nbt) {
+            NbtList players = new NbtList();
+            java.util.Set<UUID> ids = new java.util.HashSet<>(coins.keySet());
+            ids.addAll(started.keySet());
+            for (UUID id : ids) {
+                NbtCompound p = new NbtCompound();
+                p.putUuid("id", id);
+                p.putLong("coins", coins.getOrDefault(id, 0L));
+                p.putLong("earned", earned.getOrDefault(id, 0L));
+                p.putBoolean("started", started.getOrDefault(id, false));
+                players.add(p);
+            }
+            nbt.put("players", players);
+            NbtList list = new NbtList();
+            droppers.forEach((key, dr) -> {
+                NbtCompound t = new NbtCompound();
+                t.putString("key", key);
+                t.putUuid("owner", dr.owner);
+                t.putInt("level", dr.level);
+                list.add(t);
+            });
+            nbt.put("droppers", list);
+            return nbt;
+        }
+    }
+
+    static final class Dropper {
+        final UUID owner;
+        int level;
+        int timer;
+        int live;
+
+        Dropper(UUID owner, int level) {
+            this.owner = owner;
+            this.level = Math.max(1, level);
+        }
+
+        int interval() {
+            return Math.max(20, 70 - level * 5); // 3.25 s at level 1, 1 s at level 10
+        }
+
+        int oreValue() {
+            return level;
+        }
+    }
+
+    private static String key(World world, BlockPos pos) {
+        return world.getRegistryKey().getValue() + "|" + pos.asLong();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Items
+    // ---------------------------------------------------------------------------------------
+
+    private static ItemStack named(Item item, int count, String name, Formatting color) {
+        ItemStack stack = new ItemStack(item, count);
+        stack.setCustomName(Text.literal(name).styled(s -> s.withItalic(false)).formatted(color));
+        return stack;
+    }
+
+    static ItemStack dropperItem() {
+        return named(Items.DROPPER, 1, DROPPER_NAME, Formatting.GOLD);
+    }
+
+    static boolean isDropperItem(ItemStack stack) {
+        return stack.isOf(Items.DROPPER) && stack.hasCustomName() && stack.getName().getString().equals(DROPPER_NAME);
+    }
+
+    static ItemStack conveyors(int n) {
+        return named(Items.MAGENTA_GLAZED_TERRACOTTA, n, "Conveyor", Formatting.LIGHT_PURPLE);
+    }
+
+    static ItemStack collector() {
+        return named(Items.BLACK_GLAZED_TERRACOTTA, 1, "Collector", Formatting.DARK_GRAY);
+    }
+
+    /** Upgrader blocks: which block, how much it multiplies by. */
+    private static int multiplier(BlockState state) {
+        if (state.isOf(Blocks.LIME_GLAZED_TERRACOTTA)) return 2;
+        if (state.isOf(Blocks.CYAN_GLAZED_TERRACOTTA)) return 3;
+        if (state.isOf(Blocks.PURPLE_GLAZED_TERRACOTTA)) return 5;
+        return 1;
+    }
+
+    private static boolean isBelt(BlockState state) {
+        return state.isOf(Blocks.MAGENTA_GLAZED_TERRACOTTA) || multiplier(state) > 1;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Placing a Tycoon Dropper
+    // ---------------------------------------------------------------------------------------
+
+    private record Pending(RegistryKey<World> world, BlockPos pos, UUID player, int ticks) {}
+
+    private static final List<Pending> PENDING = new ArrayList<>();
+    /** Ore entities alive right now, and the dropper each came from. Not saved: old ore is cleared on load. */
+    private static final Map<UUID, String> ORES = new HashMap<>();
+
+    static void reset() {
+        PENDING.clear();
+        ORES.clear();
+    }
+
+    static ActionResult onUseBlock(PlayerEntity p, World w, Hand hand, BlockHitResult hit) {
+        if (w.isClient || !(p instanceof ServerPlayerEntity player) || p instanceof FakePlayer) return ActionResult.PASS;
+        ItemStack stack = player.getStackInHand(hand);
+        if (isDropperItem(stack)) {
+            BlockPos pos = new ItemPlacementContext(player, hand, stack, hit).getBlockPos();
+            PENDING.add(new Pending(w.getRegistryKey(), pos.toImmutable(), player.getUuid(), 0));
+        }
+        return ActionResult.PASS;
+    }
+
+    /** Old ore left over from before a restart has no dropper to pay out to: remove it. */
+    static void onEntityLoad(Entity entity, ServerWorld world) {
+        if (entity instanceof ItemEntity && entity.getCommandTags().contains(ORE_TAG) && !ORES.containsKey(entity.getUuid())) {
+            world.getServer().execute(entity::discard);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Ticking: droppers drop, conveyors carry, upgraders upgrade, collectors pay
+    // ---------------------------------------------------------------------------------------
+
+    static void tick(MinecraftServer server) {
+        Data data = Data.get(server);
+        for (int i = PENDING.size() - 1; i >= 0; i--) {
+            Pending pd = PENDING.get(i);
+            ServerWorld world = server.getWorld(pd.world());
+            if (world != null && world.getBlockState(pd.pos()).isOf(Blocks.DROPPER)) {
+                data.droppers.put(key(world, pd.pos()), new Dropper(pd.player(), 1));
+                data.markDirty();
+                ServerPlayerEntity player = server.getPlayerManager().getPlayer(pd.player());
+                if (player != null) Helper.say(player, "Tycoon Dropper placed! It drops ore out of its front. "
+                        + "Lead conveyors from there to a Collector to earn coins.");
+                PENDING.remove(i);
+            } else if (pd.ticks() > 5) {
+                PENDING.remove(i);
+            } else {
+                PENDING.set(i, new Pending(pd.world(), pd.pos(), pd.player(), pd.ticks() + 1));
+            }
+        }
+
+        for (Iterator<Map.Entry<String, Dropper>> it = data.droppers.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<String, Dropper> e = it.next();
+            String[] parts = e.getKey().split("\\|");
+            Identifier dim = Identifier.tryParse(parts[0]);
+            ServerWorld world = dim == null ? null : server.getWorld(RegistryKey.of(RegistryKeys.WORLD, dim));
+            if (world == null) continue;
+            BlockPos pos = BlockPos.fromLong(Long.parseLong(parts[1]));
+            if (!world.isChunkLoaded(pos)) continue;
+            BlockState state = world.getBlockState(pos);
+            if (!state.isOf(Blocks.DROPPER)) { // broken
+                it.remove();
+                data.markDirty();
+                continue;
+            }
+            Dropper d = e.getValue();
+            if (++d.timer < d.interval() || d.live >= MAX_ORES_PER_DROPPER) continue;
+            d.timer = 0;
+            if (world.isReceivingRedstonePower(pos)) continue; // a redstone signal pauses it
+            drop(world, pos, state.get(DispenserBlock.FACING), d, e.getKey());
+        }
+
+        // Move the ore.
+        for (Iterator<Map.Entry<UUID, String>> it = ORES.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<UUID, String> e = it.next();
+            Dropper source = data.droppers.get(e.getValue());
+            ItemEntity ore = null;
+            for (ServerWorld w : server.getWorlds()) {
+                if (w.getEntity(e.getKey()) instanceof ItemEntity ie) {
+                    ore = ie;
+                    break;
+                }
+            }
+            if (ore == null || !ore.isAlive() || ore.getItemAge() > ORE_LIFETIME) {
+                if (ore != null) ore.discard();
+                if (source != null) source.live = Math.max(0, source.live - 1);
+                it.remove();
+                continue;
+            }
+            if (moveOre((ServerWorld) ore.getWorld(), ore, data)) {
+                if (source != null) source.live = Math.max(0, source.live - 1);
+                it.remove();
+            }
+        }
+    }
+
+    private static void drop(ServerWorld world, BlockPos pos, Direction facing, Dropper d, String key) {
+        Item look = d.level >= 8 ? Items.RAW_GOLD : d.level >= 4 ? Items.RAW_IRON : Items.RAW_COPPER;
+        ItemStack stack = new ItemStack(look);
+        NbtCompound tag = stack.getOrCreateSubNbt(ORE_NBT);
+        tag.putLong("value", d.oreValue());
+        tag.putUuid("owner", d.owner);
+        tag.putLong("id", world.getRandom().nextLong()); // never stacks with other ore
+        tag.put("ups", new NbtList());
+        Vec3d at = Vec3d.ofCenter(pos).add(facing.getOffsetX() * 0.7, facing.getOffsetY() * 0.7 - 0.15, facing.getOffsetZ() * 0.7);
+        ItemEntity ore = new ItemEntity(world, at.x, at.y, at.z, stack,
+                facing.getOffsetX() * 0.1, 0, facing.getOffsetZ() * 0.1);
+        ore.setPickupDelayInfinite();
+        ore.addCommandTag(ORE_TAG);
+        ORES.put(ore.getUuid(), key);
+        world.spawnEntity(ore);
+        d.live++;
+        world.playSound(null, pos, SoundEvents.BLOCK_DISPENSER_DISPENSE, SoundCategory.BLOCKS, 0.25f, 1.4f);
+    }
+
+    /** Returns true when the ore has been collected (or is otherwise finished). */
+    private static boolean moveOre(ServerWorld world, ItemEntity ore, Data data) {
+        BlockPos under = BlockPos.ofFloored(ore.getX(), ore.getY() - 0.1, ore.getZ());
+        BlockState state = world.getBlockState(under);
+        ItemStack stack = ore.getStack();
+        NbtCompound tag = stack.getSubNbt(ORE_NBT);
+        if (tag == null) return true;
+
+        if (state.isOf(Blocks.BLACK_GLAZED_TERRACOTTA)) { // a Collector: cash in
+            long value = tag.getLong("value");
+            UUID owner = tag.getUuid("owner");
+            data.add(owner, value);
+            world.spawnParticles(ParticleTypes.HAPPY_VILLAGER, ore.getX(), ore.getY() + 0.3, ore.getZ(), 4, 0.2, 0.2, 0.2, 0);
+            world.playSound(null, under, SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.BLOCKS, 0.3f, 1.6f);
+            ServerPlayerEntity p = world.getServer().getPlayerManager().getPlayer(owner);
+            if (p != null) p.sendMessage(Text.literal("+" + value + " coins  (" + data.coins(owner) + ")").formatted(Formatting.GOLD), true);
+            ore.discard();
+            return true;
+        }
+        int mult = multiplier(state);
+        if (mult > 1) { // each upgrader block works once per ore
+            NbtList ups = tag.getList("ups", NbtElement.LONG_TYPE);
+            net.minecraft.nbt.NbtLong here = net.minecraft.nbt.NbtLong.of(under.asLong());
+            if (!ups.contains(here) && ups.size() < 16) {
+                ups.add(here);
+                tag.put("ups", ups);
+                tag.putLong("value", Math.min(Long.MAX_VALUE / 8, tag.getLong("value") * mult));
+                ore.setStack(stack.copy());
+                world.spawnParticles(ParticleTypes.ELECTRIC_SPARK, ore.getX(), ore.getY() + 0.2, ore.getZ(), 6, 0.15, 0.15, 0.15, 0.05);
+                world.playSound(null, under, SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, SoundCategory.BLOCKS, 0.4f, 1.2f);
+            }
+        }
+        if (isBelt(state)) {
+            // The arrow on the block points away from whoever placed it.
+            Direction dir = state.get(GlazedTerracottaBlock.FACING).getOpposite();
+            Vec3d v = ore.getVelocity();
+            double cx = under.getX() + 0.5, cz = under.getZ() + 0.5;
+            double vx = dir.getOffsetX() != 0 ? dir.getOffsetX() * BELT_SPEED : (cx - ore.getX()) * 0.2;
+            double vz = dir.getOffsetZ() != 0 ? dir.getOffsetZ() * BELT_SPEED : (cz - ore.getZ()) * 0.2;
+            ore.setVelocity(vx, v.y, vz);
+            ore.velocityModified = true;
+        }
+        return false;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Commands
+    // ---------------------------------------------------------------------------------------
+
+    static void info(ServerPlayerEntity player) {
+        Data data = Data.get(player.getServer());
+        long mine = data.droppers.values().stream().filter(d -> d.owner.equals(player.getUuid())).count();
+        Helper.say(player, "You have " + data.coins(player.getUuid()) + " coins and " + mine + " Tycoon Dropper"
+                + (mine == 1 ? "" : "s") + ". Shop tier: " + tierName(tier(player)) + ".");
+        String[] how = {
+                "/helper tycoon start  - free starter kit (once): a Tycoon Dropper, 16 conveyors and a Collector",
+                "/helper tycoon shop  - spend coins on tycoon parts and useful items",
+                "/helper tycoon upgrade  - look at your Tycoon Dropper to make it faster and its ore worth more",
+                "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5) boost it once each.",
+                "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
+        };
+        for (String line : how) player.sendMessage(Text.literal(line).formatted(Formatting.GRAY), false);
+    }
+
+    static void start(ServerPlayerEntity player) {
+        Data data = Data.get(player.getServer());
+        if (data.started.getOrDefault(player.getUuid(), false)) {
+            Helper.say(player, "You've already had your starter kit. Earn coins and buy more in /helper tycoon shop.");
+            return;
+        }
+        data.started.put(player.getUuid(), true);
+        data.markDirty();
+        player.getInventory().offerOrDrop(dropperItem());
+        player.getInventory().offerOrDrop(conveyors(16));
+        player.getInventory().offerOrDrop(collector());
+        Helper.say(player, "Here's your tycoon starter kit! Place the Tycoon Dropper, put conveyors in front of it "
+                + "with the arrows pointing away, and end the line on the Collector.");
+    }
+
+    static void upgrade(ServerPlayerEntity player) {
+        HitResult hit = player.raycast(6, 0, false);
+        if (!(hit instanceof BlockHitResult bh) || hit.getType() != HitResult.Type.BLOCK) {
+            Helper.say(player, "Look at your Tycoon Dropper and try again.");
+            return;
+        }
+        Data data = Data.get(player.getServer());
+        Dropper d = data.droppers.get(key(player.getWorld(), bh.getBlockPos()));
+        if (d == null || !d.owner.equals(player.getUuid())) {
+            Helper.say(player, "That isn't one of your Tycoon Droppers.");
+            return;
+        }
+        if (d.level >= MAX_LEVEL) {
+            Helper.say(player, "That dropper is already at the top level (" + MAX_LEVEL + ").");
+            return;
+        }
+        int maxForTier = tier(player) == 1 ? 4 : tier(player) == 2 ? 7 : MAX_LEVEL;
+        if (d.level >= maxForTier) {
+            Helper.say(player, "To upgrade past level " + maxForTier + ", go further in the modpack first: "
+                    + (tier(player) == 1 ? "visit the Nether." : "reach the End."));
+            return;
+        }
+        long cost = 50L * d.level * d.level;
+        if (data.coins(player.getUuid()) < cost) {
+            Helper.say(player, "Upgrading to level " + (d.level + 1) + " costs " + cost + " coins. You have "
+                    + data.coins(player.getUuid()) + ".");
+            return;
+        }
+        data.add(player.getUuid(), -cost);
+        d.level++;
+        data.markDirty();
+        player.getWorld().playSound(null, bh.getBlockPos(), SoundEvents.BLOCK_ANVIL_USE, SoundCategory.BLOCKS, 0.6f, 1.3f);
+        Helper.say(player, "Dropper upgraded to level " + d.level + ": ore worth " + d.oreValue() + " each, every "
+                + String.format(java.util.Locale.ROOT, "%.1f", d.interval() / 20.0) + " seconds.");
+    }
+
+    /** For quest rewards and admins: /helper tycoon give <player> <amount>. */
+    static void give(ServerPlayerEntity target, long amount) {
+        Data data = Data.get(target.getServer());
+        data.add(target.getUuid(), amount);
+        target.sendMessage(Text.literal("+" + amount + " coins (" + data.coins(target.getUuid()) + ")").formatted(Formatting.GOLD), false);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Progress: shop tiers follow how far you are in the modpack
+    // ---------------------------------------------------------------------------------------
+
+    private static boolean has(ServerPlayerEntity player, String advancement) {
+        Advancement adv = player.getServer().getAdvancementLoader().get(new Identifier(advancement));
+        return adv != null && player.getAdvancementTracker().getProgress(adv).isDone();
+    }
+
+    static int tier(ServerPlayerEntity player) {
+        if (has(player, "minecraft:story/enter_the_end")) return 3;
+        if (has(player, "minecraft:story/enter_the_nether")) return 2;
+        return 1;
+    }
+
+    private static String tierName(int tier) {
+        return switch (tier) {
+            case 3 -> "3 (End)";
+            case 2 -> "2 (Nether)";
+            default -> "1 (Overworld). Visit the Nether to unlock tier 2";
+        };
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The shop
+    // ---------------------------------------------------------------------------------------
+
+    private record Offer(int tier, long price, String what, java.util.function.Supplier<ItemStack> item) {}
+
+    private static final Offer[] OFFERS = {
+            new Offer(1, 20, "8 Conveyors", () -> conveyors(8)),
+            new Offer(1, 40, "Collector", Tycoon::collector),
+            new Offer(1, 150, "Upgrader (x2)", () -> named(Items.LIME_GLAZED_TERRACOTTA, 1, "Upgrader x2", Formatting.GREEN)),
+            new Offer(1, 250, "Tycoon Dropper", Tycoon::dropperItem),
+            new Offer(1, 15, "16 Bread", () -> new ItemStack(Items.BREAD, 16)),
+            new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
+            new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
+            new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
+            new Offer(2, 800, "Super Upgrader (x3)", () -> named(Items.CYAN_GLAZED_TERRACOTTA, 1, "Super Upgrader x3", Formatting.AQUA)),
+            new Offer(2, 500, "2 Diamonds", () -> new ItemStack(Items.DIAMOND, 2)),
+            new Offer(2, 300, "Golden Apple", () -> new ItemStack(Items.GOLDEN_APPLE)),
+            new Offer(2, 250, "16 Bottles o' Enchanting", () -> new ItemStack(Items.EXPERIENCE_BOTTLE, 16)),
+            new Offer(2, 300, "4 Ender Pearls", () -> new ItemStack(Items.ENDER_PEARL, 4)),
+            new Offer(3, 5000, "Mega Upgrader (x5)", () -> named(Items.PURPLE_GLAZED_TERRACOTTA, 1, "Mega Upgrader x5", Formatting.LIGHT_PURPLE)),
+            new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
+            new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
+            new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
+    };
+
+    static void openShop(ServerPlayerEntity player) {
+        player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
+                (syncId, inv, p) -> new Shop(syncId, inv, player),
+                Text.literal("Tycoon Shop")));
+    }
+
+    static final class Shop extends GenericContainerScreenHandler {
+        private final ServerPlayerEntity player;
+        private final SimpleInventory view;
+
+        Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player) {
+            this(syncId, inv, player, new SimpleInventory(27));
+        }
+
+        private Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player, SimpleInventory view) {
+            super(ScreenHandlerType.GENERIC_9X3, syncId, inv, view, 3);
+            this.player = player;
+            this.view = view;
+            refresh();
+        }
+
+        private void refresh() {
+            Data data = Data.get(player.getServer());
+            int tier = tier(player);
+            for (int i = 0; i < 27; i++) view.setStack(i, ItemStack.EMPTY);
+            for (int i = 0; i < OFFERS.length && i < 26; i++) {
+                Offer o = OFFERS[i];
+                ItemStack shown = o.item().get();
+                boolean open = tier >= o.tier();
+                ItemStack button = Storage.Menu.button(open ? shown.getItem() : Items.BARRIER, o.what(),
+                        open ? "Costs " + o.price() + " coins" : "Locked: " + (o.tier() == 2 ? "visit the Nether" : "reach the End"),
+                        open ? "Click to buy" : "Costs " + o.price() + " coins once unlocked");
+                button.setCount(Math.max(1, shown.getCount()));
+                view.setStack(i, button);
+            }
+            view.setStack(26, Storage.Menu.button(Items.GOLD_INGOT, data.coins(player.getUuid()) + " coins",
+                    "Earn coins with Tycoon Droppers", "Tier " + tierName(tier)));
+            sendContentUpdates();
+        }
+
+        @Override
+        public void onSlotClick(int slotIndex, int button, SlotActionType action, PlayerEntity p) {
+            if (slotIndex < 0 || slotIndex >= 27) {
+                if (action != SlotActionType.QUICK_MOVE) super.onSlotClick(slotIndex, button, action, p);
+                return;
+            }
+            if (action == SlotActionType.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
+            refresh();
+        }
+
+        private void buy(Offer o) {
+            Data data = Data.get(player.getServer());
+            if (tier(player) < o.tier()) {
+                player.sendMessage(Text.literal("Locked. " + (o.tier() == 2 ? "Visit the Nether" : "Reach the End") + " to unlock it.")
+                        .formatted(Formatting.RED), true);
+                return;
+            }
+            if (data.coins(player.getUuid()) < o.price()) {
+                player.sendMessage(Text.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUuid()) + ").")
+                        .formatted(Formatting.RED), true);
+                return;
+            }
+            data.add(player.getUuid(), -o.price());
+            player.getInventory().offerOrDrop(o.item().get());
+            player.playSound(SoundEvents.ENTITY_VILLAGER_YES, SoundCategory.PLAYERS, 0.6f, 1.2f);
+            player.sendMessage(Text.literal("Bought " + o.what() + ".").formatted(Formatting.GREEN), true);
+        }
+
+        @Override
+        public ItemStack quickMove(PlayerEntity p, int slot) {
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public boolean canUse(PlayerEntity p) {
+            return true;
+        }
+    }
+}
