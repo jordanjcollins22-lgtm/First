@@ -422,7 +422,9 @@ public class Helper {
             }
             return;
         }
-        if (mode != Mode.FOLLOW && m.age % 20 == 0) keepLoaded((ServerWorld) m.getWorld(), m);
+        // Always keep the helper's own chunk (and the ones around it) loaded, whatever it's doing.
+        // Counted in server ticks, not the helper's age, so it keeps going even if the helper stops ticking.
+        if (server.getTicks() % 20 == 0) keepLoaded((ServerWorld) m.getWorld(), m);
         if (!((ServerWorld) m.getWorld()).shouldTickEntity(m.getBlockPos())) {
             // Too far from every player to be simulated: it would just stand frozen. Bring it back.
             if (++missingTicks > 40) {
@@ -432,6 +434,10 @@ public class Helper {
             return;
         }
         missingTicks = 0;
+        if (m.getFirstPassenger() == player) {
+            tickRide(m, player);
+            return;
+        }
         if (m.age % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
         if (tickCombat(m, player, entry)) return;
@@ -513,14 +519,52 @@ public class Helper {
         return true;
     }
 
-    /** Keep the helper (and what it's heading for) loaded and ticking while it works, like a chunk loader. */
+    /**
+     * The helper is its own chunk loader: its chunk and the 8 around it stay loaded and running (so it
+     * can walk over a chunk border without freezing), plus wherever it's heading. The ticket runs out
+     * a few seconds after the helper is gone, so nothing stays loaded for nothing.
+     */
     private void keepLoaded(ServerWorld world, MobEntity m) {
         ChunkPos here = new ChunkPos(m.getBlockPos());
-        world.getChunkManager().addTicket(KEEP_LOADED_TICKET, here, 2, here);
+        world.getChunkManager().addTicket(KEEP_LOADED_TICKET, here, 3, here);
         if (job != null && job.target != null) {
             ChunkPos there = new ChunkPos(job.target);
-            world.getChunkManager().addTicket(KEEP_LOADED_TICKET, there, 1, there);
+            world.getChunkManager().addTicket(KEEP_LOADED_TICKET, there, 2, there);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Riding: the owner sits on the helper and steers with the normal movement keys
+    // ---------------------------------------------------------------------------------------
+
+    /** Start riding your helper (right-click it holding a saddle, or /helper ride). */
+    boolean ride(ServerPlayerEntity player, HelperData.Entry entry) {
+        MobEntity m = findEntity(player.getServer(), entry);
+        if (m == null || m.getWorld() != player.getWorld() || m.squaredDistanceTo(player) > 16 * 16) return false;
+        if (player.hasVehicle()) player.stopRiding();
+        m.getNavigation().stop();
+        clearBreaking(m);
+        return player.startRiding(m, true);
+    }
+
+    private void tickRide(MobEntity m, ServerPlayerEntity rider) {
+        m.getNavigation().stop();
+        combatTarget = null;
+        float yaw = rider.getYaw();
+        m.setYaw(yaw);
+        m.setBodyYaw(yaw);
+        m.setHeadYaw(yaw);
+        float forward = rider.forwardSpeed, side = rider.sidewaysSpeed; // the rider's W/A/S/D, sent by the game
+        if (Math.abs(forward) < 0.01f && Math.abs(side) < 0.01f) {
+            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+            return;
+        }
+        double rad = Math.toRadians(yaw);
+        double dx = side * Math.cos(rad) - forward * Math.sin(rad);
+        double dz = forward * Math.cos(rad) + side * Math.sin(rad);
+        double len = Math.sqrt(dx * dx + dz * dz);
+        double speed = forward < 0 ? 0.8 : rider.isSprinting() ? 2.2 : 1.6;
+        m.getMoveControl().moveTo(m.getX() + dx / len * 3, m.getY(), m.getZ() + dz / len * 3, speed);
     }
 
     private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {

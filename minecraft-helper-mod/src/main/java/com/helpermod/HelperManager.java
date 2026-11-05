@@ -3,6 +3,7 @@ package com.helpermod;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.Items;
 import net.minecraft.screen.GenericContainerScreenHandler;
 import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
 import net.minecraft.server.MinecraftServer;
@@ -84,6 +85,12 @@ public final class HelperManager {
             return ActionResult.SUCCESS;
         }
         HelperData.Entry entry = HelperData.get(world.getServer()).getOrCreate(owner);
+        if (player.getMainHandStack().isOf(Items.SADDLE) && player instanceof ServerPlayerEntity sp) {
+            if (helperFor(owner).ride(sp, entry)) {
+                player.sendMessage(Text.literal("Hop on! Steer with your movement keys, sprint to go faster, sneak to get off."), true);
+            }
+            return ActionResult.SUCCESS;
+        }
         player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
                 (syncId, playerInventory, p) ->
                         GenericContainerScreenHandler.createGeneric9x3(syncId, playerInventory, entry.inventory),

@@ -45,6 +45,7 @@ ask for. It works out the best way to get it:
 | `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
 | `/helper storage` | Turn the barrel in your hand into a **Helper Storage** (no size limit, see below) |
 | `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
+| `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, sprint to go faster, sneak to get off |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
 | `/helper size small` / `normal` / `big` | Make your helper shorter or taller, or give a number from 0.25 to 4 (1 is normal). With the [Pehkui](https://modrinth.com/mod/pehkui) mod on the server it truly resizes, whatever it looks like. Without Pehkui, small makes it the baby version of its mob look (zombie, villager, fox, cow...) |
@@ -103,11 +104,14 @@ Block tags work with `#`, e.g. `#minecraft:logs`.
 4. **Taking things out:** click to take a stack, right-click for half, shift-click to send a stack to your
    inventory, or press a number key to drop it into that hotbar slot.
 5. **Organizing:** items are always sorted (by name, amount or mod; click the hopper to switch) and shown in
-   pages. The tab button shows just blocks, tools and armor, food or other items. Search with
-   `/helper storage find <name>`, and click the spyglass to clear it.
-6. **Crafting:** click the crafting table to see everything you can make from what's stored (any recipe in
-   the modpack). Click one to make it, or shift-click to make a stack. The ingredients come straight out of
-   storage (empty buckets go back in) and the result goes into your inventory.
+   pages. The tab button shows just blocks, tools and armor, food or other items. Click the spyglass to
+   search: type in the box, then click the result (or press Escape) to see only what matches. Right-click
+   the spyglass to clear the search. `/helper storage find <name>` works too.
+6. **Crafting grid:** click the crafting table for a 3x3 crafting grid with your stored items beside it (the
+   search works here too). Pick items up from storage and put them in the grid like a crafting table. Click
+   the result to make one, or shift-click to keep making them: the grid tops itself up from storage, and the
+   results go into your inventory. Leftovers like empty buckets go back into storage, and anything left in the
+   grid goes back into storage when you close it.
 
 It's drawn as a normal chest screen, so nobody else has to install anything. Each player has their own storage.
 
@@ -166,6 +170,6 @@ The mod jar ends up in `build/libs/`.
   skin. That's why nobody else has to install anything. If the server can't get the owner's skin (for
   example on an offline-mode server), the helper uses the default Steve/Alex skin.
 - Helpers can't be hurt, so they make strong bodyguards. They don't use bows (melee only).
-- Helpers only work while they're within simulation distance of their owner. If you walk or teleport far
-  away, your helper pops back next to you and starts searching again from there.
+- A helper is its own chunk loader: its chunk and the ones around it stay loaded while its owner is online,
+  so it keeps working when you walk away. If you go to another dimension, it pops back next to you.
 - Mining speed follows the normal player rules. Better tools and Efficiency make your helper faster.
