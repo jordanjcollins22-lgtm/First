@@ -78,6 +78,10 @@ public final class HelperCommands {
                         .executes(ctx -> fish(ctx, 16))
                         .then(argument("amount", com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, MAX_AMOUNT))
                                 .executes(ctx -> fish(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "amount")))))
+                .then(literal("farm")
+                        .executes(ctx -> farm(ctx, 16))
+                        .then(argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(4, 48))
+                                .executes(ctx -> farm(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))))
                 .then(literal("ride").executes(HelperCommands::ride))
                 .then(literal("boss").executes(ctx -> {
                     Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
@@ -114,6 +118,7 @@ public final class HelperCommands {
                 "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
                 "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
+                "/helper farm [radius]  - harvest and replant ripe crops around you (16 blocks unless you say)",
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
@@ -302,6 +307,13 @@ public final class HelperCommands {
         ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
         ensureSummoned(player);
         HelperManager.helperFor(player.getUuid()).startFishing(player, amount);
+        return 1;
+    }
+
+    private static int farm(CommandContext<ServerCommandSource> ctx, int radius) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        ensureSummoned(player);
+        HelperManager.helperFor(player.getUuid()).startFarming(player, radius);
         return 1;
     }
 

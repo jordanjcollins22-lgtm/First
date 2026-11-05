@@ -47,6 +47,7 @@ ask for. It works out the best way to get it:
 | `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
 | `/helper boss` | On an Ad Astra planet: where is this planet's boss arena? |
 | `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
+| `/helper farm [radius]` | Look after the crops around you (16 blocks unless you say): harvest ripe wheat, carrots, potatoes, beetroot, nether wart and modded crops, plant them again, and bring you the harvest. `/helper stop` ends it |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
 | `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
@@ -157,6 +158,12 @@ mod see Ad Astra's plain sky there.
 - **Your helper comes too:** while you fly a rocket or lander it waits, then appears next to you when you land
   on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
   mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
+
+## Torches in the mine
+
+While it mines, the helper lights up dark tunnels and caves with torches so monsters can't spawn in them.
+It uses torches you give it. If it has none, it makes four from each coal (or charcoal) and stick it carries.
+It only places them underground, where it's dark.
 
 ## Reef Town (Bikini Bottom planet)
 
