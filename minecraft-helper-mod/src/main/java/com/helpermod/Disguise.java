@@ -56,9 +56,10 @@ public final class Disguise {
         return !entity.getWorld().isClient && entity.getCommandTags().contains(Helper.TAG);
     }
 
-    /** Every mob a helper can look like: living entities with attributes, except players. */
+    /** Every mob a helper can look like: living entities with attributes, except players and armor stands. */
     public static boolean canLookLike(EntityType<?> type) {
-        return type != EntityType.PLAYER && DefaultAttributeRegistry.hasDefinitionFor(type);
+        return type != EntityType.PLAYER && type != EntityType.ARMOR_STAND
+                && DefaultAttributeRegistry.hasDefinitionFor(type);
     }
 
     /** Turns "creeper", "Iron Golem" or "somemod:thing" into a mob type, or null if there's no such mob. */
