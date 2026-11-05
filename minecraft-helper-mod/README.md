@@ -243,6 +243,8 @@ The doors keep the water out, so you can walk in without a helmet. `/helper town
   planks, bricks, beds, chests...), so house floors and stone walls are safe even when they're made of
   dirt or stone. Deep underground they won't dig right next to chests, beds or furnaces.
 - They don't pillar up, bridge or plug holes within 3 blocks of anything built either.
+- When a wall it mustn't break is in the way, the helper **phases through it** to the open space on the other side
+  (up to 5 blocks) instead. If it's stuck behind a wall while following you for 3 seconds, it pops out next to you.
 - A new mine is started on open, natural ground at least 5 blocks from anything built, never under a
   roof. If an old mine runs into a build, the helper stops and starts a fresh mine elsewhere next time.
 - They avoid lava, won't drop down big holes, and plug the top of any mineshaft they dig.

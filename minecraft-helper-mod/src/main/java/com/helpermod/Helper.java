@@ -1016,6 +1016,7 @@ public class Helper {
                 m.getNavigation().startMovingTo(player, SPEED);
                 repathCooldown = 10;
             }
+            if (isStuck(m, 60)) teleportNear(m, player); // stuck behind a wall for 3 s: phase through to you
         } else if (d < 2.5 * 2.5) {
             m.getNavigation().stop();
         }
@@ -1080,6 +1081,30 @@ public class Helper {
             repathCooldown = 10;
         }
         if (isStuck(m, 100)) teleportNear(m, player);
+    }
+
+    /**
+     * Step through a wall: find the first open spot (2 tall, with a floor) up to 5 blocks further along
+     * (dx, dz) and pop out there, without breaking anything. False if there's no open spot within reach.
+     */
+    private boolean phaseThrough(MobEntity m, ServerWorld world, BlockPos cur, int dx, int dz) {
+        for (int k = 2; k <= 6; k++) {
+            for (int dy : new int[]{0, 1, -1}) {
+                BlockPos p = cur.add(dx * k, dy, dz * k);
+                if (!world.isChunkLoaded(p)) return false;
+                if (!passable(world, p) || !passable(world, p.up())) continue;
+                if (!world.getFluidState(p).isEmpty()) continue;
+                BlockPos floor = p.down();
+                if (!world.getBlockState(floor).isSideSolidFullSquare(world, floor, Direction.UP)) continue;
+                m.getNavigation().stop();
+                world.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+                m.requestTeleport(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
+                world.playSound(null, p, SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.NEUTRAL, 0.4f, 1.4f);
+                stuckTicks = 0;
+                return true;
+            }
+        }
+        return false;
     }
 
     private void teleportNear(MobEntity m, ServerPlayerEntity player) {
@@ -1985,7 +2010,12 @@ public class Helper {
                 return;
             }
             if (!canDigThrough(world, cell, s)) {
-                abandonTarget(m); // someone's build is in the way; try a different one
+                // Something built (or unbreakable) is in the way: phase through it instead of digging.
+                if ((sx != 0 || sz != 0) && phaseThrough(m, world, cur, sx, sz)) {
+                    j.targetTicks = 0;
+                    return;
+                }
+                abandonTarget(m); // can't get past; try a different one
                 return;
             }
             j.targetTicks = 0; // still making progress toward it
