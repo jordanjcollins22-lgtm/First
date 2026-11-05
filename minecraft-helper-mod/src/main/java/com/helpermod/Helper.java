@@ -1,5 +1,6 @@
 package com.helpermod;
 
+import com.helpermod.mixin.ExperienceOrbAccessor;
 import com.helpermod.mixin.MobEntityAccessor;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -7,6 +8,7 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.ExperienceOrbEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.LookAtEntityGoal;
 import net.minecraft.entity.ai.pathing.Path;
@@ -386,7 +388,9 @@ public class Helper {
         }
         if (combatTarget != null) doing = "Fighting " + combatTarget.getName().getString() + " (" + doing + ")";
         String items = summarize(inv, false);
-        return doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + ".";
+        int xp = currentEntry == null ? 0 : currentEntry.xp;
+        return doing + ". Carrying: " + (items.isEmpty() ? "nothing" : items) + "."
+                + (xp > 0 ? " Holding " + xp + " XP for you." : "");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -414,6 +418,7 @@ public class Helper {
             return;
         }
         missingTicks = 0;
+        if (m.age % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
         if (tickCombat(m, player, entry)) return;
         switch (mode) {
@@ -589,6 +594,52 @@ public class Helper {
         return ++stuckTicks > limit;
     }
 
+    /** Orbs within this many blocks of the helper are picked up. */
+    private static final double XP_PICKUP_RADIUS = 4.0;
+    /** If the owner is this close, leave the orbs for them to grab themselves. */
+    private static final double OWNER_NEAR_SQ = 6.0 * 6.0;
+
+    /**
+     * Mined ores and defeated mobs drop XP orbs where the helper is, usually far from its owner.
+     * The helper soaks them up and hands the XP over when it delivers.
+     */
+    private void pickUpXp(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+        if (player.getWorld() == m.getWorld() && player.squaredDistanceTo(m) < OWNER_NEAR_SQ) {
+            // Back with its owner and not on a run: hand over anything it's still holding.
+            if (mode == Mode.FOLLOW && entry.xp > 0) {
+                int given = giveXp(player);
+                if (given > 0) say(player, "Here's " + given + " XP I picked up for you.");
+            }
+            return;
+        }
+        int gained = 0;
+        for (ExperienceOrbEntity orb : m.getWorld().getEntitiesByClass(ExperienceOrbEntity.class,
+                m.getBoundingBox().expand(XP_PICKUP_RADIUS), Entity::isAlive)) {
+            gained += orb.getExperienceAmount() * Math.max(1, ((ExperienceOrbAccessor) orb).helpermod$getPickingCount());
+            orb.discard();
+        }
+        if (gained <= 0) return;
+        entry.xp = (int) Math.min(Integer.MAX_VALUE, (long) entry.xp + gained);
+        HelperData.get(player.getServer()).markDirty();
+        m.getWorld().playSound(null, m.getBlockPos(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
+                SoundCategory.NEUTRAL, 0.2f, 1.4f);
+    }
+
+    /** Give the owner the XP the helper has been holding. Returns how much was given. */
+    private int giveXp(ServerPlayerEntity player) {
+        HelperData.Entry entry = currentEntry;
+        if (entry == null || entry.xp <= 0) return 0;
+        int xp = entry.xp;
+        entry.xp = 0;
+        HelperData.get(player.getServer()).markDirty();
+        int before = player.experienceLevel;
+        player.addExperience(xp);
+        player.getWorld().playSound(null, player.getBlockPos(), player.experienceLevel > before
+                        ? SoundEvents.ENTITY_PLAYER_LEVELUP : SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
+                SoundCategory.PLAYERS, 0.6f, 1f);
+        return xp;
+    }
+
     private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv) {
         Map<String, Integer> given = new LinkedHashMap<>();
         boolean droppedAtFeet = false;
@@ -616,8 +667,11 @@ public class Helper {
             inv.setStack(i, ItemStack.EMPTY);
         }
         inv.markDirty();
+        int xp = giveXp(player);
+        String xpNote = xp > 0 ? " Plus " + xp + " XP I picked up along the way." : "";
         if (given.isEmpty()) {
-            say(player, "I don't have anything new for you.");
+            say(player, xp > 0 ? "No new items, but here's " + xp + " XP I picked up along the way."
+                    : "I don't have anything new for you.");
             return;
         }
         m.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
@@ -627,7 +681,7 @@ public class Helper {
             if (sb.length() > 0) sb.append(", ");
             sb.append(count).append(' ').append(name);
         });
-        say(player, "Here you go: " + sb + "." + (droppedAtFeet
+        say(player, "Here you go: " + sb + "." + xpNote + (droppedAtFeet
                 ? " Your inventory is full, so I dropped the rest at your feet." : ""));
     }
 
