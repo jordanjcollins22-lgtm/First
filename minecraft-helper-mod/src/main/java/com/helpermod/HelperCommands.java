@@ -74,6 +74,7 @@ public final class HelperCommands {
                                 .suggests((ctx, builder) -> CommandSource.suggestMatching(
                                         List.of("small", "normal", "big", "tiny", "giant", "0.5", "1.5"), builder))
                                 .executes(HelperCommands::size)))
+                .then(literal("ride").executes(HelperCommands::ride))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -91,9 +92,10 @@ public final class HelperCommands {
                 "/helper dismiss  - send your helper away (it keeps your items)",
                 "/helper collect spawner  - dig up a monster spawner you can place anywhere",
                 "/helper harvester  - turn the hopper in your hand into a Monster Harvester",
+                "  (kills monsters around it, loot goes into a chest below, sneak + right-click for XP)",
                 "/helper storage  - turn the barrel in your hand into a Helper Storage (no size limit)",
                 "/helper storage find <name>  - search your storage",
-                "  (kills monsters around it, loot goes into a chest below, sneak + right-click for XP)",
+                "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
         ctx.getSource().sendFeedback(() -> Text.literal("Helper commands:").formatted(Formatting.GOLD), false);
@@ -273,6 +275,21 @@ public final class HelperCommands {
             reply = "I can't get bigger without the Pehkui mod on the server. I saved the size, so it works once Pehkui is added.";
         }
         Helper.say(player, entry.active || size == 1f ? reply : reply + " You'll see it when you /helper summon me.");
+        return 1;
+    }
+
+    private static int ride(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
+        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+        if (entry == null || !entry.active) {
+            Helper.say(player, "You don't have a helper out. Use /helper summon");
+            return 0;
+        }
+        if (!HelperManager.helperFor(player.getUuid()).ride(player, entry)) {
+            Helper.say(player, "I need to be close by for you to hop on. Use /helper stop and I'll come to you.");
+            return 0;
+        }
+        Helper.say(player, "Hop on! Steer with your movement keys, sprint to go faster, sneak to get off.");
         return 1;
     }
 

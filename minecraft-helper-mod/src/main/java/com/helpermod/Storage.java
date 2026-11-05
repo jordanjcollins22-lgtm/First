@@ -5,6 +5,10 @@ import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.SimpleInventory;
+import net.minecraft.util.collection.DefaultedList;
+import net.minecraft.screen.ScreenHandlerContext;
+import net.minecraft.screen.AnvilScreenHandler;
+import net.minecraft.inventory.CraftingInventory;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
@@ -19,7 +23,6 @@ import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
 import net.minecraft.nbt.NbtString;
 import net.minecraft.recipe.CraftingRecipe;
-import net.minecraft.recipe.Ingredient;
 import net.minecraft.recipe.RecipeType;
 import net.minecraft.registry.Registries;
 import net.minecraft.screen.GenericContainerScreenHandler;
@@ -41,12 +44,10 @@ import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -55,8 +56,8 @@ import java.util.UUID;
  * Every Helper Storage barrel opens the same personal storage (like an ender chest), so breaking one
  * never loses anything. The screen is a normal 6-row chest screen drawn by the server, so players
  * don't need to install anything: five rows show your items (sorted, in pages, with category tabs
- * and a search), and the bottom row has the controls. Crafting mode lists everything you can make
- * from what's stored and crafts it straight from storage.
+ * and a search box), and the bottom row has the controls. The crafting grid is a 3x3 grid like a
+ * crafting table's, with your stored items beside it, and shift-crafting tops the grid up from storage.
  */
 public final class Storage {
     private Storage() {}
@@ -125,6 +126,7 @@ public final class Storage {
 
     public static void reset() {
         SEARCH.clear();
+        LOOK.clear();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -269,67 +271,36 @@ public final class Storage {
     }
 
     // ---------------------------------------------------------------------------------------
-    // Crafting from storage
-    // ---------------------------------------------------------------------------------------
-
-    /** A recipe and the stored items it would use, one per ingredient. */
-    private record Plan(CraftingRecipe recipe, ItemStack output, List<Stored> uses) {}
-
-    /** Work out which stored items a recipe would use, or null if storage doesn't have enough. */
-    private static List<Stored> plan(CraftingRecipe recipe, Map<Item, List<Stored>> byItem) {
-        Map<Stored, Long> used = new IdentityHashMap<>();
-        List<Stored> uses = new ArrayList<>();
-        for (Ingredient ing : recipe.getIngredients()) {
-            if (ing.isEmpty()) continue;
-            Stored pick = null;
-            for (ItemStack option : ing.getMatchingStacks()) {
-                List<Stored> candidates = byItem.get(option.getItem());
-                if (candidates == null) continue;
-                for (Stored s : candidates) {
-                    if (s.count - used.getOrDefault(s, 0L) > 0 && ing.test(s.template)) {
-                        pick = s;
-                        break;
-                    }
-                }
-                if (pick != null) break;
-            }
-            if (pick == null) return null;
-            used.merge(pick, 1L, Long::sum);
-            uses.add(pick);
-        }
-        return uses.isEmpty() ? null : uses;
-    }
-
-    private static List<Plan> craftables(ServerWorld world, List<Stored> stored) {
-        Map<Item, List<Stored>> byItem = new HashMap<>();
-        for (Stored s : stored) byItem.computeIfAbsent(s.template.getItem(), k -> new ArrayList<>()).add(s);
-        List<Plan> out = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (CraftingRecipe recipe : world.getRecipeManager().listAllOfType(RecipeType.CRAFTING)) {
-            if (recipe.isIgnoredInRecipeBook()) continue; // fireworks, banners and other special recipes
-            ItemStack output = recipe.getOutput(world.getRegistryManager());
-            if (output.isEmpty()) continue;
-            String key = Registries.ITEM.getId(output.getItem()) + "|" + output.getNbt();
-            if (seen.contains(key)) continue;
-            List<Stored> uses = plan(recipe, byItem);
-            if (uses == null) continue;
-            seen.add(key);
-            out.add(new Plan(recipe, output, uses));
-        }
-        out.sort(Comparator.comparing(p -> p.output().getName().getString().toLowerCase(Locale.ROOT)));
-        return out;
-    }
-
-    // ---------------------------------------------------------------------------------------
     // The screen
     // ---------------------------------------------------------------------------------------
+
+    /** What each player last had open (tab, sort, crafting), so the screen comes back the same after a search. */
+    private record Look(Tab tab, Sort sort, boolean crafting) {}
+
+    private static final Map<UUID, Look> LOOK = new HashMap<>();
+
+    private static void open(ServerPlayerEntity player, Look look) {
+        LOOK.put(player.getUuid(), look);
+        open(player);
+    }
+
+    /** Storage mode: 45 item slots. Crafting mode: a 3x3 grid and its result on the left, 20 item slots on the right. */
+    private static final int[] ALL_ITEMS = new int[VIEW];
+    private static final int[] CRAFT_ITEMS = new int[20];
+    private static final int[] GRID = {9, 10, 11, 18, 19, 20, 27, 28, 29};
+    private static final int RESULT = 22;
+
+    static {
+        for (int i = 0; i < VIEW; i++) ALL_ITEMS[i] = i;
+        int k = 0;
+        for (int row = 0; row < 5; row++) for (int col = 5; col < 9; col++) CRAFT_ITEMS[k++] = row * 9 + col;
+    }
 
     static final class Menu extends GenericContainerScreenHandler {
         private final ServerPlayerEntity player;
         private final SimpleInventory view;
+        private final CraftingInventory grid;
         private final List<Stored> shown = new ArrayList<>();
-        private final List<Plan> shownPlans = new ArrayList<>();
-        private List<Plan> plans = List.of();
         private int page;
         private Tab tab = Tab.ALL;
         private Sort sort = Sort.NAME;
@@ -343,6 +314,13 @@ public final class Storage {
             super(ScreenHandlerType.GENERIC_9X6, syncId, inv, view, 6);
             this.player = player;
             this.view = view;
+            this.grid = new CraftingInventory(this, 3, 3);
+            Look look = LOOK.get(player.getUuid());
+            if (look != null) {
+                tab = look.tab();
+                sort = look.sort();
+                crafting = look.crafting();
+            }
             refresh();
         }
 
@@ -352,6 +330,25 @@ public final class Storage {
 
         private UUID owner() {
             return player.getUuid();
+        }
+
+        private void remember() {
+            LOOK.put(owner(), new Look(tab, sort, crafting));
+        }
+
+        private int[] itemSlots() {
+            return crafting ? CRAFT_ITEMS : ALL_ITEMS;
+        }
+
+        private int itemPos(int slot) {
+            int[] slots = itemSlots();
+            for (int i = 0; i < slots.length; i++) if (slots[i] == slot) return i;
+            return -1;
+        }
+
+        private static int gridPos(int slot) {
+            for (int i = 0; i < GRID.length; i++) if (GRID[i] == slot) return i;
+            return -1;
         }
 
         private List<Stored> visible() {
@@ -366,40 +363,54 @@ public final class Storage {
             return list;
         }
 
+        /** What the grid makes right now, or nothing. */
+        private ItemStack result() {
+            ServerWorld world = player.getServerWorld();
+            return world.getRecipeManager().getFirstMatch(RecipeType.CRAFTING, grid, world)
+                    .map(r -> r.craft(grid, world.getRegistryManager()))
+                    .orElse(ItemStack.EMPTY);
+        }
+
         private void refresh() {
             view.clear();
             shown.clear();
-            shownPlans.clear();
-            int total;
-            if (crafting) {
-                total = plans.size();
-                int pages = Math.max(1, (total + VIEW - 1) / VIEW);
-                page = Math.min(page, pages - 1);
-                for (int i = 0; i < VIEW && page * VIEW + i < total; i++) {
-                    Plan p = plans.get(page * VIEW + i);
-                    shownPlans.add(p);
-                    ItemStack icon = p.output().copy();
-                    lore(icon, Text.literal("Click: make " + p.output().getCount()).formatted(Formatting.GREEN),
-                            Text.literal("Shift-click: make as many as fit in a stack").formatted(Formatting.GREEN),
-                            Text.literal("Uses: " + ingredientsText(p)).formatted(Formatting.GRAY));
-                    view.setStack(i, icon);
-                }
-            } else {
-                List<Stored> list = visible();
-                total = list.size();
-                int pages = Math.max(1, (total + VIEW - 1) / VIEW);
-                page = Math.min(page, pages - 1);
-                for (int i = 0; i < VIEW && page * VIEW + i < total; i++) {
-                    Stored s = list.get(page * VIEW + i);
-                    shown.add(s);
-                    ItemStack icon = s.template.copyWithCount((int) Math.max(1, Math.min(s.count, s.template.getMaxCount())));
-                    lore(icon, Text.literal("Stored: " + NUM.format(s.count)).formatted(Formatting.AQUA),
-                            Text.literal("Click: take a stack. Right-click: take half. Shift-click: to your inventory")
-                                    .formatted(Formatting.GRAY));
-                    view.setStack(i, icon);
-                }
+            List<Stored> list = visible();
+            int[] slots = itemSlots();
+            int per = slots.length;
+            int total = list.size();
+            int pages = Math.max(1, (total + per - 1) / per);
+            page = Math.min(page, pages - 1);
+            for (int i = 0; i < per && page * per + i < total; i++) {
+                Stored s = list.get(page * per + i);
+                shown.add(s);
+                ItemStack icon = s.template.copyWithCount((int) Math.max(1, Math.min(s.count, s.template.getMaxCount())));
+                lore(icon, Text.literal("Stored: " + NUM.format(s.count)).formatted(Formatting.AQUA),
+                        Text.literal(crafting
+                                ? "Click: pick up a stack, then click a grid square to put it in. Right-click: half"
+                                : "Click: take a stack. Right-click: take half. Shift-click: to your inventory")
+                                .formatted(Formatting.GRAY));
+                view.setStack(slots[i], icon);
             }
-            int pages = Math.max(1, (total + VIEW - 1) / VIEW);
+            if (crafting) {
+                ItemStack wall = button(Items.BLACK_STAINED_GLASS_PANE, " ");
+                for (int row = 0; row < 5; row++) for (int col = 0; col < 5; col++) view.setStack(row * 9 + col, wall.copy());
+                for (int i = 0; i < 9; i++) {
+                    ItemStack g = grid.getStack(i);
+                    view.setStack(GRID[i], g.isEmpty() ? ItemStack.EMPTY : g.copy());
+                }
+                ItemStack out = result();
+                if (out.isEmpty()) {
+                    view.setStack(RESULT, button(Items.BARRIER, "Nothing to make yet",
+                            "Put items in the 3x3 grid like a crafting table"));
+                } else {
+                    ItemStack icon = out.copy();
+                    lore(icon, Text.literal("Click: make it").formatted(Formatting.GREEN),
+                            Text.literal("Shift-click: make as many as you can (refills from storage)").formatted(Formatting.GREEN));
+                    view.setStack(RESULT, icon);
+                }
+                view.setStack(3, button(Items.LAVA_BUCKET, "Clear the grid", "Puts the grid's items back in storage"));
+                view.setStack(21, button(Items.ARROW, "→"));
+            }
             long items = 0;
             for (Stored s : data().of(owner())) items += s.count;
             String search = SEARCH.getOrDefault(owner(), "");
@@ -409,23 +420,16 @@ public final class Storage {
             view.setStack(46, button(tab.icon, "Showing: " + tab.label, "Click to change what's shown"));
             view.setStack(47, button(Items.HOPPER, "Sorted by " + sort.label, "Click to sort another way"));
             view.setStack(48, button(Items.SPYGLASS, search.isEmpty() ? "Search" : "Searching: " + search,
-                    search.isEmpty() ? "Type /helper storage find <name> to search" : "Click to clear the search"));
+                    search.isEmpty() ? "Click to type what you're looking for"
+                            : "Click to search for something else. Right-click to clear the search"));
             view.setStack(49, button(Items.BOOK, "Page " + (page + 1) + " of " + pages,
                     NUM.format(items) + " items stored (" + data().of(owner()).size() + " kinds)"));
             view.setStack(50, button(Items.CHEST, "Put my items in",
                     "Moves everything from your inventory (not your hotbar or armor) into storage"));
-            view.setStack(51, button(Items.CRAFTING_TABLE, crafting ? "Back to storage" : "Crafting",
-                    crafting ? "Click to see your items again" : "See everything you can make from what's stored"));
+            view.setStack(51, button(Items.CRAFTING_TABLE, crafting ? "Back to storage" : "Crafting grid",
+                    crafting ? "Click to see all your items again" : "Craft with a 3x3 grid, using items straight from storage"));
             view.setStack(53, button(Items.ARROW, "Next page"));
             sendContentUpdates();
-        }
-
-        private static String ingredientsText(Plan p) {
-            Map<Stored, Integer> counts = new IdentityHashMap<>();
-            for (Stored s : p.uses()) counts.merge(s, 1, Integer::sum);
-            List<String> parts = new ArrayList<>();
-            counts.forEach((s, n) -> parts.add(n + " " + s.name()));
-            return String.join(", ", parts);
         }
 
         @Override
@@ -445,9 +449,11 @@ public final class Storage {
                 return;
             }
             boolean shift = action == SlotActionType.QUICK_MOVE;
-            if (slotIndex >= VIEW) control(slotIndex);
-            else if (crafting) craft(slotIndex, shift);
-            else click(slotIndex, button, shift, action);
+            if (slotIndex >= VIEW) control(slotIndex, button);
+            else if (crafting && gridPos(slotIndex) >= 0) gridClick(gridPos(slotIndex), button, shift, action);
+            else if (crafting && slotIndex == RESULT) craft(shift);
+            else if (crafting && slotIndex == 3) clearGrid();
+            else if (!crafting || itemPos(slotIndex) >= 0) click(itemPos(slotIndex), button, shift, action);
             refresh();
         }
 
@@ -463,11 +469,17 @@ public final class Storage {
             return ItemStack.EMPTY;
         }
 
-        private void click(int index, int button, boolean shift, SlotActionType action) {
+        @Override
+        public void onClosed(PlayerEntity p) {
+            super.onClosed(p);
+            clearGrid(); // whatever was left in the grid goes back into storage
+        }
+
+        private void click(int pos, int button, boolean shift, SlotActionType action) {
             ItemStack cursor = getCursorStack();
             if (!cursor.isEmpty() && action != SlotActionType.SWAP) {
                 // Holding something: put it in (unless it's the same thing and we're topping up the stack).
-                Stored here = index < shown.size() ? shown.get(index) : null;
+                Stored here = pos >= 0 && pos < shown.size() ? shown.get(pos) : null;
                 if (here == null || !ItemStack.canCombine(here.template, cursor) || cursor.getCount() >= cursor.getMaxCount()) {
                     data().add(owner(), cursor.copy());
                     setCursorStack(ItemStack.EMPTY);
@@ -478,8 +490,8 @@ public final class Storage {
                 cursor.increment(got.getCount());
                 return;
             }
-            if (index >= shown.size()) return;
-            Stored s = shown.get(index);
+            if (pos < 0 || pos >= shown.size()) return;
+            Stored s = shown.get(pos);
             int max = s.template.getMaxCount();
             if (action == SlotActionType.SWAP) { // number key: straight to that hotbar slot if it's empty
                 if (button >= 0 && button < 9 && player.getInventory().getStack(button).isEmpty()) {
@@ -497,34 +509,86 @@ public final class Storage {
             setCursorStack(data().take(owner(), s, amount));
         }
 
-        private void craft(int index, boolean shift) {
-            if (index >= shownPlans.size()) return;
-            Plan plan = shownPlans.get(index);
-            ServerWorld world = player.getServerWorld();
-            int made = 0;
-            int limit = shift ? Math.max(1, plan.output().getMaxCount() / Math.max(1, plan.output().getCount())) : 1;
-            for (int n = 0; n < limit; n++) {
-                Map<Item, List<Stored>> byItem = new HashMap<>();
-                for (Stored s : data().of(owner())) byItem.computeIfAbsent(s.template.getItem(), k -> new ArrayList<>()).add(s);
-                List<Stored> uses = plan(plan.recipe(), byItem);
-                if (uses == null) break;
-                for (Stored s : uses) {
-                    ItemStack used = data().take(owner(), s, 1);
-                    Item remainder = used.getItem().getRecipeRemainder();
-                    if (remainder != null) data().add(owner(), new ItemStack(remainder)); // e.g. empty buckets
-                }
-                ItemStack result = plan.recipe().getOutput(world.getRegistryManager()).copy();
-                result.onCraft(world, player, result.getCount());
-                player.getInventory().offerOrDrop(result);
-                made++;
+        /** The 3x3 grid works like a crafting table's: place, pick up, split and swap stacks. */
+        private void gridClick(int g, int button, boolean shift, SlotActionType action) {
+            if (action == SlotActionType.SWAP) return;
+            ItemStack in = grid.getStack(g).copy();
+            ItemStack cursor = getCursorStack();
+            if (shift) { // back into storage
+                if (!in.isEmpty()) data().add(owner(), in);
+                grid.setStack(g, ItemStack.EMPTY);
+                return;
             }
-            if (made > 0) {
-                world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_WOOD_HIT, SoundCategory.BLOCKS, 0.6f, 1.2f);
-                plans = craftables(world, data().of(owner()));
+            if (cursor.isEmpty()) {
+                if (in.isEmpty()) return;
+                int take = button == 1 ? (in.getCount() + 1) / 2 : in.getCount();
+                setCursorStack(in.split(take));
+                grid.setStack(g, in.isEmpty() ? ItemStack.EMPTY : in);
+                return;
+            }
+            if (in.isEmpty()) {
+                grid.setStack(g, cursor.split(button == 1 ? 1 : cursor.getCount()));
+                return;
+            }
+            if (ItemStack.canCombine(in, cursor)) {
+                int put = Math.min(in.getMaxCount() - in.getCount(), button == 1 ? 1 : cursor.getCount());
+                in.increment(put);
+                cursor.decrement(put);
+                grid.setStack(g, in);
+                return;
+            }
+            grid.setStack(g, cursor.copy()); // different items: swap
+            setCursorStack(in);
+        }
+
+        private void clearGrid() {
+            for (int i = 0; i < 9; i++) {
+                ItemStack s = grid.getStack(i);
+                if (!s.isEmpty()) data().add(owner(), s.copy());
+                grid.setStack(i, ItemStack.EMPTY);
             }
         }
 
-        private void control(int index) {
+        /** Make what the grid shows. Shift: keep going, topping the grid up from storage each time. */
+        private void craft(boolean shift) {
+            ServerWorld world = player.getServerWorld();
+            int made = 0;
+            int limit = shift ? 64 : 1;
+            for (int n = 0; n < limit; n++) {
+                Optional<CraftingRecipe> recipe = world.getRecipeManager().getFirstMatch(RecipeType.CRAFTING, grid, world);
+                if (recipe.isEmpty()) break;
+                ItemStack result = recipe.get().craft(grid, world.getRegistryManager());
+                if (result.isEmpty()) break;
+                ItemStack cursor = getCursorStack();
+                if (!shift && !cursor.isEmpty() && !(ItemStack.canCombine(cursor, result)
+                        && cursor.getCount() + result.getCount() <= cursor.getMaxCount())) break;
+                DefaultedList<ItemStack> leftovers = world.getRecipeManager().getRemainingStacks(RecipeType.CRAFTING, grid, world);
+                for (int i = 0; i < 9; i++) {
+                    ItemStack before = grid.getStack(i).copy();
+                    if (before.isEmpty()) continue;
+                    grid.removeStack(i, 1);
+                    if (grid.getStack(i).isEmpty()) { // ran out: top up from storage
+                        Stored more = data().find(owner(), before);
+                        grid.setStack(i, more == null ? ItemStack.EMPTY : data().take(owner(), more, 1));
+                    }
+                    ItemStack left = leftovers.get(i);
+                    if (!left.isEmpty()) data().add(owner(), left.copy()); // e.g. empty buckets
+                }
+                result.onCraft(world, player, result.getCount());
+                if (shift) {
+                    player.getInventory().insertStack(result);
+                    if (!result.isEmpty()) data().add(owner(), result); // inventory full: into storage
+                } else if (cursor.isEmpty()) {
+                    setCursorStack(result);
+                } else {
+                    cursor.increment(result.getCount());
+                }
+                made++;
+            }
+            if (made > 0) world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_WOOD_HIT, SoundCategory.BLOCKS, 0.6f, 1.2f);
+        }
+
+        private void control(int index, int button) {
             switch (index) {
                 case 45 -> page = Math.max(0, page - 1);
                 case 53 -> page++;
@@ -534,8 +598,15 @@ public final class Storage {
                 }
                 case 47 -> sort = Sort.values()[(sort.ordinal() + 1) % Sort.values().length];
                 case 48 -> {
-                    SEARCH.remove(owner());
                     page = 0;
+                    if (button == 1) SEARCH.remove(owner());
+                    else {
+                        Look look = new Look(tab, sort, crafting);
+                        String current = SEARCH.getOrDefault(owner(), "");
+                        player.getServer().execute(() -> player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
+                                (syncId, inv, p) -> new Search(syncId, inv, player, look, current),
+                                Text.literal("Search your storage"))));
+                    }
                 }
                 case 50 -> {
                     PlayerInventory inv = player.getInventory();
@@ -547,15 +618,16 @@ public final class Storage {
                     }
                 }
                 case 51 -> {
+                    if (crafting) clearGrid();
                     crafting = !crafting;
                     page = 0;
-                    if (crafting) plans = craftables(player.getServerWorld(), data().of(owner()));
                 }
                 default -> {}
             }
+            remember();
         }
 
-        private static ItemStack button(Item item, String name, String... lines) {
+        static ItemStack button(Item item, String name, String... lines) {
             ItemStack stack = new ItemStack(item);
             stack.setCustomName(Text.literal(name).styled(s -> s.withItalic(false)).formatted(Formatting.YELLOW));
             Text[] texts = new Text[lines.length];
@@ -572,6 +644,85 @@ public final class Storage {
                 lore.add(NbtString.of(Text.Serializer.toJson(t.copy().styled(s -> s.withItalic(false)))));
             }
             display.put("Lore", lore);
+        }
+    }
+
+    /**
+     * Typing a search: an anvil screen whose name box is the search box. Type what you want, then click
+     * the result (or press Escape) and your storage opens showing only what matches.
+     */
+    static final class Search extends AnvilScreenHandler {
+        private final ServerPlayerEntity player;
+        private final Look look;
+        private String text;
+        private boolean done;
+
+        Search(int syncId, PlayerInventory inv, ServerPlayerEntity player, Look look, String current) {
+            super(syncId, inv, ScreenHandlerContext.EMPTY);
+            this.player = player;
+            this.look = look;
+            this.text = current;
+            ItemStack paper = new ItemStack(Items.PAPER);
+            paper.setCustomName(Text.literal(current));
+            input.setStack(0, paper);
+            showResult();
+        }
+
+        @Override
+        public boolean setNewItemName(String name) {
+            text = name == null ? "" : name;
+            showResult();
+            return true;
+        }
+
+        @Override
+        public void updateResult() {
+            showResult();
+        }
+
+        private void showResult() {
+            if (player == null) return; // still being set up
+            String t = text == null ? "" : text.trim();
+            output.setStack(0, Menu.button(Items.SPYGLASS, t.isEmpty() ? "Show everything" : "Search for: " + t,
+                    "Click here (or press Escape) to see the results"));
+            sendContentUpdates();
+        }
+
+        @Override
+        public void onSlotClick(int slotIndex, int button, SlotActionType action, PlayerEntity p) {
+            if (slotIndex == 2) {
+                finish();
+                return;
+            }
+            if (slotIndex == 0 || slotIndex == 1) { // the paper stays put
+                sendContentUpdates();
+                return;
+            }
+            super.onSlotClick(slotIndex, button, action, p);
+        }
+
+        @Override
+        public ItemStack quickMove(PlayerEntity p, int index) {
+            return ItemStack.EMPTY;
+        }
+
+        @Override
+        public void onClosed(PlayerEntity p) {
+            input.clear();
+            output.clear();
+            super.onClosed(p);
+            if (!done && !player.isDisconnected()) player.getServer().execute(this::finish);
+        }
+
+        private void finish() {
+            if (done) return;
+            done = true;
+            String t = text == null ? "" : text.trim().toLowerCase(Locale.ROOT);
+            if (t.isEmpty()) SEARCH.remove(player.getUuid());
+            else SEARCH.put(player.getUuid(), t);
+            input.clear();
+            output.clear();
+            open(player, look);
         }
     }
 }
