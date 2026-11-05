@@ -32,6 +32,7 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(Planets::tick); // themed monsters on every planet
         ServerTickEvents.END_SERVER_TICK.register(Bosses::tick); // a boss arena on every planet
         ServerEntityEvents.ENTITY_LOAD.register(Bosses::onEntityLoad);
+        ServerTickEvents.END_SERVER_TICK.register(Town::tick); // Reef Town on the Bikini Bottom planet
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Updater.onJoin(handler.player));
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
@@ -43,6 +44,7 @@ public class HelperMod implements ModInitializer {
             Devices.reset();
             Storage.reset();
             Bosses.reset();
+            Town.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
