@@ -75,6 +75,10 @@ public final class HelperCommands {
                                         List.of("small", "normal", "big", "tiny", "giant", "0.5", "1.5"), builder))
                                 .executes(HelperCommands::size)))
                 .then(literal("ride").executes(HelperCommands::ride))
+                .then(literal("boss").executes(ctx -> {
+                    Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
+                    return 1;
+                }))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
@@ -96,6 +100,7 @@ public final class HelperCommands {
                 "/helper storage  - turn the barrel in your hand into a Helper Storage (no size limit)",
                 "/helper storage find <name>  - search your storage",
                 "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
+                "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
         ctx.getSource().sendFeedback(() -> Text.literal("Helper commands:").formatted(Formatting.GOLD), false);

@@ -45,6 +45,7 @@ ask for. It works out the best way to get it:
 | `/helper harvester` | Turn the hopper in your hand into a **Monster Harvester** |
 | `/helper storage` | Turn the barrel in your hand into a **Helper Storage** (no size limit, see below) |
 | `/helper storage find <name>` | Search your storage, e.g. `/helper storage find iron` |
+| `/helper boss` | On an Ad Astra planet: where is this planet's boss arena? |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, sprint to go faster, sneak to get off |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
 | `/helper look me` | Make your helper look like you again |
@@ -131,6 +132,24 @@ list, each with its own orbit for space stations:
 All of them have no air and are very cold, so bring a space suit and oxygen. Without Ad Astra the mod
 leaves the planets off. On a dedicated server the planets work for everyone, but players without this
 mod see Ad Astra's plain sky there.
+
+### Monsters, bosses and your helper in space
+
+- **Monsters:** each planet has its own monsters roaming the surface, picked to fit it. The Moon has Ad Astra's
+  star crawlers and corrupted lunarians, Mars has martian raptors and pygros, Venus and Io have sulfur creepers
+  and blazes, Europa and Pluto have strays. Mobs that aren't installed are skipped, and nothing spawns on
+  Peaceful.
+- **Bosses:** the first time you land on a planet, a boss arena is built on the surface about 40 blocks away,
+  and you're told where it is (`/helper boss` tells you again). Stand on the lodestone in the middle to call
+  the planet's boss: the Crater King on the Moon, the Red Warlord on Mars, the Sun Knight on Mercury, the
+  Sulfur Lord on Venus, the Frost Lord on Glacio, the Ice Colossus on Europa, the Molten Heart on Io, the Ceres
+  Sorcerer, the Haze Beast on Titan and the Pluto Executioner. Each one has a boss bar and calls the planet's
+  monsters for help at half health. Its reward helps you reach the next planet: desh from the Moon for a
+  tier 2 rocket, ostrum from Mars for tier 3, calorite from Mercury, Venus, Europa, Io and Ceres for tier 4,
+  plus rocket fuel. You can fight it again one Minecraft day later.
+- **Your helper comes too:** while you fly a rocket or lander it waits, then appears next to you when you land
+  on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
+  mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
 
 ## Safety on shared worlds
 

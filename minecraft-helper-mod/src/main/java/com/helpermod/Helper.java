@@ -40,6 +40,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkSection;
 import net.minecraft.world.chunk.WorldChunk;
 import net.minecraft.world.Heightmap;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ChunkTicketType;
 import net.minecraft.server.world.ServerChunkManager;
 import net.minecraft.util.math.ChunkPos;
@@ -102,6 +103,8 @@ public class Helper {
     private int stairTicks;
     private int returnTicks;
     private int missingTicks;
+    private boolean toldFlight;
+    private String lastPlanet = "";
     private int repathCooldown;
     private LivingEntity combatTarget;
     private int combatTicks;
@@ -415,6 +418,34 @@ public class Helper {
     void tick(MinecraftServer server, ServerPlayerEntity player, HelperData.Entry entry) {
         currentEntry = entry;
         MobEntity m = findEntity(server, entry);
+        // Flying an Ad Astra rocket or lander: wait, then meet the owner when they've landed (on any planet).
+        Entity vehicle = player.getVehicle();
+        if (vehicle != null && vehicle != m
+                && Registries.ENTITY_TYPE.getId(vehicle.getType()).getNamespace().equals("ad_astra")) {
+            if (!toldFlight) {
+                toldFlight = true;
+                say(player, "Have a good flight! I'll meet you when you land.");
+            }
+            if (m != null && m.getWorld() == player.getWorld()) m.getNavigation().stop();
+            missingTicks = 0;
+            return;
+        }
+        if (toldFlight && m != null && m.getWorld() != player.getWorld()) spawnNear(player, entry); // just landed
+        toldFlight = false;
+        if (m != null && Planets.isSpace(m.getWorld())) { // no air and freezing or boiling: the helper is fine
+            m.setAir(m.getMaxAir());
+            m.setFrozenTicks(0);
+            m.extinguish();
+            Planets.Theme here = Planets.themeOf(m.getWorld());
+            String dim = Planets.keyOf(m.getWorld());
+            if (here != null && !dim.equals(lastPlanet)) {
+                lastPlanet = dim;
+                say(player, "We made it to " + here.display() + "! I can mine the ores here too, e.g. /helper collect "
+                        + ("moon".equals(m.getWorld().getRegistryKey().getValue().getPath()) ? "desh"
+                        : "mars".equals(m.getWorld().getRegistryKey().getValue().getPath()) ? "ostrum" : "calorite")
+                        + ". Try /helper boss to find this planet's boss.");
+            }
+        }
         if (m == null) {
             // Unloaded (owner walked or teleported away) or gone. Bring a fresh one to the owner.
             if (++missingTicks > 40) {
