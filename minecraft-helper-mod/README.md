@@ -266,6 +266,39 @@ on the right side of the screen, only to you. The "+coins" pop-up in the middle 
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
+
+### The big tycoon update (2.4.0): factory droppers and selling
+
+**Factory droppers.** Put items in a Tycoon Dropper (right-click it, or feed it with a hopper for a real
+production line). Instead of ore it then drops what those items make, worth more than the parts, and the product
+rides your conveyors like ore, so upgraders still multiply it. Recipes with one input or many:
+
+| Put in | Comes out |
+|---|---|
+| Apple + 8 Gold Ingots | Golden Apple |
+| Carrot + 8 Gold Nuggets | Golden Carrot |
+| 3 Wheat + 2 Sugar + Egg | Cake |
+| Pumpkin + Sugar + Egg | Pumpkin Pie |
+| 2 Wheat + Cocoa Beans | 8 Cookies |
+| Bowl + both mushrooms, or Bowl + 6 Beetroot | Mushroom Stew, Beetroot Soup |
+| 5 Gunpowder + 4 Sand | TNT |
+| 3 Paper + Leather, then 3 Books + 6 Planks | Book, Bookshelf |
+| 9 Iron / Gold / Diamonds / Emeralds | the block |
+| 3 Wheat, 3 Sugar Cane | Bread, 3 Paper |
+| Raw meat or fish, Potato, Kelp | cooked |
+| Raw Iron / Gold / Copper, Ancient Debris | ingots, Netherite Scrap |
+| Sand, Cobblestone, Clay, Logs | Glass, Stone, Brick, 4 Planks |
+
+A product is worth at least its own sell price, or its parts times 1.25 to 2, plus the dropper's level. When a
+dropper has several kinds of things in it, it makes the best recipe it can first. Anything with no recipe rides the
+line as it is and sells for its own value. With nothing inside, the dropper drops ore like before.
+`/helper tycoon recipes` lists them in game.
+
+**Sell anything.** `/helper tycoon sell` (or "Sell Box" in the shop) opens a Sell Box: put in food, ores, ingots,
+gems, mob drops, crops, blocks... and close it to get coins (rebirth bonus included). Tools, armour, renamed and
+special items are never sold and come back to you. `/helper tycoon price` tells you what the item in your hand is
+worth, e.g. Bread 8, Diamond 50, Golden Apple 150, Netherite Ingot 600.
+
 ## Furniture (1.34.0)
 
 `/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 42 pieces in seven rooms.
