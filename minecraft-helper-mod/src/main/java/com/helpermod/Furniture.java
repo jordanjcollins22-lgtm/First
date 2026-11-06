@@ -889,19 +889,9 @@ final class Furniture {
                 return;
             }
         }
-        var result = player.startSleepInBed(head);
-        result.ifLeft(problem -> player.sendOverlayMessage(Component.literal(sleepProblem(String.valueOf(problem)))
-                .withStyle(ChatFormatting.YELLOW)));
-    }
-
-    private static String sleepProblem(String p) {
-        String s = p.toUpperCase(java.util.Locale.ROOT);
-        if (s.contains("MONSTER")) return "You may not rest now, there are monsters nearby.";
-        if (s.contains("FAR")) return "Get a bit closer to the bed.";
-        if (s.contains("OBSTRUCT")) return "The bed is blocked.";
-        if (s.contains("HERE")) return "You can't sleep in this world. Your spawn point is set.";
-        if (s.contains("NOW") || s.contains("DAY")) return "You can only sleep at night or in a thunderstorm. Your spawn point is set.";
-        return "You can't sleep right now.";
+        // Exactly like right-clicking a vanilla bed: night check, monsters, spawn point, the Nether explosion.
+        BlockHitResult hit = new BlockHitResult(net.minecraft.world.phys.Vec3.atCenterOf(head), Direction.UP, head, false);
+        world.getBlockState(head).useWithoutItem(world, player, hit);
     }
 
     private static void openCrafting(ServerLevel world, ServerPlayer player, Placed placed) {
