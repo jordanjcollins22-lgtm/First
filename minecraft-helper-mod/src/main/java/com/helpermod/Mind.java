@@ -163,6 +163,18 @@ final class Mind {
             return;
         }
         if (askAboutSelf(player, ask)) return;
+        if (has(ask, "storage", "stash")) { // storage anywhere
+            Matcher pull = Pattern.compile("\\b(?:bring|get|fetch|grab|give|pull|take|hand)\\b\\s+(?:me\\s+)?(?:some\\s+)?(?:(\\d{1,4})\\s+)?"
+                    + "(?:of\\s+)?(?:my\\s+|the\\s+)?(.+?)\\s+(?:out\\s+)?(?:from|out of|in)\\b").matcher(ask);
+            if (pull.find() && !pull.group(2).matches("(it|them|that|this|everything|stuff|things)")) {
+                run(player, "helper fetch " + pull.group(2).trim() + " " + (pull.group(1) == null ? 64 : pull.group(1)));
+            } else if (has(ask, "put", "send", "store", "drop off", "empty")) {
+                run(player, "helper storage send");
+            } else {
+                run(player, "helper storage open");
+            }
+            return;
+        }
         Matcher flyTo = Pattern.compile("\\b(fly|take|drive)\\b.*?\\bto\\s+(-?\\d+)[\\s,]+(?:-?\\d+[\\s,]+)?(-?\\d+)\\b").matcher(ask);
         if (flyTo.find()) { // "helper, fly me to 300 -150": roadster autopilot waypoint (y in the middle is ignored)
             Roadster.setWaypoint(player, Integer.parseInt(flyTo.group(2)) + 0.5, Integer.parseInt(flyTo.group(3)) + 0.5);

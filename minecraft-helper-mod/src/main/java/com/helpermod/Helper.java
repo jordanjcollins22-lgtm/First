@@ -406,6 +406,7 @@ public class Helper {
         clearToolNeed();
         SimpleContainer inv = HelperData.get(player.level().getServer()).getOrCreate(player.getUUID()).inventory;
         BlockState needs = missingToolFor(inv, spec);
+        if (needs != null && pullFromStorage(player, inv, has -> missingToolFor(has, spec) == null)) needs = null;
         if (needs != null) { // nothing in its pockets can mine any of it: say so now, not after the walk
             job = null;
             mode = Mode.FOLLOW;
@@ -432,7 +433,8 @@ public class Helper {
         if (mob != null) clearBreaking(mob);
         job = null;
         clearToolNeed();
-        if (rodSlot(HelperData.get(player.level().getServer()).getOrCreate(player.getUUID()).inventory) < 0) {
+        SimpleContainer pockets = HelperData.get(player.level().getServer()).getOrCreate(player.getUUID()).inventory;
+        if (rodSlot(pockets) < 0 && !pullFromStorage(player, pockets, has -> rodSlot(has) >= 0)) {
             fishWanted = 0;
             mode = Mode.FOLLOW;
             needTool(player, "Helper needs a fishing rod",
@@ -487,6 +489,7 @@ public class Helper {
         ServerLevel world = (ServerLevel) m.level();
         SimpleContainer inv = entry.inventory;
         int slot = rodSlot(inv);
+        if (slot < 0 && pullFromStorage(player, inv, has -> rodSlot(has) >= 0)) return; // fetched one: fish next tick
         if (slot < 0) {
             int left = Math.max(1, fishWanted - fishCaught);
             fishWanted = 0;
@@ -561,7 +564,9 @@ public class Helper {
         rod.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
         inv.setChanged();
         if (!rod.isEmpty() && rod.isDamageableItem()) warnIfLow(player, rod);
-        if (rod.isEmpty() || rodSlot(inv) < 0) {
+        if ((rod.isEmpty() || rodSlot(inv) < 0) && pullFromStorage(player, inv, has -> rodSlot(has) >= 0)) {
+            m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY); // swaps to the fresh rod on the next cast
+        } else if (rod.isEmpty() || rodSlot(inv) < 0) {
             int left = Math.max(1, fishWanted - fishCaught);
             needTool(player, "Helper's fishing rod is worn out",
                     "My fishing rod is about to break, so I stopped. Give me a new one (or repair it) and I'll go back to fishing.",
@@ -1305,6 +1310,13 @@ public class Helper {
             tickBreaking(m, player, (ServerLevel) m.level(), entry.inventory); // e.g. gravel fell on the stairs
             return;
         }
+        if (entry.autoStore && !toPlayer) { // storage anywhere: send the haul home from right here, no walk back
+            returnTicks = 0;
+            m.getNavigation().stop();
+            deliver(m, player, entry.inventory, true);
+            afterDeliver(player, entry);
+            return;
+        }
         if (mineStep >= 0 || branchFrom >= 0) {
             // Walk back up the mine's staircase to the surface.
             if (goToStep(m, player, (ServerLevel) m.level(), entry, 0)) {
@@ -1343,27 +1355,7 @@ public class Helper {
             if (job != null) plugShafts((ServerLevel) m.level(), entry.inventory);
             if (store != null) deliver(m, player, entry.inventory, true);
             else deliver(m, player, entry.inventory);
-            toPlayer = false;
-            if (job != null && !job.done && isFull(entry.inventory)) {
-                say(player, "I'm still out of space: my inventory is full of tools and gear. Right-click me and "
-                        + "take some things out, then ask me again.");
-                job = null;
-            }
-            if (job != null && !job.done) {
-                job.resetSearch();
-                mode = Mode.COLLECT;
-            } else if (job == null && fishWanted > 0 && fishCaught < fishWanted && rodSlot(entry.inventory) >= 0
-                    && !isFull(entry.inventory)) {
-                mode = Mode.FISH; // back to the water for the rest
-            } else if (job == null && farmCentre != null && !isFull(entry.inventory)) {
-                farmTarget = null;
-                mode = Mode.FARM; // back to the fields
-            } else {
-                farmCentre = null;
-                fishWanted = 0;
-                job = null;
-                mode = Mode.FOLLOW;
-            }
+            afterDeliver(player, entry);
             return;
         }
         if (d > 48 * 48) {
@@ -1499,6 +1491,31 @@ public class Helper {
             }
         }
         return null;
+    }
+
+    /** After a delivery: back to the job, the water or the fields if there's more to do, else follow. */
+    private void afterDeliver(ServerPlayer player, HelperData.Entry entry) {
+        toPlayer = false;
+        if (job != null && !job.done && isFull(entry.inventory)) {
+            say(player, "I'm still out of space: my inventory is full of tools and gear. Right-click me and "
+                    + "take some things out, then ask me again.");
+            job = null;
+        }
+        if (job != null && !job.done) {
+            job.resetSearch();
+            mode = Mode.COLLECT;
+        } else if (job == null && fishWanted > 0 && fishCaught < fishWanted && rodSlot(entry.inventory) >= 0
+                && !isFull(entry.inventory)) {
+            mode = Mode.FISH; // back to the water for the rest
+        } else if (job == null && farmCentre != null && !isFull(entry.inventory)) {
+            farmTarget = null;
+            mode = Mode.FARM; // back to the fields
+        } else {
+            farmCentre = null;
+            fishWanted = 0;
+            job = null;
+            mode = Mode.FOLLOW;
+        }
     }
 
     private void deliver(Mob m, ServerPlayer player, SimpleContainer inv) {
@@ -2141,6 +2158,10 @@ public class Helper {
         BlockState state = world.getBlockState(p);
         int slot = Mining.bestToolSlot(inv, state, world, p, true, job.spec.preferSilk);
         ItemStack tool = slot >= 0 ? inv.getItem(slot) : ItemStack.EMPTY;
+        if (!Mining.canHarvest(tool, state) && pullFromStorage(player, inv, has -> hasToolFor(has, state))) {
+            slot = Mining.bestToolSlot(inv, state, world, p, true, job.spec.preferSilk);
+            tool = slot >= 0 ? inv.getItem(slot) : ItemStack.EMPTY;
+        }
         if (!Mining.canHarvest(tool, state)) {
             for (int i = 0; i < inv.getContainerSize(); i++) {
                 ItemStack worn = inv.getItem(i);
@@ -2691,7 +2712,16 @@ public class Helper {
         if (!tool.isEmpty() && tool.isDamageableItem() && hardness != 0) {
             tool.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
             inv.setChanged();
-            if (!Mining.isUsableTool(tool)) {
+            Item wornItem = tool.getItem();
+            if (!Mining.isUsableTool(tool) && pullFromStorage(player, inv, has -> {
+                for (int k = 0; k < has.getContainerSize(); k++) {
+                    ItemStack s = has.getItem(k);
+                    if (s.is(wornItem) && Mining.isUsableTool(s)) return true;
+                }
+                return false;
+            })) {
+                // a spare from storage; nothing to warn about
+            } else if (!Mining.isUsableTool(tool)) {
                 alert(player, "Helper's " + tool.getHoverName().getString() + " is worn out",
                         "My " + tool.getHoverName().getString() + " is about to break, so I've stopped using it. "
                                 + "Give me a new one, or take it out and repair it.");
@@ -2827,6 +2857,7 @@ public class Helper {
         if (toolNeedHas == null) return;
         toolNeedTicks++;
         boolean idle = mode == Mode.FOLLOW && (job == null || job.done);
+        if (toolNeedTicks % 100 == 0 && idle && !toolNeedHas.test(inv)) pullFromStorage(player, inv, toolNeedHas);
         if (toolNeedTicks % 20 == 0 && idle && toolNeedHas.test(inv)) {
             java.util.function.Consumer<ServerPlayer> resume = toolNeedResume;
             clearToolNeed();
@@ -2855,6 +2886,37 @@ public class Helper {
         alert(player, "Helper's " + name + " is almost worn out",
                 "Heads up: my " + name + " is almost worn out (" + left + " uses left). Give me a spare or repair it soon, "
                         + "or I'll have to stop.");
+    }
+
+    /**
+     * Storage anywhere: take one tool that would satisfy {@code has} out of the owner's Helper Storage, wherever
+     * the helper is, and put it in its pockets. True if it got one.
+     */
+    private boolean pullFromStorage(ServerPlayer player, SimpleContainer inv, java.util.function.Predicate<SimpleContainer> has) {
+        SimpleContainer probe = new SimpleContainer(1);
+        ItemStack got = Storage.takeOne(player.level().getServer(), player.getUUID(), s -> {
+            probe.setItem(0, s.copyWithCount(1));
+            return has.test(probe);
+        });
+        if (got.isEmpty()) return false;
+        String name = got.getHoverName().getString();
+        ItemStack rest = inv.addItem(got);
+        if (!rest.isEmpty()) { // pockets full: put it back
+            Storage.Data.get(player.level().getServer()).add(player.getUUID(), rest);
+            return false;
+        }
+        inv.setChanged();
+        say(player, "I grabbed " + (name.matches("(?i)^[aeiou].*") ? "an " : "a ") + name + " from your Helper Storage.");
+        return true;
+    }
+
+    /** /helper storage send: put everything in its pockets (except tools) into the owner's storage, from anywhere. */
+    void sendToStorage(ServerPlayer player, HelperData.Entry entry) {
+        if (mob == null) {
+            say(player, "I'm not out right now. /helper summon me first.");
+            return;
+        }
+        deliver(mob, player, entry.inventory, true);
     }
 
     private static boolean hasToolFor(SimpleContainer inv, BlockState state) {

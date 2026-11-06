@@ -138,6 +138,17 @@ Helper Storage within 48 blocks of it, it walks to the closest one and puts ever
 in your pockets (it keeps its tools and a few building blocks, as before). With no Helper Storage nearby it
 brings it to you like before. `/helper deliver` always brings it to you.
 
+**Storage anywhere (2.2.0):** your helper can reach into your Helper Storage from anywhere, in any dimension,
+without a barrel nearby.
+
+- `/helper storage open` (or "helper, open my storage") opens your storage wherever you are.
+- `/helper fetch torches 32` (or "helper, bring me 32 torches from storage") pulls items out and hands them to you.
+- When the helper needs a tool it doesn't have (a pickaxe, a better pickaxe, a fishing rod, or a spare when its
+  tool is about to break), it grabs one from your storage by itself and tells you, then carries on.
+- `/helper storage send` puts everything it's carrying into your storage right where it is.
+- `/helper storage auto on`: when its pockets fill up mid-job it sends the haul straight to your storage and
+  keeps working, so no walking back. `/helper storage auto off` turns that off again.
+
 ## More real planets (needs Ad Astra)
 
 If Ad Astra is installed (it is in Prominence II), five more real places and an ocean planet show up on the rocket's planet
