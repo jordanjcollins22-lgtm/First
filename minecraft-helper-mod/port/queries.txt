@@ -1,65 +1,12 @@
-net.minecraft.util.Prediction
-net.minecraft.core.Registry
-net.minecraft.core.DefaultedRegistry
-net.minecraft.core.HolderLookup$Provider
-net.minecraft.core.HolderGetter
-net.minecraft.core.Holder
-net.minecraft.world.item.Item$Properties
-net.minecraft.server.ServerScoreboard$Method
-net.minecraft.world.entity.npc.villager.VillagerData
-net.minecraft.world.entity.ai.attributes.AttributeModifier$Operation
-com.mojang.blaze3d.platform.NativeImage
-net.minecraft.util.Util$OS
-net.minecraft.server.ServerAdvancementManager
-net.minecraft.world.item.crafting.Recipe
-net.minecraft.world.level.block.state.BlockBehaviour$BlockStateBase
-net.minecraft.world.level.block.state.BlockBehaviour
-net.minecraft.world.entity.EntityReference
-net.minecraft.world.level.levelgen.feature.ConfiguredFeature
-net.minecraft.world.level.levelgen.placement.PlacedFeature
-net.minecraft.world.level.block.entity.BaseContainerBlockEntity
-net.minecraft.server.players.PlayerList
-net.minecraft.world.inventory.AbstractContainerMenu
-net.minecraft.world.entity.ai.navigation.PathNavigation
-net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration
-net.minecraft.world.level.ServerLevelAccessor
-net.minecraft.world.level.storage.LevelData
-net.minecraft.world.level.storage.ServerLevelData
-net.minecraft.world.level.levelgen.Heightmap$Types
-net.minecraft.world.entity.Display$TextDisplay
-net.minecraft.world.entity.Display$ItemDisplay
-net.minecraft.world.entity.Interaction
-net.minecraft.world.item.alchemy.PotionContents
-net.minecraft.world.item.alchemy.Potions
-net.minecraft.world.level.BaseSpawner
-net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration
-net.minecraft.world.level.levelgen.feature.Feature
-net.minecraft.world.level.biome.Biome
-net.minecraft.world.level.biome.BiomeGenerationSettings
-net.minecraft.world.level.dimension.DimensionType
-net.minecraft.world.level.levelgen.NoiseGeneratorSettings
-net.minecraft.server.level.ServerPlayer$RespawnConfig
-net.minecraft.world.entity.player.Abilities
-net.minecraft.world.food.FoodProperties
-net.minecraft.world.item.component.Consumable
-net.minecraft.world.entity.projectile.FireworkRocketEntity
-net.minecraft.world.item.component.Fireworks
-net.minecraft.world.item.component.FireworkExplosion
-net.minecraft.world.entity.ExperienceOrb
-net.minecraft.world.level.block.DoorBlock
-net.minecraft.world.level.block.entity.HopperBlockEntity
-net.minecraft.world.level.block.entity.BarrelBlockEntity
-net.minecraft.world.inventory.Slot
-net.minecraft.world.inventory.TransientCraftingContainer
-net.minecraft.world.inventory.ContainerLevelAccess
-net.minecraft.network.chat.MutableComponent
-net.minecraft.network.chat.Style
-net.minecraft.world.entity.monster.zombie.Zombie
-net.minecraft.world.entity.monster.piglin.Piglin
-net.minecraft.world.entity.AgeableMob
-net.minecraft.network.syncher.SynchedEntityData
-net.minecraft.network.protocol.game.ServerboundChatPacket
-net.minecraft.server.network.ServerGamePacketListenerImpl
-net.minecraft.network.chat.PlayerChatMessage
-net.minecraft.world.entity.TamableAnimal
-net.minecraft.world.entity.OwnableEntity
+find /EntityTypes?$|/EntityTypeIds$
+find /Avatar$
+find ServerScoreboard
+find /ProfileResolver|/GameProfileCache|/UserNameToIdResolver
+find /ChatFormatting$
+find /Variant$
+net.minecraft.world.entity.Avatar
+net.minecraft.world.entity.player.Player
+net.minecraft.world.entity.LivingEntity
+net.minecraft.world.entity.Mob
+net.minecraft.server.level.ServerPlayer
+net.minecraft.server.MinecraftServer
