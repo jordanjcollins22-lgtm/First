@@ -52,6 +52,8 @@ ask for. It works out the best way to get it:
 | `/helper fish [amount]` | Go fishing at the nearest water (within 24 blocks). Give it a fishing rod first; Lure makes it faster and Luck of the Sea luckier. It brings you the catch and the fishing XP |
 | `/helper farm [radius]` | Look after the crops around you (16 blocks unless you say): harvest ripe wheat, carrots, potatoes, beetroot, nether wart and modded crops, plant them again, and bring you the harvest. `/helper stop` ends it |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
+| `/helperupdate` | Shows the update screen again (what's new, Yes/No) |
+| `/helperupdate preview` | Shows how this version's own update screen looks (no download) |
 | `/helper golf` | Fairway golf: where's the club, how to play. `/helper golf shop` opens the Pro Shop, `/helper golf ball` picks your ball up |
 | `/helper blackhole` | How to make a Singularity, and the Black Hole's bosses. `/helper blackhole leave` gets you out |
 | `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
@@ -350,15 +352,32 @@ to go home. `/helper blackhole` shows which bosses you've beaten.
 2. Put the `helper-mod-<version>.jar` file into the `mods` folder (only one version at a time).
 3. Launch the game.
 
-### Updates install themselves
+### Updates: "Helper Buddies X is available, update now?"
 
-From 1.16.0 on, you only install the jar by hand once. Each time the game starts, the mod checks this
-repo's GitHub releases in the background. When a newer version is there, it downloads it and tells you
-in chat. When you close Minecraft, a small script waits for the game to exit, removes the old jar from
-`mods` and puts the new one in. The next launch runs the new version. A new release is published as soon
-as a version reaches Validate on the flow board.
+You only install the jar by hand once. When the game starts, and every 30 minutes while it's open, the mod
+checks this repo's GitHub releases in the background. When a newer version is out, a screen pops up in game
+(a few seconds after you're in a world) showing what's new, what to look for, and any screenshots from the
+release notes, with these buttons:
 
-To turn this off, set `auto_update=false` in `config/helpermod-updater.properties`.
+- **Yes, update**: downloads it in the background while you keep playing.
+- **Not now**: hides it until next launch. Type `/helperupdate` (or click the chat link) to see it again.
+- **Skip this version**: won't ask about that version again.
+- **Open release page**: opens the full notes on GitHub.
+
+The new version goes live the next time you open Minecraft. A running game can't swap a mod's code (every
+Fabric mod loads once at startup), so when you close Minecraft a small script removes the old jar from `mods`
+and puts the new one in. On LAN, the host's copy runs the helpers, so the host is the one who must update.
+A dedicated server has nobody to ask, so it downloads by itself and installs on the next server restart.
+
+`config/helpermod-updater.properties`: `auto_update=ask` (default), `always` (download without asking) or
+`false` (never check).
+
+**Publishing:** pushing a `claude/helper-*` branch whose version has a `release-notes/<version>.md` file publishes it as release `helper-v<version>` (only if it's newer than every published one). Pushing a `helper-v<version>` tag works too.
+
+**Release notes:** put them in `release-notes/<version>.md`. Use `## What's new` and
+`## What to look for` headings and `- ` bullets. Screenshots: `![caption](https://.../shot.png)` (PNG shows
+inside the game; other formats show a "see release page" note). Images in `release-notes/images/` can be
+linked with `https://raw.githubusercontent.com/jordanjcollins22-lgtm/First/<tag>/minecraft-helper-mod/release-notes/images/<file>.png`.
 
 **Playing together:**
 - **Open to LAN, or the host's single-player world:** only the host needs the mod.

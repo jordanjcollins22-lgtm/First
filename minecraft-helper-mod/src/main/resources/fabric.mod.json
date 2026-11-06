@@ -4,14 +4,23 @@
   "version": "${version}",
   "name": "Helper Buddies",
   "description": "Every player gets their own little helper that gathers materials for them. Use /helper collect <material> [amount].",
-  "authors": ["jordanjcollins22"],
+  "authors": [
+    "jordanjcollins22"
+  ],
   "license": "MIT",
   "icon": "assets/helpermod/icon.png",
   "environment": "*",
   "entrypoints": {
-    "main": ["com.helpermod.HelperMod"]
+    "main": [
+      "com.helpermod.HelperMod"
+    ],
+    "client": [
+      "com.helpermod.client.UpdateClient"
+    ]
   },
-  "mixins": ["helpermod.mixins.json"],
+  "mixins": [
+    "helpermod.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.14.21",
     "minecraft": "~1.20.1",

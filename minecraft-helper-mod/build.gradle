@@ -33,6 +33,11 @@ java {
 }
 
 jar {
+    // This version's release notes, so /helperupdate preview can show the update screen without a release.
+    from("release-notes") {
+        include "${project.version}.md"
+        rename { "helpermod-release-notes.md" }
+    }
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
