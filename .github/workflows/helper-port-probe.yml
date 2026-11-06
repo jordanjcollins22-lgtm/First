@@ -69,8 +69,9 @@ jobs:
           CP=$(cat cp.txt)
           Q=minecraft-helper-mod/port/queries.txt
           [ -f $Q ] || exit 0
-          tr ':' '\n' < cp.txt | grep -E 'minecraft-merged|fabric-' > jars.txt
+          tr ':' '\n' < cp.txt | grep -E '\.jar$' > jars.txt
           for j in $(cat jars.txt); do jar tf "$j" | grep '\.class$'; done | grep -v '\$[0-9]' | sed 's/\.class$//' | sort -u > classes.txt
+          echo "jars: $(wc -l < jars.txt) classes: $(wc -l < classes.txt)"; head -3 classes.txt
           while IFS= read -r line; do
             [ -z "$line" ] && continue
             case "$line" in
