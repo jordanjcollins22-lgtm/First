@@ -1,28 +1,29 @@
 package com.helpermod;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.DoorBlock;
-import net.minecraft.block.enums.DoubleBlockHalf;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.PersistentState;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -43,7 +44,7 @@ final class Town {
     private static final int DOME = 5;
     private static final int RING = 20;
 
-    private record Resident(String name, VillagerProfession job, Block workstation) {}
+    private record Resident(String name, net.minecraft.resources.ResourceKey<VillagerProfession> job, Block workstation) {}
 
     private static final Resident[] HOUSES = {
             new Resident("Old Finn", VillagerProfession.FISHERMAN, Blocks.BARREL),
@@ -60,42 +61,42 @@ final class Town {
     }
 
     /** Where the town is. Saved with the world. */
-    static final class Data extends PersistentState {
+    static final class Data extends SavedData {
         private static final String ID = "helpermod_reef_town";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         BlockPos centre;
 
         static Data get(MinecraftServer server) {
-            return server.getOverworld().getPersistentStateManager().getOrCreate(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
-        private static Data fromNbt(NbtCompound nbt) {
+        private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            if (nbt.contains("centre")) d.centre = BlockPos.fromLong(nbt.getLong("centre"));
+            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLongOr("centre", 0L));
             return d;
         }
 
-        @Override
-        public NbtCompound writeNbt(NbtCompound nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             if (centre != null) nbt.putLong("centre", centre.asLong());
             return nbt;
         }
     }
 
     static void tick(MinecraftServer server) {
-        if (server.getTicks() % 40 != 0) return;
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+        if (server.getTickCount() % 40 != 0) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerWorld world = player.getServerWorld();
+            ServerLevel world = player.level();
             if (!Planets.keyOf(world).equals(PLANET)) continue;
             Data data = Data.get(server);
             if (data.centre == null) {
-                if (player.hasVehicle() || !(player.isOnGround() || player.isTouchingWater())) continue;
+                if (player.isPassenger() || !(player.onGround() || player.isInWater())) continue;
                 BlockPos centre = build(world, player);
                 if (centre == null) continue;
                 data.centre = centre;
-                data.markDirty();
+                data.setDirty();
             }
-            if (TOLD.add(player.getUuid())) {
+            if (TOLD.add(player.getUUID())) {
                 Helper.say(player, "There's a town under the sea here, Reef Town, " + where(player, data.centre)
                         + ". The glass domes are full of air, so you can go inside and trade with the townsfolk.");
             }
@@ -103,12 +104,12 @@ final class Town {
     }
 
     /** /helper town */
-    static void tellWhere(ServerPlayerEntity player) {
-        if (!Planets.keyOf(player.getServerWorld()).equals(PLANET)) {
+    static void tellWhere(ServerPlayer player) {
+        if (!Planets.keyOf(player.level()).equals(PLANET)) {
             Helper.say(player, "Reef Town is on the Bikini Bottom planet. Fly there with a tier 3 Ad Astra rocket.");
             return;
         }
-        BlockPos c = Data.get(player.getServer()).centre;
+        BlockPos c = Data.get(player.level().getServer()).centre;
         if (c == null) {
             Helper.say(player, "Reef Town gets built near you once you reach the sea floor.");
             return;
@@ -116,7 +117,7 @@ final class Town {
         Helper.say(player, "Reef Town is " + where(player, c) + ".");
     }
 
-    private static String where(ServerPlayerEntity player, BlockPos c) {
+    private static String where(ServerPlayer player, BlockPos c) {
         double dx = c.getX() + 0.5 - player.getX(), dz = c.getZ() + 0.5 - player.getZ();
         int dist = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
         if (dist < 10) return "right here";
@@ -129,12 +130,12 @@ final class Town {
     // Building
     // ---------------------------------------------------------------------------------------
 
-    private static BlockPos build(ServerWorld world, ServerPlayerEntity player) {
+    private static BlockPos build(ServerLevel world, ServerPlayer player) {
         double angle = world.getRandom().nextDouble() * Math.PI * 2;
-        int cx = MathHelper.floor(player.getX() + Math.cos(angle) * 48);
-        int cz = MathHelper.floor(player.getZ() + Math.sin(angle) * 48);
+        int cx = Mth.floor(player.getX() + Math.cos(angle) * 48);
+        int cz = Mth.floor(player.getZ() + Math.sin(angle) * 48);
         int cy = floorY(world, cx, cz);
-        if (cy <= world.getBottomY() + 8 || cy >= world.getTopY() - 16) return null;
+        if (cy <= world.getMinY() + 8 || cy >= (world.getMaxY() + 1) - 16) return null;
 
         diner(world, new BlockPos(cx, cy, cz));
         for (int i = 0; i < HOUSES.length; i++) {
@@ -142,35 +143,35 @@ final class Town {
             int hx = cx + (int) Math.round(Math.cos(a) * RING);
             int hz = cz + (int) Math.round(Math.sin(a) * RING);
             int hy = floorY(world, hx, hz);
-            if (hy <= world.getBottomY() + 8) hy = cy;
+            if (hy <= world.getMinY() + 8) hy = cy;
             // The door faces the town centre.
-            Direction facing = Direction.getFacing(cx - hx, 0, cz - hz);
+            Direction facing = Direction.getNearest(cx - hx, 0, cz - hz, Direction.NORTH);
             dome(world, new BlockPos(hx, hy, hz), facing, HOUSES[i]);
             path(world, new BlockPos(cx, cy, cz), new BlockPos(hx, hy, hz));
         }
         return new BlockPos(cx, cy, cz);
     }
 
-    private static int floorY(ServerWorld world, int x, int z) {
+    private static int floorY(ServerLevel world, int x, int z) {
         world.getChunk(x >> 4, z >> 4);
-        return world.getTopY(Heightmap.Type.OCEAN_FLOOR, x, z);
+        return world.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z);
     }
 
-    private static void set(ServerWorld world, BlockPos pos, BlockState state) {
-        world.setBlockState(pos, state, Block.NOTIFY_LISTENERS);
+    private static void set(ServerLevel world, BlockPos pos, BlockState state) {
+        world.setBlock(pos, state, Block.UPDATE_CLIENTS);
     }
 
     /** Solid ground under a building so it doesn't hang over a drop. */
-    private static void foundation(ServerWorld world, int x, int y, int z) {
+    private static void foundation(ServerLevel world, int x, int y, int z) {
         for (int fy = y - 1; fy >= y - 8; fy--) {
             BlockPos p = new BlockPos(x, fy, z);
-            if (world.getBlockState(p).isSolidBlock(world, p)) break;
-            set(world, p, Blocks.SANDSTONE.getDefaultState());
+            if (world.getBlockState(p).isRedstoneConductor(world, p)) break;
+            set(world, p, Blocks.SANDSTONE.defaultBlockState());
         }
     }
 
     /** A glass dome house filled with air. pos is the centre of its floor. */
-    private static void dome(ServerWorld world, BlockPos pos, Direction door, Resident who) {
+    private static void dome(ServerLevel world, BlockPos pos, Direction door, Resident who) {
         int r = DOME;
         for (int dx = -r - 1; dx <= r + 1; dx++) {
             for (int dz = -r - 1; dz <= r + 1; dz++) {
@@ -180,47 +181,47 @@ final class Town {
                 int x = pos.getX() + dx, z = pos.getZ() + dz;
                 foundation(world, x, pos.getY(), z);
                 set(world, new BlockPos(x, pos.getY(), z), flat > r - 0.5
-                        ? Blocks.PRISMARINE_BRICKS.getDefaultState() : Blocks.SMOOTH_SANDSTONE.getDefaultState());
+                        ? Blocks.PRISMARINE_BRICKS.defaultBlockState() : Blocks.SMOOTH_SANDSTONE.defaultBlockState());
                 for (int dy = 1; dy <= r + 1; dy++) {
                     double d = Math.sqrt(dx * dx + dy * dy + dz * dz);
                     BlockPos p = new BlockPos(x, pos.getY() + dy, z);
-                    if (d <= r - 1.5) set(world, p, Blocks.AIR.getDefaultState());
-                    else if (d <= r + 0.5) set(world, p, Blocks.GLASS.getDefaultState());
+                    if (d <= r - 1.5) set(world, p, Blocks.AIR.defaultBlockState());
+                    else if (d <= r + 0.5) set(world, p, Blocks.GLASS.defaultBlockState());
                 }
             }
         }
-        set(world, pos.up(r), Blocks.SEA_LANTERN.getDefaultState());
+        set(world, pos.above(r), Blocks.SEA_LANTERN.defaultBlockState());
 
         // Door in the outer wall facing the town, with a short air tunnel through the thick glass.
         for (int k = 3; k < r; k++) {
-            set(world, pos.offset(door, k).up(), Blocks.AIR.getDefaultState());
-            set(world, pos.offset(door, k).up(2), Blocks.AIR.getDefaultState());
+            set(world, pos.relative(door, k).above(), Blocks.AIR.defaultBlockState());
+            set(world, pos.relative(door, k).above(2), Blocks.AIR.defaultBlockState());
         }
-        BlockPos doorPos = pos.offset(door, r).up();
-        BlockState lower = Blocks.SPRUCE_DOOR.getDefaultState().with(DoorBlock.FACING, door)
-                .with(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+        BlockPos doorPos = pos.relative(door, r).above();
+        BlockState lower = Blocks.SPRUCE_DOOR.defaultBlockState().setValue(DoorBlock.FACING, door)
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
         set(world, doorPos, lower);
-        set(world, doorPos.up(), lower.with(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        set(world, doorPos.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
 
         // Inside: a bed, a light, a chest and the resident's work block.
-        Direction left = door.rotateYCounterclockwise();
-        BlockPos back = pos.offset(door.getOpposite(), 2).up();
-        set(world, back.offset(left, 2), who.workstation().getDefaultState());
-        set(world, back.offset(left.getOpposite(), 2), Blocks.CHEST.getDefaultState());
-        bed(world, back.offset(left.getOpposite(), 0), door);
-        set(world, pos.up().offset(left, 3), Blocks.LANTERN.getDefaultState());
-        resident(world, pos.up().offset(door, 1), who);
+        Direction left = door.getCounterClockWise();
+        BlockPos back = pos.relative(door.getOpposite(), 2).above();
+        set(world, back.relative(left, 2), who.workstation().defaultBlockState());
+        set(world, back.relative(left.getOpposite(), 2), Blocks.CHEST.defaultBlockState());
+        bed(world, back.relative(left.getOpposite(), 0), door);
+        set(world, pos.above().relative(left, 3), Blocks.LANTERN.defaultBlockState());
+        resident(world, pos.above().relative(door, 1), who);
     }
 
-    private static void bed(ServerWorld world, BlockPos foot, Direction door) {
+    private static void bed(ServerLevel world, BlockPos foot, Direction door) {
         Direction head = door.getOpposite();
-        BlockState bed = Blocks.CYAN_BED.getDefaultState().with(net.minecraft.block.BedBlock.FACING, head);
-        set(world, foot, bed.with(net.minecraft.block.BedBlock.PART, net.minecraft.block.enums.BedPart.FOOT));
-        set(world, foot.offset(head), bed.with(net.minecraft.block.BedBlock.PART, net.minecraft.block.enums.BedPart.HEAD));
+        BlockState bed = Blocks.BED.cyan().defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
+        set(world, foot, bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
+        set(world, foot.relative(head), bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
     }
 
     /** The diner in the middle of town: a prismarine hall with a glass roof, tables and a cook. */
-    private static void diner(ServerWorld world, BlockPos pos) {
+    private static void diner(ServerLevel world, BlockPos pos) {
         int hw = 6, hd = 4, h = 5;
         for (int dx = -hw; dx <= hw; dx++) {
             for (int dz = -hd; dz <= hd; dz++) {
@@ -228,79 +229,79 @@ final class Town {
                 world.getChunk(x >> 4, z >> 4);
                 foundation(world, x, pos.getY(), z);
                 boolean edge = Math.abs(dx) == hw || Math.abs(dz) == hd;
-                set(world, new BlockPos(x, pos.getY(), z), Blocks.DARK_PRISMARINE.getDefaultState());
+                set(world, new BlockPos(x, pos.getY(), z), Blocks.DARK_PRISMARINE.defaultBlockState());
                 for (int dy = 1; dy <= h; dy++) {
                     BlockPos p = new BlockPos(x, pos.getY() + dy, z);
-                    if (dy == h) set(world, p, edge ? Blocks.PRISMARINE_BRICKS.getDefaultState() : Blocks.GLASS.getDefaultState());
-                    else if (edge) set(world, p, dy == 2 && dx % 2 == 0 ? Blocks.GLASS.getDefaultState()
-                            : Blocks.PRISMARINE_BRICKS.getDefaultState());
-                    else set(world, p, Blocks.AIR.getDefaultState());
+                    if (dy == h) set(world, p, edge ? Blocks.PRISMARINE_BRICKS.defaultBlockState() : Blocks.GLASS.defaultBlockState());
+                    else if (edge) set(world, p, dy == 2 && dx % 2 == 0 ? Blocks.GLASS.defaultBlockState()
+                            : Blocks.PRISMARINE_BRICKS.defaultBlockState());
+                    else set(world, p, Blocks.AIR.defaultBlockState());
                 }
             }
         }
-        set(world, pos.up(h), Blocks.SEA_LANTERN.getDefaultState());
-        set(world, pos.add(-3, h, 0), Blocks.SEA_LANTERN.getDefaultState());
-        set(world, pos.add(3, h, 0), Blocks.SEA_LANTERN.getDefaultState());
+        set(world, pos.above(h), Blocks.SEA_LANTERN.defaultBlockState());
+        set(world, pos.offset(-3, h, 0), Blocks.SEA_LANTERN.defaultBlockState());
+        set(world, pos.offset(3, h, 0), Blocks.SEA_LANTERN.defaultBlockState());
 
         // Doors on both long sides.
         for (Direction d : new Direction[]{Direction.NORTH, Direction.SOUTH}) {
-            BlockPos dp = pos.offset(d, hd).up();
-            BlockState lower = Blocks.SPRUCE_DOOR.getDefaultState().with(DoorBlock.FACING, d.getOpposite())
-                    .with(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+            BlockPos dp = pos.relative(d, hd).above();
+            BlockState lower = Blocks.SPRUCE_DOOR.defaultBlockState().setValue(DoorBlock.FACING, d.getOpposite())
+                    .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
             set(world, dp, lower);
-            set(world, dp.up(), lower.with(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+            set(world, dp.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
         }
 
         // A counter along the back, a smoker and some tables.
         for (int dx = -hw + 1; dx <= -hw + 3; dx++) {
             for (int dz = -hd + 1; dz <= hd - 1; dz++) {
-                if (dx == -hw + 3) set(world, pos.add(dx, 1, dz), Blocks.STRIPPED_SPRUCE_LOG.getDefaultState());
+                if (dx == -hw + 3) set(world, pos.offset(dx, 1, dz), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
             }
         }
-        set(world, pos.add(-hw + 1, 1, 0), CHEF.workstation().getDefaultState());
-        set(world, pos.add(-hw + 1, 1, 1), Blocks.CAMPFIRE.getDefaultState()
-                .with(net.minecraft.block.CampfireBlock.LIT, false));
-        set(world, pos.add(-hw + 1, 1, -1), Blocks.BARREL.getDefaultState());
+        set(world, pos.offset(-hw + 1, 1, 0), CHEF.workstation().defaultBlockState());
+        set(world, pos.offset(-hw + 1, 1, 1), Blocks.CAMPFIRE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.CampfireBlock.LIT, false));
+        set(world, pos.offset(-hw + 1, 1, -1), Blocks.BARREL.defaultBlockState());
         for (int[] t : new int[][]{{1, -2}, {1, 2}, {4, -2}, {4, 2}}) {
-            BlockPos table = pos.add(t[0], 1, t[1]);
-            set(world, table, Blocks.SPRUCE_FENCE.getDefaultState());
-            set(world, table.up(), Blocks.SPRUCE_PRESSURE_PLATE.getDefaultState());
-            set(world, table.east(), Blocks.SPRUCE_STAIRS.getDefaultState()
-                    .with(net.minecraft.block.StairsBlock.FACING, Direction.WEST));
-            set(world, table.west(), Blocks.SPRUCE_STAIRS.getDefaultState()
-                    .with(net.minecraft.block.StairsBlock.FACING, Direction.EAST));
+            BlockPos table = pos.offset(t[0], 1, t[1]);
+            set(world, table, Blocks.SPRUCE_FENCE.defaultBlockState());
+            set(world, table.above(), Blocks.SPRUCE_PRESSURE_PLATE.defaultBlockState());
+            set(world, table.east(), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.StairBlock.FACING, Direction.WEST));
+            set(world, table.west(), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.StairBlock.FACING, Direction.EAST));
         }
-        resident(world, pos.add(-hw + 2, 1, 0), CHEF);
+        resident(world, pos.offset(-hw + 2, 1, 0), CHEF);
     }
 
     /** A sandstone path along the sea floor from the town centre to a house. */
-    private static void path(ServerWorld world, BlockPos from, BlockPos to) {
-        int steps = (int) Math.ceil(Math.sqrt(from.getSquaredDistance(to)));
+    private static void path(ServerLevel world, BlockPos from, BlockPos to) {
+        int steps = (int) Math.ceil(Math.sqrt(from.distSqr(to)));
         for (int s = 0; s <= steps; s++) {
             double t = s / (double) Math.max(1, steps);
-            int x = MathHelper.floor(MathHelper.lerp(t, from.getX(), to.getX()) + 0.5);
-            int z = MathHelper.floor(MathHelper.lerp(t, from.getZ(), to.getZ()) + 0.5);
+            int x = Mth.floor(Mth.lerp(t, from.getX(), to.getX()) + 0.5);
+            int z = Mth.floor(Mth.lerp(t, from.getZ(), to.getZ()) + 0.5);
             int y = floorY(world, x, z) - 1;
             BlockPos p = new BlockPos(x, y, z);
             BlockState here = world.getBlockState(p);
-            if (here.isOf(Blocks.GLASS) || here.isOf(Blocks.SMOOTH_SANDSTONE) || here.isOf(Blocks.DARK_PRISMARINE)
-                    || here.isOf(Blocks.PRISMARINE_BRICKS)) continue;
-            set(world, p, Blocks.CUT_SANDSTONE.getDefaultState());
+            if (here.is(Blocks.GLASS) || here.is(Blocks.SMOOTH_SANDSTONE) || here.is(Blocks.DARK_PRISMARINE)
+                    || here.is(Blocks.PRISMARINE_BRICKS)) continue;
+            set(world, p, Blocks.CUT_SANDSTONE.defaultBlockState());
         }
     }
 
-    private static void resident(ServerWorld world, BlockPos at, Resident who) {
-        VillagerEntity v = EntityType.VILLAGER.create(world);
+    private static void resident(ServerLevel world, BlockPos at, Resident who) {
+        Villager v = EntityTypes.VILLAGER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (v == null) return;
-        v.refreshPositionAndAngles(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, world.getRandom().nextFloat() * 360f, 0f);
-        v.initialize(world, world.getLocalDifficulty(at), SpawnReason.STRUCTURE, null, null);
-        v.setVillagerData(v.getVillagerData().withProfession(who.job()).withLevel(2));
-        v.setExperience(10); // keeps the job even if it loses its work block
-        v.setCustomName(Text.literal(who.name()).formatted(Formatting.AQUA));
+        v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, world.getRandom().nextFloat() * 360f, 0f);
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null);
+        v.setVillagerData(v.getVillagerData().withProfession(v.registryAccess(), who.job()).withLevel(2));
+        v.setVillagerXp(10); // keeps the job even if it loses its work block
+        v.setCustomName(Component.literal(who.name()).withStyle(ChatFormatting.AQUA));
         v.setCustomNameVisible(true);
-        v.setPersistent();
-        v.addCommandTag(TAG);
-        v.addStatusEffect(new StatusEffectInstance(StatusEffects.WATER_BREATHING, StatusEffectInstance.INFINITE, 0, false, false));
-        world.spawnEntity(v);
+        v.setPersistenceRequired();
+        v.addTag(TAG);
+        v.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, MobEffectInstance.INFINITE_DURATION, 0, false, false));
+        world.addFreshEntity(v);
     }
 }

@@ -22,6 +22,7 @@ public class HelperMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        Helper.registerTickets();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 HelperCommands.register(dispatcher));
         ServerTickEvents.END_SERVER_TICK.register(HelperManager::tick);
@@ -62,9 +63,26 @@ public class HelperMod implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Updater.onJoin(handler.player));
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
+        ServerLifecycleEvents.SERVER_STARTING.register(Compat::serverStarting);
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
+        if (System.getenv("HELPERMOD_SMOKETEST") != null) { // CI: start a server, check it boots, stop
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+                for (String planet : Space.PLANETS) {
+                    var w = server.getLevel(Space.key(planet));
+                    if (w == null) { LOG.error("HELPERMOD SMOKETEST planet missing: " + planet); server.halt(false); return; }
+                    w.getChunk(0, 0);
+                    LOG.info("HELPERMOD SMOKETEST planet " + planet + " ground at "
+                            + w.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0)
+                            + " top block " + w.getBlockState(new net.minecraft.core.BlockPos(0,
+                            w.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0) - 1, 0)));
+                }
+                LOG.info("HELPERMOD SMOKETEST OK");
+                server.halt(false);
+            });
+        }
         ServerLifecycleEvents.SERVER_STOPPING.register(HelperManager::saveParcels);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            Compat.serverStopped();
             HelperManager.reset();
             Materials.reset();
             Disguise.reset();

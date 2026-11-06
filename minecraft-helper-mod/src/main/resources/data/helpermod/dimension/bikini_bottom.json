@@ -1,0 +1,11 @@
+{
+ "type": "helpermod:bikini_bottom",
+ "generator": {
+  "type": "minecraft:noise",
+  "biome_source": {
+   "type": "minecraft:fixed",
+   "biome": "helpermod:bikini_bottom"
+  },
+  "settings": "helpermod:bikini_bottom"
+ }
+}

@@ -1,26 +1,21 @@
 package com.helpermod;
 
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.ArmorItem;
-import net.minecraft.item.AxeItem;
-import net.minecraft.item.HoeItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.MiningToolItem;
-import net.minecraft.item.RangedWeaponItem;
-import net.minecraft.item.ShieldItem;
-import net.minecraft.item.SwordItem;
-import net.minecraft.item.TridentItem;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ProjectileWeaponItem;
+import net.minecraft.world.item.ShieldItem;
+import net.minecraft.world.item.TridentItem;
 
 /**
  * Every weapon and piece of armour in the mod pack (vanilla and every other mod), found by scanning the item registry
@@ -39,16 +34,16 @@ final class ModGear {
     static synchronized List<Gear> all() {
         if (cache != null) return cache;
         List<Gear> list = new ArrayList<>();
-        for (Item item : Registries.ITEM) {
-            Identifier id = Registries.ITEM.getId(item);
+        for (Item item : BuiltInRegistries.ITEM) {
+            Identifier id = BuiltInRegistries.ITEM.getKey(item);
             String path = id.getPath().toLowerCase(Locale.ROOT);
             boolean skip = false;
             for (String s : SKIP) if (path.contains(s)) skip = true;
-            if (skip || item.getMaxDamage() <= 0) continue;
+            if (skip || item.getDefaultInstance().getMaxDamage() <= 0) continue;
             long price = price(item);
             if (price <= 0) continue;
             int tier = price < 1_000 ? 1 : price < 20_000 ? 2 : 3;
-            list.add(new Gear(item, name(item, id), price, tier, rarityFor(price), item instanceof ArmorItem));
+            list.add(new Gear(item, name(item, id), price, tier, rarityFor(price), Compat.isArmor(item.getDefaultInstance())));
         }
         list.sort(Comparator.comparingLong(Gear::price));
         cache = List.copyOf(list);
@@ -75,28 +70,31 @@ final class ModGear {
     }
 
     private static double attackDamage(Item item) {
-        double dmg = 0;
-        for (EntityAttributeModifier m : item.getAttributeModifiers(EquipmentSlot.MAINHAND).get(EntityAttributes.GENERIC_ATTACK_DAMAGE)) {
-            if (m.getOperation() == EntityAttributeModifier.Operation.ADDITION) dmg += m.getValue();
-        }
+        double dmg = Compat.modifierSum(item.getDefaultInstance(), Attributes.ATTACK_DAMAGE, EquipmentSlot.MAINHAND);
         return dmg + 1; // players hit for 1 with an empty hand
     }
 
     /** 0 = not a weapon or armour. */
     static long price(Item item) {
-        double durability = 1 + item.getMaxDamage() / 2000.0;
+        ItemStack stack = item.getDefaultInstance();
+        int maxDamage = stack.getMaxDamage();
+        double durability = 1 + maxDamage / 2000.0;
         double p;
-        if (item instanceof ArmorItem armor) {
-            double points = armor.getProtection() + armor.getToughness() * 1.0;
+        EquipmentSlot armorSlot = Compat.armorSlot(stack);
+        if (armorSlot != null) {
+            double points = Compat.modifierSum(stack, Attributes.ARMOR, armorSlot)
+                    + Compat.modifierSum(stack, Attributes.ARMOR_TOUGHNESS, armorSlot);
             if (points <= 0) return 0;
-            p = 10 * Math.pow(2, points - 2) * (1 + item.getMaxDamage() / 1000.0);
+            p = 10 * Math.pow(2, points - 2) * (1 + maxDamage / 1000.0);
         } else if (item instanceof ShieldItem) {
-            p = 80 + item.getMaxDamage() / 2.0;
-        } else if (item instanceof RangedWeaponItem) {
-            p = 150 + item.getMaxDamage() * 1.5;
+            p = 80 + maxDamage / 2.0;
+        } else if (item instanceof ProjectileWeaponItem) {
+            p = 150 + maxDamage * 1.5;
         } else {
-            boolean weapon = item instanceof SwordItem || item instanceof AxeItem || item instanceof TridentItem;
-            if (!weapon && (item instanceof MiningToolItem || item instanceof HoeItem)) return 0; // pickaxes, shovels, hoes
+            boolean weapon = stack.is(net.minecraft.tags.ItemTags.SWORDS) || stack.is(net.minecraft.tags.ItemTags.AXES)
+                    || item instanceof TridentItem || stack.is(Items.MACE);
+            if (!weapon && (stack.is(net.minecraft.tags.ItemTags.PICKAXES) || stack.is(net.minecraft.tags.ItemTags.SHOVELS)
+                    || stack.is(net.minecraft.tags.ItemTags.HOES))) return 0; // pickaxes, shovels, hoes
             double dmg = attackDamage(item);
             if (!weapon && dmg < 5) return 0; // modded weapons that don't extend SwordItem still count when they hit hard
             if (dmg > 100) return 0; // creative-only
@@ -106,8 +104,8 @@ final class ModGear {
     }
 
     private static String name(Item item, Identifier id) {
-        String n = new ItemStack(item).getName().getString();
-        if (n.isEmpty() || n.equals(item.getTranslationKey())) {
+        String n = new ItemStack(item).getHoverName().getString();
+        if (n.isEmpty() || n.equals(item.getDescriptionId())) {
             StringBuilder sb = new StringBuilder();
             for (String w : id.getPath().split("_")) {
                 if (w.isEmpty()) continue;
@@ -125,8 +123,8 @@ final class ModGear {
     }
 
     static Set<Item> soldElsewhere() {
-        return Set.of(net.minecraft.item.Items.IRON_SWORD, net.minecraft.item.Items.IRON_AXE, net.minecraft.item.Items.BOW,
-                net.minecraft.item.Items.SHIELD, net.minecraft.item.Items.DIAMOND_SWORD, net.minecraft.item.Items.CROSSBOW,
-                net.minecraft.item.Items.TRIDENT, net.minecraft.item.Items.NETHERITE_SWORD);
+        return Set.of(net.minecraft.world.item.Items.IRON_SWORD, net.minecraft.world.item.Items.IRON_AXE, net.minecraft.world.item.Items.BOW,
+                net.minecraft.world.item.Items.SHIELD, net.minecraft.world.item.Items.DIAMOND_SWORD, net.minecraft.world.item.Items.CROSSBOW,
+                net.minecraft.world.item.Items.TRIDENT, net.minecraft.world.item.Items.NETHERITE_SWORD);
     }
 }

@@ -2,52 +2,53 @@ package com.helpermod;
 
 import com.helpermod.mixin.ExperienceOrbAccessor;
 import com.helpermod.mixin.MobEntityAccessor;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ExperienceOrbEntity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.ai.goal.LookAtEntityGoal;
-import net.minecraft.entity.ai.pathing.Path;
-import net.minecraft.entity.attribute.EntityAttributeInstance;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.passive.WanderingTraderEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.registry.tag.FluidTags;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkSectionPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.WorldChunk;
-import net.minecraft.world.Heightmap;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ChunkTicketType;
-import net.minecraft.server.world.ServerChunkManager;
-import net.minecraft.util.math.ChunkPos;
-
+import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.npc.wanderingtrader.WanderingTrader;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import net.minecraft.resources.Identifier;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -76,10 +77,17 @@ public class Helper {
     private static final int FAR_PARALLEL = 8;
     /** Past this horizontal distance the helper walks over land toward the target before digging. */
     private static final double TRAVEL_DISTANCE = 40;
-    private static final ChunkTicketType<ChunkPos> SEARCH_TICKET =
-            ChunkTicketType.create("helpermod_search", Comparator.comparingLong(ChunkPos::toLong), 300);
-    private static final ChunkTicketType<ChunkPos> KEEP_LOADED_TICKET =
-            ChunkTicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
+    private static TicketType SEARCH_TICKET;
+    private static TicketType KEEP_LOADED_TICKET;
+
+    /** Chunk tickets must be registered while the game starts up. */
+    static void registerTickets() {
+        SEARCH_TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
+                Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "search"), new TicketType(300L, TicketType.FLAG_LOADING));
+        KEEP_LOADED_TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
+                Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "helper"),
+                new TicketType(80L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION));
+    }
 
     enum Mode { FOLLOW, COLLECT, RETURN, FISH, FARM, SEND }
 
@@ -94,7 +102,7 @@ public class Helper {
     private static final int BRANCH_REACH = 4;
 
     private final UUID owner;
-    private MobEntity mob;
+    private Mob mob;
     private HelperData.Entry currentEntry;
     /** Which stair step the helper is standing on (-1 = not in the mine). */
     private int mineStep = -1;
@@ -122,7 +130,7 @@ public class Helper {
     private final Set<UUID> ignoredTargets = new HashSet<>();
     private int ignoreClearTicks;
     private int stuckTicks;
-    private Vec3d lastPos = Vec3d.ZERO;
+    private Vec3 lastPos = Vec3.ZERO;
     /** Items it's taking to another player (/helper send), who they're for, and how long it's been going. */
     private final List<ItemStack> parcel = new ArrayList<>();
     private UUID sendTo;
@@ -132,7 +140,7 @@ public class Helper {
     Job job;
 
     /** The helper's mob while it's out in the world, or null. */
-    MobEntity mobEntity() {
+    Mob mobEntity() {
         return mob;
     }
 
@@ -175,7 +183,7 @@ public class Helper {
         boolean toldFarSearch;
 
         int travelFailures;
-        Vec3d travelFrom;
+        Vec3 travelFrom;
 
         /** Using the mine: NONE = normal gathering; DESCEND = on the stairs; WORK = mining off a landing. */
         MineState mineState = MineState.NONE;
@@ -228,7 +236,7 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     public static String ownerNameOf(Entity entity) {
-        for (String tag : entity.getCommandTags()) {
+        for (String tag : entity.entityTags()) {
             if (tag.startsWith(NAME_TAG)) return tag.substring(NAME_TAG.length());
         }
         String name = entity.getName().getString();
@@ -236,7 +244,7 @@ public class Helper {
     }
 
     public static UUID ownerOf(Entity entity) {
-        for (String tag : entity.getCommandTags()) {
+        for (String tag : entity.entityTags()) {
             if (tag.startsWith(OWNER_TAG)) {
                 try {
                     return UUID.fromString(tag.substring(OWNER_TAG.length()));
@@ -249,28 +257,28 @@ public class Helper {
     }
 
     /** Strip the vanilla AI so only this mod moves the helper. Called on spawn and on every load. */
-    public static void applyBrain(MobEntity mob) {
+    public static void applyBrain(Mob mob) {
         MobEntityAccessor accessor = (MobEntityAccessor) mob;
-        accessor.helpermod$getGoalSelector().clear(goal -> true);
-        accessor.helpermod$getTargetSelector().clear(goal -> true);
-        accessor.helpermod$getGoalSelector().add(8, new LookAtEntityGoal(mob, PlayerEntity.class, 8f));
-        mob.getNavigation().setCanSwim(true);
-        mob.setPersistent();
-        mob.setInvulnerable(true);
+        accessor.helpermod$getGoalSelector().removeAllGoals(goal -> true);
+        accessor.helpermod$getTargetSelector().removeAllGoals(goal -> true);
+        accessor.helpermod$getGoalSelector().addGoal(8, new LookAtPlayerGoal(mob, Player.class, 8f));
+        mob.getNavigation().setCanFloat(true);
+        mob.setPersistenceRequired();
+        ((com.helpermod.mixin.EntityAccessor) mob).helpermod$setInvulnerable(true);
         mob.setSilent(true);
-        if (mob instanceof WanderingTraderEntity trader) trader.setDespawnDelay(0);
-        for (EquipmentSlot slot : EquipmentSlot.values()) mob.setEquipmentDropChance(slot, 0f);
-        EntityAttributeInstance range = mob.getAttributeInstance(EntityAttributes.GENERIC_FOLLOW_RANGE);
+        if (mob instanceof WanderingTrader trader) trader.setDespawnDelay(0);
+        for (EquipmentSlot slot : EquipmentSlot.values()) mob.setDropChance(slot, 0f);
+        AttributeInstance range = mob.getAttribute(Attributes.FOLLOW_RANGE);
         if (range != null) range.setBaseValue(64);
     }
 
-    MobEntity findEntity(MinecraftServer server, HelperData.Entry entry) {
+    Mob findEntity(MinecraftServer server, HelperData.Entry entry) {
         if (entry.entity == null) return null;
-        if (mob != null && !mob.isRemoved() && mob.getUuid().equals(entry.entity)) return mob;
+        if (mob != null && !mob.isRemoved() && mob.getUUID().equals(entry.entity)) return mob;
         mob = null;
-        for (ServerWorld world : server.getWorlds()) {
+        for (ServerLevel world : server.getAllLevels()) {
             Entity e = world.getEntity(entry.entity);
-            if (e instanceof MobEntity m && !m.isRemoved()) {
+            if (e instanceof Mob m && !m.isRemoved()) {
                 mob = m;
                 break;
             }
@@ -279,16 +287,16 @@ public class Helper {
     }
 
     /** Spawn (or move) the helper right next to the player. */
-    void spawnNear(ServerPlayerEntity player, HelperData.Entry entry) {
-        MinecraftServer server = player.getServer();
+    void spawnNear(ServerPlayer player, HelperData.Entry entry) {
+        MinecraftServer server = player.level().getServer();
         Disguise.prepare(player);
-        MobEntity existing = findEntity(server, entry);
-        ServerWorld world = player.getServerWorld();
-        Vec3d spot = findSpotNear(world, player.getBlockPos());
-        if (existing != null && existing.getWorld() == world) {
+        Mob existing = findEntity(server, entry);
+        ServerLevel world = player.level();
+        Vec3 spot = findSpotNear(world, player.blockPosition());
+        if (existing != null && existing.level() == world) {
             clearBreaking(existing);
             existing.getNavigation().stop();
-            existing.requestTeleport(spot.x, spot.y, spot.z);
+            existing.teleportTo(spot.x, spot.y, spot.z);
             mineStep = -1;
             branchFrom = -1;
             entry.active = true;
@@ -299,61 +307,61 @@ public class Helper {
             clearBreaking(existing);
             existing.discard();
         }
-        WanderingTraderEntity helper = EntityType.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (helper == null) return;
         mineStep = -1;
         branchFrom = -1;
-        helper.refreshPositionAndAngles(spot.x, spot.y, spot.z, player.getYaw() + 180f, 0f);
-        helper.setCustomName(Text.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.snapTo(spot.x, spot.y, spot.z, player.getYRot() + 180f, 0f);
+        helper.setCustomName(Component.literal(player.getGameProfile().name() + "'s Helper"));
         helper.setCustomNameVisible(true);
-        helper.addCommandTag(TAG);
-        helper.addCommandTag(OWNER_TAG + owner);
-        helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
+        helper.addTag(TAG);
+        helper.addTag(OWNER_TAG + owner);
+        helper.addTag(NAME_TAG + player.getGameProfile().name());
         applyBrain(helper);
         if (entry.size != 1f) Size.apply(helper, entry.size);
-        entry.entity = helper.getUuid();
+        entry.entity = helper.getUUID();
         entry.active = true;
-        HelperData.get(server).markDirty();
+        HelperData.get(server).setDirty();
         mob = helper;
-        world.spawnEntity(helper);
-        world.playSound(null, helper.getBlockPos(), SoundEvents.ENTITY_ILLUSIONER_MIRROR_MOVE, SoundCategory.NEUTRAL,
+        world.addFreshEntity(helper);
+        world.playSound(null, helper.blockPosition(), SoundEvents.ILLUSIONER_MIRROR_MOVE, SoundSource.NEUTRAL,
                 0.6f, 1.4f);
         if (job != null) job.resetSearch();
     }
 
     /** Replace the helper entity with a fresh one in the same spot (used to refresh its skin). */
     void respawnInPlace(MinecraftServer server, HelperData.Entry entry) {
-        MobEntity old = findEntity(server, entry);
-        ServerPlayerEntity player = server.getPlayerManager().getPlayer(owner);
+        Mob old = findEntity(server, entry);
+        ServerPlayer player = server.getPlayerList().getPlayer(owner);
         if (old == null || player == null) return;
         clearBreaking(old);
-        ServerWorld world = (ServerWorld) old.getWorld();
-        Vec3d pos = old.getPos();
-        float yaw = old.getYaw();
+        ServerLevel world = (ServerLevel) old.level();
+        Vec3 pos = old.position();
+        float yaw = old.getYRot();
         old.discard();
         mob = null;
-        WanderingTraderEntity helper = EntityType.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (helper == null) return;
-        helper.refreshPositionAndAngles(pos.x, pos.y, pos.z, yaw, 0f);
-        helper.setCustomName(Text.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.snapTo(pos.x, pos.y, pos.z, yaw, 0f);
+        helper.setCustomName(Component.literal(player.getGameProfile().name() + "'s Helper"));
         helper.setCustomNameVisible(true);
-        helper.addCommandTag(TAG);
-        helper.addCommandTag(OWNER_TAG + owner);
-        helper.addCommandTag(NAME_TAG + player.getGameProfile().getName());
+        helper.addTag(TAG);
+        helper.addTag(OWNER_TAG + owner);
+        helper.addTag(NAME_TAG + player.getGameProfile().name());
         applyBrain(helper);
         if (entry.size != 1f) Size.apply(helper, entry.size);
-        entry.entity = helper.getUuid();
-        HelperData.get(server).markDirty();
+        entry.entity = helper.getUUID();
+        HelperData.get(server).setDirty();
         mob = helper;
-        world.spawnEntity(helper);
+        world.addFreshEntity(helper);
         gearTicks = 0;
     }
 
     void dismiss(MinecraftServer server, HelperData.Entry entry) {
-        ServerPlayerEntity ownerPlayer = server.getPlayerManager().getPlayer(owner);
+        ServerPlayer ownerPlayer = server.getPlayerList().getPlayer(owner);
         if (ownerPlayer != null) cancelSend(ownerPlayer, "I'll hold off on that delivery. Here it is back.");
         else saveParcel(server);
-        MobEntity m = findEntity(server, entry);
+        Mob m = findEntity(server, entry);
         if (m != null) {
             clearBreaking(m);
             m.discard();
@@ -362,38 +370,38 @@ public class Helper {
         job = null;
         mode = Mode.FOLLOW;
         entry.active = false;
-        HelperData.get(server).markDirty();
+        HelperData.get(server).setDirty();
     }
 
-    private static Vec3d findSpotNear(ServerWorld world, BlockPos center) {
+    private static Vec3 findSpotNear(ServerLevel world, BlockPos center) {
         for (int r = 1; r <= 3; r++) {
             for (int dx = -r; dx <= r; dx++) {
                 for (int dz = -r; dz <= r; dz++) {
                     for (int dy = -1; dy <= 1; dy++) {
-                        BlockPos p = center.add(dx, dy, dz);
-                        if (canStand(world, p)) return Vec3d.ofBottomCenter(p);
+                        BlockPos p = center.offset(dx, dy, dz);
+                        if (canStand(world, p)) return Vec3.atBottomCenterOf(p);
                     }
                 }
             }
         }
-        return Vec3d.ofBottomCenter(center);
+        return Vec3.atBottomCenterOf(center);
     }
 
-    private static boolean canStand(World world, BlockPos p) {
-        return passable(world, p) && passable(world, p.up())
-                && world.getBlockState(p.down()).isSideSolidFullSquare(world, p.down(), Direction.UP);
+    private static boolean canStand(Level world, BlockPos p) {
+        return passable(world, p) && passable(world, p.above())
+                && world.getBlockState(p.below()).isFaceSturdy(world, p.below(), Direction.UP);
     }
 
-    private static boolean passable(World world, BlockPos p) {
+    private static boolean passable(Level world, BlockPos p) {
         BlockState s = world.getBlockState(p);
-        return s.getCollisionShape(world, p).isEmpty() && !s.getFluidState().isIn(FluidTags.LAVA);
+        return s.getCollisionShape(world, p).isEmpty() && !s.getFluidState().is(FluidTags.LAVA);
     }
 
     // ---------------------------------------------------------------------------------------
     // Commands
     // ---------------------------------------------------------------------------------------
 
-    void startJob(ServerPlayerEntity player, Materials.Spec spec, int amount) {
+    void startJob(ServerPlayer player, Materials.Spec spec, int amount) {
         if (mob != null) clearBreaking(mob);
         job = new Job(spec, amount);
         mode = Mode.COLLECT;
@@ -407,7 +415,7 @@ public class Helper {
     private int fishWanted, fishCaught, fishTimer, fishWalkTicks;
     private BlockPos fishSpot, fishStand;
 
-    void startFishing(ServerPlayerEntity player, int amount) {
+    void startFishing(ServerPlayer player, int amount) {
         if (mob != null) clearBreaking(mob);
         job = null;
         fishWanted = amount;
@@ -420,32 +428,32 @@ public class Helper {
                 + "(right-click me to give me one).");
     }
 
-    private static int rodSlot(SimpleInventory inv) {
-        for (int i = 0; i < inv.size(); i++) {
-            ItemStack s = inv.getStack(i);
-            if (s.getItem() instanceof net.minecraft.item.FishingRodItem && s.getDamage() < s.getMaxDamage() - 1) return i;
+    private static int rodSlot(SimpleContainer inv) {
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.getItem() instanceof net.minecraft.world.item.FishingRodItem && s.getDamageValue() < s.getMaxDamage() - 1) return i;
         }
         return -1;
     }
 
     /** The nearest open water (a water block with air above), and a dry spot right next to it to stand on. */
-    private static BlockPos[] findWater(ServerWorld world, BlockPos from) {
+    private static BlockPos[] findWater(ServerLevel world, BlockPos from) {
         BlockPos best = null, stand = null;
         double bestD = Double.MAX_VALUE;
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -24; dx <= 24; dx++) for (int dz = -24; dz <= 24; dz++) for (int dy = -6; dy <= 4; dy++) {
             p.set(from.getX() + dx, from.getY() + dy, from.getZ() + dz);
-            if (!world.getFluidState(p).isIn(net.minecraft.registry.tag.FluidTags.WATER)
-                    || !world.getFluidState(p).isStill() || !world.getBlockState(p.up()).isAir()) continue;
+            if (!world.getFluidState(p).is(net.minecraft.tags.FluidTags.WATER)
+                    || !world.getFluidState(p).isSource() || !world.getBlockState(p.above()).isAir()) continue;
             double d = dx * dx + dz * dz + dy * dy * 4;
             if (d >= bestD) continue;
-            for (Direction side : Direction.Type.HORIZONTAL) {
-                BlockPos land = p.offset(side); // stand on the bank, level with the water's surface
-                BlockPos feet = land.up();
-                if (world.getBlockState(land).isSolidBlock(world, land) && world.getBlockState(feet).isAir()
-                        && world.getBlockState(feet.up()).isAir()) {
-                    best = p.toImmutable();
-                    stand = feet.toImmutable();
+            for (Direction side : Direction.Plane.HORIZONTAL) {
+                BlockPos land = p.relative(side); // stand on the bank, level with the water's surface
+                BlockPos feet = land.above();
+                if (world.getBlockState(land).isRedstoneConductor(world, land) && world.getBlockState(feet).isAir()
+                        && world.getBlockState(feet.above()).isAir()) {
+                    best = p.immutable();
+                    stand = feet.immutable();
                     bestD = d;
                     break;
                 }
@@ -454,9 +462,9 @@ public class Helper {
         return best == null ? null : new BlockPos[]{best, stand};
     }
 
-    private void tickFish(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
-        ServerWorld world = (ServerWorld) m.getWorld();
-        SimpleInventory inv = entry.inventory;
+    private void tickFish(Mob m, ServerPlayer player, HelperData.Entry entry) {
+        ServerLevel world = (ServerLevel) m.level();
+        SimpleContainer inv = entry.inventory;
         int slot = rodSlot(inv);
         if (slot < 0) {
             say(player, "I need a fishing rod to fish. Right-click me and put one in my inventory, then ask me again.");
@@ -465,13 +473,13 @@ public class Helper {
         }
         if (fishCaught >= fishWanted || isFull(inv)) {
             if (fishCaught < fishWanted) say(player, "My pockets are full of fish, so I'm bringing them over. Then I'll go back to fishing.");
-            m.equipStack(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
             mode = Mode.RETURN;
             return;
         }
-        if (fishSpot == null || !world.getFluidState(fishSpot).isIn(net.minecraft.registry.tag.FluidTags.WATER)) {
-            BlockPos[] w = findWater(world, m.getBlockPos());
-            if (w == null) w = findWater(world, player.getBlockPos());
+        if (fishSpot == null || !world.getFluidState(fishSpot).is(net.minecraft.tags.FluidTags.WATER)) {
+            BlockPos[] w = findWater(world, m.blockPosition());
+            if (w == null) w = findWater(world, player.blockPosition());
             if (w == null) {
                 say(player, "I can't see any open water within 24 blocks. Take me to a lake, river or the sea and ask me again.");
                 mode = Mode.FOLLOW;
@@ -482,54 +490,54 @@ public class Helper {
             fishWalkTicks = 0;
             fishTimer = 0;
         }
-        Vec3d stand = Vec3d.ofBottomCenter(fishStand);
-        if (m.getPos().squaredDistanceTo(stand) > 1.5 * 1.5) { // walk to the bank
-            if (m.getNavigation().isIdle() || ++fishWalkTicks % 40 == 0) m.getNavigation().startMovingTo(stand.x, stand.y, stand.z, SPEED);
-            if (fishWalkTicks > 300) m.requestTeleport(stand.x, stand.y, stand.z);
+        Vec3 stand = Vec3.atBottomCenterOf(fishStand);
+        if (m.position().distanceToSqr(stand) > 1.5 * 1.5) { // walk to the bank
+            if (m.getNavigation().isDone() || ++fishWalkTicks % 40 == 0) m.getNavigation().moveTo(stand.x, stand.y, stand.z, SPEED);
+            if (fishWalkTicks > 300) m.teleportTo(stand.x, stand.y, stand.z);
             fishWalkTicks++;
             return;
         }
         m.getNavigation().stop();
-        ItemStack rod = inv.getStack(slot);
-        if (!ItemStack.areEqual(m.getMainHandStack(), rod)) m.equipStack(EquipmentSlot.MAINHAND, rod.copy());
-        m.getLookControl().lookAt(Vec3d.ofCenter(fishSpot));
+        ItemStack rod = inv.getItem(slot);
+        if (!ItemStack.matches(m.getMainHandItem(), rod)) m.setItemSlot(EquipmentSlot.MAINHAND, rod.copy());
+        m.getLookControl().setLookAt(Vec3.atCenterOf(fishSpot));
         if (fishTimer <= 0) { // cast: wait 5 to 30 seconds like a player, less with Lure
-            int lure = net.minecraft.enchantment.EnchantmentHelper.getLure(rod);
+            int lure = Compat.enchLevel(net.minecraft.world.item.enchantment.Enchantments.LURE, rod);
             fishTimer = Math.max(40, 100 + world.getRandom().nextInt(500) - lure * 100);
-            m.swingHand(Hand.MAIN_HAND);
-            world.playSound(null, fishSpot, SoundEvents.ENTITY_FISHING_BOBBER_THROW, SoundCategory.NEUTRAL, 0.5f, 0.4f);
+            Compat.swing(m, InteractionHand.MAIN_HAND);
+            world.playSound(null, fishSpot, SoundEvents.FISHING_BOBBER_THROW, SoundSource.NEUTRAL, 0.5f, 0.4f);
             return;
         }
         if (fishTimer % 20 == 0) {
-            world.spawnParticles(net.minecraft.particle.ParticleTypes.FISHING, fishSpot.getX() + 0.5, fishSpot.getY() + 0.9,
+            world.sendParticles(net.minecraft.core.particles.ParticleTypes.FISHING, fishSpot.getX() + 0.5, fishSpot.getY() + 0.9,
                     fishSpot.getZ() + 0.5, 2, 0.2, 0, 0.2, 0.02);
         }
         if (--fishTimer > 0) return;
         // A bite: reel it in.
-        world.playSound(null, fishSpot, SoundEvents.ENTITY_FISHING_BOBBER_SPLASH, SoundCategory.NEUTRAL, 0.6f, 1f);
-        world.spawnParticles(net.minecraft.particle.ParticleTypes.SPLASH, fishSpot.getX() + 0.5, fishSpot.getY() + 1,
+        world.playSound(null, fishSpot, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.6f, 1f);
+        world.sendParticles(net.minecraft.core.particles.ParticleTypes.SPLASH, fishSpot.getX() + 0.5, fishSpot.getY() + 1,
                 fishSpot.getZ() + 0.5, 12, 0.3, 0.1, 0.3, 0.1);
-        m.swingHand(Hand.MAIN_HAND);
-        float luck = net.minecraft.enchantment.EnchantmentHelper.getLuckOfTheSea(rod);
-        net.minecraft.loot.context.LootContextParameterSet params = new net.minecraft.loot.context.LootContextParameterSet.Builder(world)
-                .add(net.minecraft.loot.context.LootContextParameters.ORIGIN, Vec3d.ofCenter(fishSpot))
-                .add(net.minecraft.loot.context.LootContextParameters.TOOL, rod)
-                .luck(luck)
-                .build(net.minecraft.loot.context.LootContextTypes.FISHING);
-        List<ItemStack> loot = world.getServer().getLootManager()
-                .getLootTable(net.minecraft.loot.LootTables.FISHING_GAMEPLAY).generateLoot(params);
+        Compat.swing(m, InteractionHand.MAIN_HAND);
+        float luck = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingLuckBonus(world, rod, m);
+        net.minecraft.world.level.storage.loot.LootParams params = new net.minecraft.world.level.storage.loot.LootParams.Builder(world)
+                .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, Vec3.atCenterOf(fishSpot))
+                .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.TOOL, rod)
+                .withLuck(luck)
+                .create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.FISHING);
+        List<ItemStack> loot = world.getServer().reloadableRegistries()
+                .getLootTable(net.minecraft.world.level.storage.loot.BuiltInLootTables.FISHING).getRandomItems(params);
         for (ItemStack caught : loot) {
             fishCaught += caught.getCount();
-            ItemStack rest = inv.addStack(caught);
-            if (!rest.isEmpty()) Block.dropStack(world, m.getBlockPos(), rest);
+            ItemStack rest = inv.addItem(caught);
+            if (!rest.isEmpty()) Block.popResource(world, m.blockPosition(), rest);
         }
         if (currentEntry != null) currentEntry.xp += 1 + world.getRandom().nextInt(6); // fishing XP, handed over on delivery
         addWork(player, 2);
-        rod.damage(1, m, e -> {});
-        inv.markDirty();
+        rod.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+        inv.setChanged();
         if (rod.isEmpty() || rodSlot(inv) < 0) {
             say(player, "My fishing rod is about to break, so I stopped. Give me a new one and ask me again.");
-            m.equipStack(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+            m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
             mode = Mode.RETURN;
         }
     }
@@ -542,13 +550,13 @@ public class Helper {
     private int torchTicks;
     private boolean toldNoTorches;
 
-    private void lightUp(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
-        BlockPos feet = m.getBlockPos();
-        if (world.getLightLevel(net.minecraft.world.LightType.SKY, feet) > 7) return; // out in the open
-        if (world.getLightLevel(net.minecraft.world.LightType.BLOCK, feet) > 4) return; // already lit
+    private void lightUp(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
+        BlockPos feet = m.blockPosition();
+        if (world.getBrightness(net.minecraft.world.level.LightLayer.SKY, feet) > 7) return; // out in the open
+        if (world.getBrightness(net.minecraft.world.level.LightLayer.BLOCK, feet) > 4) return; // already lit
         if (!world.getBlockState(feet).isAir()) return;
-        net.minecraft.block.BlockState torch = net.minecraft.block.Blocks.TORCH.getDefaultState();
-        if (!torch.canPlaceAt(world, feet)) return;
+        net.minecraft.world.level.block.state.BlockState torch = net.minecraft.world.level.block.Blocks.TORCH.defaultBlockState();
+        if (!torch.canSurvive(world, feet)) return;
         if (!takeTorch(inv)) {
             if (!toldNoTorches) {
                 toldNoTorches = true;
@@ -556,32 +564,32 @@ public class Helper {
             }
             return;
         }
-        world.setBlockState(feet, torch);
-        world.playSound(null, feet, SoundEvents.BLOCK_WOOD_PLACE, SoundCategory.BLOCKS, 0.6f, 1.2f);
-        inv.markDirty();
+        world.setBlockAndUpdate(feet, torch);
+        world.playSound(null, feet, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 0.6f, 1.2f);
+        inv.setChanged();
     }
 
     /** Take one torch, crafting four from a coal and a stick if it has none. */
-    private static boolean takeTorch(SimpleInventory inv) {
-        int torch = slotOf(inv, net.minecraft.item.Items.TORCH);
+    private static boolean takeTorch(SimpleContainer inv) {
+        int torch = slotOf(inv, net.minecraft.world.item.Items.TORCH);
         if (torch < 0) {
-            int coal = slotOf(inv, net.minecraft.item.Items.COAL);
-            if (coal < 0) coal = slotOf(inv, net.minecraft.item.Items.CHARCOAL);
-            int stick = slotOf(inv, net.minecraft.item.Items.STICK);
+            int coal = slotOf(inv, net.minecraft.world.item.Items.COAL);
+            if (coal < 0) coal = slotOf(inv, net.minecraft.world.item.Items.CHARCOAL);
+            int stick = slotOf(inv, net.minecraft.world.item.Items.STICK);
             if (coal < 0 || stick < 0) return false;
-            inv.getStack(coal).decrement(1);
-            inv.getStack(stick).decrement(1);
-            ItemStack rest = inv.addStack(new ItemStack(net.minecraft.item.Items.TORCH, 4));
+            inv.getItem(coal).shrink(1);
+            inv.getItem(stick).shrink(1);
+            ItemStack rest = inv.addItem(new ItemStack(net.minecraft.world.item.Items.TORCH, 4));
             if (!rest.isEmpty()) return true; // no room for them, but it can still place the one in its hand
-            torch = slotOf(inv, net.minecraft.item.Items.TORCH);
+            torch = slotOf(inv, net.minecraft.world.item.Items.TORCH);
             if (torch < 0) return false;
         }
-        inv.getStack(torch).decrement(1);
+        inv.getItem(torch).shrink(1);
         return true;
     }
 
-    private static int slotOf(SimpleInventory inv, Item item) {
-        for (int i = 0; i < inv.size(); i++) if (inv.getStack(i).isOf(item)) return i;
+    private static int slotOf(SimpleContainer inv, Item item) {
+        for (int i = 0; i < inv.getContainerSize(); i++) if (inv.getItem(i).is(item)) return i;
         return -1;
     }
 
@@ -592,11 +600,11 @@ public class Helper {
     private BlockPos farmCentre, farmTarget;
     private int farmRadius, farmHarvested, farmIdle, farmWalkTicks, farmSinceDelivery;
 
-    void startFarming(ServerPlayerEntity player, int radius) {
+    void startFarming(ServerPlayer player, int radius) {
         if (mob != null) clearBreaking(mob);
         job = null;
         fishWanted = 0;
-        farmCentre = player.getBlockPos();
+        farmCentre = player.blockPosition();
         farmRadius = radius;
         farmHarvested = 0;
         farmSinceDelivery = 0;
@@ -608,33 +616,33 @@ public class Helper {
     }
 
     private static boolean isRipe(BlockState state) {
-        if (state.getBlock() instanceof net.minecraft.block.CropBlock crop) return crop.isMature(state);
-        if (state.getBlock() instanceof net.minecraft.block.NetherWartBlock)
-            return state.get(net.minecraft.block.NetherWartBlock.AGE) >= 3;
+        if (state.getBlock() instanceof net.minecraft.world.level.block.CropBlock crop) return crop.isMaxAge(state);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.NetherWartBlock)
+            return state.getValue(net.minecraft.world.level.block.NetherWartBlock.AGE) >= 3;
         return false;
     }
 
-    private BlockPos findRipe(ServerWorld world) {
+    private BlockPos findRipe(ServerLevel world) {
         BlockPos best = null;
         double bestD = Double.MAX_VALUE;
-        BlockPos from = mob != null ? mob.getBlockPos() : farmCentre;
-        BlockPos.Mutable p = new BlockPos.Mutable();
+        BlockPos from = mob != null ? mob.blockPosition() : farmCentre;
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -farmRadius; dx <= farmRadius; dx++) for (int dz = -farmRadius; dz <= farmRadius; dz++) for (int dy = -4; dy <= 4; dy++) {
             p.set(farmCentre.getX() + dx, farmCentre.getY() + dy, farmCentre.getZ() + dz);
-            if (!world.isChunkLoaded(p.getX() >> 4, p.getZ() >> 4)) continue;
+            if (!world.hasChunk(p.getX() >> 4, p.getZ() >> 4)) continue;
             if (!isRipe(world.getBlockState(p))) continue;
-            double d = p.getSquaredDistance(from);
+            double d = p.distSqr(from);
             if (d < bestD) {
                 bestD = d;
-                best = p.toImmutable();
+                best = p.immutable();
             }
         }
         return best;
     }
 
-    private void tickFarm(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
-        ServerWorld world = (ServerWorld) m.getWorld();
-        SimpleInventory inv = entry.inventory;
+    private void tickFarm(Mob m, ServerPlayer player, HelperData.Entry entry) {
+        ServerLevel world = (ServerLevel) m.level();
+        SimpleContainer inv = entry.inventory;
         if (farmCentre == null) {
             mode = Mode.FOLLOW;
             return;
@@ -655,47 +663,47 @@ public class Helper {
                     mode = Mode.RETURN;
                     return;
                 }
-                Vec3d c = Vec3d.ofBottomCenter(farmCentre);
-                if (m.getPos().squaredDistanceTo(c) > 6 * 6 && m.getNavigation().isIdle())
-                    m.getNavigation().startMovingTo(c.x, c.y, c.z, SPEED);
+                Vec3 c = Vec3.atBottomCenterOf(farmCentre);
+                if (m.position().distanceToSqr(c) > 6 * 6 && m.getNavigation().isDone())
+                    m.getNavigation().moveTo(c.x, c.y, c.z, SPEED);
                 return;
             }
         }
-        m.getLookControl().lookAt(Vec3d.ofCenter(farmTarget));
-        if (m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(farmTarget)) > REACH_SQ) {
-            if (m.getNavigation().isIdle() || ++farmWalkTicks % 40 == 0)
-                m.getNavigation().startMovingTo(farmTarget.getX() + 0.5, farmTarget.getY(), farmTarget.getZ() + 0.5, SPEED);
+        m.getLookControl().setLookAt(Vec3.atCenterOf(farmTarget));
+        if (m.getEyePosition().distanceToSqr(Vec3.atCenterOf(farmTarget)) > REACH_SQ) {
+            if (m.getNavigation().isDone() || ++farmWalkTicks % 40 == 0)
+                m.getNavigation().moveTo(farmTarget.getX() + 0.5, farmTarget.getY(), farmTarget.getZ() + 0.5, SPEED);
             if (++farmWalkTicks > 400) farmTarget = null; // can't get there, try another
             return;
         }
         m.getNavigation().stop();
-        m.swingHand(Hand.MAIN_HAND);
+        Compat.swing(m, InteractionHand.MAIN_HAND);
         BlockState ripe = world.getBlockState(farmTarget);
-        List<ItemStack> drops = Block.getDroppedStacks(ripe, world, farmTarget, world.getBlockEntity(farmTarget), m, m.getMainHandStack());
+        List<ItemStack> drops = Block.getDrops(ripe, world, farmTarget, world.getBlockEntity(farmTarget), m, m.getMainHandItem());
         // Replant with one of the seeds it just harvested (or one it was carrying).
-        ItemStack seed = ripe.getBlock().getPickStack(world, farmTarget, ripe);
+        ItemStack seed = ripe.getCloneItemStack(world, farmTarget, false);
         boolean replanted = false;
         for (ItemStack d : drops) {
-            if (!seed.isEmpty() && d.isOf(seed.getItem()) && !replanted) {
-                d.decrement(1);
+            if (!seed.isEmpty() && d.is(seed.getItem()) && !replanted) {
+                d.shrink(1);
                 replanted = true;
             }
         }
         if (!replanted && !seed.isEmpty()) {
             int s = slotOf(inv, seed.getItem());
             if (s >= 0) {
-                inv.getStack(s).decrement(1);
+                inv.getItem(s).shrink(1);
                 replanted = true;
             }
         }
-        world.syncWorldEvent(net.minecraft.world.WorldEvents.BLOCK_BROKEN, farmTarget, Block.getRawIdFromState(ripe));
-        world.setBlockState(farmTarget, replanted ? ripe.getBlock().getDefaultState() : net.minecraft.block.Blocks.AIR.getDefaultState());
+        world.levelEvent(net.minecraft.world.level.block.LevelEvent.PARTICLES_DESTROY_BLOCK, farmTarget, Block.getId(ripe));
+        world.setBlockAndUpdate(farmTarget, replanted ? ripe.getBlock().defaultBlockState() : net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
         for (ItemStack d : drops) {
             if (d.isEmpty()) continue;
-            ItemStack rest = inv.addStack(d);
-            if (!rest.isEmpty()) Block.dropStack(world, farmTarget, rest);
+            ItemStack rest = inv.addItem(d);
+            if (!rest.isEmpty()) Block.popResource(world, farmTarget, rest);
         }
-        inv.markDirty();
+        inv.setChanged();
         farmHarvested++;
         farmSinceDelivery++;
         addWork(player, 1);
@@ -703,12 +711,12 @@ public class Helper {
         farmIdle = 0;
     }
 
-    void stop(ServerPlayerEntity player) {
+    void stop(ServerPlayer player) {
         if (mode == Mode.SEND) cancelSend(player, "Okay, I won't take it. Here it is back.");
         fishWanted = 0;
         farmCentre = null;
-        if (mob != null && job != null && mob.getWorld() instanceof ServerWorld w) {
-            plugShafts(w, HelperData.get(player.getServer()).getOrCreate(owner).inventory);
+        if (mob != null && job != null && mob.level() instanceof ServerLevel w) {
+            plugShafts(w, HelperData.get(player.level().getServer()).getOrCreate(owner).inventory);
         }
         if (mob != null) {
             clearBreaking(mob);
@@ -729,7 +737,7 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     /** Hand the helper some items to walk over to another player. False (items untouched) if it can't. */
-    boolean send(ServerPlayerEntity player, ServerPlayerEntity target, List<ItemStack> items) {
+    boolean send(ServerPlayer player, ServerPlayer target, List<ItemStack> items) {
         if (mode == Mode.SEND) {
             say(player, "I'm already taking " + parcelText() + " to " + sendToName + ". One delivery at a time!");
             return false;
@@ -738,7 +746,7 @@ public class Helper {
         parcel.clear();
         for (ItemStack s : items) if (!s.isEmpty()) parcel.add(s);
         if (parcel.isEmpty()) return false;
-        sendTo = target.getUuid();
+        sendTo = target.getUUID();
         sendToName = target.getName().getString();
         sendTicks = 0;
         returnTicks = 0;
@@ -749,7 +757,7 @@ public class Helper {
 
     private String parcelText() {
         Map<String, Integer> counts = new LinkedHashMap<>();
-        for (ItemStack s : parcel) counts.merge(s.getName().getString(), s.getCount(), Integer::sum);
+        for (ItemStack s : parcel) counts.merge(s.getHoverName().getString(), s.getCount(), Integer::sum);
         StringBuilder sb = new StringBuilder();
         counts.forEach((name, count) -> {
             if (sb.length() > 0) sb.append(", ");
@@ -759,11 +767,11 @@ public class Helper {
     }
 
     /** Give the parcel back to its owner (or drop it at their feet) and go back to following. */
-    private void cancelSend(ServerPlayerEntity player, String why) {
+    private void cancelSend(ServerPlayer player, String why) {
         if (mode == Mode.SEND) mode = Mode.FOLLOW;
         sendTo = null;
         if (parcel.isEmpty()) return;
-        for (ItemStack s : parcel) player.getInventory().offerOrDrop(s);
+        for (ItemStack s : parcel) player.getInventory().placeItemBackInInventory(s, net.minecraft.util.Prediction.SERVER_ONLY);
         parcel.clear();
         say(player, why);
     }
@@ -773,13 +781,13 @@ public class Helper {
         if (parcel.isEmpty()) return;
         Storage.Data store = Storage.Data.get(server);
         for (ItemStack s : parcel) store.add(owner, s);
-        store.markDirty();
+        store.setDirty();
         parcel.clear();
         if (mode == Mode.SEND) mode = Mode.FOLLOW;
     }
 
-    private void tickSend(MobEntity m, ServerPlayerEntity player) {
-        ServerPlayerEntity target = sendTo == null ? null : player.getServer().getPlayerManager().getPlayer(sendTo);
+    private void tickSend(Mob m, ServerPlayer player) {
+        ServerPlayer target = sendTo == null ? null : player.level().getServer().getPlayerList().getPlayer(sendTo);
         if (target == null) {
             cancelSend(player, sendToName + " isn't online any more, so here's your stuff back.");
             return;
@@ -788,13 +796,13 @@ public class Helper {
             cancelSend(player, "I couldn't reach " + sendToName + " in two minutes. Here's your stuff back.");
             return;
         }
-        ServerWorld world = (ServerWorld) m.getWorld();
-        if (target.getWorld() != world) {
+        ServerLevel world = (ServerLevel) m.level();
+        if (target.level() != world) {
             // A different dimension: zip through and hand it over straight away.
             handOver(m, player, target, true);
             return;
         }
-        double d = m.squaredDistanceTo(target);
+        double d = m.distanceToSqr(target);
         if (d <= 3 * 3) {
             handOver(m, player, target, false);
             return;
@@ -804,30 +812,30 @@ public class Helper {
             return;
         }
         if (--repathCooldown <= 0) {
-            m.getNavigation().startMovingTo(target, SPEED);
+            m.getNavigation().moveTo(target, SPEED);
             repathCooldown = 10;
         }
         if (isStuck(m, 80)) hopNear(m, target);
     }
 
-    private void hopNear(MobEntity m, ServerPlayerEntity target) {
-        ServerWorld world = (ServerWorld) m.getWorld();
-        Vec3d spot = findSpotNear(world, target.getBlockPos());
-        world.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+    private void hopNear(Mob m, ServerPlayer target) {
+        ServerLevel world = (ServerLevel) m.level();
+        Vec3 spot = findSpotNear(world, target.blockPosition());
+        world.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
         m.getNavigation().stop();
-        m.requestTeleport(spot.x, spot.y, spot.z);
-        world.playSound(null, BlockPos.ofFloored(spot), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.NEUTRAL, 0.4f, 1.4f);
+        m.teleportTo(spot.x, spot.y, spot.z);
+        world.playSound(null, BlockPos.containing(spot), SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 0.4f, 1.4f);
         stuckTicks = 0;
     }
 
-    private void handOver(MobEntity m, ServerPlayerEntity player, ServerPlayerEntity target, boolean otherWorld) {
+    private void handOver(Mob m, ServerPlayer player, ServerPlayer target, boolean otherWorld) {
         String what = parcelText();
         boolean dropped = false;
         for (ItemStack s : parcel) {
             ItemStack give = s.copy();
-            target.getInventory().insertStack(give);
+            target.getInventory().add(give);
             if (!give.isEmpty()) {
-                target.dropItem(give, false, false);
+                target.drop(give, false, net.minecraft.util.Prediction.SERVER_ONLY);
                 dropped = true;
             }
         }
@@ -835,17 +843,17 @@ public class Helper {
         sendTo = null;
         mode = Mode.FOLLOW;
         m.getNavigation().stop();
-        target.playSound(SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.6f, 1.2f);
+        Compat.notifySound(target, SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.6f, 1.2f);
         if (otherWorld) {
-            ((ServerWorld) target.getWorld()).spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL,
+            ((ServerLevel) target.level()).sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
                     target.getX(), target.getY() + 1, target.getZ(), 30, 0.5, 0.5, 0.5, 0.2);
         } else {
             danceTicks = Celebrate.DANCE_TICKS / 2;
-            Celebrate.fireworks((ServerWorld) m.getWorld(), m.getPos());
+            Celebrate.fireworks((ServerLevel) m.level(), m.position());
         }
-        target.sendMessage(Text.literal("[" + player.getName().getString() + "'s Helper] ").formatted(Formatting.GOLD)
-                .append(Text.literal(player.getName().getString() + " sent you " + what + "."
-                        + (dropped ? " Your inventory is full, so some of it is at your feet." : "")).formatted(Formatting.WHITE)), false);
+        target.sendSystemMessage(Component.literal("[" + player.getName().getString() + "'s Helper] ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(player.getName().getString() + " sent you " + what + "."
+                        + (dropped ? " Your inventory is full, so some of it is at your feet." : "")).withStyle(ChatFormatting.WHITE)));
         say(player, "Delivered " + what + " to " + target.getName().getString() + "!"
                 + (otherWorld ? " (They're in another dimension, so I zipped it over.)" : " Heading back to you now."));
     }
@@ -855,18 +863,18 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     /** Does it look stuck: not moving while it's trying to get somewhere? */
-    boolean looksStuck(ServerPlayerEntity player) {
-        MobEntity m = mob;
+    boolean looksStuck(ServerPlayer player) {
+        Mob m = mob;
         if (m == null || !m.isAlive()) return true;
-        if (m.getWorld() != player.getWorld() && mode == Mode.FOLLOW) return true;
+        if (m.level() != player.level() && mode == Mode.FOLLOW) return true;
         if (stuckTicks > 30) return true;
-        return mode == Mode.FOLLOW && m.squaredDistanceTo(player) > 10 * 10 && m.getNavigation().isIdle();
+        return mode == Mode.FOLLOW && m.distanceToSqr(player) > 10 * 10 && m.getNavigation().isDone();
     }
 
     /** Pop over to the owner, cancelling the trip it was stuck on (the job itself keeps going). */
-    void unstick(ServerPlayerEntity player, HelperData.Entry entry) {
-        MobEntity m = mob;
-        if (m == null || !m.isAlive() || m.getWorld() != player.getWorld()) {
+    void unstick(ServerPlayer player, HelperData.Entry entry) {
+        Mob m = mob;
+        if (m == null || !m.isAlive() || m.level() != player.level()) {
             spawnNear(player, entry);
             return;
         }
@@ -876,18 +884,18 @@ public class Helper {
             job.travelFailures = 0;
         }
         teleportNear(m, player);
-        ((ServerWorld) m.getWorld()).spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL,
+        ((ServerLevel) m.level()).sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
                 m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
     }
 
     /** Where it is, in words: distance, direction and height from the owner. */
-    String whereText(ServerPlayerEntity player) {
-        MobEntity m = mob;
+    String whereText(ServerPlayer player) {
+        Mob m = mob;
         if (m == null || !m.isAlive()) return "I'm not out in the world right now. /helper summon brings me to you.";
-        if (m.getWorld() != player.getWorld()) {
-            return "I'm in a different dimension (" + m.getWorld().getRegistryKey().getValue().getPath() + "). I'll come over in a moment.";
+        if (m.level() != player.level()) {
+            return "I'm in a different dimension (" + m.level().dimension().identifier().getPath() + "). I'll come over in a moment.";
         }
-        BlockPos at = m.getBlockPos();
+        BlockPos at = m.blockPosition();
         double dx = m.getX() - player.getX(), dz = m.getZ() - player.getZ(), dy = m.getY() - player.getY();
         int dist = (int) Math.round(Math.sqrt(dx * dx + dz * dz + dy * dy));
         if (dist <= 4) return "Right next to you! (" + at.getX() + ", " + at.getY() + ", " + at.getZ() + ")";
@@ -901,17 +909,17 @@ public class Helper {
 
     /** Health and what it's carrying, for "are you ok" / "are you full". */
     String healthText() {
-        MobEntity m = mob;
+        Mob m = mob;
         if (m == null || !m.isAlive()) return "I'm not out right now.";
         int hp = (int) Math.ceil(m.getHealth()), max = (int) Math.ceil(m.getMaxHealth());
         return hp >= max ? "Full health (" + hp + "/" + max + ")" : hp <= max / 3 ? "Ouch, I'm hurt: " + hp + "/" + max + " health"
                 : hp + "/" + max + " health";
     }
 
-    String pocketsText(SimpleInventory inv) {
-        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.size();
+    String pocketsText(SimpleContainer inv) {
+        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.getContainerSize();
         int used = 0;
-        for (int i = 0; i < room; i++) if (!inv.getStack(i).isEmpty()) used++;
+        for (int i = 0; i < room; i++) if (!inv.getItem(i).isEmpty()) used++;
         String items = summarize(inv, false);
         return (used >= room ? "I'm full! " : "") + used + " of my " + room + " pockets are used. Carrying: "
                 + (items.isEmpty() ? "nothing" : items) + ".";
@@ -930,7 +938,7 @@ public class Helper {
         return "I'm not on a job right now, just following you. Give me one, like \"helper, get 20 iron\".";
     }
 
-    String status(SimpleInventory inv) {
+    String status(SimpleContainer inv) {
         String doing;
         if (mode == Mode.COLLECT && job != null) {
             doing = "Collecting " + job.spec.display + ": " + job.collected + "/" + job.wanted;
@@ -959,34 +967,34 @@ public class Helper {
     // Ticking
     // ---------------------------------------------------------------------------------------
 
-    void tick(MinecraftServer server, ServerPlayerEntity player, HelperData.Entry entry) {
+    void tick(MinecraftServer server, ServerPlayer player, HelperData.Entry entry) {
         currentEntry = entry;
-        MobEntity m = findEntity(server, entry);
+        Mob m = findEntity(server, entry);
         // Flying an Ad Astra rocket or lander: wait, then meet the owner when they've landed (on any planet).
         Entity vehicle = player.getVehicle();
         if (vehicle != null && vehicle != m
-                && Registries.ENTITY_TYPE.getId(vehicle.getType()).getNamespace().equals("ad_astra")) {
+                && BuiltInRegistries.ENTITY_TYPE.getKey(vehicle.getType()).getNamespace().equals("ad_astra")) {
             if (!toldFlight) {
                 toldFlight = true;
                 say(player, "Have a good flight! I'll meet you when you land.");
             }
-            if (m != null && m.getWorld() == player.getWorld()) m.getNavigation().stop();
+            if (m != null && m.level() == player.level()) m.getNavigation().stop();
             missingTicks = 0;
             return;
         }
-        if (toldFlight && m != null && m.getWorld() != player.getWorld()) spawnNear(player, entry); // just landed
+        if (toldFlight && m != null && m.level() != player.level()) spawnNear(player, entry); // just landed
         toldFlight = false;
-        if (m != null && Planets.isSpace(m.getWorld())) { // no air and freezing or boiling: the helper is fine
-            m.setAir(m.getMaxAir());
-            m.setFrozenTicks(0);
-            m.extinguish();
-            Planets.Theme here = Planets.themeOf(m.getWorld());
-            String dim = Planets.keyOf(m.getWorld());
+        if (m != null && Planets.isSpace(m.level())) { // no air and freezing or boiling: the helper is fine
+            m.setAirSupply(m.getMaxAirSupply());
+            m.setTicksFrozen(0);
+            m.clearFire();
+            Planets.Theme here = Planets.themeOf(m.level());
+            String dim = Planets.keyOf(m.level());
             if (here != null && !dim.equals(lastPlanet)) {
                 lastPlanet = dim;
                 say(player, "We made it to " + here.display() + "! I can mine the ores here too, e.g. /helper collect "
-                        + ("moon".equals(m.getWorld().getRegistryKey().getValue().getPath()) ? "desh"
-                        : "mars".equals(m.getWorld().getRegistryKey().getValue().getPath()) ? "ostrum" : "calorite")
+                        + ("moon".equals(m.level().dimension().identifier().getPath()) ? "desh"
+                        : "mars".equals(m.level().dimension().identifier().getPath()) ? "ostrum" : "calorite")
                         + ". Try /helper boss to find this planet's boss.");
             }
         }
@@ -1000,8 +1008,8 @@ public class Helper {
         }
         // Always keep the helper's own chunk (and the ones around it) loaded, whatever it's doing.
         // Counted in server ticks, not the helper's age, so it keeps going even if the helper stops ticking.
-        if (server.getTicks() % 20 == 0) keepLoaded((ServerWorld) m.getWorld(), m);
-        if (!((ServerWorld) m.getWorld()).shouldTickEntity(m.getBlockPos())) {
+        if (server.getTickCount() % 20 == 0) keepLoaded((ServerLevel) m.level(), m);
+        if (!((ServerLevel) m.level()).isPositionEntityTicking(m.blockPosition())) {
             // Too far from every player to be simulated: it would just stand frozen. Bring it back.
             if (++missingTicks > 40) {
                 missingTicks = 0;
@@ -1014,9 +1022,9 @@ public class Helper {
             tickRide(m, player);
             return;
         }
-        if (m.getStepHeight() != WALK_STEP) m.setStepHeight(WALK_STEP); // got off: back to its normal step
-        if (m.hasNoGravity() && !m.hasPassengers()) m.setNoGravity(false); // got off a flying helper
-        if (m.age % 10 == 0) pickUpXp(m, player, entry);
+        if (m.maxUpStep() != WALK_STEP) Compat.setStep(m, WALK_STEP); // got off: back to its normal step
+        if (m.isNoGravity() && !m.isVehicle()) m.setNoGravity(false); // got off a flying helper
+        if (m.tickCount % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
         if (tickCombat(m, player, entry)) return;
         if (danceTicks > 0) {
@@ -1040,7 +1048,7 @@ public class Helper {
     // Combat: protect the owner and itself, and help with whatever the owner attacks
     // ---------------------------------------------------------------------------------------
 
-    private boolean tickCombat(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+    private boolean tickCombat(Mob m, ServerPlayer player, HelperData.Entry entry) {
         if (!entry.guard) {
             combatTarget = null;
             return false;
@@ -1058,7 +1066,7 @@ public class Helper {
             }
             combatTarget = Combat.findThreat(m, player, mode == Mode.COLLECT, ignoredTargets);
             if (combatTarget == null) return false;
-            if (DEBUG) HelperMod.LOG.info("[helper debug] target {} at {}", combatTarget, combatTarget.getBlockPos());
+            if (DEBUG) HelperMod.LOG.info("[helper debug] target {} at {}", combatTarget, combatTarget.blockPosition());
             combatTicks = 0;
             lastProgressTick = 0;
             closestSoFar = Double.MAX_VALUE;
@@ -1069,29 +1077,29 @@ public class Helper {
             }
         }
         LivingEntity target = combatTarget;
-        m.getLookControl().lookAt(target, 30f, 30f);
-        double d = m.squaredDistanceTo(target);
+        m.getLookControl().setLookAt(target, 30f, 30f);
+        double d = m.distanceToSqr(target);
         if (d < closestSoFar - 0.5) {
             closestSoFar = d;
             lastProgressTick = combatTicks;
         }
         if (combatTicks - lastProgressTick > 80) { // can't get to it (behind walls, in a cave...): skip it
             if (DEBUG) HelperMod.LOG.info("[helper debug] giving up on {}", target);
-            ignoredTargets.add(target.getUuid());
+            ignoredTargets.add(target.getUUID());
             combatTarget = null;
             m.getNavigation().stop();
             return false;
         }
         if (d > Combat.REACH_SQ) {
             if (--repathCooldown <= 0) {
-                m.getNavigation().startMovingTo(target, Combat.CHASE_SPEED);
+                m.getNavigation().moveTo(target, Combat.CHASE_SPEED);
                 repathCooldown = 5;
             }
         } else {
             m.getNavigation().stop();
         }
         if (attackCooldown > 0) attackCooldown--;
-        if (attackCooldown <= 0 && d <= Combat.REACH_SQ && m.canSee(target)) {
+        if (attackCooldown <= 0 && d <= Combat.REACH_SQ && m.hasLineOfSight(target)) {
             attackCooldown = Combat.attack(m, target, entry.inventory, name -> say(player,
                     "My " + name + " is about to break, so I've stopped using it. Give me a new one or repair it."));
             lastProgressTick = combatTicks;
@@ -1107,21 +1115,21 @@ public class Helper {
     // Levels: the helper gets better the more it works
     // ---------------------------------------------------------------------------------------
 
-    private void addWork(ServerPlayerEntity player, int points) {
+    private void addWork(ServerPlayer player, int points) {
         HelperData.Entry e = currentEntry;
         if (e == null || e.level >= HelperData.MAX_LEVEL) return;
         e.work += points;
         int level = HelperData.levelFor(e.work);
-        HelperData.get(player.getServer()).markDirty();
+        HelperData.get(player.level().getServer()).setDirty();
         if (level <= e.level) return;
         e.level = level;
         e.inventory.unlocked = HelperData.pocketsFor(level);
-        MobEntity m = mob;
+        Mob m = mob;
         if (m != null) {
-            ServerWorld w = (ServerWorld) m.getWorld();
-            w.playSound(null, m.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.NEUTRAL, 0.8f, 1.2f);
-            w.spawnParticles(net.minecraft.particle.ParticleTypes.HAPPY_VILLAGER,
-                    m.getX(), m.getY() + m.getHeight(), m.getZ(), 15, 0.4, 0.4, 0.4, 0.1);
+            ServerLevel w = (ServerLevel) m.level();
+            w.playSound(null, m.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 0.8f, 1.2f);
+            w.sendParticles(net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER,
+                    m.getX(), m.getY() + m.getBbHeight(), m.getZ(), 15, 0.4, 0.4, 0.4, 0.1);
         }
         say(player, "I leveled up! I'm level " + level + " now: I mine "
                 + Math.round((HelperData.speedFor(level) - 1) * 100) + "% faster and have "
@@ -1139,12 +1147,12 @@ public class Helper {
      * can walk over a chunk border without freezing), plus wherever it's heading. The ticket runs out
      * a few seconds after the helper is gone, so nothing stays loaded for nothing.
      */
-    private void keepLoaded(ServerWorld world, MobEntity m) {
-        ChunkPos here = new ChunkPos(m.getBlockPos());
-        world.getChunkManager().addTicket(KEEP_LOADED_TICKET, here, 3, here);
+    private void keepLoaded(ServerLevel world, Mob m) {
+        ChunkPos here = ChunkPos.containing(m.blockPosition());
+        world.getChunkSource().addTicketWithRadius(KEEP_LOADED_TICKET, here, 3);
         if (job != null && job.target != null) {
-            ChunkPos there = new ChunkPos(job.target);
-            world.getChunkManager().addTicket(KEEP_LOADED_TICKET, there, 2, there);
+            ChunkPos there = ChunkPos.containing(job.target);
+            world.getChunkSource().addTicketWithRadius(KEEP_LOADED_TICKET, there, 2);
         }
     }
 
@@ -1153,13 +1161,13 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     /** Start riding your helper (right-click it holding a saddle, or /helper ride). */
-    boolean ride(ServerPlayerEntity player, HelperData.Entry entry) {
-        MobEntity m = findEntity(player.getServer(), entry);
-        if (m == null || m.getWorld() != player.getWorld() || m.squaredDistanceTo(player) > 16 * 16) return false;
-        if (player.hasVehicle()) player.stopRiding();
+    boolean ride(ServerPlayer player, HelperData.Entry entry) {
+        Mob m = findEntity(player.level().getServer(), entry);
+        if (m == null || m.level() != player.level() || m.distanceToSqr(player) > 16 * 16) return false;
+        if (player.isPassenger()) player.stopRiding();
         m.getNavigation().stop();
         clearBreaking(m);
-        return player.startRiding(m, true);
+        return player.startRiding(m, true, true);
     }
 
     private static final Set<String> FLYERS = Set.of("minecraft:phantom", "minecraft:bat", "minecraft:parrot",
@@ -1178,14 +1186,14 @@ public class Helper {
     /** How high a step it walks up without jumping: a mob's usual 0.6, or a full block while ridden (like a horse). */
     private static final float WALK_STEP = 0.6f, RIDE_STEP = 1.0f;
 
-    private void tickRide(MobEntity m, ServerPlayerEntity rider) {
+    private void tickRide(Mob m, ServerPlayer rider) {
         m.getNavigation().stop();
         combatTarget = null;
-        float yaw = rider.getYaw();
-        m.setYaw(yaw);
-        m.setBodyYaw(yaw);
-        m.setHeadYaw(yaw);
-        float forward = rider.forwardSpeed, side = rider.sidewaysSpeed; // the rider's W/A/S/D, sent by the game
+        float yaw = rider.getYRot();
+        m.setYRot(yaw);
+        m.setYBodyRot(yaw);
+        m.setYHeadRot(yaw);
+        float forward = rider.zza, side = rider.xxa; // the rider's W/A/S/D, sent by the game
         boolean jump = ((com.helpermod.mixin.LivingEntityAccessor) rider).helpermod$isJumping(); // the rider's space bar
         double rad = Math.toRadians(yaw);
         double dx = side * Math.cos(rad) - forward * Math.sin(rad);
@@ -1199,54 +1207,54 @@ public class Helper {
         boolean flyer = looksLikeFlyer();
         m.setNoGravity(flyer);
         if (flyer) { // fly where the rider looks: W goes that way (up or down too), space bar climbs
-            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
-            Vec3d look = rider.getRotationVec(1f);
+            m.getMoveControl().setWantedPosition(m.getX(), m.getY(), m.getZ(), 0);
+            Vec3 look = rider.getViewVector(1f);
             double speed = rider.isSprinting() ? 0.9 : 0.6;
-            Vec3d v = moving ? new Vec3d(dx * speed, forward > 0 ? look.y * speed : 0, dz * speed) : Vec3d.ZERO;
+            Vec3 v = moving ? new Vec3(dx * speed, forward > 0 ? look.y * speed : 0, dz * speed) : Vec3.ZERO;
             if (jump) v = v.add(0, 0.4, 0);
-            m.setVelocity(m.getVelocity().multiply(0.5).add(v.multiply(0.5)));
-            m.velocityModified = true;
+            m.setDeltaMovement(m.getDeltaMovement().scale(0.5).add(v.scale(0.5)));
+            m.needsSync = true;
             m.fallDistance = 0;
             return;
         }
-        if (m.isTouchingWater()) { // swim properly: full speed through water, space bar swims up
-            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+        if (m.isInWater()) { // swim properly: full speed through water, space bar swims up
+            m.getMoveControl().setWantedPosition(m.getX(), m.getY(), m.getZ(), 0);
             double speed = rider.isSprinting() ? 0.45 : 0.3;
-            Vec3d v = moving ? new Vec3d(dx * speed, 0, dz * speed) : Vec3d.ZERO;
-            double up = jump ? 0.3 : m.isSubmergedInWater() ? 0.05 : 0; // float up gently
-            m.setVelocity(new Vec3d(v.x, Math.max(m.getVelocity().y, up), v.z));
-            m.velocityModified = true;
+            Vec3 v = moving ? new Vec3(dx * speed, 0, dz * speed) : Vec3.ZERO;
+            double up = jump ? 0.3 : m.isUnderWater() ? 0.05 : 0; // float up gently
+            m.setDeltaMovement(new Vec3(v.x, Math.max(m.getDeltaMovement().y, up), v.z));
+            m.needsSync = true;
             return;
         }
         // Like a horse: walk straight up 1-block steps, and hop over anything a little taller by itself.
-        if (m.getStepHeight() != RIDE_STEP) m.setStepHeight(RIDE_STEP);
-        if (!jump && moving && m.isOnGround() && m.horizontalCollision && !m.isTouchingWater()) {
-            m.setVelocity(m.getVelocity().x, 0.5, m.getVelocity().z);
-            m.velocityModified = true;
+        if (m.maxUpStep() != RIDE_STEP) Compat.setStep(m, RIDE_STEP);
+        if (!jump && moving && m.onGround() && m.horizontalCollision && !m.isInWater()) {
+            m.setDeltaMovement(m.getDeltaMovement().x, 0.5, m.getDeltaMovement().z);
+            m.needsSync = true;
         }
-        if (jump && m.isOnGround()) { // jump like a horse: a good hop, more while moving
-            m.setVelocity(m.getVelocity().x + dx * 0.2, 0.6, m.getVelocity().z + dz * 0.2);
-            m.velocityModified = true;
+        if (jump && m.onGround()) { // jump like a horse: a good hop, more while moving
+            m.setDeltaMovement(m.getDeltaMovement().x + dx * 0.2, 0.6, m.getDeltaMovement().z + dz * 0.2);
+            m.needsSync = true;
         }
         if (!moving) {
-            m.getMoveControl().moveTo(m.getX(), m.getY(), m.getZ(), 0);
+            m.getMoveControl().setWantedPosition(m.getX(), m.getY(), m.getZ(), 0);
             return;
         }
         double speed = forward < 0 ? 0.8 : rider.isSprinting() ? 2.2 : 1.6;
-        m.getMoveControl().moveTo(m.getX() + dx * 3, m.getY(), m.getZ() + dz * 3, speed);
+        m.getMoveControl().setWantedPosition(m.getX() + dx * 3, m.getY(), m.getZ() + dz * 3, speed);
     }
 
-    private void tickFollow(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
-        if (m.getWorld() != player.getWorld()) {
+    private void tickFollow(Mob m, ServerPlayer player, HelperData.Entry entry) {
+        if (m.level() != player.level()) {
             spawnNear(player, entry);
             return;
         }
-        double d = m.squaredDistanceTo(player);
+        double d = m.distanceToSqr(player);
         if (d > 32 * 32) {
             teleportNear(m, player);
         } else if (d > 4 * 4) {
             if (--repathCooldown <= 0) {
-                m.getNavigation().startMovingTo(player, SPEED);
+                m.getNavigation().moveTo(player, SPEED);
                 repathCooldown = 10;
             }
             if (isStuck(m, 60)) teleportNear(m, player); // stuck behind a wall for 3 s: phase through to you
@@ -1255,51 +1263,51 @@ public class Helper {
         }
     }
 
-    private void tickReturn(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
-        if (m.getWorld() != player.getWorld()) {
+    private void tickReturn(Mob m, ServerPlayer player, HelperData.Entry entry) {
+        if (m.level() != player.level()) {
             spawnNear(player, entry);
             return;
         }
         if (job != null && job.breaking != null) {
-            tickBreaking(m, player, (ServerWorld) m.getWorld(), entry.inventory); // e.g. gravel fell on the stairs
+            tickBreaking(m, player, (ServerLevel) m.level(), entry.inventory); // e.g. gravel fell on the stairs
             return;
         }
         if (mineStep >= 0 || branchFrom >= 0) {
             // Walk back up the mine's staircase to the surface.
-            if (goToStep(m, player, (ServerWorld) m.getWorld(), entry, 0)) {
+            if (goToStep(m, player, (ServerLevel) m.level(), entry, 0)) {
                 mineStep = -1;
                 stuckTicks = 0;
             }
             return;
         }
         // A Helper Storage nearby? Put the haul in there instead of in the player's pockets.
-        BlockPos store = toPlayer ? null : nearbyStorage(m, (ServerWorld) m.getWorld());
+        BlockPos store = toPlayer ? null : nearbyStorage(m, (ServerLevel) m.level());
         if (store != null) {
-            double ds = m.squaredDistanceTo(Vec3d.ofCenter(store));
+            double ds = m.distanceToSqr(Vec3.atCenterOf(store));
             if (ds > 3.2 * 3.2) {
                 if (--repathCooldown <= 0) {
-                    m.getNavigation().startMovingTo(store.getX() + 0.5, store.getY(), store.getZ() + 0.5, SPEED);
+                    m.getNavigation().moveTo(store.getX() + 0.5, store.getY(), store.getZ() + 0.5, SPEED);
                     repathCooldown = 10;
                 }
                 if (++returnTicks > 600 || isStuck(m, 100)) { // can't get there: hop next to it
                     returnTicks = 0;
-                    BlockPos stand = standNear((ServerWorld) m.getWorld(), store);
-                    if (stand != null) m.requestTeleport(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
+                    BlockPos stand = standNear((ServerLevel) m.level(), store);
+                    if (stand != null) m.teleportTo(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
                     else storagePos = null;
                 }
                 return;
             }
         }
-        double d = m.squaredDistanceTo(player);
+        double d = m.distanceToSqr(player);
         if (store == null && d > 3 * 3 && ++returnTicks > 600) { // 30 s and still can't reach you: hop over
             returnTicks = 0;
             teleportNear(m, player);
-            d = m.squaredDistanceTo(player);
+            d = m.distanceToSqr(player);
         }
         if (store != null || d <= 3 * 3) {
             returnTicks = 0;
             m.getNavigation().stop();
-            if (job != null) plugShafts((ServerWorld) m.getWorld(), entry.inventory);
+            if (job != null) plugShafts((ServerLevel) m.level(), entry.inventory);
             if (store != null) deliver(m, player, entry.inventory, true);
             else deliver(m, player, entry.inventory);
             toPlayer = false;
@@ -1330,7 +1338,7 @@ public class Helper {
             return;
         }
         if (--repathCooldown <= 0) {
-            m.getNavigation().startMovingTo(player, SPEED);
+            m.getNavigation().moveTo(player, SPEED);
             repathCooldown = 10;
         }
         if (isStuck(m, 100)) teleportNear(m, player);
@@ -1340,19 +1348,19 @@ public class Helper {
      * Step through a wall: find the first open spot (2 tall, with a floor) up to 5 blocks further along
      * (dx, dz) and pop out there, without breaking anything. False if there's no open spot within reach.
      */
-    private boolean phaseThrough(MobEntity m, ServerWorld world, BlockPos cur, int dx, int dz) {
+    private boolean phaseThrough(Mob m, ServerLevel world, BlockPos cur, int dx, int dz) {
         for (int k = 2; k <= 6; k++) {
             for (int dy : new int[]{0, 1, -1}) {
-                BlockPos p = cur.add(dx * k, dy, dz * k);
-                if (!world.isChunkLoaded(p)) return false;
-                if (!passable(world, p) || !passable(world, p.up())) continue;
+                BlockPos p = cur.offset(dx * k, dy, dz * k);
+                if (!world.hasChunkAt(p)) return false;
+                if (!passable(world, p) || !passable(world, p.above())) continue;
                 if (!world.getFluidState(p).isEmpty()) continue;
-                BlockPos floor = p.down();
-                if (!world.getBlockState(floor).isSideSolidFullSquare(world, floor, Direction.UP)) continue;
+                BlockPos floor = p.below();
+                if (!world.getBlockState(floor).isFaceSturdy(world, floor, Direction.UP)) continue;
                 m.getNavigation().stop();
-                world.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
-                m.requestTeleport(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
-                world.playSound(null, p, SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.NEUTRAL, 0.4f, 1.4f);
+                world.sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+                m.teleportTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5);
+                world.playSound(null, p, SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 0.4f, 1.4f);
                 stuckTicks = 0;
                 return true;
             }
@@ -1360,18 +1368,18 @@ public class Helper {
         return false;
     }
 
-    private void teleportNear(MobEntity m, ServerPlayerEntity player) {
+    private void teleportNear(Mob m, ServerPlayer player) {
         mineStep = -1;
         branchFrom = -1;
-        Vec3d spot = findSpotNear(player.getServerWorld(), player.getBlockPos());
+        Vec3 spot = findSpotNear(player.level(), player.blockPosition());
         m.getNavigation().stop();
-        m.requestTeleport(spot.x, spot.y, spot.z);
+        m.teleportTo(spot.x, spot.y, spot.z);
         stuckTicks = 0;
     }
 
-    private boolean isStuck(MobEntity m, int limit) {
-        if (m.getPos().squaredDistanceTo(lastPos) > 0.04) {
-            lastPos = m.getPos();
+    private boolean isStuck(Mob m, int limit) {
+        if (m.position().distanceToSqr(lastPos) > 0.04) {
+            lastPos = m.position();
             stuckTicks = 0;
             return false;
         }
@@ -1387,8 +1395,8 @@ public class Helper {
      * Mined ores and defeated mobs drop XP orbs where the helper is, usually far from its owner.
      * The helper soaks them up and hands the XP over when it delivers.
      */
-    private void pickUpXp(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
-        if (player.getWorld() == m.getWorld() && player.squaredDistanceTo(m) < OWNER_NEAR_SQ) {
+    private void pickUpXp(Mob m, ServerPlayer player, HelperData.Entry entry) {
+        if (player.level() == m.level() && player.distanceToSqr(m) < OWNER_NEAR_SQ) {
             // Back with its owner and not on a run: hand over anything it's still holding.
             if (mode == Mode.FOLLOW && entry.xp > 0) {
                 int given = giveXp(player);
@@ -1397,50 +1405,50 @@ public class Helper {
             return;
         }
         int gained = 0;
-        for (ExperienceOrbEntity orb : m.getWorld().getEntitiesByClass(ExperienceOrbEntity.class,
-                m.getBoundingBox().expand(XP_PICKUP_RADIUS), Entity::isAlive)) {
-            gained += orb.getExperienceAmount() * Math.max(1, ((ExperienceOrbAccessor) orb).helpermod$getPickingCount());
+        for (ExperienceOrb orb : m.level().getEntitiesOfClass(ExperienceOrb.class,
+                m.getBoundingBox().inflate(XP_PICKUP_RADIUS), Entity::isAlive)) {
+            gained += orb.getValue() * Math.max(1, ((ExperienceOrbAccessor) orb).helpermod$getPickingCount());
             orb.discard();
         }
         if (gained <= 0) return;
         entry.xp = (int) Math.min(Integer.MAX_VALUE, (long) entry.xp + gained);
-        HelperData.get(player.getServer()).markDirty();
-        m.getWorld().playSound(null, m.getBlockPos(), SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
-                SoundCategory.NEUTRAL, 0.2f, 1.4f);
+        HelperData.get(player.level().getServer()).setDirty();
+        m.level().playSound(null, m.blockPosition(), SoundEvents.EXPERIENCE_ORB_PICKUP,
+                SoundSource.NEUTRAL, 0.2f, 1.4f);
     }
 
     /** Give the owner the XP the helper has been holding. Returns how much was given. */
-    private int giveXp(ServerPlayerEntity player) {
+    private int giveXp(ServerPlayer player) {
         HelperData.Entry entry = currentEntry;
         if (entry == null || entry.xp <= 0) return 0;
         int xp = entry.xp;
         entry.xp = 0;
-        HelperData.get(player.getServer()).markDirty();
+        HelperData.get(player.level().getServer()).setDirty();
         int before = player.experienceLevel;
-        player.addExperience(xp);
-        player.getWorld().playSound(null, player.getBlockPos(), player.experienceLevel > before
-                        ? SoundEvents.ENTITY_PLAYER_LEVELUP : SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
-                SoundCategory.PLAYERS, 0.6f, 1f);
+        player.giveExperiencePoints(xp);
+        player.level().playSound(null, player.blockPosition(), player.experienceLevel > before
+                        ? SoundEvents.PLAYER_LEVELUP : SoundEvents.EXPERIENCE_ORB_PICKUP,
+                SoundSource.PLAYERS, 0.6f, 1f);
         return xp;
     }
 
     /** The closest Helper Storage within 48 blocks of the helper (rescanned every 5 seconds), or null. */
-    private BlockPos nearbyStorage(MobEntity m, ServerWorld world) {
-        long now = world.getTime();
+    private BlockPos nearbyStorage(Mob m, ServerLevel world) {
+        long now = world.getGameTime();
         if (storagePos != null && now < storageScanAt && Storage.isStorageBlock(world, storagePos)) return storagePos;
         storageScanAt = now + 100;
         storagePos = null;
-        BlockPos here = m.getBlockPos();
+        BlockPos here = m.blockPosition();
         double best = 48 * 48;
         int cx = here.getX() >> 4, cz = here.getZ() >> 4;
         for (int x = cx - 3; x <= cx + 3; x++) {
             for (int z = cz - 3; z <= cz + 3; z++) {
-                if (!world.isChunkLoaded(x, z)) continue;
+                if (!world.hasChunk(x, z)) continue;
                 for (BlockPos pos : world.getChunk(x, z).getBlockEntities().keySet()) {
-                    double dist = pos.getSquaredDistance(here);
+                    double dist = pos.distSqr(here);
                     if (dist < best && Storage.isStorageBlock(world, pos)) {
                         best = dist;
-                        storagePos = pos.toImmutable();
+                        storagePos = pos.immutable();
                     }
                 }
             }
@@ -1449,55 +1457,55 @@ public class Helper {
     }
 
     /** An open spot (2 tall, with a floor) next to a block, to stand by it. */
-    private static BlockPos standNear(ServerWorld world, BlockPos pos) {
-        for (Direction dir : Direction.Type.HORIZONTAL) {
+    private static BlockPos standNear(ServerLevel world, BlockPos pos) {
+        for (Direction dir : Direction.Plane.HORIZONTAL) {
             for (int dy : new int[]{0, -1, 1}) {
-                BlockPos p = pos.offset(dir).up(dy);
-                if (world.getBlockState(p).isAir() && world.getBlockState(p.up()).isAir()
-                        && world.getBlockState(p.down()).isSideSolidFullSquare(world, p.down(), Direction.UP)) return p;
+                BlockPos p = pos.relative(dir).above(dy);
+                if (world.getBlockState(p).isAir() && world.getBlockState(p.above()).isAir()
+                        && world.getBlockState(p.below()).isFaceSturdy(world, p.below(), Direction.UP)) return p;
             }
         }
         return null;
     }
 
-    private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv) {
+    private void deliver(Mob m, ServerPlayer player, SimpleContainer inv) {
         deliver(m, player, inv, false);
     }
 
-    private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv, boolean toStorage) {
-        Storage.Data store = toStorage ? Storage.Data.get(player.getServer()) : null;
+    private void deliver(Mob m, ServerPlayer player, SimpleContainer inv, boolean toStorage) {
+        Storage.Data store = toStorage ? Storage.Data.get(player.level().getServer()) : null;
         Map<String, Integer> given = new LinkedHashMap<>();
         boolean droppedAtFeet = false;
         int keptBuilding = 0;
-        for (int i = 0; i < inv.size(); i++) {
-            ItemStack stack = inv.getStack(i);
-            if (stack.isEmpty() || stack.isDamageable()) continue; // keep tools
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
+            if (stack.isEmpty() || stack.isDamageableItem()) continue; // keep tools
             if (isBuildingBlock(stack) && (job == null || !job.spec.counts(stack))
                     && keptBuilding < KEEP_BUILDING_BLOCKS) {
                 int keep = Math.min(stack.getCount(), KEEP_BUILDING_BLOCKS - keptBuilding);
                 keptBuilding += keep;
                 if (keep == stack.getCount()) continue;
                 ItemStack give = stack.split(stack.getCount() - keep);
-                given.merge(give.getName().getString(), give.getCount(), Integer::sum);
-                if (store != null) store.add(player.getUuid(), give);
-                else player.getInventory().offerOrDrop(give);
+                given.merge(give.getHoverName().getString(), give.getCount(), Integer::sum);
+                if (store != null) store.add(player.getUUID(), give);
+                else player.getInventory().placeItemBackInInventory(give, net.minecraft.util.Prediction.SERVER_ONLY);
                 continue;
             }
-            given.merge(stack.getName().getString(), stack.getCount(), Integer::sum);
+            given.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
             ItemStack give = stack.copy();
             if (store != null) {
-                store.add(player.getUuid(), give);
+                store.add(player.getUUID(), give);
                 give = ItemStack.EMPTY;
             } else {
-                player.getInventory().insertStack(give);
+                player.getInventory().add(give);
             }
             if (!give.isEmpty()) {
-                player.dropItem(give, false, false);
+                player.drop(give, false, net.minecraft.util.Prediction.SERVER_ONLY);
                 droppedAtFeet = true;
             }
-            inv.setStack(i, ItemStack.EMPTY);
+            inv.setItem(i, ItemStack.EMPTY);
         }
-        inv.markDirty();
+        inv.setChanged();
         int xp = giveXp(player);
         String xpNote = xp > 0 ? " Plus " + xp + " XP I picked up along the way." : "";
         if (given.isEmpty()) {
@@ -1505,8 +1513,8 @@ public class Helper {
                     : "I don't have anything new for you.");
             return;
         }
-        m.getWorld().playSound(null, store != null ? m.getBlockPos() : player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP,
-                SoundCategory.PLAYERS, 0.4f, 1.2f);
+        m.level().playSound(null, store != null ? m.blockPosition() : player.blockPosition(), SoundEvents.ITEM_PICKUP,
+                SoundSource.PLAYERS, 0.4f, 1.2f);
         StringBuilder sb = new StringBuilder();
         given.forEach((name, count) -> {
             if (sb.length() > 0) sb.append(", ");
@@ -1514,7 +1522,7 @@ public class Helper {
         });
         danceTicks = Celebrate.DANCE_TICKS;
         m.getNavigation().stop();
-        Celebrate.fireworks((ServerWorld) m.getWorld(), m.getPos());
+        Celebrate.fireworks((ServerLevel) m.level(), m.position());
         if (store != null) {
             say(player, "Put " + sb + " in your Helper Storage." + xpNote);
             return;
@@ -1527,10 +1535,10 @@ public class Helper {
     // Collecting
     // ---------------------------------------------------------------------------------------
 
-    private void tickCollect(MobEntity m, ServerPlayerEntity player, HelperData.Entry entry) {
+    private void tickCollect(Mob m, ServerPlayer player, HelperData.Entry entry) {
         Job j = job;
-        ServerWorld world = (ServerWorld) m.getWorld();
-        SimpleInventory inv = entry.inventory;
+        ServerLevel world = (ServerLevel) m.level();
+        SimpleContainer inv = entry.inventory;
         if (++torchTicks % 10 == 0) lightUp(m, player, world, inv);
 
         if (j.breaking != null) {
@@ -1554,9 +1562,9 @@ public class Helper {
             abandonTarget(m);
             return;
         }
-        m.getLookControl().lookAt(Vec3d.ofCenter(target));
+        m.getLookControl().setLookAt(Vec3.atCenterOf(target));
 
-        boolean inReach = m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(target)) <= REACH_SQ;
+        boolean inReach = m.getEyePosition().distanceToSqr(Vec3.atCenterOf(target)) <= REACH_SQ;
         if (inReach && (isExposed(world, target) || isAdjacent(m, target))) {
             m.getNavigation().stop();
             j.stepCell = null;
@@ -1569,56 +1577,56 @@ public class Helper {
     }
 
     /** Far away: walk over land toward the target in hops, then dig the rest. Returns false when done. */
-    private boolean tickTravel(MobEntity m, ServerWorld world) {
+    private boolean tickTravel(Mob m, ServerLevel world) {
         Job j = job;
-        Vec3d here = m.getPos();
+        Vec3 here = m.position();
         double hx = j.target.getX() + 0.5 - here.x;
         double hz = j.target.getZ() + 0.5 - here.z;
         double h = Math.sqrt(hx * hx + hz * hz);
         if (h <= TRAVEL_DISTANCE || j.travelFailures >= 3) return false;
-        if (j.travelFrom == null || here.squaredDistanceTo(j.travelFrom) > 8 * 8) {
+        if (j.travelFrom == null || here.distanceToSqr(j.travelFrom) > 8 * 8) {
             j.travelFrom = here; // making progress
             j.travelFailures = 0;
             j.targetTicks = 0;
         }
         boolean stuck = isStuck(m, 60);
-        if (m.getNavigation().isIdle() || stuck) {
+        if (m.getNavigation().isDone() || stuck) {
             stuckTicks = 0;
             if (stuck) j.travelFailures++;
             int wx = (int) Math.floor(here.x + hx / h * 24);
             int wz = (int) Math.floor(here.z + hz / h * 24);
-            int wy = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, wx, wz);
-            Path path = m.getNavigation().findPathTo(new BlockPos(wx, wy, wz), 3);
-            if (path == null || path.getLength() <= 1 || !m.getNavigation().startMovingAlong(path, SPEED)) {
+            int wy = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, wx, wz);
+            Path path = m.getNavigation().createPath(new BlockPos(wx, wy, wz), 3);
+            if (path == null || path.getNodeCount() <= 1 || !m.getNavigation().moveTo(path, SPEED)) {
                 j.travelFailures++;
             }
         }
         return true;
     }
 
-    private static boolean isAdjacent(MobEntity m, BlockPos target) {
-        BlockPos feet = m.getBlockPos();
+    private static boolean isAdjacent(Mob m, BlockPos target) {
+        BlockPos feet = m.blockPosition();
         int dx = Math.abs(target.getX() - feet.getX());
         int dz = Math.abs(target.getZ() - feet.getZ());
         int dy = target.getY() - feet.getY();
         return dx + dz <= 1 && dy >= -1 && dy <= 2;
     }
 
-    private void tickWalk(MobEntity m, ServerWorld world) {
+    private void tickWalk(Mob m, ServerLevel world) {
         Job j = job;
         boolean stuck = isStuck(m, 40);
-        if (m.getNavigation().isIdle() || stuck) {
+        if (m.getNavigation().isDone() || stuck) {
             stuckTicks = 0;
             if (++j.pathFailures > 2) {
                 j.tunneling = true; // walking isn't working; dig a way there instead
                 return;
             }
-            Path path = m.getNavigation().findPathTo(j.target, 2);
-            if (path == null || !m.getNavigation().startMovingAlong(path, SPEED)) j.tunneling = true;
+            Path path = m.getNavigation().createPath(j.target, 2);
+            if (path == null || !m.getNavigation().moveTo(path, SPEED)) j.tunneling = true;
         }
     }
 
-    private boolean pickTarget(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+    private boolean pickTarget(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
         Job j = job;
         j.targetTicks = 0;
         j.pathFailures = 0;
@@ -1631,9 +1639,9 @@ public class Helper {
             if (isValidTarget(world, p, false)) {
                 if (!checkTool(player, world, inv, p)) return false;
                 j.target = p;
-                Path path = m.getNavigation().findPathTo(p, 2);
-                j.tunneling = path == null || !path.reachesTarget();
-                if (!j.tunneling) m.getNavigation().startMovingAlong(path, SPEED);
+                Path path = m.getNavigation().createPath(p, 2);
+                j.tunneling = path == null || !path.canReach();
+                if (!j.tunneling) m.getNavigation().moveTo(path, SPEED);
                 return true;
             }
         }
@@ -1652,11 +1660,11 @@ public class Helper {
                 break;
             }
             j.scanStage++;
-            scan(world, m.getBlockPos(), SCAN_RADII[j.scanStage][0], SCAN_RADII[j.scanStage][1], j);
+            scan(world, m.blockPosition(), SCAN_RADII[j.scanStage][0], SCAN_RADII[j.scanStage][1], j);
             j.candidates.removeIf(p -> !isValidTarget(world, p, true));
         }
-        Vec3d here = m.getPos();
-        j.candidates.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(here)));
+        Vec3 here = m.position();
+        j.candidates.sort(Comparator.comparingDouble(p -> Vec3.atCenterOf(p).distanceToSqr(here)));
 
         // 3. Of the closest few, pick the cheapest: walk if there's a path, otherwise dig.
         BlockPos best = null;
@@ -1664,14 +1672,14 @@ public class Helper {
         double bestCost = Double.MAX_VALUE;
         for (int i = 0; i < Math.min(PATH_CHECKS, j.candidates.size()); i++) {
             BlockPos p = j.candidates.get(i);
-            double dist = Math.sqrt(Vec3d.ofCenter(p).squaredDistanceTo(here));
+            double dist = Math.sqrt(Vec3.atCenterOf(p).distanceToSqr(here));
             double cost;
             Path path = null;
-            if (m.getEyePos().squaredDistanceTo(Vec3d.ofCenter(p)) <= REACH_SQ && isExposed(world, p)) {
+            if (m.getEyePosition().distanceToSqr(Vec3.atCenterOf(p)) <= REACH_SQ && isExposed(world, p)) {
                 cost = 0;
             } else {
-                if (isExposed(world, p)) path = m.getNavigation().findPathTo(p, 2);
-                if (path != null && path.reachesTarget()) cost = path.getLength();
+                if (isExposed(world, p)) path = m.getNavigation().createPath(p, 2);
+                if (path != null && path.canReach()) cost = path.getNodeCount();
                 else {
                     path = null;
                     cost = dist * 3 + 4; // digging is slower than walking
@@ -1694,7 +1702,7 @@ public class Helper {
         j.target = best;
         j.candidates.remove(best);
         j.tunneling = bestPath == null && bestCost > 0;
-        if (bestPath != null) m.getNavigation().startMovingAlong(bestPath, SPEED);
+        if (bestPath != null) m.getNavigation().moveTo(bestPath, SPEED);
         return true;
     }
 
@@ -1709,7 +1717,7 @@ public class Helper {
      * to the stairs. Branches always leave the stairs' 2x2 footprint on the outside, so they never cut
      * into the steps above or below.
      */
-    private boolean pickFromBranch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+    private boolean pickFromBranch(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv,
                                    HelperData.Entry entry) {
         Job j = job;
         BlockPos landing = stepPos(entry, branchFrom);
@@ -1723,11 +1731,11 @@ public class Helper {
         j.candidates.removeIf(p -> !isValidTarget(world, p, true));
 
         // Ore we can reach from where we stand in the tunnel: take it (short pokes into the wall are fine).
-        Vec3d eye = m.getEyePos();
+        Vec3 eye = m.getEyePosition();
         BlockPos reachable = null;
         double best = Double.MAX_VALUE;
         for (BlockPos p : j.candidates) {
-            double d = eye.squaredDistanceTo(Vec3d.ofCenter(p));
+            double d = eye.distanceToSqr(Vec3.atCenterOf(p));
             if (d <= REACH_SQ && d < best && Math.abs(p.getY() - landing.getY()) <= 3) {
                 best = d;
                 reachable = p;
@@ -1745,7 +1753,7 @@ public class Helper {
     }
 
     /** Which ways to dig from this landing: the two outward directions, most ore first, skipping empty ones. */
-    private void planBranches(ServerWorld world, HelperData.Entry entry, BlockPos landing, int length) {
+    private void planBranches(ServerLevel world, HelperData.Entry entry, BlockPos landing, int length) {
         Job j = job;
         j.branchQueue.clear();
         j.branchDir = null;
@@ -1756,8 +1764,8 @@ public class Helper {
             int rx = p.getX() - landing.getX(), rz = p.getZ() - landing.getZ(), ry = p.getY() - landing.getY();
             if (Math.abs(ry) > 3) continue;
             for (int k = 0; k < 2; k++) {
-                int along = rx * out[k].getOffsetX() + rz * out[k].getOffsetZ();
-                int side = Math.abs(rx * out[k].getOffsetZ() - rz * out[k].getOffsetX());
+                int along = rx * out[k].getStepX() + rz * out[k].getStepZ();
+                int side = Math.abs(rx * out[k].getStepZ() - rz * out[k].getStepX());
                 if (along >= 1 && along <= length + 1 && side <= BRANCH_REACH) counts[k]++;
             }
         }
@@ -1777,17 +1785,17 @@ public class Helper {
     }
 
     /** Dig the current branch one block further, or start the next one, or head back to the stairs. */
-    private void tickBranch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+    private void tickBranch(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv,
                             HelperData.Entry entry, BlockPos landing, int length, boolean atBottom) {
         Job j = job;
         if (j.stepCell != null) { // stepping into the block we just opened
             BlockPos cell = j.stepCell;
-            Vec3d c = Vec3d.ofBottomCenter(cell);
-            if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(c) < 0.15) j.stepCell = null;
+            Vec3 c = Vec3.atBottomCenterOf(cell);
+            if (m.blockPosition().equals(cell) || m.position().distanceToSqr(c) < 0.15) j.stepCell = null;
             else if (++j.stepTicks > 25) {
-                m.requestTeleport(c.x, c.y, c.z);
+                m.teleportTo(c.x, c.y, c.z);
                 j.stepCell = null;
-            } else m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+            } else m.getMoveControl().setWantedPosition(c.x, c.y, c.z, SPEED);
             return;
         }
         if (j.branchDir != null && j.branchLen >= length) j.branchDir = null; // this branch is finished
@@ -1805,25 +1813,25 @@ public class Helper {
             j.branchTicks = 0;
         }
         Direction d = j.branchDir;
-        BlockPos head = landing.offset(d, j.branchLen); // where we should be standing
-        BlockPos next = head.offset(d);
+        BlockPos head = landing.relative(d, j.branchLen); // where we should be standing
+        BlockPos next = head.relative(d);
         // Get back to the end of the tunnel first (e.g. after mining a bit of ore off to the side).
-        if (!m.getBlockPos().equals(head) && m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(head)) > 0.5) {
-            if (m.getNavigation().isIdle() || isStuck(m, 40)) {
-                Path path = m.getNavigation().findPathTo(head, 0);
-                if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+        if (!m.blockPosition().equals(head) && m.position().distanceToSqr(Vec3.atBottomCenterOf(head)) > 0.5) {
+            if (m.getNavigation().isDone() || isStuck(m, 40)) {
+                Path path = m.getNavigation().createPath(head, 0);
+                if (path != null) m.getNavigation().moveTo(path, SPEED);
             }
             if (++j.branchTicks > 200) {
-                m.requestTeleport(head.getX() + 0.5, head.getY(), head.getZ() + 0.5);
+                m.teleportTo(head.getX() + 0.5, head.getY(), head.getZ() + 0.5);
                 j.branchTicks = 0;
             }
             return;
         }
         j.branchTicks = 0;
         j.targetTicks = 0;
-        for (BlockPos cell : new BlockPos[]{next.up(), next}) {
+        for (BlockPos cell : new BlockPos[]{next.above(), next}) {
             BlockState s = world.getBlockState(cell);
-            if (s.getFluidState().isIn(FluidTags.LAVA) || lavaNear(world, cell)) {
+            if (s.getFluidState().is(FluidTags.LAVA) || lavaNear(world, cell)) {
                 if (!sealLava(world, inv, cell, head)) j.branchDir = null; // can't make it safe: stop this branch
                 return;
             }
@@ -1836,11 +1844,11 @@ public class Helper {
             return;
         }
         // Keep the tunnel floor solid so it stays a straight, walkable line.
-        BlockPos floor = next.down();
+        BlockPos floor = next.below();
         BlockState fs = world.getBlockState(floor);
-        if (!fs.isSideSolidFullSquare(world, floor, Direction.UP)) {
+        if (!fs.isFaceSturdy(world, floor, Direction.UP)) {
             int slot = buildingBlockSlot(inv);
-            if (slot >= 0 && fs.isReplaceable()) placeBlock(world, inv, slot, floor);
+            if (slot >= 0 && fs.canBeReplaced()) placeBlock(world, inv, slot, floor);
             else if (!hasGroundWithin(world, floor, 1)) {
                 j.branchDir = null; // a drop into a cave and nothing to bridge with
                 return;
@@ -1850,33 +1858,33 @@ public class Helper {
         j.stepCell = next;
         j.stepTicks = 0;
         m.getNavigation().stop();
-        Vec3d c = Vec3d.ofBottomCenter(next);
-        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+        Vec3 c = Vec3.atBottomCenterOf(next);
+        m.getMoveControl().setWantedPosition(c.x, c.y, c.z, SPEED);
     }
 
-    private static boolean isDeepUnderground(ServerWorld world, MobEntity m, BlockPos target) {
-        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ());
+    private static boolean isDeepUnderground(ServerLevel world, Mob m, BlockPos target) {
+        int surface = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, target.getX(), target.getZ());
         return target.getY() < m.getBlockY() - 3 && target.getY() < surface - 4;
     }
 
     static BlockPos stepPos(HelperData.Entry entry, int i) {
         int[] c = SPIRAL[i & 3];
-        return entry.mineOrigin.add(c[0], -i, c[1]);
+        return entry.mineOrigin.offset(c[0], -i, c[1]);
     }
 
-    private int bottomStep(ServerWorld world, HelperData.Entry entry) {
-        return Math.max(0, entry.mineOrigin.getY() - (world.getBottomY() + 6));
+    private int bottomStep(ServerLevel world, HelperData.Entry entry) {
+        return Math.max(0, entry.mineOrigin.getY() - (world.getMinY() + 6));
     }
 
-    private void startMine(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+    private void startMine(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry,
                            BlockPos target) {
         Job j = job;
-        String dim = world.getRegistryKey().getValue().toString();
+        String dim = world.dimension().identifier().toString();
         boolean marked = entry.mineMarker != null && entry.mineOrigin != null && dim.equals(entry.mineDim);
         boolean reuse = marked || (entry.mineOrigin != null && dim.equals(entry.mineDim)
-                && horizontalDistanceSq(entry.mineOrigin, m.getBlockPos()) < 256 * 256);
+                && horizontalDistanceSq(entry.mineOrigin, m.blockPosition()) < 256 * 256);
         if (!reuse) {
-            BlockPos spot = findMineSpot(world, m.getBlockPos());
+            BlockPos spot = findMineSpot(world, m.blockPosition());
             if (spot == null) {
                 finishJob(player, entry.inventory, "I'd have to dig a mine to reach " + j.spec.display
                         + ", but there's no open ground nearby that's away from buildings. "
@@ -1886,7 +1894,7 @@ public class Helper {
             entry.mineOrigin = spot;
             entry.mineDim = dim;
             entry.mineDepth = 0;
-            HelperData.get(world.getServer()).markDirty();
+            HelperData.get(world.getServer()).setDirty();
             say(player, "There's no cave I can walk through to get there, so I'm digging a mine at "
                     + entry.mineOrigin.getX() + ", " + entry.mineOrigin.getY() + ", " + entry.mineOrigin.getZ()
                     + ". It's a staircase you can use too, and I'll use it every time I go underground.");
@@ -1903,7 +1911,7 @@ public class Helper {
                 .limit(20).forEach(p -> ys.add(p.getY()));
         ys.sort(null);
         int median = ys.get(ys.size() / 2);
-        j.mineTargetY = Math.max(world.getBottomY() + 6, median);
+        j.mineTargetY = Math.max(world.getMinY() + 6, median);
         j.mineState = MineState.DESCEND;
         j.landingScanned = false;
         j.doneLanding = -1;
@@ -1918,7 +1926,7 @@ public class Helper {
     }
 
     /** Down the stairs, stopping at every landing to mine what's around. */
-    private void tickDescend(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry) {
+    private void tickDescend(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry) {
         Job j = job;
         if (entry.mineOrigin == null) {
             j.mineState = MineState.NONE;
@@ -1954,23 +1962,23 @@ public class Helper {
      * Move one step at a time along the staircase toward step {@code goal}, digging new steps when
      * going deeper than the mine has been dug. Returns true once standing on the goal step.
      */
-    private boolean goToStep(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+    private boolean goToStep(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry,
                              int goal) {
         if (entry.mineOrigin == null) return true;
         // Out in a side tunnel: walk back to the landing we came from.
         if (branchFrom >= 0) {
             BlockPos landing = stepPos(entry, branchFrom);
-            if (m.getBlockPos().equals(landing) || m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(landing)) < 0.5) {
+            if (m.blockPosition().equals(landing) || m.position().distanceToSqr(Vec3.atBottomCenterOf(landing)) < 0.5) {
                 mineStep = branchFrom;
                 branchFrom = -1;
                 stairTicks = 0;
             } else {
-                if (m.getNavigation().isIdle() || isStuck(m, 40)) {
-                    Path path = m.getNavigation().findPathTo(landing, 0);
-                    if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+                if (m.getNavigation().isDone() || isStuck(m, 40)) {
+                    Path path = m.getNavigation().createPath(landing, 0);
+                    if (path != null) m.getNavigation().moveTo(path, SPEED);
                 }
                 if (++stairTicks > 200) { // tunnel got blocked somehow: hop back
-                    m.requestTeleport(landing.getX() + 0.5, landing.getY(), landing.getZ() + 0.5);
+                    m.teleportTo(landing.getX() + 0.5, landing.getY(), landing.getZ() + 0.5);
                     stairTicks = 0;
                 }
                 return false;
@@ -1979,16 +1987,16 @@ public class Helper {
         // Not on the stairs yet: walk to the entrance.
         if (mineStep < 0) {
             BlockPos top = stepPos(entry, 0);
-            if (m.getBlockPos().equals(top) || m.getPos().squaredDistanceTo(Vec3d.ofBottomCenter(top)) < 0.6) {
+            if (m.blockPosition().equals(top) || m.position().distanceToSqr(Vec3.atBottomCenterOf(top)) < 0.6) {
                 mineStep = 0;
                 stairTicks = 0;
             } else {
-                if (m.getNavigation().isIdle() || isStuck(m, 60)) {
-                    Path path = m.getNavigation().findPathTo(top, 0);
-                    if (path != null) m.getNavigation().startMovingAlong(path, SPEED);
+                if (m.getNavigation().isDone() || isStuck(m, 60)) {
+                    Path path = m.getNavigation().createPath(top, 0);
+                    if (path != null) m.getNavigation().moveTo(path, SPEED);
                 }
                 if (++stairTicks > 400) {
-                    m.requestTeleport(top.getX() + 0.5, top.getY(), top.getZ() + 0.5);
+                    m.teleportTo(top.getX() + 0.5, top.getY(), top.getZ() + 0.5);
                     stairTicks = 0;
                 }
                 return false;
@@ -1998,32 +2006,32 @@ public class Helper {
         int next = mineStep + Integer.signum(goal - mineStep);
         BlockPos cell = stepPos(entry, next);
         if (!prepareStep(m, player, world, entry, cell)) return false; // digging / sealing this tick
-        Vec3d c = Vec3d.ofBottomCenter(cell);
-        if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(c) < 0.15) {
+        Vec3 c = Vec3.atBottomCenterOf(cell);
+        if (m.blockPosition().equals(cell) || m.position().distanceToSqr(c) < 0.15) {
             mineStep = next;
             stairTicks = 0;
             if (next > entry.mineDepth) {
                 entry.mineDepth = next;
-                HelperData.get(world.getServer()).markDirty();
+                HelperData.get(world.getServer()).setDirty();
             }
             return mineStep == goal;
         }
         m.getNavigation().stop();
-        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+        m.getMoveControl().setWantedPosition(c.x, c.y, c.z, SPEED);
         if (++stairTicks > 25) {
-            m.requestTeleport(c.x, c.y, c.z);
+            m.teleportTo(c.x, c.y, c.z);
             stairTicks = 0;
         }
         return false;
     }
 
     /** Make sure a stair step is open, sealed from lava and water, and has a floor. False while working on it. */
-    private boolean prepareStep(MobEntity m, ServerPlayerEntity player, ServerWorld world, HelperData.Entry entry,
+    private boolean prepareStep(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry,
                                 BlockPos cell) {
         if (job == null) return true; // nothing to dig with; just walk (and hop if blocked)
-        SimpleInventory inv = entry.inventory;
+        SimpleContainer inv = entry.inventory;
         for (int dy = 2; dy >= 0; dy--) {
-            BlockPos p = cell.up(dy);
+            BlockPos p = cell.above(dy);
             BlockState s = world.getBlockState(p);
             if (!s.getFluidState().isEmpty() || fluidNear(world, p, entry)) {
                 if (sealFluids(world, inv, p, entry)) return false;
@@ -2035,7 +2043,7 @@ public class Helper {
                 }
             }
             if (s.getCollisionShape(world, p).isEmpty()) continue;
-            if (s.hasBlockEntity() || s.getHardness(world, p) < 0 || protectedHere(world, p, s)) {
+            if (s.hasBlockEntity() || s.getDestroySpeed(world, p) < 0 || protectedHere(world, p, s)) {
                 say(player, "My mine ran into something that looks built or that I can't dig through, at "
                         + p.toShortString() + ", so I left it alone. I'll start a new mine somewhere else next time.");
                 if (entry.mineMarker == null) entry.mineOrigin = null;
@@ -2047,9 +2055,9 @@ public class Helper {
             startBreaking(m, player, world, inv, p, job.spec.matches(s));
             return false;
         }
-        BlockPos floor = cell.down();
+        BlockPos floor = cell.below();
         BlockState fs = world.getBlockState(floor);
-        if (!fs.isSideSolidFullSquare(world, floor, Direction.UP) && fs.isReplaceable()) {
+        if (!fs.isFaceSturdy(world, floor, Direction.UP) && fs.canBeReplaced()) {
             int slot = buildingBlockSlot(inv);
             if (slot >= 0) placeBlock(world, inv, slot, floor);
         }
@@ -2069,21 +2077,21 @@ public class Helper {
         return false;
     }
 
-    private boolean fluidNear(ServerWorld world, BlockPos p, HelperData.Entry entry) {
+    private boolean fluidNear(ServerLevel world, BlockPos p, HelperData.Entry entry) {
         for (Direction dir : Direction.values()) {
-            BlockPos n = p.offset(dir);
+            BlockPos n = p.relative(dir);
             if (!world.getFluidState(n).isEmpty() && !isMineCell(entry, n)) return true;
         }
         return false;
     }
 
     /** Plug water and lava touching the mine. True if it placed something (call again next tick). */
-    private boolean sealFluids(ServerWorld world, SimpleInventory inv, BlockPos p, HelperData.Entry entry) {
+    private boolean sealFluids(ServerLevel world, SimpleContainer inv, BlockPos p, HelperData.Entry entry) {
         boolean placed = false;
         List<BlockPos> spots = new ArrayList<>();
         if (!world.getFluidState(p).isEmpty()) spots.add(p);
         for (Direction dir : Direction.values()) {
-            BlockPos n = p.offset(dir);
+            BlockPos n = p.relative(dir);
             if (!world.getFluidState(n).isEmpty() && !isMineCell(entry, n)) spots.add(n);
         }
         for (BlockPos spot : spots) {
@@ -2096,15 +2104,15 @@ public class Helper {
     }
 
     /** Make sure we can actually harvest this block; otherwise tell the owner what we need. */
-    private boolean checkTool(ServerPlayerEntity player, ServerWorld world, SimpleInventory inv, BlockPos p) {
+    private boolean checkTool(ServerPlayer player, ServerLevel world, SimpleContainer inv, BlockPos p) {
         BlockState state = world.getBlockState(p);
         int slot = Mining.bestToolSlot(inv, state, world, p, true, job.spec.preferSilk);
-        ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
+        ItemStack tool = slot >= 0 ? inv.getItem(slot) : ItemStack.EMPTY;
         if (!Mining.canHarvest(tool, state)) {
-            for (int i = 0; i < inv.size(); i++) {
-                ItemStack worn = inv.getStack(i);
-                if (!worn.isEmpty() && !Mining.isUsableTool(worn) && worn.isSuitableFor(state)) {
-                    finishJob(player, inv, "My " + worn.getName().getString() + " is worn out (it would break). "
+            for (int i = 0; i < inv.getContainerSize(); i++) {
+                ItemStack worn = inv.getItem(i);
+                if (!worn.isEmpty() && !Mining.isUsableTool(worn) && worn.isCorrectToolForDrops(state)) {
+                    finishJob(player, inv, "My " + worn.getHoverName().getString() + " is worn out (it would break). "
                             + "Give me a new one or repair it, and I'll mine " + Mining.blockName(state.getBlock()) + ".");
                     return false;
                 }
@@ -2120,66 +2128,66 @@ public class Helper {
         return true;
     }
 
-    private boolean isValidTarget(ServerWorld world, BlockPos p, boolean checkTree) {
+    private boolean isValidTarget(ServerLevel world, BlockPos p, boolean checkTree) {
         Job j = job;
-        if (j.blacklist.contains(p) || !world.isChunkLoaded(p)) return false;
+        if (j.blacklist.contains(p) || !world.hasChunkAt(p)) return false;
         BlockState state = world.getBlockState(p);
         if (!j.spec.matches(state)) return false;
-        if (checkTree && state.isIn(BlockTags.LOGS)) return isPartOfTree(world, p);
+        if (checkTree && state.is(BlockTags.LOGS)) return isPartOfTree(world, p);
         return true;
     }
 
     /** Logs only count if they're part of a real tree (natural leaves nearby), so cabins are safe. */
-    private static boolean isPartOfTree(ServerWorld world, BlockPos p) {
-        BlockPos.Mutable q = new BlockPos.Mutable();
+    private static boolean isPartOfTree(ServerLevel world, BlockPos p) {
+        BlockPos.MutableBlockPos q = new BlockPos.MutableBlockPos();
         for (int dy = -1; dy <= 8; dy++) {
             for (int dx = -3; dx <= 3; dx++) {
                 for (int dz = -3; dz <= 3; dz++) {
                     q.set(p.getX() + dx, p.getY() + dy, p.getZ() + dz);
                     BlockState s = world.getBlockState(q);
-                    if (s.isIn(BlockTags.LEAVES) && Materials.isGatherable(s)) return true;
+                    if (s.is(BlockTags.LEAVES) && Materials.isGatherable(s)) return true;
                 }
             }
         }
         return false;
     }
 
-    private static boolean isExposed(World world, BlockPos p) {
+    private static boolean isExposed(Level world, BlockPos p) {
         for (Direction dir : Direction.values()) {
-            BlockPos n = p.offset(dir);
-            if (!world.getBlockState(n).isOpaqueFullCube(world, n)) return true;
+            BlockPos n = p.relative(dir);
+            if (!world.getBlockState(n).isSolidRender()) return true;
         }
         return false;
     }
 
-    private static void scan(ServerWorld world, BlockPos center, int radius, int vertical, Job j) {
-        int minY = Math.max(world.getBottomY(), center.getY() - vertical);
-        int maxY = Math.min(world.getTopY() - 1, center.getY() + vertical);
+    private static void scan(ServerLevel world, BlockPos center, int radius, int vertical, Job j) {
+        int minY = Math.max(world.getMinY(), center.getY() - vertical);
+        int maxY = Math.min(world.getMaxY(), center.getY() + vertical);
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
             for (int cz = (center.getZ() - radius) >> 4; cz <= (center.getZ() + radius) >> 4; cz++) {
-                WorldChunk chunk = world.getChunkManager().getWorldChunk(cx, cz);
+                LevelChunk chunk = world.getChunkSource().getChunkNow(cx, cz);
                 if (chunk == null) continue;
                 scanChunk(world, chunk, minY, maxY, j, seen, center, radius);
             }
         }
         if (j.candidates.size() > MAX_CANDIDATES) {
-            j.candidates.sort(Comparator.comparingDouble(p -> p.getSquaredDistance(center)));
+            j.candidates.sort(Comparator.comparingDouble(p -> p.distSqr(center)));
             j.candidates.subList(MAX_CANDIDATES, j.candidates.size()).clear();
         }
     }
 
     /** Add every matching block in this chunk (within the radius of center, if given) to the candidates. */
-    private static void scanChunk(ServerWorld world, WorldChunk chunk, int minY, int maxY, Job j,
+    private static void scanChunk(ServerLevel world, LevelChunk chunk, int minY, int maxY, Job j,
                                   Set<BlockPos> seen, BlockPos center, int radius) {
         int r2 = radius * radius;
-        int cx = chunk.getPos().x, cz = chunk.getPos().z;
-        ChunkSection[] sections = chunk.getSectionArray();
+        int cx = chunk.getPos().x(), cz = chunk.getPos().z();
+        LevelChunkSection[] sections = chunk.getSections();
         for (int si = 0; si < sections.length; si++) {
-            int baseY = ChunkSectionPos.getBlockCoord(world.getBottomSectionCoord() + si);
+            int baseY = SectionPos.sectionToBlockCoord(world.getMinSectionY() + si);
             if (baseY + 15 < minY || baseY > maxY) continue;
-            ChunkSection section = sections[si];
-            if (section == null || section.isEmpty() || !section.hasAny(j.spec::matches)) continue;
+            LevelChunkSection section = sections[si];
+            if (section == null || section.hasOnlyAir() || !section.maybeHas(j.spec::matches)) continue;
             for (int y = 0; y < 16; y++) {
                 int wy = baseY + y;
                 if (wy < minY || wy > maxY) continue;
@@ -2203,10 +2211,10 @@ public class Helper {
      * Nothing in the loaded area: load chunks ring by ring around where we are (a few at a time, so the
      * server doesn't lag) and scan each one as it arrives. Returns true once there are candidates.
      */
-    private boolean farSearch(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+    private boolean farSearch(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
         Job j = job;
         if (j.farRing < 0) {
-            j.farOrigin = new ChunkPos(m.getBlockPos());
+            j.farOrigin = ChunkPos.containing(m.blockPosition());
             j.farRing = FAR_START_RING;
             j.farQueue.clear();
             j.farPending.clear();
@@ -2217,14 +2225,14 @@ public class Helper {
                         + "This can take a little while.");
             }
         }
-        ServerChunkManager chunks = world.getChunkManager();
+        ServerChunkCache chunks = world.getChunkSource();
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (java.util.Iterator<ChunkPos> it = j.farPending.iterator(); it.hasNext(); ) {
             ChunkPos cp = it.next();
-            WorldChunk chunk = chunks.getWorldChunk(cp.x, cp.z);
+            LevelChunk chunk = chunks.getChunkNow(cp.x(), cp.z());
             if (chunk == null) continue; // still loading / generating
             it.remove();
-            scanChunk(world, chunk, world.getBottomY(), world.getTopY() - 1, j, seen, null, 0);
+            scanChunk(world, chunk, world.getMinY(), world.getMaxY(), j, seen, null, 0);
         }
         while (j.farPending.size() < FAR_PARALLEL) {
             if (j.farQueue.isEmpty()) {
@@ -2240,7 +2248,7 @@ public class Helper {
                 queueRing(j);
             }
             ChunkPos cp = j.farQueue.pollFirst();
-            chunks.addTicket(SEARCH_TICKET, cp, 0, cp);
+            chunks.addTicketWithRadius(SEARCH_TICKET, cp, 0);
             j.farPending.add(cp);
         }
         j.candidates.removeIf(p -> !isValidTarget(world, p, true));
@@ -2252,7 +2260,7 @@ public class Helper {
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
-                j.farQueue.add(new ChunkPos(j.farOrigin.x + dx, j.farOrigin.z + dz));
+                j.farQueue.add(new ChunkPos(j.farOrigin.x() + dx, j.farOrigin.z() + dz));
             }
         }
     }
@@ -2261,24 +2269,24 @@ public class Helper {
     // Digging a path (staircases, tunnels, bridging, pillaring)
     // ---------------------------------------------------------------------------------------
 
-    private void tickTunnel(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+    private void tickTunnel(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
         Job j = job;
         if (j.stepCell != null) {
             BlockPos cell = j.stepCell;
-            Vec3d center = Vec3d.ofBottomCenter(cell);
-            if (m.getBlockPos().equals(cell) || m.getPos().squaredDistanceTo(center) < 0.15) {
+            Vec3 center = Vec3.atBottomCenterOf(cell);
+            if (m.blockPosition().equals(cell) || m.position().distanceToSqr(center) < 0.15) {
                 j.stepCell = null;
             } else if (++j.stepTicks > 25) {
-                m.requestTeleport(center.x, center.y, center.z); // nudge into the freshly dug spot
+                m.teleportTo(center.x, center.y, center.z); // nudge into the freshly dug spot
                 j.stepCell = null;
             } else {
                 // Step straight into the freshly dug cell (pathfinding is unreliable in 1-wide tunnels).
-                m.getMoveControl().moveTo(center.x, center.y, center.z, SPEED);
+                m.getMoveControl().setWantedPosition(center.x, center.y, center.z, SPEED);
             }
             return;
         }
 
-        BlockPos cur = m.getBlockPos();
+        BlockPos cur = m.blockPosition();
         BlockPos target = j.target;
         int dx = target.getX() - cur.getX();
         int dy = target.getY() - cur.getY();
@@ -2295,19 +2303,19 @@ public class Helper {
             startBreaking(m, player, world, inv, target, true);
             return;
         }
-        BlockPos next = cur.add(sx, sy, sz);
+        BlockPos next = cur.offset(sx, sy, sz);
         boolean pillar = sx == 0 && sz == 0 && sy == 1;
 
         List<BlockPos> toClear = new ArrayList<>();
-        if (sy == 1) toClear.add(cur.up(2));
-        if (sy == -1) toClear.add(next.up(2));
-        toClear.add(next.up());
+        if (sy == 1) toClear.add(cur.above(2));
+        if (sy == -1) toClear.add(next.above(2));
+        toClear.add(next.above());
         toClear.add(next);
         for (BlockPos cell : toClear) {
-            if (cell.equals(cur) || cell.equals(cur.up())) continue;
+            if (cell.equals(cur) || cell.equals(cur.above())) continue;
             BlockState s = world.getBlockState(cell);
             if (passable(world, cell)) continue;
-            if (s.getFluidState().isIn(FluidTags.LAVA) || lavaNear(world, cell)) {
+            if (s.getFluidState().is(FluidTags.LAVA) || lavaNear(world, cell)) {
                 // Plug the lava with a building block (like a player would), then dig on.
                 if (!sealLava(world, inv, cell, cur)) abandonTarget(m);
                 j.targetTicks = 0;
@@ -2323,8 +2331,8 @@ public class Helper {
                 return;
             }
             j.targetTicks = 0; // still making progress toward it
-            if (sx == 0 && sz == 0 && sy == -1 && cell.equals(next) && world.isSkyVisible(cur)) {
-                j.shaftTops.add(next.toImmutable());
+            if (sx == 0 && sz == 0 && sy == -1 && cell.equals(next) && world.canSeeSky(cur)) {
+                j.shaftTops.add(next.immutable());
             }
             startBreaking(m, player, world, inv, cell, j.spec.matches(s));
             return;
@@ -2342,23 +2350,23 @@ public class Helper {
                 return;
             }
             m.getNavigation().stop();
-            m.requestTeleport(cur.getX() + 0.5, cur.getY() + 1.0, cur.getZ() + 0.5);
+            m.teleportTo(cur.getX() + 0.5, cur.getY() + 1.0, cur.getZ() + 0.5);
             placeBlock(world, inv, slot, cur);
             return;
         }
 
-        BlockPos floor = next.down();
+        BlockPos floor = next.below();
         BlockState floorState = world.getBlockState(floor);
-        if (!floorState.isSideSolidFullSquare(world, floor, Direction.UP)) {
+        if (!floorState.isFaceSturdy(world, floor, Direction.UP)) {
             boolean fluid = !floorState.getFluidState().isEmpty();
-            if (floorState.isReplaceable() && (fluid || passable(world, floor))) {
+            if (floorState.canBeReplaced() && (fluid || passable(world, floor))) {
                 int slot = buildingBlockSlot(inv);
                 if (slot >= 0 && nearBuild(world, floor, 3, true)) {
                     abandonTarget(m); // don't bridge through someone's build
                     return;
                 } else if (slot >= 0) {
                     placeBlock(world, inv, slot, floor); // bridge over the gap, water or lava
-                } else if (floorState.getFluidState().isIn(FluidTags.LAVA)
+                } else if (floorState.getFluidState().is(FluidTags.LAVA)
                         || (!fluid && !hasGroundWithin(world, floor, 3))) {
                     abandonTarget(m); // too dangerous and nothing to bridge with
                     return;
@@ -2369,14 +2377,14 @@ public class Helper {
         j.stepCell = next;
         j.stepTicks = 0;
         m.getNavigation().stop();
-        Vec3d c = Vec3d.ofBottomCenter(next);
-        m.getMoveControl().moveTo(c.x, c.y, c.z, SPEED);
+        Vec3 c = Vec3.atBottomCenterOf(next);
+        m.getMoveControl().setWantedPosition(c.x, c.y, c.z, SPEED);
     }
 
-    private void plugShafts(ServerWorld world, SimpleInventory inv) {
+    private void plugShafts(ServerLevel world, SimpleContainer inv) {
         for (BlockPos top : job.shaftTops) {
-            if (!world.isChunkLoaded(top) || !world.getBlockState(top).isAir()) continue;
-            if (mob != null && mob.getBoundingBox().intersects(new net.minecraft.util.math.Box(top))) continue;
+            if (!world.hasChunkAt(top) || !world.getBlockState(top).isAir()) continue;
+            if (mob != null && mob.getBoundingBox().intersects(new net.minecraft.world.phys.AABB(top))) continue;
             if (nearBuild(world, top, 2, true)) continue; // leave holes next to builds for the owner to deal with
             int slot = buildingBlockSlot(inv);
             if (slot < 0) break;
@@ -2386,13 +2394,13 @@ public class Helper {
     }
 
     /** Cover any lava in or next to the cell we're about to open. False if we ran out of blocks. */
-    private boolean sealLava(ServerWorld world, SimpleInventory inv, BlockPos cell, BlockPos cur) {
+    private boolean sealLava(ServerLevel world, SimpleContainer inv, BlockPos cell, BlockPos cur) {
         List<BlockPos> spots = new ArrayList<>();
-        if (world.getFluidState(cell).isIn(FluidTags.LAVA)) spots.add(cell);
+        if (world.getFluidState(cell).is(FluidTags.LAVA)) spots.add(cell);
         for (Direction dir : Direction.values()) {
-            BlockPos n = cell.offset(dir);
-            if (n.equals(cur) || n.equals(cur.up())) continue;
-            if (world.getFluidState(n).isIn(FluidTags.LAVA)) spots.add(n);
+            BlockPos n = cell.relative(dir);
+            if (n.equals(cur) || n.equals(cur.above())) continue;
+            if (world.getFluidState(n).is(FluidTags.LAVA)) spots.add(n);
         }
         if (spots.isEmpty()) return false; // the lava is where we're standing; go a different way
         for (BlockPos spot : spots) {
@@ -2407,13 +2415,13 @@ public class Helper {
      * Natural terrain is always fine to dig through. Deep underground (well below the surface, where
      * nobody builds) anything that isn't obviously player-made is fine too, e.g. modded stone or sculk.
      */
-    private boolean canDigThrough(ServerWorld world, BlockPos pos, BlockState s) {
+    private boolean canDigThrough(ServerLevel world, BlockPos pos, BlockState s) {
         if (protectedHere(world, pos, s)) return false;
         if (Materials.isTerrain(s) || job.spec.matches(s)) return true;
         if (s.hasBlockEntity()) return false;
-        float hardness = s.getHardness(world, pos);
+        float hardness = s.getDestroySpeed(world, pos);
         if (hardness < 0 || hardness >= 30) return false;
-        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
+        int surface = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
         if (pos.getY() > surface - 8) return false;
         return !Materials.looksPlayerMade(s);
     }
@@ -2432,30 +2440,30 @@ public class Helper {
      * isProtected, except right around the owner's Mine Marker: there the player chose the spot, so only
      * blocks that are themselves built (planks, glass, chests...) are off limits, not their neighbours.
      */
-    private boolean protectedHere(ServerWorld world, BlockPos pos, BlockState s) {
+    private boolean protectedHere(ServerLevel world, BlockPos pos, BlockState s) {
         HelperData.Entry e = currentEntry;
         if (e != null && e.mineMarker != null && e.mineOrigin != null
-                && world.getRegistryKey().getValue().toString().equals(e.mineDim)
+                && world.dimension().identifier().toString().equals(e.mineDim)
                 && Math.abs(pos.getX() - e.mineOrigin.getX()) <= 3 && Math.abs(pos.getZ() - e.mineOrigin.getZ()) <= 3) {
             if (pos.equals(e.mineMarker)) return true; // never dig up the marker itself
-            if (s.isOf(net.minecraft.block.Blocks.SPAWNER)) return false;
+            if (s.is(net.minecraft.world.level.block.Blocks.SPAWNER)) return false;
             return s.hasBlockEntity() || isBuildEvidence(s);
         }
         return isProtected(world, pos, s);
     }
 
-    static boolean isProtected(ServerWorld world, BlockPos pos, BlockState s) {
-        if (s.isAir() || s.isOf(net.minecraft.block.Blocks.SPAWNER)) return false;
+    static boolean isProtected(ServerLevel world, BlockPos pos, BlockState s) {
+        if (s.isAir() || s.is(net.minecraft.world.level.block.Blocks.SPAWNER)) return false;
         if (s.hasBlockEntity()) return true;
-        int surface = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
+        int surface = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, pos.getX(), pos.getZ());
         boolean shallow = pos.getY() > surface - 8;
         if (shallow && isBuildEvidence(s)) return true;
         return nearBuild(world, pos, 2, shallow);
     }
 
     /** Is there a placed-looking block (or, when deep, a chest/bed/furnace) within radius? */
-    static boolean nearBuild(ServerWorld world, BlockPos center, int radius, boolean shallow) {
-        BlockPos.Mutable p = new BlockPos.Mutable();
+    static boolean nearBuild(ServerLevel world, BlockPos center, int radius, boolean shallow) {
+        BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dy = -radius; dy <= radius; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
@@ -2464,7 +2472,7 @@ public class Helper {
                     BlockState s = world.getBlockState(p);
                     if (s.isAir()) continue;
                     if (s.hasBlockEntity()) {
-                        if (!s.isOf(net.minecraft.block.Blocks.SPAWNER)) return true;
+                        if (!s.is(net.minecraft.world.level.block.Blocks.SPAWNER)) return true;
                         continue;
                     }
                     if (shallow && isBuildEvidence(s)) return true;
@@ -2476,8 +2484,8 @@ public class Helper {
 
     /** Placed-looking blocks, minus torches (helpers light their own mines) and logs (trees). */
     private static boolean isBuildEvidence(BlockState s) {
-        if (s.isIn(BlockTags.LOGS) || s.isIn(BlockTags.LEAVES)) return false;
-        if (s.isOf(net.minecraft.block.Blocks.TORCH) || s.isOf(net.minecraft.block.Blocks.WALL_TORCH)) return false;
+        if (s.is(BlockTags.LOGS) || s.is(BlockTags.LEAVES)) return false;
+        if (s.is(net.minecraft.world.level.block.Blocks.TORCH) || s.is(net.minecraft.world.level.block.Blocks.WALL_TORCH)) return false;
         if (Materials.isTerrain(s)) return false;
         return Materials.looksPlayerMade(s);
     }
@@ -2496,79 +2504,79 @@ public class Helper {
     }
 
     /** The nearest open, natural ground with nothing built close by, for a new staircase mine. */
-    private static BlockPos findMineSpot(ServerWorld world, BlockPos near) {
+    private static BlockPos findMineSpot(ServerLevel world, BlockPos near) {
         for (int[] o : MINE_SPOT_OFFSETS) {
             int x = near.getX() + o[0], z = near.getZ() + o[1];
-            if (!world.getChunkManager().isChunkLoaded(x >> 4, z >> 4)
-                    || !world.getChunkManager().isChunkLoaded((x + 2) >> 4, (z + 2) >> 4)
-                    || !world.getChunkManager().isChunkLoaded((x - 1) >> 4, (z - 1) >> 4)) continue;
-            BlockPos top = world.getTopPosition(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z));
+            if (!world.getChunkSource().hasChunk(x >> 4, z >> 4)
+                    || !world.getChunkSource().hasChunk((x + 2) >> 4, (z + 2) >> 4)
+                    || !world.getChunkSource().hasChunk((x - 1) >> 4, (z - 1) >> 4)) continue;
+            BlockPos top = world.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, new BlockPos(x, 0, z));
             if (goodMineSpot(world, top)) return top;
         }
         return null;
     }
 
-    private static boolean goodMineSpot(ServerWorld world, BlockPos top) {
+    private static boolean goodMineSpot(ServerLevel world, BlockPos top) {
         // The staircase uses a 2x2 column; check a ring around it too.
         for (int dx = -1; dx <= 2; dx++) {
             for (int dz = -1; dz <= 2; dz++) {
                 int x = top.getX() + dx, z = top.getZ() + dz;
-                int ty = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
+                int ty = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
                 if (Math.abs(ty - top.getY()) > 2) return false; // roofs, walls or a cliff
                 BlockPos ground = new BlockPos(x, ty - 1, z);
-                if (!world.getFluidState(ground).isEmpty() || !world.getFluidState(ground.up()).isEmpty()) return false;
+                if (!world.getFluidState(ground).isEmpty() || !world.getFluidState(ground.above()).isEmpty()) return false;
                 if (!Materials.isTerrain(world.getBlockState(ground))) return false;
             }
         }
-        return !nearBuild(world, top.down(), 5, true);
+        return !nearBuild(world, top.below(), 5, true);
     }
 
-    private static boolean hasGroundWithin(World world, BlockPos from, int depth) {
+    private static boolean hasGroundWithin(Level world, BlockPos from, int depth) {
         for (int i = 1; i <= depth; i++) {
-            BlockPos p = from.down(i);
+            BlockPos p = from.below(i);
             BlockState s = world.getBlockState(p);
-            if (s.getFluidState().isIn(FluidTags.LAVA)) return false;
-            if (s.isSideSolidFullSquare(world, p, Direction.UP)) return true;
+            if (s.getFluidState().is(FluidTags.LAVA)) return false;
+            if (s.isFaceSturdy(world, p, Direction.UP)) return true;
         }
         return false;
     }
 
-    private static boolean lavaNear(World world, BlockPos cell) {
+    private static boolean lavaNear(Level world, BlockPos cell) {
         for (Direction dir : Direction.values()) {
-            if (world.getFluidState(cell.offset(dir)).isIn(FluidTags.LAVA)) return true;
+            if (world.getFluidState(cell.relative(dir)).is(FluidTags.LAVA)) return true;
         }
         return false;
     }
 
     private static boolean isBuildingBlock(ItemStack stack) {
         if (!(stack.getItem() instanceof BlockItem bi)) return false;
-        BlockState s = bi.getBlock().getDefaultState();
-        if (s.hasBlockEntity() || bi.getBlock() instanceof net.minecraft.block.FallingBlock) return false;
+        BlockState s = bi.getBlock().defaultBlockState();
+        if (s.hasBlockEntity() || bi.getBlock() instanceof net.minecraft.world.level.block.FallingBlock) return false;
         Item item = stack.getItem();
-        String path = net.minecraft.registry.Registries.ITEM.getId(item).getPath();
-        return s.isIn(BlockTags.BASE_STONE_OVERWORLD) || s.isIn(BlockTags.BASE_STONE_NETHER)
-                || s.isIn(BlockTags.DIRT) || path.equals("cobblestone") || path.equals("cobbled_deepslate");
+        String path = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).getPath();
+        return s.is(BlockTags.BASE_STONE_OVERWORLD) || s.is(BlockTags.BASE_STONE_NETHER)
+                || s.is(BlockTags.DIRT) || path.equals("cobblestone") || path.equals("cobbled_deepslate");
     }
 
-    private int buildingBlockSlot(SimpleInventory inv) {
-        for (int i = 0; i < inv.size(); i++) {
-            ItemStack stack = inv.getStack(i);
+    private int buildingBlockSlot(SimpleContainer inv) {
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && isBuildingBlock(stack) && !job.spec.counts(stack)) return i;
         }
         return -1;
     }
 
-    private static void placeBlock(ServerWorld world, SimpleInventory inv, int slot, BlockPos pos) {
-        ItemStack stack = inv.getStack(slot);
+    private static void placeBlock(ServerLevel world, SimpleContainer inv, int slot, BlockPos pos) {
+        ItemStack stack = inv.getItem(slot);
         Block block = ((BlockItem) stack.getItem()).getBlock();
-        BlockState state = block.getDefaultState();
-        world.setBlockState(pos, state);
-        world.playSound(null, pos, state.getSoundGroup().getPlaceSound(), SoundCategory.BLOCKS, 0.8f, 1f);
-        stack.decrement(1);
-        inv.markDirty();
+        BlockState state = block.defaultBlockState();
+        world.setBlockAndUpdate(pos, state);
+        world.playSound(null, pos, state.getSoundType().getPlaceSound(), SoundSource.BLOCKS, 0.8f, 1f);
+        stack.shrink(1);
+        inv.setChanged();
     }
 
-    private void abandonTarget(MobEntity m) {
+    private void abandonTarget(Mob m) {
         Job j = job;
         if (j.target != null) j.blacklist.add(j.target);
         j.target = null;
@@ -2580,7 +2588,7 @@ public class Helper {
     // Breaking blocks
     // ---------------------------------------------------------------------------------------
 
-    private void startBreaking(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv,
+    private void startBreaking(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv,
                                BlockPos pos, boolean isTarget) {
         Job j = job;
         BlockState state = world.getBlockState(pos);
@@ -2589,7 +2597,7 @@ public class Helper {
             return;
         }
         int slot = Mining.bestToolSlot(inv, state, world, pos, isTarget, j.spec.preferSilk);
-        ItemStack tool = slot >= 0 ? inv.getStack(slot) : ItemStack.EMPTY;
+        ItemStack tool = slot >= 0 ? inv.getItem(slot) : ItemStack.EMPTY;
         int ticks = Mining.breakTicks(tool, state, world, pos);
         if (ticks > 0 && currentEntry != null) { // a higher level helper mines faster
             ticks = Math.max(1, Math.round(ticks / HelperData.speedFor(currentEntry.level)));
@@ -2602,16 +2610,16 @@ public class Helper {
             checkTool(player, world, inv, pos);
             return;
         }
-        j.breaking = pos.toImmutable();
+        j.breaking = pos.immutable();
         j.breakTotal = ticks;
         j.breakProgress = 0;
         j.breakSlot = slot;
         j.lastStage = -1;
         j.breakingTarget = isTarget;
-        m.equipStack(EquipmentSlot.MAINHAND, tool.copy());
+        m.setItemSlot(EquipmentSlot.MAINHAND, tool.copy());
     }
 
-    private void tickBreaking(MobEntity m, ServerPlayerEntity player, ServerWorld world, SimpleInventory inv) {
+    private void tickBreaking(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
         Job j = job;
         BlockPos pos = j.breaking;
         BlockState state = world.getBlockState(pos);
@@ -2619,36 +2627,36 @@ public class Helper {
             clearBreaking(m);
             return;
         }
-        m.getLookControl().lookAt(Vec3d.ofCenter(pos));
+        m.getLookControl().setLookAt(Vec3.atCenterOf(pos));
         j.breakProgress++;
         if (j.breakProgress % 4 == 1) {
-            m.swingHand(Hand.MAIN_HAND);
-            world.playSound(null, pos, state.getSoundGroup().getHitSound(), SoundCategory.NEUTRAL, 0.25f, 0.6f);
+            Compat.swing(m, InteractionHand.MAIN_HAND);
+            world.playSound(null, pos, state.getSoundType().getHitSound(), SoundSource.NEUTRAL, 0.25f, 0.6f);
         }
         int stage = Math.min(9, (int) (10f * j.breakProgress / j.breakTotal));
         if (stage != j.lastStage) {
-            world.setBlockBreakingInfo(m.getId(), pos, stage);
+            world.destroyBlockProgress(m.getId(), pos, stage);
             j.lastStage = stage;
         }
         if (j.breakProgress < j.breakTotal) return;
 
         // Done: harvest it.
-        ItemStack tool = j.breakSlot >= 0 ? inv.getStack(j.breakSlot) : ItemStack.EMPTY;
+        ItemStack tool = j.breakSlot >= 0 ? inv.getItem(j.breakSlot) : ItemStack.EMPTY;
         if (!tool.isEmpty() && !Mining.isUsableTool(tool)) tool = ItemStack.EMPTY;
         boolean harvest = Mining.canHarvest(tool, state);
-        float hardness = state.getHardness(world, pos);
+        float hardness = state.getDestroySpeed(world, pos);
         BlockEntity be = world.getBlockEntity(pos);
         List<ItemStack> drops = !harvest ? List.of()
-                : state.isOf(net.minecraft.block.Blocks.SPAWNER) ? List.of(Devices.spawnerItem(be)) // keeps its mob
-                : Block.getDroppedStacks(state, world, pos, be, m, tool);
-        if (harvest) state.onStacksDropped(world, pos, tool, true);
-        world.setBlockBreakingInfo(m.getId(), pos, -1);
-        world.breakBlock(pos, false, m);
-        if (!tool.isEmpty() && tool.isDamageable() && hardness != 0) {
-            tool.damage(1, m, e -> {});
-            inv.markDirty();
+                : state.is(net.minecraft.world.level.block.Blocks.SPAWNER) ? List.of(Devices.spawnerItem(be)) // keeps its mob
+                : Block.getDrops(state, world, pos, be, m, tool);
+        if (harvest) state.spawnAfterBreak(world, pos, tool, true);
+        world.destroyBlockProgress(m.getId(), pos, -1);
+        world.destroyBlock(pos, false, m);
+        if (!tool.isEmpty() && tool.isDamageableItem() && hardness != 0) {
+            tool.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
+            inv.setChanged();
             if (!Mining.isUsableTool(tool)) {
-                say(player, "My " + tool.getName().getString() + " is about to break, so I've stopped using it. "
+                say(player, "My " + tool.getHoverName().getString() + " is about to break, so I've stopped using it. "
                         + "Give me a new one, or take it out and repair it.");
             }
         }
@@ -2657,12 +2665,12 @@ public class Helper {
         addWork(player, 1);
         for (ItemStack drop : drops) {
             if (wasTarget && j.spec.counts(drop)) j.collected += drop.getCount();
-            ItemStack rest = inv.addStack(drop);
+            ItemStack rest = inv.addItem(drop);
             if (!rest.isEmpty()) {
-                Block.dropStack(world, pos, rest);
+                Block.popResource(world, pos, rest);
                 if (mode == Mode.COLLECT) {
                     say(player, "I'm out of space, so I had to drop " + rest.getCount() + " "
-                            + rest.getName().getString() + ". Bringing everything back to you.");
+                            + rest.getHoverName().getString() + ". Bringing everything back to you.");
                     mode = Mode.RETURN;
                 }
             }
@@ -2673,7 +2681,7 @@ public class Helper {
                 for (int oy = -1; oy <= 1; oy++)
                     for (int oz = -1; oz <= 1; oz++) {
                         if (ox == 0 && oy == 0 && oz == 0) continue;
-                        BlockPos n = pos.add(ox, oy, oz);
+                        BlockPos n = pos.offset(ox, oy, oz);
                         if (j.spec.matches(world.getBlockState(n)) && !j.blacklist.contains(n)) j.vein.addLast(n);
                     }
         }
@@ -2684,9 +2692,9 @@ public class Helper {
         }
     }
 
-    private void clearBreaking(MobEntity m) {
+    private void clearBreaking(Mob m) {
         if (job != null && job.breaking != null) {
-            m.getWorld().setBlockBreakingInfo(m.getId(), job.breaking, -1);
+            m.level().destroyBlockProgress(m.getId(), job.breaking, -1);
             job.breaking = null;
         }
     }
@@ -2698,7 +2706,7 @@ public class Helper {
      * Nothing left near the bottom of the mine. Don't give up yet: strip-mine further out from the bottom
      * landing, 32 blocks longer each time, until enough is found (or after a few rounds).
      */
-    private void stripMineFurther(ServerPlayerEntity player, SimpleInventory inv, HelperData.Entry entry, int step) {
+    private void stripMineFurther(ServerPlayer player, SimpleContainer inv, HelperData.Entry entry, int step) {
         Job j = job;
         if (j.collected >= j.wanted || j.stripRounds >= STRIP_ROUNDS || step < 0) {
             int dug = BRANCH_LENGTH * 2 + j.lengthBonus;
@@ -2724,7 +2732,7 @@ public class Helper {
         j.branchQueue.clear();
     }
 
-    private void finishJob(ServerPlayerEntity player, SimpleInventory inv, String message) {
+    private void finishJob(ServerPlayer player, SimpleContainer inv, String message) {
         say(player, message);
         if (mob != null) clearBreaking(mob);
         if (!summarize(inv, true).isEmpty()) {
@@ -2740,18 +2748,18 @@ public class Helper {
     // Utilities
     // ---------------------------------------------------------------------------------------
 
-    private static boolean isFull(SimpleInventory inv) {
-        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.size();
-        for (int i = 0; i < room; i++) if (inv.getStack(i).isEmpty()) return false;
+    private static boolean isFull(SimpleContainer inv) {
+        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.getContainerSize();
+        for (int i = 0; i < room; i++) if (inv.getItem(i).isEmpty()) return false;
         return true;
     }
 
-    static String summarize(SimpleInventory inv, boolean skipTools) {
+    static String summarize(SimpleContainer inv, boolean skipTools) {
         Map<String, Integer> counts = new LinkedHashMap<>();
-        for (int i = 0; i < inv.size(); i++) {
-            ItemStack s = inv.getStack(i);
-            if (s.isEmpty() || (skipTools && s.isDamageable())) continue;
-            counts.merge(s.getName().getString(), s.getCount(), Integer::sum);
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty() || (skipTools && s.isDamageableItem())) continue;
+            counts.merge(s.getHoverName().getString(), s.getCount(), Integer::sum);
         }
         StringBuilder sb = new StringBuilder();
         counts.forEach((name, count) -> {
@@ -2761,10 +2769,10 @@ public class Helper {
         return sb.toString();
     }
 
-    static void say(ServerPlayerEntity player, String message) {
-        MutableText text = Text.literal("[Helper] ").formatted(Formatting.GOLD)
-                .append(Text.literal(message).formatted(Formatting.WHITE));
+    static void say(ServerPlayer player, String message) {
+        MutableComponent text = Component.literal("[Helper] ").withStyle(ChatFormatting.GOLD)
+                .append(Component.literal(message).withStyle(ChatFormatting.WHITE));
         if (Mind.sayToAll(player, text, message)) return; // answering chat: everyone sees the reply
-        player.sendMessage(text, false);
+        player.sendSystemMessage(text);
     }
 }

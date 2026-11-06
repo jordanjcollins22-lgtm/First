@@ -1,0 +1,74 @@
+{
+ "attributes": {
+  "minecraft:visual/sky_color": "#79a6ff",
+  "minecraft:visual/fog_color": "#c0d8ff",
+  "minecraft:visual/water_fog_color": "#050533",
+  "minecraft:gameplay/natural_mob_spawns": {
+   "argument": {
+    "spawn_costs": {},
+    "spawns_by_category": {
+     "creature": [
+      {
+       "type": "minecraft:sheep",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 2,
+        "max_inclusive": 4
+       },
+       "weight": 8
+      },
+      {
+       "type": "minecraft:rabbit",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 2,
+        "max_inclusive": 3
+       },
+       "weight": 6
+      },
+      {
+       "type": "minecraft:cow",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 2,
+        "max_inclusive": 3
+       },
+       "weight": 4
+      }
+     ]
+    }
+   },
+   "modifier": "overlay"
+  }
+ },
+ "carvers": [
+  "minecraft:cave"
+ ],
+ "downfall": 0.4,
+ "effects": {
+  "water_color": "#3f76e4"
+ },
+ "features": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [
+   "minecraft:ore_coal_upper",
+   "minecraft:ore_iron_middle",
+   "minecraft:ore_gold"
+  ],
+  [],
+  [],
+  [
+   "minecraft:flower_plains",
+   "minecraft:patch_grass_plain",
+   "minecraft:trees_plains"
+  ],
+  []
+ ],
+ "has_precipitation": true,
+ "temperature": 0.8
+}

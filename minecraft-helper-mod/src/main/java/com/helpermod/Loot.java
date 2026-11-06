@@ -1,29 +1,26 @@
 package com.helpermod;
 
 import net.fabricmc.fabric.api.entity.FakePlayer;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.nbt.NbtString;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.random.Random;
-import net.minecraft.world.World;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.BlockHitResult;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -38,13 +35,13 @@ final class Loot {
     private static final String TAG = "HelperLootBox";
 
     enum Rarity {
-        COMMON("Common", Formatting.WHITE), UNCOMMON("Uncommon", Formatting.GREEN), RARE("Rare", Formatting.AQUA),
-        EPIC("Epic", Formatting.LIGHT_PURPLE), LEGENDARY("Legendary", Formatting.GOLD);
+        COMMON("Common", ChatFormatting.WHITE), UNCOMMON("Uncommon", ChatFormatting.GREEN), RARE("Rare", ChatFormatting.AQUA),
+        EPIC("Epic", ChatFormatting.LIGHT_PURPLE), LEGENDARY("Legendary", ChatFormatting.GOLD);
 
         final String label;
-        final Formatting color;
+        final ChatFormatting color;
 
-        Rarity(String label, Formatting color) {
+        Rarity(String label, ChatFormatting color) {
             this.label = label;
             this.color = color;
         }
@@ -52,7 +49,7 @@ final class Loot {
 
     private record Prize(Rarity rarity, String what, Supplier<List<ItemStack>> items) {}
 
-    private record Box(String id, String name, Formatting color, int[] weights, List<Prize> prizes) {}
+    private record Box(String id, String name, ChatFormatting color, int[] weights, List<Prize> prizes) {}
 
     // ---------------------------------------------------------------------------------------
     // Gear
@@ -60,12 +57,12 @@ final class Loot {
 
     static ItemStack enchanted(Item item, Object... enchants) {
         ItemStack stack = new ItemStack(item);
-        for (int i = 0; i + 1 < enchants.length; i += 2) stack.addEnchantment((Enchantment) enchants[i], (Integer) enchants[i + 1]);
+        for (int i = 0; i + 1 < enchants.length; i += 2) stack.enchant(Compat.ench((net.minecraft.resources.ResourceKey<Enchantment>) enchants[i]), (Integer) enchants[i + 1]);
         return stack;
     }
 
-    static ItemStack named(ItemStack stack, String name, Formatting color) {
-        stack.setCustomName(Text.literal(name).styled(s -> s.withItalic(false)).formatted(color));
+    static ItemStack named(ItemStack stack, String name, ChatFormatting color) {
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         return stack;
     }
 
@@ -82,8 +79,8 @@ final class Loot {
     static List<ItemStack> protectedDiamondSet() {
         List<ItemStack> list = new ArrayList<>();
         for (ItemStack s : diamondSet()) {
-            s.addEnchantment(Enchantments.PROTECTION, 4);
-            s.addEnchantment(Enchantments.UNBREAKING, 3);
+            s.enchant(Compat.ench(Enchantments.PROTECTION), 4);
+            s.enchant(Compat.ench(Enchantments.UNBREAKING), 3);
             list.add(s);
         }
         return list;
@@ -109,8 +106,8 @@ final class Loot {
     /** The legendary prize: an original sword, only from loot boxes. */
     static ItemStack coinbreaker() {
         ItemStack s = enchanted(Items.NETHERITE_SWORD, Enchantments.SHARPNESS, 5, Enchantments.LOOTING, 3,
-                Enchantments.FIRE_ASPECT, 2, Enchantments.SWEEPING, 3, Enchantments.MENDING, 1, Enchantments.UNBREAKING, 3);
-        return named(s, "Coinbreaker", Formatting.GOLD);
+                Enchantments.FIRE_ASPECT, 2, Enchantments.SWEEPING_EDGE, 3, Enchantments.MENDING, 1, Enchantments.UNBREAKING, 3);
+        return named(s, "Coinbreaker", ChatFormatting.GOLD);
     }
 
     /** Netherite armour with everything: only from loot boxes. */
@@ -119,16 +116,16 @@ final class Loot {
         String[] names = {"Vaultguard Helm", "Vaultguard Chestplate", "Vaultguard Leggings", "Vaultguard Boots"};
         int i = 0;
         for (ItemStack s : netheriteSet()) {
-            s.addEnchantment(Enchantments.PROTECTION, 4);
-            s.addEnchantment(Enchantments.UNBREAKING, 3);
-            s.addEnchantment(Enchantments.MENDING, 1);
-            list.add(named(s, names[i++], Formatting.GOLD));
+            s.enchant(Compat.ench(Enchantments.PROTECTION), 4);
+            s.enchant(Compat.ench(Enchantments.UNBREAKING), 3);
+            s.enchant(Compat.ench(Enchantments.MENDING), 1);
+            list.add(named(s, names[i++], ChatFormatting.GOLD));
         }
         return list;
     }
 
-    static boolean giveAll(ServerPlayerEntity player, List<ItemStack> items) {
-        for (ItemStack s : items) player.getInventory().offerOrDrop(s.copy());
+    static boolean giveAll(ServerPlayer player, List<ItemStack> items) {
+        for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s.copy(), net.minecraft.util.Prediction.SERVER_ONLY);
         return true;
     }
 
@@ -192,9 +189,9 @@ final class Loot {
 
     // Weights per rarity: common, uncommon, rare, epic, legendary (out of 1000)
     private static final Box[] BOXES = {
-            new Box("gear", "Gear Box", Formatting.RED, new int[]{550, 280, 120, 42, 8}, GEAR),
-            new Box("machine", "Machine Box", Formatting.YELLOW, new int[]{550, 280, 120, 42, 8}, MACHINES),
-            new Box("mega", "Mega Box", Formatting.LIGHT_PURPLE, new int[]{0, 300, 400, 230, 70}, MEGA),
+            new Box("gear", "Gear Box", ChatFormatting.RED, new int[]{550, 280, 120, 42, 8}, GEAR),
+            new Box("machine", "Machine Box", ChatFormatting.YELLOW, new int[]{550, 280, 120, 42, 8}, MACHINES),
+            new Box("mega", "Mega Box", ChatFormatting.LIGHT_PURPLE, new int[]{0, 300, 400, 230, 70}, MEGA),
     };
 
     private static Box box(String id) {
@@ -205,41 +202,41 @@ final class Loot {
     static ItemStack boxItem(String id) {
         Box b = box(id);
         ItemStack stack = new ItemStack(Items.CHEST);
-        stack.getOrCreateNbt().putString(TAG, id);
+        Compat.editTag(stack, t -> t.putString(TAG, id));
         named(stack, b.name(), b.color());
-        NbtList lore = new NbtList();
+        java.util.List<Component> lore = new java.util.ArrayList<>();
         String inside = id.equals("gear") ? "Weapons and armour" : id.equals("machine") ? "Tycoon machines and droppers" : "Gear and machines, better odds";
-        lore.add(NbtString.of(Text.Serializer.toJson(Text.literal(inside).styled(s -> s.withItalic(false)).formatted(Formatting.GRAY))));
-        lore.add(NbtString.of(Text.Serializer.toJson(Text.literal("Right-click to open").styled(s -> s.withItalic(false)).formatted(Formatting.GREEN))));
-        stack.getOrCreateSubNbt("display").put("Lore", lore);
+        lore.add(Component.literal(inside).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY));
+        lore.add(Component.literal("Right-click to open").withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GREEN));
+        Compat.lore(stack, lore);
         return stack;
     }
 
     static String boxOf(ItemStack stack) {
-        if (!stack.isOf(Items.CHEST) || !stack.hasNbt()) return null;
-        String id = stack.getNbt().getString(TAG);
+        if (!stack.is(Items.CHEST) || !Compat.hasTag(stack)) return null;
+        String id = Compat.tag(stack).getStringOr(TAG, "");
         return box(id) == null ? null : id;
     }
 
-    static TypedActionResult<ItemStack> onUseItem(PlayerEntity p, World w, Hand hand) {
-        ItemStack stack = p.getStackInHand(hand);
-        if (boxOf(stack) == null) return TypedActionResult.pass(stack);
-        if (!w.isClient && p instanceof ServerPlayerEntity player && !(p instanceof FakePlayer)) open(player, stack);
-        return TypedActionResult.success(stack);
+    static InteractionResult onUseItem(Player p, Level w, InteractionHand hand) {
+        ItemStack stack = p.getItemInHand(hand);
+        if (boxOf(stack) == null) return InteractionResult.PASS;
+        if (!w.isClientSide() && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
+        return InteractionResult.SUCCESS;
     }
 
     /** Clicking a block with a box opens it instead of placing a chest. */
-    static ActionResult onUseBlock(PlayerEntity p, World w, Hand hand, BlockHitResult hit) {
-        ItemStack stack = p.getStackInHand(hand);
-        if (boxOf(stack) == null) return ActionResult.PASS;
-        if (!w.isClient && p instanceof ServerPlayerEntity player && !(p instanceof FakePlayer)) open(player, stack);
-        return ActionResult.SUCCESS;
+    static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
+        ItemStack stack = p.getItemInHand(hand);
+        if (boxOf(stack) == null) return InteractionResult.PASS;
+        if (!w.isClientSide() && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
+        return InteractionResult.SUCCESS;
     }
 
-    private static void open(ServerPlayerEntity player, ItemStack stack) {
+    private static void open(ServerPlayer player, ItemStack stack) {
         Box b = box(boxOf(stack));
         if (b == null) return;
-        Random random = player.getRandom();
+        RandomSource random = player.getRandom();
         Rarity rarity = roll(b.weights(), random);
         List<Prize> pool = new ArrayList<>();
         for (Prize pr : b.prizes()) if (pr.rarity() == rarity) pool.add(pr);
@@ -255,36 +252,36 @@ final class Loot {
                 prize = new Prize(rarity, g.name(), () -> List.of(new ItemStack(g.item())));
             }
         }
-        stack.decrement(1);
+        stack.shrink(1);
         giveAll(player, prize.items().get());
 
-        Text line = Text.literal(b.name() + ": ").formatted(Formatting.GRAY)
-                .append(Text.literal(rarity.label + " ").formatted(rarity.color, Formatting.BOLD))
-                .append(Text.literal(prize.what()).formatted(rarity.color));
-        player.sendMessage(line, false);
-        player.sendMessage(Text.literal(rarity.label + "! " + prize.what()).formatted(rarity.color), true);
-        ServerWorld world = player.getServerWorld();
+        Component line = Component.literal(b.name() + ": ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(rarity.label + " ").withStyle(rarity.color, ChatFormatting.BOLD))
+                .append(Component.literal(prize.what()).withStyle(rarity.color));
+        player.sendSystemMessage(line);
+        player.sendOverlayMessage(Component.literal(rarity.label + "! " + prize.what()).withStyle(rarity.color));
+        ServerLevel world = player.level();
         double x = player.getX(), y = player.getY() + 1.2, z = player.getZ();
-        world.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_CHEST_OPEN, SoundCategory.PLAYERS, 0.8f, 1.1f);
+        world.playSound(null, player.blockPosition(), SoundEvents.CHEST_OPEN, SoundSource.PLAYERS, 0.8f, 1.1f);
         switch (rarity) {
-            case COMMON, UNCOMMON -> world.spawnParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 10, 0.4, 0.4, 0.4, 0);
+            case COMMON, UNCOMMON -> world.sendParticles(ParticleTypes.HAPPY_VILLAGER, x, y, z, 10, 0.4, 0.4, 0.4, 0);
             case RARE -> {
-                world.spawnParticles(ParticleTypes.ENCHANT, x, y, z, 40, 0.5, 0.5, 0.5, 0.5);
-                world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.PLAYERS, 0.6f, 1.4f);
+                world.sendParticles(ParticleTypes.ENCHANT, x, y, z, 40, 0.5, 0.5, 0.5, 0.5);
+                world.playSound(null, player.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 0.6f, 1.4f);
             }
             default -> {
-                world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 60, 0.5, 0.8, 0.5, 0.4);
-                world.playSound(null, player.getBlockPos(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundCategory.PLAYERS, 0.8f, 1.0f);
+                world.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 60, 0.5, 0.8, 0.5, 0.4);
+                world.playSound(null, player.blockPosition(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8f, 1.0f);
                 if (rarity == Rarity.LEGENDARY) {
-                    player.getServer().getPlayerManager().broadcast(Text.literal(player.getName().getString() + " opened a ")
-                            .formatted(Formatting.GOLD).append(Text.literal(b.name()).formatted(b.color()))
-                            .append(Text.literal(" and got the LEGENDARY " + prize.what() + "!").formatted(Formatting.GOLD)), false);
+                    player.level().getServer().getPlayerList().broadcastSystemMessage(Component.literal(player.getName().getString() + " opened a ")
+                            .withStyle(ChatFormatting.GOLD).append(Component.literal(b.name()).withStyle(b.color()))
+                            .append(Component.literal(" and got the LEGENDARY " + prize.what() + "!").withStyle(ChatFormatting.GOLD)), false);
                 }
             }
         }
     }
 
-    private static Rarity roll(int[] weights, Random random) {
+    private static Rarity roll(int[] weights, RandomSource random) {
         int total = 0;
         for (int w : weights) total += w;
         int r = random.nextInt(Math.max(1, total));
@@ -296,18 +293,18 @@ final class Loot {
     }
 
     /** What /helper tycoon odds shows. */
-    static void odds(ServerPlayerEntity player) {
+    static void odds(ServerPlayer player) {
         List<ModGear.Gear> gear = ModGear.all();
-        long mods = gear.stream().map(g -> net.minecraft.registry.Registries.ITEM.getId(g.item()).getNamespace()).distinct().count();
-        player.sendMessage(Text.literal(gear.size() + " weapons and armour pieces from " + mods
-                + " mods are in the shop and the Gear and Mega Boxes.").formatted(Formatting.GRAY), false);
+        long mods = gear.stream().map(g -> net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(g.item()).getNamespace()).distinct().count();
+        player.sendSystemMessage(Component.literal(gear.size() + " weapons and armour pieces from " + mods
+                + " mods are in the shop and the Gear and Mega Boxes.").withStyle(ChatFormatting.GRAY));
         for (Box b : BOXES) {
             StringBuilder sb = new StringBuilder(b.name() + ": ");
             for (int i = 0; i < 5; i++) {
                 if (b.weights()[i] == 0) continue;
                 sb.append(Rarity.values()[i].label).append(' ').append(b.weights()[i] / 10.0).append("%  ");
             }
-            player.sendMessage(Text.literal(sb.toString().trim()).formatted(b.color()), false);
+            player.sendSystemMessage(Component.literal(sb.toString().trim()).withStyle(b.color()));
         }
     }
 }

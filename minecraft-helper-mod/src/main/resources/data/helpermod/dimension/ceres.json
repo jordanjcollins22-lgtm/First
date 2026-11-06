@@ -1,0 +1,11 @@
+{
+ "type": "helpermod:ceres",
+ "generator": {
+  "type": "minecraft:noise",
+  "biome_source": {
+   "type": "minecraft:fixed",
+   "biome": "helpermod:ceres"
+  },
+  "settings": "helpermod:ceres"
+ }
+}

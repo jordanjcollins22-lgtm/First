@@ -1,19 +1,19 @@
 package com.helpermod;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
-import net.minecraft.screen.GenericContainerScreenHandler;
-import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.EntityHitResult;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -48,13 +48,13 @@ public final class HelperManager {
         PENDING_DISCARD.clear();
 
         HelperData data = HelperData.get(server);
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            HelperData.Entry entry = data.get(player.getUuid());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            HelperData.Entry entry = data.get(player.getUUID());
             if (entry == null || !entry.active) continue;
             try {
-                helperFor(player.getUuid()).tick(server, player, entry);
+                helperFor(player.getUUID()).tick(server, player, entry);
             } catch (Exception ex) {
-                HelperMod.LOG.error("Helper for {} hit an error", player.getGameProfile().getName(), ex);
+                HelperMod.LOG.error("Helper for {} hit an error", player.getGameProfile().name(), ex);
             }
         }
     }
@@ -67,11 +67,11 @@ public final class HelperManager {
     }
 
     /** Re-apply the helper brain when a helper loads, and clean up stale duplicates. */
-    public static void onEntityLoad(Entity entity, ServerWorld world) {
-        if (!(entity instanceof MobEntity mob) || !entity.getCommandTags().contains(Helper.TAG)) return;
+    public static void onEntityLoad(Entity entity, ServerLevel world) {
+        if (!(entity instanceof Mob mob) || !entity.entityTags().contains(Helper.TAG)) return;
         UUID owner = Helper.ownerOf(entity);
         HelperData.Entry entry = owner == null ? null : HelperData.get(world.getServer()).get(owner);
-        if (entry == null || !entry.active || !entity.getUuid().equals(entry.entity)) {
+        if (entry == null || !entry.active || !entity.getUUID().equals(entry.entity)) {
             PENDING_DISCARD.add(entity);
             return;
         }
@@ -79,27 +79,27 @@ public final class HelperManager {
     }
 
     /** Right-click your helper to open its inventory (give it tools, take out loot). */
-    public static ActionResult onUseEntity(PlayerEntity player, World world, Hand hand, Entity entity,
+    public static InteractionResult onUseEntity(Player player, Level world, InteractionHand hand, Entity entity,
                                            @Nullable EntityHitResult hit) {
-        if (world.isClient || !entity.getCommandTags().contains(Helper.TAG)) return ActionResult.PASS;
-        if (hand != Hand.MAIN_HAND) return ActionResult.SUCCESS;
+        if (world.isClientSide() || !entity.entityTags().contains(Helper.TAG)) return InteractionResult.PASS;
+        if (hand != InteractionHand.MAIN_HAND) return InteractionResult.SUCCESS;
         UUID owner = Helper.ownerOf(entity);
-        if (!player.getUuid().equals(owner)) {
-            player.sendMessage(Text.literal("That's " + entity.getName().getString().replace("'s Helper", "")
-                    + "'s helper. Get your own with /helper summon"), true);
-            return ActionResult.SUCCESS;
+        if (!player.getUUID().equals(owner)) {
+            player.sendOverlayMessage(Component.literal("That's " + entity.getName().getString().replace("'s Helper", "")
+                    + "'s helper. Get your own with /helper summon"));
+            return InteractionResult.SUCCESS;
         }
         HelperData.Entry entry = HelperData.get(world.getServer()).getOrCreate(owner);
-        if (player.getMainHandStack().isOf(Items.SADDLE) && player instanceof ServerPlayerEntity sp) {
+        if (player.getMainHandItem().is(Items.SADDLE) && player instanceof ServerPlayer sp) {
             if (helperFor(owner).ride(sp, entry)) {
-                player.sendMessage(Text.literal("Hop on! Steer with your movement keys, sprint to go faster, sneak to get off."), true);
+                player.sendOverlayMessage(Component.literal("Hop on! Steer with your movement keys, sprint to go faster, sneak to get off."));
             }
-            return ActionResult.SUCCESS;
+            return InteractionResult.SUCCESS;
         }
-        player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
+        player.openMenu(new SimpleMenuProvider(
                 (syncId, playerInventory, p) ->
-                        GenericContainerScreenHandler.createGeneric9x6(syncId, playerInventory, entry.inventory),
-                Text.literal("Your Helper: level " + entry.level + ", " + entry.inventory.unlocked + " pockets")));
-        return ActionResult.SUCCESS;
+                        ChestMenu.sixRows(syncId, playerInventory, entry.inventory),
+                Component.literal("Your Helper: level " + entry.level + ", " + entry.inventory.unlocked + " pockets")));
+        return InteractionResult.SUCCESS;
     }
 }

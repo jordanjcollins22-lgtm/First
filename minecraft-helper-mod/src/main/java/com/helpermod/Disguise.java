@@ -7,29 +7,28 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import io.netty.buffer.Unpooled;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.DefaultAttributeContainer;
-import net.minecraft.entity.attribute.DefaultAttributeRegistry;
-import net.minecraft.entity.attribute.EntityAttributeInstance;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerRemoveS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerSpawnS2CPacket;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.Vec3d;
 import org.jetbrains.annotations.Nullable;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.Util;
-import net.minecraft.util.math.MathHelper;
-
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
+import net.minecraft.world.entity.ai.attributes.DefaultAttributes;
+import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -53,13 +52,13 @@ public final class Disguise {
     private static final byte ALL_SKIN_LAYERS = 0x7F;
 
     public static boolean isHelper(Entity entity) {
-        return !entity.getWorld().isClient && entity.getCommandTags().contains(Helper.TAG);
+        return !entity.level().isClientSide() && entity.entityTags().contains(Helper.TAG);
     }
 
     /** Every mob a helper can look like: living entities with attributes, except players and armor stands. */
     public static boolean canLookLike(EntityType<?> type) {
-        return type != EntityType.PLAYER && type != EntityType.ARMOR_STAND
-                && DefaultAttributeRegistry.hasDefinitionFor(type);
+        return type != EntityTypes.PLAYER && type != EntityTypes.ARMOR_STAND
+                && DefaultAttributes.hasSupplier(type);
     }
 
     /** Turns "creeper", "Iron Golem" or "somemod:thing" into a mob type, or null if there's no such mob. */
@@ -67,16 +66,16 @@ public final class Disguise {
     public static EntityType<?> resolveLook(String raw) {
         String name = raw.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
         Identifier id = Identifier.tryParse(name);
-        if (id == null || !Registries.ENTITY_TYPE.containsId(id)) return null;
-        EntityType<?> type = Registries.ENTITY_TYPE.get(id);
+        if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(id);
         return canLookLike(type) ? type : null;
     }
 
     public static List<String> lookSuggestions() {
         List<String> out = new ArrayList<>();
-        for (EntityType<?> type : Registries.ENTITY_TYPE) {
+        for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
             if (!canLookLike(type)) continue;
-            Identifier id = Registries.ENTITY_TYPE.getId(type);
+            Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
             out.add(id.getNamespace().equals("minecraft") ? id.getPath() : id.toString());
         }
         out.sort(null);
@@ -87,13 +86,13 @@ public final class Disguise {
     @Nullable
     public static EntityType<?> lookOf(Entity entity) {
         UUID owner = Helper.ownerOf(entity);
-        MinecraftServer server = entity.getServer();
+        MinecraftServer server = entity.level().getServer();
         if (owner == null || server == null) return null;
         HelperData.Entry entry = HelperData.get(server).get(owner);
         if (entry == null || entry.look == null) return null;
         Identifier id = Identifier.tryParse(entry.look);
-        if (id == null || !Registries.ENTITY_TYPE.containsId(id)) return null;
-        EntityType<?> type = Registries.ENTITY_TYPE.get(id);
+        if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(id);
         return canLookLike(type) ? type : null;
     }
 
@@ -103,22 +102,24 @@ public final class Disguise {
     }
 
     /** Remember the owner's skin. Fetches it from Mojang if the server doesn't have it yet. */
-    public static void prepare(ServerPlayerEntity player) {
-        UUID id = player.getUuid();
-        Property textures = Iterables.getFirst(player.getGameProfile().getProperties().get("textures"), null);
+    public static void prepare(ServerPlayer player) {
+        UUID id = player.getUUID();
+        Property textures = Iterables.getFirst(player.getGameProfile().properties().get("textures"), null);
         if (textures != null) {
             SKINS.put(id, textures);
             return;
         }
         if (SKINS.containsKey(id) || !FETCHING.add(id)) return;
-        MinecraftServer server = player.getServer();
-        GameProfile lookup = new GameProfile(id, player.getGameProfile().getName());
-        CompletableFuture.supplyAsync(() -> server.getSessionService().fillProfileProperties(lookup, false),
-                        Util.getMainWorkerExecutor())
+        MinecraftServer server = player.level().getServer();
+        GameProfile lookup = new GameProfile(id, player.getGameProfile().name());
+        CompletableFuture.supplyAsync(() -> {
+                    var result = server.services().sessionService().fetchProfile(id, false);
+                    return result == null ? null : result.profile();
+                }, Util.backgroundExecutor())
                 .whenComplete((filled, error) -> server.execute(() -> {
                     FETCHING.remove(id);
                     Property t = filled == null ? null
-                            : Iterables.getFirst(filled.getProperties().get("textures"), null);
+                            : Iterables.getFirst(filled.properties().get("textures"), null);
                     if (t != null) {
                         SKINS.put(id, t);
                         HelperManager.refreshDisguise(server, id); // re-show with the real skin
@@ -140,79 +141,72 @@ public final class Disguise {
     }
 
     private static PropertyMap properties(Entity entity) {
-        PropertyMap map = new PropertyMap();
         UUID owner = Helper.ownerOf(entity);
         Property skin = owner == null ? null : SKINS.get(owner);
-        if (skin != null) map.put("textures", skin);
-        return map;
+        if (skin == null) return PropertyMap.EMPTY;
+        return new PropertyMap(com.google.common.collect.ImmutableMultimap.of("textures", skin));
     }
 
     /** Adds a hidden (not in the tab list) player entry so the client knows the name and skin. */
-    public static PlayerListS2CPacket playerListAdd(Entity entity) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        buf.writeEnumSet(EnumSet.of(PlayerListS2CPacket.Action.ADD_PLAYER), PlayerListS2CPacket.Action.class);
+    public static ClientboundPlayerInfoUpdatePacket playerListAdd(Entity entity) {
+        net.minecraft.network.RegistryFriendlyByteBuf buf = new net.minecraft.network.RegistryFriendlyByteBuf(
+                Unpooled.buffer(), entity.level().registryAccess());
+        buf.writeEnumSet(EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER), ClientboundPlayerInfoUpdatePacket.Action.class);
         buf.writeVarInt(1);
-        buf.writeUuid(entity.getUuid());
-        buf.writeString(profileName(entity), 16);
-        buf.writePropertyMap(properties(entity));
-        return new PlayerListS2CPacket(buf);
+        buf.writeUUID(entity.getUUID());
+        buf.writeUtf(profileName(entity), 16);
+        net.minecraft.network.codec.ByteBufCodecs.GAME_PROFILE_PROPERTIES.encode(buf, properties(entity));
+        return ClientboundPlayerInfoUpdatePacket.STREAM_CODEC.decode(buf);
     }
 
-    public static PlayerRemoveS2CPacket playerListRemove(Entity entity) {
-        return new PlayerRemoveS2CPacket(List.of(entity.getUuid()));
+    public static ClientboundPlayerInfoRemovePacket playerListRemove(Entity entity) {
+        return new ClientboundPlayerInfoRemovePacket(List.of(entity.getUUID()));
     }
 
-    public static Packet<ClientPlayPacketListener> spawnPacket(Entity entity) {
+    public static Packet<ClientGamePacketListener> spawnPacket(Entity entity) {
         EntityType<?> look = lookOf(entity);
         if (look != null) {
-            return new EntitySpawnS2CPacket(entity.getId(), entity.getUuid(), entity.getX(), entity.getY(),
-                    entity.getZ(), entity.getPitch(), entity.getYaw(), look, 0, Vec3d.ZERO, entity.getHeadYaw());
+            return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), entity.getX(), entity.getY(),
+                    entity.getZ(), entity.getXRot(), entity.getYRot(), look, 0, Vec3.ZERO, entity.getYHeadRot());
         }
         return playerSpawnPacket(entity);
     }
 
-    private static PlayerSpawnS2CPacket playerSpawnPacket(Entity entity) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-        buf.writeVarInt(entity.getId());
-        buf.writeUuid(entity.getUuid());
-        buf.writeDouble(entity.getX());
-        buf.writeDouble(entity.getY());
-        buf.writeDouble(entity.getZ());
-        buf.writeByte((byte) MathHelper.floor(entity.getYaw() * 256f / 360f));
-        buf.writeByte((byte) MathHelper.floor(entity.getPitch() * 256f / 360f));
-        return new PlayerSpawnS2CPacket(buf);
+    private static Packet<ClientGamePacketListener> playerSpawnPacket(Entity entity) {
+        return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), entity.getX(), entity.getY(),
+                entity.getZ(), entity.getXRot(), entity.getYRot(), EntityTypes.PLAYER, 0, Vec3.ZERO, entity.getYHeadRot());
     }
 
     /**
      * Only send entity data the disguise understands (the shared living-entity part), plus skin layers
      * when it is shown as a player.
      */
-    public static List<DataTracker.SerializedEntry<?>> filterData(Entity entity,
-                                                                   List<DataTracker.SerializedEntry<?>> list,
+    public static List<SynchedEntityData.DataValue<?>> filterData(Entity entity,
+                                                                   List<SynchedEntityData.DataValue<?>> list,
                                                                    boolean initial) {
-        int lastLivingId = DataTrackerAccessor.helpermod$getTrackedEntities().getInt(LivingEntity.class);
-        List<DataTracker.SerializedEntry<?>> out = new ArrayList<>();
+        int lastLivingId = DataTrackerAccessor.helpermod$getIdRegistry().getLastIdFor(LivingEntity.class);
+        List<SynchedEntityData.DataValue<?>> out = new ArrayList<>();
         if (list != null) {
-            for (DataTracker.SerializedEntry<?> entry : list) if (entry.id() <= lastLivingId) out.add(entry);
+            for (SynchedEntityData.DataValue<?> entry : list) if (entry.id() <= lastLivingId) out.add(entry);
         }
         if (initial) {
-            DataTracker.SerializedEntry<Boolean> baby = Size.babyEntry(entity, lookOf(entity));
+            SynchedEntityData.DataValue<Boolean> baby = Size.babyEntry(entity, lookOf(entity));
             if (baby != null) out.add(baby);
         }
         if (initial && lookOf(entity) == null) {
-            out.add(DataTracker.SerializedEntry.of(PlayerEntityAccessor.helpermod$getModelParts(), ALL_SKIN_LAYERS));
+            out.add(SynchedEntityData.DataValue.create(PlayerEntityAccessor.helpermod$getModelParts(), ALL_SKIN_LAYERS));
         }
         return out;
     }
 
     @SuppressWarnings("unchecked")
-    public static Collection<EntityAttributeInstance> filterAttributes(Entity entity,
-                                                                       Collection<EntityAttributeInstance> in) {
+    public static Collection<AttributeInstance> filterAttributes(Entity entity,
+                                                                       Collection<AttributeInstance> in) {
         EntityType<?> look = lookOf(entity);
-        DefaultAttributeContainer known = DefaultAttributeRegistry.get(look == null ? EntityType.PLAYER
+        AttributeSupplier known = DefaultAttributes.getSupplier(look == null ? EntityTypes.PLAYER
                 : (EntityType<? extends LivingEntity>) look);
-        List<EntityAttributeInstance> out = new ArrayList<>();
-        for (EntityAttributeInstance instance : in) if (known.has(instance.getAttribute())) out.add(instance);
+        List<AttributeInstance> out = new ArrayList<>();
+        for (AttributeInstance instance : in) if (known.hasAttribute(instance.getAttribute())) out.add(instance);
         return out;
     }
 }

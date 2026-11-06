@@ -2,48 +2,48 @@ package com.helpermod;
 
 import com.helpermod.mixin.ExperienceOrbAccessor;
 import net.fabricmc.fabric.api.entity.FakePlayer;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.ShapeContext;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.HopperBlockEntity;
-import net.minecraft.block.entity.MobSpawnerBlockEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ExperienceOrbEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.boss.WitherEntity;
-import net.minecraft.entity.boss.dragon.EnderDragonEntity;
-import net.minecraft.entity.mob.ElderGuardianEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.Monster;
-import net.minecraft.entity.mob.WardenEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemPlacementContext;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.World;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.boss.wither.WitherBoss;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.ElderGuardian;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.monster.warden.Warden;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -70,40 +70,41 @@ public final class Devices {
     public static ItemStack spawnerItem(BlockEntity be) {
         String mob = "";
         if (be != null) {
-            mob = be.createNbt().getCompound("SpawnData").getCompound("entity").getString("id");
+            mob = be.saveWithoutMetadata(be.getLevel().registryAccess()).getCompoundOrEmpty("SpawnData").getCompoundOrEmpty("entity").getStringOr("id", "");
         }
         ItemStack stack = new ItemStack(Items.SPAWNER);
         String name = "Monster Spawner";
         Identifier id = Identifier.tryParse(mob);
         if (id != null && !mob.isEmpty()) {
-            stack.getOrCreateNbt().putString(SPAWNER_MOB_KEY, mob);
-            var type = EntityType.get(mob);
-            if (type.isPresent()) name = type.get().getName().getString() + " Spawner";
+            String spawnMob = mob;
+            Compat.editTag(stack, t -> t.putString(SPAWNER_MOB_KEY, spawnMob));
+            var type = Compat.entityType(mob);
+            if (type.isPresent()) name = type.get().getDescription().getString() + " Spawner";
         }
-        stack.setCustomName(Text.literal(name).styled(s -> s.withItalic(false)).formatted(Formatting.YELLOW));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
         return stack;
     }
 
-    private static ActionResult placeSpawner(ServerPlayerEntity player, ServerWorld world, Hand hand,
+    private static InteractionResult placeSpawner(ServerPlayer player, ServerLevel world, InteractionHand hand,
                                              ItemStack stack, BlockHitResult hit) {
-        ItemPlacementContext ctx = new ItemPlacementContext(player, hand, stack, hit);
-        if (!ctx.canPlace()) return ActionResult.FAIL;
-        BlockPos pos = ctx.getBlockPos();
-        BlockState state = Blocks.SPAWNER.getDefaultState();
-        if (!world.canPlace(state, pos, ShapeContext.of(player)) || !world.canPlayerModifyAt(player, pos)) {
-            return ActionResult.FAIL;
+        BlockPlaceContext ctx = new BlockPlaceContext(player, hand, stack, hit);
+        if (!ctx.canPlace()) return InteractionResult.FAIL;
+        BlockPos pos = ctx.getClickedPos();
+        BlockState state = Blocks.SPAWNER.defaultBlockState();
+        if (!world.isUnobstructed(state, pos, CollisionContext.of(player)) || !world.mayInteract(player, pos)) {
+            return InteractionResult.FAIL;
         }
-        world.setBlockState(pos, state);
-        if (world.getBlockEntity(pos) instanceof MobSpawnerBlockEntity spawner) {
-            EntityType.get(stack.getNbt().getString(SPAWNER_MOB_KEY))
-                    .ifPresent(type -> spawner.setEntityType(type, world.getRandom()));
-            spawner.markDirty();
-            world.updateListeners(pos, state, state, 3);
+        world.setBlockAndUpdate(pos, state);
+        if (world.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
+            Compat.entityType(Compat.tag(stack).getStringOr(SPAWNER_MOB_KEY, ""))
+                    .ifPresent(type -> spawner.setEntityId(type, world.getRandom()));
+            spawner.setChanged();
+            world.sendBlockUpdated(pos, state, state, 3);
         }
-        world.playSound(null, pos, SoundEvents.BLOCK_STONE_PLACE, SoundCategory.BLOCKS, 1f, 0.8f);
-        player.swingHand(hand, true);
-        if (!player.isCreative()) stack.decrement(1);
-        return ActionResult.SUCCESS;
+        world.playSound(null, pos, SoundEvents.STONE_PLACE, SoundSource.BLOCKS, 1f, 0.8f);
+        Compat.swing(player, hand);
+        if (!player.isCreative()) stack.shrink(1);
+        return InteractionResult.SUCCESS;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -111,32 +112,32 @@ public final class Devices {
     // ---------------------------------------------------------------------------------------
 
     public static boolean isHarvesterItem(ItemStack stack) {
-        return stack.isOf(Items.HOPPER) && stack.hasCustomName()
-                && stack.getName().getString().equals(HARVESTER_NAME);
+        return stack.is(Items.HOPPER) && stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)
+                && stack.getHoverName().getString().equals(HARVESTER_NAME);
     }
 
     public static ItemStack harvesterItem() {
         ItemStack stack = new ItemStack(Items.HOPPER);
-        stack.setCustomName(Text.literal(HARVESTER_NAME).styled(s -> s.withItalic(false)).formatted(Formatting.GOLD));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(HARVESTER_NAME).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
         return stack;
     }
 
     /** /helper harvester: turn a hopper in your hand into a Monster Harvester. */
-    public static void craftHarvester(ServerPlayerEntity player) {
-        ItemStack held = player.getMainHandStack();
-        if (!held.isOf(Items.HOPPER) || isHarvesterItem(held)) {
+    public static void craftHarvester(ServerPlayer player) {
+        ItemStack held = player.getMainHandItem();
+        if (!held.is(Items.HOPPER) || isHarvesterItem(held)) {
             Helper.say(player, "Hold a hopper in your hand and run /helper harvester again. "
                     + "I'll turn it into a Monster Harvester.");
             return;
         }
-        if (!player.isCreative()) held.decrement(1);
-        player.getInventory().offerOrDrop(harvesterItem());
+        if (!player.isCreative()) held.shrink(1);
+        player.getInventory().placeItemBackInInventory(harvesterItem(), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Here's your Monster Harvester! Place it right below where the spawner's monsters "
                 + "appear (within " + RANGE + " blocks) and put a chest under it for the loot. "
                 + "Sneak + right-click it to collect the XP.");
     }
 
-    private record Pending(RegistryKey<World> world, BlockPos pos, UUID player, int ticks) {}
+    private record Pending(ResourceKey<Level> world, BlockPos pos, UUID player, int ticks) {}
 
     private static final List<Pending> PENDING = new ArrayList<>();
 
@@ -145,43 +146,43 @@ public final class Devices {
     }
 
     /** All block right-clicks: placing spawners and harvesters, and collecting harvester XP. */
-    public static ActionResult onUseBlock(PlayerEntity p, World w, Hand hand, BlockHitResult hit) {
-        if (w.isClient || !(p instanceof ServerPlayerEntity player) || !(w instanceof ServerWorld world)) {
-            return ActionResult.PASS;
+    public static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
+        if (w.isClientSide() || !(p instanceof ServerPlayer player) || !(w instanceof ServerLevel world)) {
+            return InteractionResult.PASS;
         }
-        if (p instanceof FakePlayer) return ActionResult.PASS;
-        ItemStack stack = player.getStackInHand(hand);
+        if (p instanceof FakePlayer) return InteractionResult.PASS;
+        ItemStack stack = player.getItemInHand(hand);
         BlockPos clicked = hit.getBlockPos();
         HarvesterData data = HarvesterData.get(world.getServer());
 
-        if (player.isSneaking() && data.has(world, clicked)) {
-            if (hand != Hand.MAIN_HAND) return ActionResult.SUCCESS;
+        if (player.isShiftKeyDown() && data.has(world, clicked)) {
+            if (hand != InteractionHand.MAIN_HAND) return InteractionResult.SUCCESS;
             int xp = data.take(world, clicked);
             if (xp <= 0) {
-                player.sendMessage(Text.literal("No XP stored yet.").formatted(Formatting.GRAY), true);
+                player.sendOverlayMessage(Component.literal("No XP stored yet.").withStyle(ChatFormatting.GRAY));
             } else {
                 int before = player.experienceLevel;
-                player.addExperience(xp);
-                world.playSound(null, player.getBlockPos(), player.experienceLevel > before
-                                ? SoundEvents.ENTITY_PLAYER_LEVELUP : SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP,
-                        SoundCategory.PLAYERS, 0.8f, 1f);
-                player.sendMessage(Text.literal("Collected " + xp + " XP from the Monster Harvester!")
-                        .formatted(Formatting.GREEN), true);
+                player.giveExperiencePoints(xp);
+                world.playSound(null, player.blockPosition(), player.experienceLevel > before
+                                ? SoundEvents.PLAYER_LEVELUP : SoundEvents.EXPERIENCE_ORB_PICKUP,
+                        SoundSource.PLAYERS, 0.8f, 1f);
+                player.sendOverlayMessage(Component.literal("Collected " + xp + " XP from the Monster Harvester!")
+                        .withStyle(ChatFormatting.GREEN));
             }
-            return ActionResult.SUCCESS;
+            return InteractionResult.SUCCESS;
         }
-        if ((!player.isSneaking() || stack.isEmpty()) && Storage.isStorageBlock(world, clicked)) {
-            if (hand == Hand.MAIN_HAND) Storage.open(player);
-            return ActionResult.SUCCESS;
+        if ((!player.isShiftKeyDown() || stack.isEmpty()) && Storage.isStorageBlock(world, clicked)) {
+            if (hand == InteractionHand.MAIN_HAND) Storage.open(player);
+            return InteractionResult.SUCCESS;
         }
-        if (stack.isOf(Items.SPAWNER) && stack.hasNbt() && stack.getNbt().contains(SPAWNER_MOB_KEY)) {
+        if (stack.is(Items.SPAWNER) && Compat.hasTag(stack) && Compat.tag(stack).contains(SPAWNER_MOB_KEY)) {
             return placeSpawner(player, world, hand, stack, hit);
         }
         if (isHarvesterItem(stack)) {
-            BlockPos pos = new ItemPlacementContext(player, hand, stack, hit).getBlockPos();
-            PENDING.add(new Pending(world.getRegistryKey(), pos.toImmutable(), player.getUuid(), 0));
+            BlockPos pos = new BlockPlaceContext(player, hand, stack, hit).getClickedPos();
+            PENDING.add(new Pending(world.dimension(), pos.immutable(), player.getUUID(), 0));
         }
-        return ActionResult.PASS; // let the game place the hopper normally
+        return InteractionResult.PASS; // let the game place the hopper normally
     }
 
     public static void tick(MinecraftServer server) {
@@ -189,10 +190,10 @@ public final class Devices {
         // Harvesters placed last tick: register them once the hopper is really there.
         for (int i = PENDING.size() - 1; i >= 0; i--) {
             Pending pending = PENDING.get(i);
-            ServerWorld world = server.getWorld(pending.world());
-            if (world != null && world.getBlockState(pending.pos()).isOf(Blocks.HOPPER)) {
+            ServerLevel world = server.getLevel(pending.world());
+            if (world != null && world.getBlockState(pending.pos()).is(Blocks.HOPPER)) {
                 data.add(world, pending.pos());
-                ServerPlayerEntity player = server.getPlayerManager().getPlayer(pending.player());
+                ServerPlayer player = server.getPlayerList().getPlayer(pending.player());
                 if (player != null) {
                     Helper.say(player, "Monster Harvester placed. It kills monsters within " + RANGE
                             + " blocks, sends the loot into a chest below it, and stores the XP. "
@@ -205,75 +206,76 @@ public final class Devices {
                 PENDING.set(i, new Pending(pending.world(), pending.pos(), pending.player(), pending.ticks() + 1));
             }
         }
-        if (server.getTicks() % 10 != 0) return;
+        if (server.getTickCount() % 10 != 0) return;
         data.forEach(server, Devices::tickHarvester);
     }
 
     /** Returns false if the harvester is gone (broken). */
-    private static boolean tickHarvester(ServerWorld world, BlockPos pos, int[] xp) {
-        if (!world.isChunkLoaded(pos)) return true;
+    private static boolean tickHarvester(ServerLevel world, BlockPos pos, int[] xp) {
+        if (!world.hasChunkAt(pos)) return true;
         if (!(world.getBlockEntity(pos) instanceof HopperBlockEntity hopper)) {
-            if (xp[0] > 0) ExperienceOrbEntity.spawn(world, Vec3d.ofCenter(pos), xp[0]); // don't lose stored XP
+            if (xp[0] > 0) ExperienceOrb.award(world, Vec3.atCenterOf(pos), xp[0]); // don't lose stored XP
             return false;
         }
-        Box area = new Box(pos.add(-RANGE, -1, -RANGE), pos.add(RANGE + 1, RANGE + 2, RANGE + 1));
+        AABB area = AABB.encapsulatingFullBlocks(pos.offset(-RANGE, -1, -RANGE), pos.offset(RANGE, RANGE + 1, RANGE));
         FakePlayer killer = FakePlayer.get(world);
-        for (MobEntity mob : world.getEntitiesByClass(MobEntity.class, area, Devices::isHarvestable)) {
-            mob.damage(world.getDamageSources().playerAttack(killer), Float.MAX_VALUE);
+        for (Mob mob : world.getEntitiesOfClass(Mob.class, area, Devices::isHarvestable)) {
+            mob.hurt(world.damageSources().playerAttack(killer), Float.MAX_VALUE);
         }
-        for (ItemEntity item : world.getEntitiesByClass(ItemEntity.class, area, Entity::isAlive)) {
-            ItemStack rest = HopperBlockEntity.transfer(null, hopper, item.getStack().copy(), null);
+        for (ItemEntity item : world.getEntitiesOfClass(ItemEntity.class, area, Entity::isAlive)) {
+            ItemStack rest = HopperBlockEntity.addItem(null, hopper, item.getItem().copy(), null);
             if (rest.isEmpty()) item.discard();
-            else item.setStack(rest);
+            else item.setItem(rest);
         }
-        for (ExperienceOrbEntity orb : world.getEntitiesByClass(ExperienceOrbEntity.class, area, Entity::isAlive)) {
-            xp[0] += orb.getExperienceAmount() * Math.max(1, ((ExperienceOrbAccessor) orb).helpermod$getPickingCount());
+        for (ExperienceOrb orb : world.getEntitiesOfClass(ExperienceOrb.class, area, Entity::isAlive)) {
+            xp[0] += orb.getValue() * Math.max(1, ((ExperienceOrbAccessor) orb).helpermod$getPickingCount());
             orb.discard();
         }
         return true;
     }
 
-    private static boolean isHarvestable(MobEntity mob) {
-        if (!(mob instanceof Monster) || !mob.isAlive() || mob.hasCustomName()) return false;
-        if (mob.getCommandTags().contains(Helper.TAG)) return false;
-        return !(mob instanceof WitherEntity || mob instanceof EnderDragonEntity || mob instanceof WardenEntity
-                || mob instanceof ElderGuardianEntity);
+    private static boolean isHarvestable(Mob mob) {
+        if (!(mob instanceof Enemy) || !mob.isAlive() || mob.hasCustomName()) return false;
+        if (mob.entityTags().contains(Helper.TAG)) return false;
+        return !(mob instanceof WitherBoss || mob instanceof EnderDragon || mob instanceof Warden
+                || mob instanceof ElderGuardian);
     }
 
     /** Where the harvesters are, and how much XP each is holding. Saved with the world. */
-    public static final class HarvesterData extends PersistentState {
+    public static final class HarvesterData extends SavedData {
         private static final String ID = "helpermod_harvesters";
+        private static final SavedDataType<HarvesterData> TYPE = Compat.dataType(ID, HarvesterData::new, HarvesterData::fromNbt, d -> d.save(new CompoundTag()));
         private final Map<String, int[]> harvesters = new LinkedHashMap<>();
 
         public static HarvesterData get(MinecraftServer server) {
-            return server.getOverworld().getPersistentStateManager()
-                    .getOrCreate(HarvesterData::fromNbt, HarvesterData::new, ID);
+            return server.overworld().getDataStorage()
+                    .computeIfAbsent(TYPE);
         }
 
-        private static String key(World world, BlockPos pos) {
-            return world.getRegistryKey().getValue() + "|" + pos.asLong();
+        private static String key(Level world, BlockPos pos) {
+            return world.dimension().identifier() + "|" + pos.asLong();
         }
 
-        boolean has(World world, BlockPos pos) {
+        boolean has(Level world, BlockPos pos) {
             return harvesters.containsKey(key(world, pos));
         }
 
-        void add(World world, BlockPos pos) {
+        void add(Level world, BlockPos pos) {
             harvesters.putIfAbsent(key(world, pos), new int[]{0});
-            markDirty();
+            setDirty();
         }
 
-        int take(World world, BlockPos pos) {
+        int take(Level world, BlockPos pos) {
             int[] xp = harvesters.get(key(world, pos));
             if (xp == null) return 0;
             int amount = xp[0];
             xp[0] = 0;
-            markDirty();
+            setDirty();
             return amount;
         }
 
         interface Visitor {
-            boolean visit(ServerWorld world, BlockPos pos, int[] xp);
+            boolean visit(ServerLevel world, BlockPos pos, int[] xp);
         }
 
         void forEach(MinecraftServer server, Visitor visitor) {
@@ -281,33 +283,32 @@ public final class Devices {
                 Map.Entry<String, int[]> e = it.next();
                 String[] parts = e.getKey().split("\\|");
                 Identifier dim = Identifier.tryParse(parts[0]);
-                ServerWorld world = dim == null ? null : server.getWorld(RegistryKey.of(RegistryKeys.WORLD, dim));
+                ServerLevel world = dim == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dim));
                 if (world == null) continue;
                 int before = e.getValue()[0];
-                if (!visitor.visit(world, BlockPos.fromLong(Long.parseLong(parts[1])), e.getValue())) {
+                if (!visitor.visit(world, BlockPos.of(Long.parseLong(parts[1])), e.getValue())) {
                     it.remove();
-                    markDirty();
+                    setDirty();
                 } else if (e.getValue()[0] != before) {
-                    markDirty();
+                    setDirty();
                 }
             }
         }
 
-        private static HarvesterData fromNbt(NbtCompound nbt) {
+        private static HarvesterData fromNbt(CompoundTag nbt) {
             HarvesterData data = new HarvesterData();
-            NbtList list = nbt.getList("harvesters", NbtElement.COMPOUND_TYPE);
+            ListTag list = nbt.getListOrEmpty("harvesters");
             for (int i = 0; i < list.size(); i++) {
-                NbtCompound tag = list.getCompound(i);
-                data.harvesters.put(tag.getString("key"), new int[]{tag.getInt("xp")});
+                CompoundTag tag = list.getCompoundOrEmpty(i);
+                data.harvesters.put(tag.getStringOr("key", ""), new int[]{tag.getIntOr("xp", 0)});
             }
             return data;
         }
 
-        @Override
-        public NbtCompound writeNbt(NbtCompound nbt) {
-            NbtList list = new NbtList();
+                public CompoundTag save(CompoundTag nbt) {
+            ListTag list = new ListTag();
             harvesters.forEach((key, xp) -> {
-                NbtCompound tag = new NbtCompound();
+                CompoundTag tag = new CompoundTag();
                 tag.putString("key", key);
                 tag.putInt("xp", xp[0]);
                 list.add(tag);

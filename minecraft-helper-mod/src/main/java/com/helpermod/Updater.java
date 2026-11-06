@@ -7,10 +7,9 @@ import com.google.gson.JsonParser;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -35,7 +34,7 @@ import java.util.concurrent.TimeUnit;
  * Keeps the mod up to date.
  *
  * At launch, and again every 30 minutes while the game is open, this checks the repo's GitHub
- * releases (tags named helper-v1.2.3) in the background. On a player's PC (singleplayer or LAN,
+ * releases (tags named helper26-v2.0.0; the 1.20.1 line used helper-v) in the background. On a player's PC (singleplayer or LAN,
  * host and guests alike) it doesn't download anything by itself: UpdateScreen pops up in game with
  * what's new and asks "Update now?". Pressing Yes downloads the jar in the background.
  * Minecraft loads mod code once at startup, so the new version can't replace the running one:
@@ -50,7 +49,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Updater {
     private static final String RELEASES = "https://api.github.com/repos/jordanjcollins22-lgtm/First/releases?per_page=30";
-    private static final String TAG_PREFIX = "helper-v";
+    private static final String TAG_PREFIX = "helper26-v";
     private static final long RECHECK_MINUTES = 30;
 
     /** One release newer than the running version, newest first. */
@@ -132,12 +131,12 @@ public final class Updater {
     }
 
     /** Tell a player on a dedicated server that a new version is waiting for a restart. */
-    public static void onJoin(ServerPlayerEntity player) {
+    public static void onJoin(ServerPlayer player) {
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.SERVER) return; // players' PCs get UpdateScreen
         String v = readyVersion;
         if (v == null) return;
-        player.sendMessage(Text.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
-                .formatted(Formatting.AQUA), false);
+        player.sendSystemMessage(Component.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
+                .withStyle(ChatFormatting.AQUA));
     }
 
     private static String mode() {

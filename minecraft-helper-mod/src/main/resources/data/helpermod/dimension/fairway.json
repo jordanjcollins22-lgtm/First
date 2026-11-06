@@ -1,0 +1,11 @@
+{
+ "type": "helpermod:fairway",
+ "generator": {
+  "type": "minecraft:noise",
+  "biome_source": {
+   "type": "minecraft:fixed",
+   "biome": "helpermod:fairway"
+  },
+  "settings": "helpermod:fairway"
+ }
+}

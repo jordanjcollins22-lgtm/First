@@ -1,22 +1,22 @@
 package com.helpermod;
 
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtHelper;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.network.packet.s2c.play.ScoreboardDisplayS2CPacket;
-import net.minecraft.network.packet.s2c.play.ScoreboardObjectiveUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.ScoreboardPlayerUpdateS2CPacket;
-import net.minecraft.scoreboard.Scoreboard;
-import net.minecraft.scoreboard.ScoreboardCriterion;
-import net.minecraft.scoreboard.ScoreboardObjective;
-import net.minecraft.scoreboard.ServerScoreboard;
+import net.minecraft.ChatFormatting;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket;
+import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket;
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.world.PersistentState;
-
+import net.minecraft.server.ServerScoreboard;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -33,27 +33,27 @@ final class TycoonSidebar {
 
     private static final String OBJECTIVE = "helper_tycoon";
     private static final int WINDOW = 10; // seconds averaged for "per second"
-    private static final int SIDEBAR_SLOT = 1;
+    private static final net.minecraft.world.scores.DisplaySlot SIDEBAR_SLOT = net.minecraft.world.scores.DisplaySlot.SIDEBAR;
 
-    static final class Data extends PersistentState {
+    static final class Data extends SavedData {
         private static final String ID = "helpermod_tycoon_sidebar";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         final Set<UUID> hidden = new HashSet<>();
 
         static Data get(MinecraftServer server) {
-            return server.getOverworld().getPersistentStateManager().getOrCreate(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
-        private static Data fromNbt(NbtCompound nbt) {
+        private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            NbtList l = nbt.getList("hidden", NbtElement.INT_ARRAY_TYPE);
-            for (int i = 0; i < l.size(); i++) d.hidden.add(NbtHelper.toUuid(l.get(i)));
+            ListTag l = nbt.getListOrEmpty("hidden");
+            for (int i = 0; i < l.size(); i++) d.hidden.add(Compat.uuidOf(l.get(i)));
             return d;
         }
 
-        @Override
-        public NbtCompound writeNbt(NbtCompound nbt) {
-            NbtList l = new NbtList();
-            for (UUID id : hidden) l.add(NbtHelper.fromUuid(id));
+                public CompoundTag save(CompoundTag nbt) {
+            ListTag l = new ListTag();
+            for (UUID id : hidden) l.add(Compat.uuidTag(id));
             nbt.put("hidden", l);
             return nbt;
         }
@@ -67,9 +67,9 @@ final class TycoonSidebar {
 
     private static final Map<UUID, long[]> EARNED = new HashMap<>(); // coins per second, last WINDOW seconds
     private static final Map<UUID, Shown> SHOWN = new HashMap<>();
-    private static final ScoreboardObjective DISPLAY = new ScoreboardObjective(new Scoreboard(), OBJECTIVE,
-            ScoreboardCriterion.DUMMY, Text.literal("Tycoon").formatted(Formatting.GOLD, Formatting.BOLD),
-            ScoreboardCriterion.RenderType.INTEGER);
+    private static final Objective DISPLAY = new Objective(new Scoreboard(), OBJECTIVE,
+            ObjectiveCriteria.DUMMY, Component.literal("Tycoon").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD),
+            ObjectiveCriteria.RenderType.INTEGER, false, null);
 
     static void reset() {
         EARNED.clear();
@@ -77,14 +77,14 @@ final class TycoonSidebar {
     }
 
     /** A player (re)joined: their game has no panel yet. */
-    static void onJoin(ServerPlayerEntity player) {
-        SHOWN.remove(player.getUuid());
+    static void onJoin(ServerPlayer player) {
+        SHOWN.remove(player.getUUID());
     }
 
     /** Called by the collector each time it pays out. */
     static void earned(MinecraftServer server, UUID owner, long coins) {
         long[] buckets = EARNED.computeIfAbsent(owner, k -> new long[WINDOW]);
-        int slot = (int) ((server.getTicks() / 20) % WINDOW);
+        int slot = (int) ((server.getTickCount() / 20) % WINDOW);
         buckets[slot] += coins;
     }
 
@@ -97,13 +97,13 @@ final class TycoonSidebar {
     }
 
     static void tick(MinecraftServer server) {
-        if (server.getTicks() % 20 != 0) return;
-        int next = (int) ((server.getTicks() / 20 + 1) % WINDOW);
+        if (server.getTickCount() % 20 != 0) return;
+        int next = (int) ((server.getTickCount() / 20 + 1) % WINDOW);
         for (long[] buckets : EARNED.values()) buckets[next] = 0; // the oldest second drops off
         Tycoon.Data data = Tycoon.Data.get(server);
         Data prefs = Data.get(server);
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            UUID id = player.getUuid();
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            UUID id = player.getUUID();
             boolean playing = data.coins(id) > 0 || data.droppers.values().stream().anyMatch(d -> d.owner.equals(id));
             if (!playing || prefs.hidden.contains(id)) {
                 hide(player);
@@ -114,40 +114,40 @@ final class TycoonSidebar {
         }
     }
 
-    private static void show(ServerPlayerEntity player, String total, String rate) {
-        Shown s = SHOWN.get(player.getUuid());
-        var net = player.networkHandler;
+    private static void show(ServerPlayer player, String total, String rate) {
+        Shown s = SHOWN.get(player.getUUID());
+        var net = player.connection;
         if (s == null) {
             s = new Shown();
-            SHOWN.put(player.getUuid(), s);
-            net.sendPacket(new ScoreboardObjectiveUpdateS2CPacket(DISPLAY, ScoreboardObjectiveUpdateS2CPacket.ADD_MODE));
-            net.sendPacket(new ScoreboardDisplayS2CPacket(SIDEBAR_SLOT, DISPLAY));
+            SHOWN.put(player.getUUID(), s);
+            net.send(new ClientboundSetObjectivePacket(DISPLAY, ClientboundSetObjectivePacket.METHOD_ADD));
+            net.send(new ClientboundSetDisplayObjectivePacket(SIDEBAR_SLOT, DISPLAY));
         }
-        String totalLine = Formatting.GOLD + total;
-        String rateLine = Formatting.YELLOW + rate;
+        String totalLine = ChatFormatting.GOLD + total;
+        String rateLine = ChatFormatting.YELLOW + rate;
         if (!totalLine.equals(s.total)) {
-            if (s.total != null) net.sendPacket(new ScoreboardPlayerUpdateS2CPacket(ServerScoreboard.UpdateMode.REMOVE, OBJECTIVE, s.total, 0));
-            net.sendPacket(new ScoreboardPlayerUpdateS2CPacket(ServerScoreboard.UpdateMode.CHANGE, OBJECTIVE, totalLine, 2));
+            if (s.total != null) net.send(new net.minecraft.network.protocol.game.ClientboundResetScorePacket(s.total, OBJECTIVE));
+            net.send(new ClientboundSetScorePacket(totalLine, OBJECTIVE, 2, java.util.Optional.empty(), java.util.Optional.empty()));
             s.total = totalLine;
         }
         if (!rateLine.equals(s.rate)) {
-            if (s.rate != null) net.sendPacket(new ScoreboardPlayerUpdateS2CPacket(ServerScoreboard.UpdateMode.REMOVE, OBJECTIVE, s.rate, 0));
-            net.sendPacket(new ScoreboardPlayerUpdateS2CPacket(ServerScoreboard.UpdateMode.CHANGE, OBJECTIVE, rateLine, 1));
+            if (s.rate != null) net.send(new net.minecraft.network.protocol.game.ClientboundResetScorePacket(s.rate, OBJECTIVE));
+            net.send(new ClientboundSetScorePacket(rateLine, OBJECTIVE, 1, java.util.Optional.empty(), java.util.Optional.empty()));
             s.rate = rateLine;
         }
     }
 
-    private static void hide(ServerPlayerEntity player) {
-        if (SHOWN.remove(player.getUuid()) == null) return;
-        player.networkHandler.sendPacket(new ScoreboardObjectiveUpdateS2CPacket(DISPLAY, ScoreboardObjectiveUpdateS2CPacket.REMOVE_MODE));
+    private static void hide(ServerPlayer player) {
+        if (SHOWN.remove(player.getUUID()) == null) return;
+        player.connection.send(new ClientboundSetObjectivePacket(DISPLAY, ClientboundSetObjectivePacket.METHOD_REMOVE));
     }
 
     /** /helper tycoon sidebar on|off */
-    static void set(ServerPlayerEntity player, boolean on) {
-        Data prefs = Data.get(player.getServer());
-        if (on) prefs.hidden.remove(player.getUuid());
-        else prefs.hidden.add(player.getUuid());
-        prefs.markDirty();
+    static void set(ServerPlayer player, boolean on) {
+        Data prefs = Data.get(player.level().getServer());
+        if (on) prefs.hidden.remove(player.getUUID());
+        else prefs.hidden.add(player.getUUID());
+        prefs.setDirty();
         if (!on) hide(player);
         Helper.say(player, on ? "Your coin total and coins per second are back on the side of the screen."
                 : "Hid the coin panel. /helper tycoon sidebar on brings it back.");

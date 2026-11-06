@@ -1,0 +1,36 @@
+{
+ "attributes": {
+  "minecraft:visual/sky_color": "#020208",
+  "minecraft:visual/fog_color": "#020208",
+  "minecraft:visual/water_fog_color": "#050533"
+ },
+ "carvers": [
+  "minecraft:cave",
+  "minecraft:cave_extra_underground",
+  "minecraft:canyon"
+ ],
+ "downfall": 0.0,
+ "effects": {
+  "water_color": "#3f76e4"
+ },
+ "features": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [
+   "helpermod:pluto_deepslate_emerald_ore",
+   "helpermod:pluto_deepslate_diamond_ore",
+   "helpermod:pluto_deepslate_calorite_ore",
+   "helpermod:pluto_terracotta"
+  ],
+  [],
+  [],
+  [],
+  []
+ ],
+ "has_precipitation": false,
+ "temperature": -0.5
+}

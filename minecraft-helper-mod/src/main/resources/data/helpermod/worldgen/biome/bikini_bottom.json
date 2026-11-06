@@ -1,0 +1,95 @@
+{
+ "attributes": {
+  "minecraft:visual/sky_color": "#78a7ff",
+  "minecraft:visual/fog_color": "#c0d8ff",
+  "minecraft:visual/water_fog_color": "#041f33",
+  "minecraft:gameplay/natural_mob_spawns": {
+   "argument": {
+    "spawn_costs": {},
+    "spawns_by_category": {
+     "creature": [
+      {
+       "type": "minecraft:turtle",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 2,
+        "max_inclusive": 5
+       },
+       "weight": 5
+      }
+     ],
+     "water_ambient": [
+      {
+       "type": "minecraft:tropical_fish",
+       "count": 8,
+       "weight": 25
+      },
+      {
+       "type": "minecraft:pufferfish",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 1,
+        "max_inclusive": 3
+       },
+       "weight": 15
+      }
+     ],
+     "water_creature": [
+      {
+       "type": "minecraft:squid",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 1,
+        "max_inclusive": 4
+       },
+       "weight": 2
+      },
+      {
+       "type": "minecraft:dolphin",
+       "count": {
+        "type": "minecraft:uniform",
+        "min_inclusive": 1,
+        "max_inclusive": 2
+       },
+       "weight": 2
+      }
+     ]
+    }
+   },
+   "modifier": "overlay"
+  }
+ },
+ "carvers": [
+  "minecraft:cave",
+  "minecraft:cave_extra_underground",
+  "minecraft:canyon"
+ ],
+ "downfall": 0.5,
+ "effects": {
+  "water_color": "#43d5ee"
+ },
+ "features": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [
+   "helpermod:bikini_bottom_gold_ore",
+   "helpermod:bikini_bottom_copper_ore",
+   "helpermod:bikini_bottom_prismarine"
+  ],
+  [],
+  [],
+  [
+   "minecraft:warm_ocean_vegetation",
+   "minecraft:seagrass_warm",
+   "minecraft:sea_pickle",
+   "minecraft:kelp_warm"
+  ],
+  []
+ ],
+ "has_precipitation": false,
+ "temperature": 0.9
+}
