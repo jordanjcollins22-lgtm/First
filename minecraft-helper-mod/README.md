@@ -238,6 +238,10 @@ and look down to land. Rocket smoke and flames pour out the back while it flies.
 `/helper roadster coat <white|creamy|chestnut|brown|black|gray|dark_brown>`, `/helper roadster name <name>`,
 and `/helper roadster call` brings it to you.
 
+**Roadster autopilot:** `/helper roadster waypoint <x> <z>` sets a temporary waypoint (`waypoint clear` cancels it).
+Sit in your roadster and it takes off by itself, climbs above the ground (at least to Y 120), flies there and lands on
+the spot, then the waypoint is gone. The action bar counts down the distance. Press S at any time to take over.
+
 **Rockets (with Ad Astra):** the shop sells Ad Astra rockets that are ready to fly, each with a full tank of
 cryo fuel (3 buckets, enough for 3 launches): Tier 1 (50k), Tier 2 (150k, needs tier 2), Tier 3 (400k) and
 Tier 4 (1M, the max rocket, reaches every planet; both need tier 3). It also sells Launch Pads (5k) and 4 cryo

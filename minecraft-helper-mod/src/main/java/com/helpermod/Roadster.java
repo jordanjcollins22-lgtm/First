@@ -22,8 +22,11 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * The Star Roadster: a flying sports car (on the horse model) from the tycoon shop. Drive it like a horse;
@@ -230,11 +233,12 @@ final class Roadster {
 
     private static void fly(ServerPlayerEntity rider, HorseEntity h) {
         ServerWorld world = rider.getServerWorld();
+        if (autopilot(rider, h, world)) return;
         float forward = rider.forwardSpeed;
         Vec3d look = rider.getRotationVec(1f);
         boolean airborne = h.hasNoGravity();
         if (!airborne) {
-            if (forward > 0 && rider.getPitch() < -25) { // looking up while driving: lift off
+            if (forward > 0 && rider.getPitch() < -25 || WAYPOINTS.containsKey(rider.getUuid())) { // lift off
                 h.setNoGravity(true);
                 h.setVelocity(h.getVelocity().add(0, 0.5, 0));
                 h.velocityModified = true;
@@ -261,5 +265,132 @@ final class Roadster {
         if (world.getTime() % 30 == 0) {
             world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_BLAZE_BURN, SoundCategory.NEUTRAL, 0.5f, 0.6f);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Autopilot: set a temporary waypoint, sit in the roadster, and it flies you there and lands
+    // ---------------------------------------------------------------------------------------
+
+    private enum Phase { CLIMB, CRUISE, LAND }
+
+    private static final class Waypoint {
+        final net.minecraft.registry.RegistryKey<net.minecraft.world.World> world;
+        final double x, z;
+        Phase phase = Phase.CLIMB;
+        int ticks;
+
+        Waypoint(net.minecraft.registry.RegistryKey<net.minecraft.world.World> world, double x, double z) {
+            this.world = world;
+            this.x = x;
+            this.z = z;
+        }
+    }
+
+    /** Temporary: one per player, gone once it lands you (or you cancel, or the server restarts). */
+    private static final Map<UUID, Waypoint> WAYPOINTS = new HashMap<>();
+    private static final double CRUISE_SPEED = 1.2;
+    private static final int MIN_CRUISE_Y = 120;
+
+    static void reset() {
+        WAYPOINTS.clear();
+    }
+
+    /** /helper roadster waypoint <x> <z> (or "here" to come back to where you're standing). */
+    static void setWaypoint(ServerPlayerEntity player, double x, double z) {
+        WAYPOINTS.put(player.getUuid(), new Waypoint(player.getWorld().getRegistryKey(), x, z));
+        boolean riding = player.getVehicle() instanceof HorseEntity h && h.getCommandTags().contains(TAG);
+        int dist = (int) Math.sqrt(sq(x - player.getX()) + sq(z - player.getZ()));
+        Helper.say(player, "Waypoint set at " + (int) Math.floor(x) + ", " + (int) Math.floor(z) + " (" + dist + " blocks away). "
+                + (riding ? "Autopilot on: sit back, I'll fly you there and land. Press S to take over."
+                : "Hop in your Star Roadster and the autopilot takes you there. /helper roadster waypoint clear cancels it."));
+    }
+
+    static void clearWaypoint(ServerPlayerEntity player) {
+        Helper.say(player, WAYPOINTS.remove(player.getUuid()) != null ? "Waypoint cleared. You're driving."
+                : "You don't have a roadster waypoint set.");
+    }
+
+    private static double sq(double d) {
+        return d * d;
+    }
+
+    /** Flies the roadster to the rider's waypoint. True while the autopilot is in control. */
+    private static boolean autopilot(ServerPlayerEntity rider, HorseEntity h, ServerWorld world) {
+        Waypoint wp = WAYPOINTS.get(rider.getUuid());
+        if (wp == null) return false;
+        if (wp.world != world.getRegistryKey()) {
+            if (wp.ticks++ == 0) Helper.say(rider, "That waypoint is in another dimension, so the autopilot can't get there. Cleared it.");
+            WAYPOINTS.remove(rider.getUuid());
+            return false;
+        }
+        if (rider.forwardSpeed < 0) { // S: the rider takes over
+            WAYPOINTS.remove(rider.getUuid());
+            rider.sendMessage(Text.literal("Autopilot off. You're driving.").formatted(Formatting.YELLOW), true);
+            return false;
+        }
+        wp.ticks++;
+        h.fallDistance = 0;
+        rider.fallDistance = 0;
+        double dx = wp.x - h.getX(), dz = wp.z - h.getZ();
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        if (!h.hasNoGravity()) {
+            h.setNoGravity(true);
+            world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.NEUTRAL, 1f, 0.6f);
+            if (wp.phase == Phase.LAND) wp.phase = Phase.CLIMB;
+        }
+        // How high to fly: well above the ground here and a little ahead (only chunks that are already loaded).
+        double nx = flat > 0.01 ? dx / flat : 0, nz = flat > 0.01 ? dz / flat : 0;
+        int ground = groundY(world, h.getX(), h.getZ());
+        for (int k = 8; k <= 32; k += 8) ground = Math.max(ground, groundY(world, h.getX() + nx * k, h.getZ() + nz * k));
+        double cruise = Math.min(world.getTopY() - 8, Math.max(MIN_CRUISE_Y, ground + 25));
+        Vec3d v;
+        if (wp.phase != Phase.LAND && flat < 3) wp.phase = Phase.LAND;
+        switch (wp.phase) {
+            case CLIMB -> {
+                v = new Vec3d(nx * 0.2, 0.7, nz * 0.2);
+                if (h.getY() >= cruise - 2 || flat < 40 && h.getY() >= ground + 12) wp.phase = Phase.CRUISE;
+            }
+            case CRUISE -> {
+                double speed = Math.min(CRUISE_SPEED, Math.max(0.3, flat / 12)); // slow down coming in
+                double up = h.getY() < cruise - 3 && flat > 40 ? 0.4 : h.getY() < ground + 6 ? 0.5 : 0;
+                v = new Vec3d(nx * speed, up, nz * speed);
+            }
+            default -> { // LAND: straight down, gently, over the waypoint
+                double above = h.getY() - groundY(world, h.getX(), h.getZ());
+                v = new Vec3d(dx * 0.1, above > 10 ? -0.6 : -0.25, dz * 0.1);
+                if (h.isOnGround() || above < 0.2) {
+                    h.setNoGravity(false);
+                    h.setVelocity(Vec3d.ZERO);
+                    h.velocityModified = true;
+                    WAYPOINTS.remove(rider.getUuid());
+                    world.spawnParticles(ParticleTypes.CLOUD, h.getX(), h.getY(), h.getZ(), 20, 0.8, 0.1, 0.8, 0.02);
+                    world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.NEUTRAL, 0.6f, 1.4f);
+                    Helper.say(rider, "Touchdown! We've landed at your waypoint (" + (int) Math.floor(wp.x) + ", " + (int) Math.floor(wp.z) + ").");
+                    return true;
+                }
+            }
+        }
+        h.setVelocity(h.getVelocity().multiply(0.3).add(v.multiply(0.7)));
+        h.velocityModified = true;
+        if (flat > 0.5) h.setYaw((float) (Math.toDegrees(Math.atan2(-nx, nz))));
+        h.setBodyYaw(h.getYaw());
+        // Smoke and flames out the back, same as when you fly it yourself.
+        Vec3d back = h.getPos().subtract(Vec3d.fromPolar(0, h.getYaw()).multiply(1.4)).add(0, 0.7, 0);
+        world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
+        world.spawnParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
+        if (wp.phase != Phase.LAND) world.spawnParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
+        if (wp.ticks % 20 == 0) {
+            String what = wp.phase == Phase.CLIMB ? "Taking off" : wp.phase == Phase.CRUISE ? "Autopilot" : "Landing";
+            rider.sendMessage(Text.literal(what + ": " + (int) flat + " blocks to go (S to take over)").formatted(Formatting.AQUA), true);
+        }
+        if (world.getTime() % 30 == 0) world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_BLAZE_BURN, SoundCategory.NEUTRAL, 0.5f, 0.6f);
+        return true;
+    }
+
+    /** Top of the ground (ignoring leaves) at x, z; the world bottom when that chunk isn't loaded yet. */
+    private static int groundY(ServerWorld world, double x, double z) {
+        int bx = (int) Math.floor(x), bz = (int) Math.floor(z);
+        if (!world.isChunkLoaded(bx >> 4, bz >> 4)) return world.getBottomY();
+        return world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, bx, bz);
     }
 }

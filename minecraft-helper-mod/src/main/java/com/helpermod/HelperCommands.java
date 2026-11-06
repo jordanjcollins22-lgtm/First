@@ -134,6 +134,16 @@ public final class HelperCommands {
                 .then(literal("roadster").executes(ctx -> { Roadster.info(ctx.getSource().getPlayerOrThrow()); return 1; })
                         .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("call").executes(ctx -> { Roadster.call(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("waypoint")
+                                .then(literal("clear").executes(ctx -> { Roadster.clearWaypoint(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                                .then(argument("x", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                        .then(argument("z", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
+                                                .executes(ctx -> {
+                                                    Roadster.setWaypoint(ctx.getSource().getPlayerOrThrow(),
+                                                            com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "x"),
+                                                            com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "z"));
+                                                    return 1;
+                                                }))))
                         .then(literal("paint").then(net.minecraft.server.command.CommandManager.argument("colour",
                                 com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
                             Roadster.paint(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "colour"));
@@ -185,7 +195,7 @@ public final class HelperCommands {
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
                 "/helper golf  - Fairway golf planet: where's the club, your round, /helper golf shop, /helper golf ball (pick up your ball)",
-                "/helper roadster  - the Star Roadster flying car: buy it in /helper tycoon shop or /helper golf shop. paint <colour>|coat <coat>|name <name>|call",
+                "/helper roadster  - the Star Roadster flying car: buy it in /helper tycoon shop or /helper golf shop. paint <colour>|coat <coat>|name <name>|call|waypoint <x> <z> (autopilot)",
                 "/helper blackhole  - how to make a Singularity and the Black Hole's bosses. /helper blackhole leave gets you out",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",

@@ -164,6 +164,11 @@ final class Mind {
             return;
         }
         if (askAboutSelf(player, ask)) return;
+        Matcher flyTo = Pattern.compile("\\b(fly|take|drive)\\b.*?\\bto\\s+(-?\\d+)[\\s,]+(?:-?\\d+[\\s,]+)?(-?\\d+)\\b").matcher(ask);
+        if (flyTo.find()) { // "helper, fly me to 300 -150": roadster autopilot waypoint (y in the middle is ignored)
+            Roadster.setWaypoint(player, Integer.parseInt(flyTo.group(2)) + 0.5, Integer.parseInt(flyTo.group(3)) + 0.5);
+            return;
+        }
         Matcher sendTo = Pattern.compile("\\b(give|take|bring|send|deliver|carry|hand)\\b.*?\\bto\\s+([a-z0-9_]{3,16})\\b").matcher(ask);
         if (sendTo.find() && !sendTo.group(2).equals("me")
                 && HelperCommands.onlinePlayer(player.getServer(), sendTo.group(2)) != null) {
