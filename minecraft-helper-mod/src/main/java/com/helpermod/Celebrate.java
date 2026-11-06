@@ -35,9 +35,9 @@ public final class Celebrate {
         // Under a roof a rocket bursts against the ceiling, right next to you. Only launch in the open.
         if (!world.canSeeSky(net.minecraft.core.BlockPos.containing(at).above())) return;
         for (int i = 0; i < 2; i++) {
-            ItemStack rocket = rocket(world.random.nextInt(COLORS.length), world.random.nextInt(5));
-            double dx = (world.random.nextDouble() - 0.5) * 2.0;
-            double dz = (world.random.nextDouble() - 0.5) * 2.0;
+            ItemStack rocket = rocket(world.getRandom().nextInt(COLORS.length), world.getRandom().nextInt(5));
+            double dx = (world.getRandom().nextDouble() - 0.5) * 2.0;
+            double dz = (world.getRandom().nextDouble() - 0.5) * 2.0;
             world.addFreshEntity(new FireworkRocketEntity(world, at.x + dx, at.y + 1.0, at.z + dz, rocket));
         }
     }

@@ -44,7 +44,7 @@ final class TycoonSidebar {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            ListTag l = nbt.getList("hidden", Tag.TAG_INT_ARRAY);
+            ListTag l = nbt.getListOrEmpty("hidden");
             for (int i = 0; i < l.size(); i++) d.hidden.add(NbtUtils.loadUUID(l.get(i)));
             return d;
         }
@@ -143,7 +143,7 @@ final class TycoonSidebar {
 
     /** /helper tycoon sidebar on|off */
     static void set(ServerPlayer player, boolean on) {
-        Data prefs = Data.get(player.getServer());
+        Data prefs = Data.get(player.level().getServer());
         if (on) prefs.hidden.remove(player.getUUID());
         else prefs.hidden.add(player.getUUID());
         prefs.setDirty();

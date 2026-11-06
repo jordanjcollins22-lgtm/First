@@ -10,7 +10,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.monster.piglin.Piglin;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
@@ -39,7 +39,7 @@ public final class Size {
     /** The size saved for this helper's owner (1 = normal). */
     public static float sizeOf(Entity helper) {
         UUID owner = Helper.ownerOf(helper);
-        MinecraftServer server = helper.getServer();
+        MinecraftServer server = helper.level().getServer();
         if (owner == null || server == null) return 1f;
         HelperData.Entry entry = HelperData.get(server).get(owner);
         return entry == null || entry.size <= 0 ? 1f : entry.size;

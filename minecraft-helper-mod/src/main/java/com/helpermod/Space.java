@@ -4,7 +4,7 @@ import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * Extra planets for Ad Astra: the real Europa, Io, Titan, Ceres and Pluto, plus Bikini Bottom, a warm ocean planet, and Fairway, a grassy golf planet.
@@ -23,7 +23,7 @@ final class Space {
         }
         FabricLoader.getInstance().getModContainer(HelperMod.MOD_ID).ifPresent(mod -> {
             boolean ok = ResourceManagerHelper.registerBuiltinResourcePack(
-                    new ResourceLocation(HelperMod.MOD_ID, "space"), mod,
+                    Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "space"), mod,
                     Component.literal("Helper Buddies: real planets"), ResourcePackActivationType.ALWAYS_ENABLED);
             HelperMod.LOG.info(ok ? "Added Europa, Io, Titan, Ceres, Pluto, Bikini Bottom and Fairway to Ad Astra" : "Could not add the extra planets");
         });

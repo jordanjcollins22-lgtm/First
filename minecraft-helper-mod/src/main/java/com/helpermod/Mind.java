@@ -87,7 +87,7 @@ final class Mind {
         else if (end.find()) ask = text.substring(0, end.start());
         else return;
         String clean = ask.trim().toLowerCase(Locale.ROOT).replaceAll("[?!.,]+$", "");
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         if (server == null) return;
         long now = System.currentTimeMillis();
         synchronized (LAST_CHAT) {
@@ -131,18 +131,18 @@ final class Mind {
 
     /** While answering chat, the helper speaks so everyone can see it (others saw the question too). */
     static boolean sayToAll(ServerPlayer player, net.minecraft.network.chat.Component text, String message) {
-        if (talkingTo == null || talkingTo != player || player.getServer() == null) return false;
+        if (talkingTo == null || talkingTo != player || player.level().getServer() == null) return false;
         net.minecraft.network.chat.Component named = net.minecraft.network.chat.Component.literal("[" + player.getName().getString() + "'s Helper] ")
                 .withStyle(net.minecraft.ChatFormatting.GOLD)
                 .append(net.minecraft.network.chat.Component.literal(message).withStyle(net.minecraft.ChatFormatting.WHITE));
-        for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
-            p.displayClientMessage(p == player ? text : named, false);
+        for (ServerPlayer p : player.level().getServer().getPlayerList().getPlayers()) {
+            p.sendSystemMessage(p == player ? text : named);
         }
         return true;
     }
 
     private static void run(ServerPlayer player, String command) {
-        player.getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
+        player.level().getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
     }
 
     private static int number(String ask, int fallback) {
@@ -170,7 +170,7 @@ final class Mind {
         }
         Matcher sendTo = Pattern.compile("\\b(give|take|bring|send|deliver|carry|hand)\\b.*?\\bto\\s+([a-z0-9_]{3,16})\\b").matcher(ask);
         if (sendTo.find() && !sendTo.group(2).equals("me")
-                && HelperCommands.onlinePlayer(player.getServer(), sendTo.group(2)) != null) {
+                && HelperCommands.onlinePlayer(player.level().getServer(), sendTo.group(2)) != null) {
             boolean haul = has(ask, "haul", "everything", "all", "your stuff", "what you have", "what you've got", "your items");
             HelperCommands.send(player, sendTo.group(2), haul ? "haul" : "hand");
             return;
@@ -203,7 +203,7 @@ final class Mind {
             run(player, "helper summon");
         } else if (has(ask, "how are you", "how is it going", "how's it going", "hows it going", "how you doing",
                 "how are you doing", "you ok", "you good", "feeling", "what's up", "whats up")) {
-            HelperData.Entry e = HelperData.get(player.getServer()).get(player.getUUID());
+            HelperData.Entry e = HelperData.get(player.level().getServer()).get(player.getUUID());
             int level = e == null ? 1 : HelperData.levelFor(e.work);
             Helper.say(player, level >= 5
                     ? "Never better. Level " + level + " and still learning. Thanks for asking, " + player.getName().getString() + "."
@@ -227,7 +227,7 @@ final class Mind {
      * how far along are you. Answered from what it's really doing. True if the question was one of these.
      */
     private static boolean askAboutSelf(ServerPlayer player, String ask) {
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
+        HelperData.Entry entry = HelperData.get(player.level().getServer()).get(player.getUUID());
         if (has(ask, "unstick", "get unstuck")) {
             HelperCommands.unstick(player);
             return true;
@@ -297,7 +297,7 @@ final class Mind {
             Mob mob = helper.mobEntity();
             if (mob == null || !mob.isAlive() || mob.level() != player.level()) continue;
             Memory mem = MEMORY.computeIfAbsent(player.getUUID(), k -> new Memory());
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             long now = world.getGameTime();
 
             notice(player, world, mem, now);
@@ -363,7 +363,7 @@ final class Mind {
     /** While following, pick up things lying around nearby (not ore on a tycoon line, not things you just dropped). */
     private static void tidyUp(Mob mob, SimpleContainer inv, ServerLevel world) {
         for (ItemEntity item : world.getEntitiesOfClass(ItemEntity.class, mob.getBoundingBox().inflate(3.5), e -> e.isAlive()
-                && !e.hasPickUpDelay() && e.getAge() > 100 && !e.getTags().contains("helpermod_ore"))) {
+                && !e.hasPickUpDelay() && e.getAge() > 100 && !e.entityTags().contains("helpermod_ore"))) {
             ItemStack rest = inv.addItem(item.getItem().copy());
             if (rest.getCount() == item.getItem().getCount()) continue; // no room
             if (rest.isEmpty()) item.discard();

@@ -88,7 +88,7 @@ public class HelperData extends SavedData {
             ItemStack rest = stack.copy();
             for (int i = 0; i < unlocked && !rest.isEmpty(); i++) { // top up matching stacks first
                 ItemStack here = getItem(i);
-                if (here.isEmpty() || !ItemStack.isSameItemSameTags(here, rest)) continue;
+                if (here.isEmpty() || !ItemStack.isSameItemSameComponents(here, rest)) continue;
                 int move = Math.min(rest.getCount(), Math.min(here.getMaxStackSize(), getMaxStackSize()) - here.getCount());
                 if (move <= 0) continue;
                 here.grow(move);
@@ -126,27 +126,27 @@ public class HelperData extends SavedData {
 
     private static HelperData fromNbt(CompoundTag nbt) {
         HelperData data = new HelperData();
-        ListTag list = nbt.getList("helpers", Tag.TAG_COMPOUND);
+        ListTag list = nbt.getListOrEmpty("helpers");
         for (int i = 0; i < list.size(); i++) {
-            CompoundTag tag = list.getCompound(i);
+            CompoundTag tag = list.getCompoundOrEmpty(i);
             Entry entry = data.new Entry();
             UUID owner = tag.getUUID("owner");
             if (tag.hasUUID("entity")) entry.entity = tag.getUUID("entity");
-            entry.active = tag.getBoolean("active");
+            entry.active = tag.getBooleanOr("active", false);
             entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
-            entry.work = tag.getInt("work"); // before the items, so every unlocked pocket is there to fill
+            entry.work = tag.getIntOr("work", 0); // before the items, so every unlocked pocket is there to fill
             entry.level = levelFor(entry.work);
             entry.inventory.unlocked = pocketsFor(entry.level);
-            entry.inventory.fromTag(tag.getList("items", Tag.TAG_COMPOUND));
+            entry.inventory.fromTag(tag.getListOrEmpty("items"));
             if (tag.contains("mineDim")) {
-                entry.mineDim = tag.getString("mineDim");
-                entry.mineOrigin = net.minecraft.core.BlockPos.of(tag.getLong("mineOrigin"));
-                entry.mineDepth = tag.getInt("mineDepth");
-                if (tag.contains("mineMarker")) entry.mineMarker = net.minecraft.core.BlockPos.of(tag.getLong("mineMarker"));
+                entry.mineDim = tag.getStringOr("mineDim", "");
+                entry.mineOrigin = net.minecraft.core.BlockPos.of(tag.getLongOr("mineOrigin", 0L));
+                entry.mineDepth = tag.getIntOr("mineDepth", 0);
+                if (tag.contains("mineMarker")) entry.mineMarker = net.minecraft.core.BlockPos.of(tag.getLongOr("mineMarker", 0L));
             }
-            if (tag.contains("look")) entry.look = tag.getString("look");
-            entry.xp = tag.getInt("xp");
-            if (tag.contains("size")) entry.size = tag.getFloat("size");
+            if (tag.contains("look")) entry.look = tag.getStringOr("look", "");
+            entry.xp = tag.getIntOr("xp", 0);
+            if (tag.contains("size")) entry.size = tag.getFloatOr("size", 0f);
             data.entries.put(owner, entry);
         }
         return data;

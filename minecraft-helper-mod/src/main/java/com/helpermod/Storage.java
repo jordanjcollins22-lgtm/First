@@ -20,7 +20,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
@@ -107,7 +107,7 @@ public final class Storage {
     /** /helper storage find <text>: only show stored items whose name contains the text. */
     public static void find(ServerPlayer player, String text) {
         SEARCH.put(player.getUUID(), text.trim().toLowerCase(Locale.ROOT));
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         long total = 0;
         int kinds = 0;
         for (Stored s : data.of(player.getUUID())) {
@@ -207,7 +207,7 @@ public final class Storage {
         }
 
         Stored find(UUID player, ItemStack stack) {
-            for (Stored s : of(player)) if (ItemStack.isSameItemSameTags(s.template, stack)) return s;
+            for (Stored s : of(player)) if (ItemStack.isSameItemSameComponents(s.template, stack)) return s;
             return null;
         }
 
@@ -231,15 +231,15 @@ public final class Storage {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data data = new Data();
-            ListTag players = nbt.getList("players", Tag.TAG_COMPOUND);
+            ListTag players = nbt.getListOrEmpty("players");
             for (int i = 0; i < players.size(); i++) {
-                CompoundTag p = players.getCompound(i);
+                CompoundTag p = players.getCompoundOrEmpty(i);
                 List<Stored> list = new ArrayList<>();
-                ListTag items = p.getList("items", Tag.TAG_COMPOUND);
+                ListTag items = p.getListOrEmpty("items");
                 for (int k = 0; k < items.size(); k++) {
-                    CompoundTag t = items.getCompound(k);
+                    CompoundTag t = items.getCompoundOrEmpty(k);
                     ItemStack stack = ItemStack.of(t.getCompound("item"));
-                    long count = t.getLong("count");
+                    long count = t.getLongOr("count", 0L);
                     if (!stack.isEmpty() && count > 0) list.add(new Stored(stack.copyWithCount(1), count));
                 }
                 data.stores.put(p.getUUID("owner"), list);
@@ -324,7 +324,7 @@ public final class Storage {
         }
 
         private Data data() {
-            return Data.get(player.getServer());
+            return Data.get(player.level().getServer());
         }
 
         private UUID owner() {
@@ -364,7 +364,7 @@ public final class Storage {
 
         /** What the grid makes right now, or nothing. */
         private ItemStack result() {
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             return world.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, grid, world)
                     .map(r -> r.assemble(grid, world.registryAccess()))
                     .orElse(ItemStack.EMPTY);
@@ -391,7 +391,7 @@ public final class Storage {
                 view.setItem(slots[i], icon);
             }
             if (crafting) {
-                ItemStack wall = button(Items.BLACK_STAINED_GLASS_PANE, " ");
+                ItemStack wall = button(Items.STAINED_GLASS_PANE.black(), " ");
                 for (int row = 0; row < 5; row++) for (int col = 0; col < 5; col++) view.setItem(row * 9 + col, wall.copy());
                 for (int i = 0; i < 9; i++) {
                     ItemStack g = grid.getItem(i);
@@ -413,7 +413,7 @@ public final class Storage {
             long items = 0;
             for (Stored s : data().of(owner())) items += s.count;
             String search = SEARCH.getOrDefault(owner(), "");
-            ItemStack filler = button(Items.GRAY_STAINED_GLASS_PANE, " ");
+            ItemStack filler = button(Items.STAINED_GLASS_PANE.gray(), " ");
             for (int i = VIEW; i < 54; i++) view.setItem(i, filler.copy());
             view.setItem(45, button(Items.ARROW, "Previous page"));
             view.setItem(46, button(tab.icon, "Showing: " + tab.label, "Click to change what's shown"));
@@ -437,17 +437,17 @@ public final class Storage {
         }
 
         @Override
-        public void clicked(int slotIndex, int button, ClickType action, Player p) {
+        public void clicked(int slotIndex, int button, ContainerInput action, Player p) {
             if (slotIndex < 0 || slotIndex >= 54) {
                 super.clicked(slotIndex, button, action, p);
                 return;
             }
-            if (action == ClickType.QUICK_CRAFT || action == ClickType.PICKUP_ALL
-                    || action == ClickType.CLONE || action == ClickType.THROW) {
+            if (action == ContainerInput.QUICK_CRAFT || action == ContainerInput.PICKUP_ALL
+                    || action == ContainerInput.CLONE || action == ContainerInput.THROW) {
                 refresh();
                 return;
             }
-            boolean shift = action == ClickType.QUICK_MOVE;
+            boolean shift = action == ContainerInput.QUICK_MOVE;
             if (slotIndex >= VIEW) control(slotIndex, button);
             else if (crafting && gridPos(slotIndex) >= 0) gridClick(gridPos(slotIndex), button, shift, action);
             else if (crafting && slotIndex == RESULT) craft(shift);
@@ -474,12 +474,12 @@ public final class Storage {
             clearGrid(); // whatever was left in the grid goes back into storage
         }
 
-        private void click(int pos, int button, boolean shift, ClickType action) {
+        private void click(int pos, int button, boolean shift, ContainerInput action) {
             ItemStack cursor = getCarried();
-            if (!cursor.isEmpty() && action != ClickType.SWAP) {
+            if (!cursor.isEmpty() && action != ContainerInput.SWAP) {
                 // Holding something: put it in (unless it's the same thing and we're topping up the stack).
                 Stored here = pos >= 0 && pos < shown.size() ? shown.get(pos) : null;
-                if (here == null || !ItemStack.isSameItemSameTags(here.template, cursor) || cursor.getCount() >= cursor.getMaxStackSize()) {
+                if (here == null || !ItemStack.isSameItemSameComponents(here.template, cursor) || cursor.getCount() >= cursor.getMaxStackSize()) {
                     data().add(owner(), cursor.copy());
                     setCarried(ItemStack.EMPTY);
                     return;
@@ -492,7 +492,7 @@ public final class Storage {
             if (pos < 0 || pos >= shown.size()) return;
             Stored s = shown.get(pos);
             int max = s.template.getMaxStackSize();
-            if (action == ClickType.SWAP) { // number key: straight to that hotbar slot if it's empty
+            if (action == ContainerInput.SWAP) { // number key: straight to that hotbar slot if it's empty
                 if (button >= 0 && button < 9 && player.getInventory().getItem(button).isEmpty()) {
                     player.getInventory().setItem(button, data().take(owner(), s, max));
                 }
@@ -509,8 +509,8 @@ public final class Storage {
         }
 
         /** The 3x3 grid works like a crafting table's: place, pick up, split and swap stacks. */
-        private void gridClick(int g, int button, boolean shift, ClickType action) {
-            if (action == ClickType.SWAP) return;
+        private void gridClick(int g, int button, boolean shift, ContainerInput action) {
+            if (action == ContainerInput.SWAP) return;
             ItemStack in = grid.getItem(g).copy();
             ItemStack cursor = getCarried();
             if (shift) { // back into storage
@@ -529,7 +529,7 @@ public final class Storage {
                 grid.setItem(g, cursor.split(button == 1 ? 1 : cursor.getCount()));
                 return;
             }
-            if (ItemStack.isSameItemSameTags(in, cursor)) {
+            if (ItemStack.isSameItemSameComponents(in, cursor)) {
                 int put = Math.min(in.getMaxStackSize() - in.getCount(), button == 1 ? 1 : cursor.getCount());
                 in.grow(put);
                 cursor.shrink(put);
@@ -550,7 +550,7 @@ public final class Storage {
 
         /** Make what the grid shows. Shift: keep going, topping the grid up from storage each time. */
         private void craft(boolean shift) {
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             int made = 0;
             int limit = shift ? 64 : 1;
             for (int n = 0; n < limit; n++) {
@@ -559,7 +559,7 @@ public final class Storage {
                 ItemStack result = recipe.get().assemble(grid, world.registryAccess());
                 if (result.isEmpty()) break;
                 ItemStack cursor = getCarried();
-                if (!shift && !cursor.isEmpty() && !(ItemStack.isSameItemSameTags(cursor, result)
+                if (!shift && !cursor.isEmpty() && !(ItemStack.isSameItemSameComponents(cursor, result)
                         && cursor.getCount() + result.getCount() <= cursor.getMaxStackSize())) break;
                 NonNullList<ItemStack> leftovers = world.getRecipeManager().getRemainingItemsFor(RecipeType.CRAFTING, grid, world);
                 for (int i = 0; i < 9; i++) {
@@ -602,7 +602,7 @@ public final class Storage {
                     else {
                         Look look = new Look(tab, sort, crafting);
                         String current = SEARCH.getOrDefault(owner(), "");
-                        player.getServer().execute(() -> player.openMenu(new SimpleMenuProvider(
+                        player.level().getServer().execute(() -> player.openMenu(new SimpleMenuProvider(
                                 (syncId, inv, p) -> new Search(syncId, inv, player, look, current),
                                 Component.literal("Search your storage"))));
                     }
@@ -688,7 +688,7 @@ public final class Storage {
         }
 
         @Override
-        public void clicked(int slotIndex, int button, ClickType action, Player p) {
+        public void clicked(int slotIndex, int button, ContainerInput action, Player p) {
             if (slotIndex == 2) {
                 finish();
                 return;
@@ -710,7 +710,7 @@ public final class Storage {
             inputSlots.clearContent();
             resultSlots.clearContent();
             super.removed(p);
-            if (!done && !player.hasDisconnected()) player.getServer().execute(this::finish);
+            if (!done && !player.hasDisconnected()) player.level().getServer().execute(this::finish);
         }
 
         private void finish() {

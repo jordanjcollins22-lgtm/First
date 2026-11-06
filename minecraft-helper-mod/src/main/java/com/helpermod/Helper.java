@@ -29,7 +29,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
-import net.minecraft.world.entity.npc.WanderingTrader;
+import net.minecraft.world.entity.npc.wanderingtrader.WanderingTrader;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -227,7 +227,7 @@ public class Helper {
     // ---------------------------------------------------------------------------------------
 
     public static String ownerNameOf(Entity entity) {
-        for (String tag : entity.getTags()) {
+        for (String tag : entity.entityTags()) {
             if (tag.startsWith(NAME_TAG)) return tag.substring(NAME_TAG.length());
         }
         String name = entity.getName().getString();
@@ -235,7 +235,7 @@ public class Helper {
     }
 
     public static UUID ownerOf(Entity entity) {
-        for (String tag : entity.getTags()) {
+        for (String tag : entity.entityTags()) {
             if (tag.startsWith(OWNER_TAG)) {
                 try {
                     return UUID.fromString(tag.substring(OWNER_TAG.length()));
@@ -279,10 +279,10 @@ public class Helper {
 
     /** Spawn (or move) the helper right next to the player. */
     void spawnNear(ServerPlayer player, HelperData.Entry entry) {
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         Disguise.prepare(player);
         Mob existing = findEntity(server, entry);
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         Vec3 spot = findSpotNear(world, player.blockPosition());
         if (existing != null && existing.level() == world) {
             clearBreaking(existing);
@@ -302,7 +302,7 @@ public class Helper {
         if (helper == null) return;
         mineStep = -1;
         branchFrom = -1;
-        helper.moveTo(spot.x, spot.y, spot.z, player.getYRot() + 180f, 0f);
+        helper.snapTo(spot.x, spot.y, spot.z, player.getYRot() + 180f, 0f);
         helper.setCustomName(Component.literal(player.getGameProfile().getName() + "'s Helper"));
         helper.setCustomNameVisible(true);
         helper.addTag(TAG);
@@ -333,7 +333,7 @@ public class Helper {
         mob = null;
         WanderingTrader helper = EntityType.WANDERING_TRADER.create(world);
         if (helper == null) return;
-        helper.moveTo(pos.x, pos.y, pos.z, yaw, 0f);
+        helper.snapTo(pos.x, pos.y, pos.z, yaw, 0f);
         helper.setCustomName(Component.literal(player.getGameProfile().getName() + "'s Helper"));
         helper.setCustomNameVisible(true);
         helper.addTag(TAG);
@@ -707,7 +707,7 @@ public class Helper {
         fishWanted = 0;
         farmCentre = null;
         if (mob != null && job != null && mob.level() instanceof ServerLevel w) {
-            plugShafts(w, HelperData.get(player.getServer()).getOrCreate(owner).inventory);
+            plugShafts(w, HelperData.get(player.level().getServer()).getOrCreate(owner).inventory);
         }
         if (mob != null) {
             clearBreaking(mob);
@@ -778,7 +778,7 @@ public class Helper {
     }
 
     private void tickSend(Mob m, ServerPlayer player) {
-        ServerPlayer target = sendTo == null ? null : player.getServer().getPlayerList().getPlayer(sendTo);
+        ServerPlayer target = sendTo == null ? null : player.level().getServer().getPlayerList().getPlayer(sendTo);
         if (target == null) {
             cancelSend(player, sendToName + " isn't online any more, so here's your stuff back.");
             return;
@@ -842,9 +842,9 @@ public class Helper {
             danceTicks = Celebrate.DANCE_TICKS / 2;
             Celebrate.fireworks((ServerLevel) m.level(), m.position());
         }
-        target.displayClientMessage(Component.literal("[" + player.getName().getString() + "'s Helper] ").withStyle(ChatFormatting.GOLD)
+        target.sendSystemMessage(Component.literal("[" + player.getName().getString() + "'s Helper] ").withStyle(ChatFormatting.GOLD)
                 .append(Component.literal(player.getName().getString() + " sent you " + what + "."
-                        + (dropped ? " Your inventory is full, so some of it is at your feet." : "")).withStyle(ChatFormatting.WHITE)), false);
+                        + (dropped ? " Your inventory is full, so some of it is at your feet." : "")).withStyle(ChatFormatting.WHITE)));
         say(player, "Delivered " + what + " to " + target.getName().getString() + "!"
                 + (otherWorld ? " (They're in another dimension, so I zipped it over.)" : " Heading back to you now."));
     }
@@ -1111,7 +1111,7 @@ public class Helper {
         if (e == null || e.level >= HelperData.MAX_LEVEL) return;
         e.work += points;
         int level = HelperData.levelFor(e.work);
-        HelperData.get(player.getServer()).setDirty();
+        HelperData.get(player.level().getServer()).setDirty();
         if (level <= e.level) return;
         e.level = level;
         e.inventory.unlocked = HelperData.pocketsFor(level);
@@ -1153,7 +1153,7 @@ public class Helper {
 
     /** Start riding your helper (right-click it holding a saddle, or /helper ride). */
     boolean ride(ServerPlayer player, HelperData.Entry entry) {
-        Mob m = findEntity(player.getServer(), entry);
+        Mob m = findEntity(player.level().getServer(), entry);
         if (m == null || m.level() != player.level() || m.distanceToSqr(player) > 16 * 16) return false;
         if (player.isPassenger()) player.stopRiding();
         m.getNavigation().stop();
@@ -1204,7 +1204,7 @@ public class Helper {
             Vec3 v = moving ? new Vec3(dx * speed, forward > 0 ? look.y * speed : 0, dz * speed) : Vec3.ZERO;
             if (jump) v = v.add(0, 0.4, 0);
             m.setDeltaMovement(m.getDeltaMovement().scale(0.5).add(v.scale(0.5)));
-            m.hurtMarked = true;
+            m.needsSync = true;
             m.fallDistance = 0;
             return;
         }
@@ -1214,18 +1214,18 @@ public class Helper {
             Vec3 v = moving ? new Vec3(dx * speed, 0, dz * speed) : Vec3.ZERO;
             double up = jump ? 0.3 : m.isUnderWater() ? 0.05 : 0; // float up gently
             m.setDeltaMovement(new Vec3(v.x, Math.max(m.getDeltaMovement().y, up), v.z));
-            m.hurtMarked = true;
+            m.needsSync = true;
             return;
         }
         // Like a horse: walk straight up 1-block steps, and hop over anything a little taller by itself.
         if (m.maxUpStep() != RIDE_STEP) m.setMaxUpStep(RIDE_STEP);
         if (!jump && moving && m.onGround() && m.horizontalCollision && !m.isInWater()) {
             m.setDeltaMovement(m.getDeltaMovement().x, 0.5, m.getDeltaMovement().z);
-            m.hurtMarked = true;
+            m.needsSync = true;
         }
         if (jump && m.onGround()) { // jump like a horse: a good hop, more while moving
             m.setDeltaMovement(m.getDeltaMovement().x + dx * 0.2, 0.6, m.getDeltaMovement().z + dz * 0.2);
-            m.hurtMarked = true;
+            m.needsSync = true;
         }
         if (!moving) {
             m.getMoveControl().setWantedPosition(m.getX(), m.getY(), m.getZ(), 0);
@@ -1362,7 +1362,7 @@ public class Helper {
     private void teleportNear(Mob m, ServerPlayer player) {
         mineStep = -1;
         branchFrom = -1;
-        Vec3 spot = findSpotNear(player.serverLevel(), player.blockPosition());
+        Vec3 spot = findSpotNear(player.level(), player.blockPosition());
         m.getNavigation().stop();
         m.teleportTo(spot.x, spot.y, spot.z);
         stuckTicks = 0;
@@ -1403,7 +1403,7 @@ public class Helper {
         }
         if (gained <= 0) return;
         entry.xp = (int) Math.min(Integer.MAX_VALUE, (long) entry.xp + gained);
-        HelperData.get(player.getServer()).setDirty();
+        HelperData.get(player.level().getServer()).setDirty();
         m.level().playSound(null, m.blockPosition(), SoundEvents.EXPERIENCE_ORB_PICKUP,
                 SoundSource.NEUTRAL, 0.2f, 1.4f);
     }
@@ -1414,7 +1414,7 @@ public class Helper {
         if (entry == null || entry.xp <= 0) return 0;
         int xp = entry.xp;
         entry.xp = 0;
-        HelperData.get(player.getServer()).setDirty();
+        HelperData.get(player.level().getServer()).setDirty();
         int before = player.experienceLevel;
         player.giveExperiencePoints(xp);
         player.level().playSound(null, player.blockPosition(), player.experienceLevel > before
@@ -1464,7 +1464,7 @@ public class Helper {
     }
 
     private void deliver(Mob m, ServerPlayer player, SimpleContainer inv, boolean toStorage) {
-        Storage.Data store = toStorage ? Storage.Data.get(player.getServer()) : null;
+        Storage.Data store = toStorage ? Storage.Data.get(player.level().getServer()) : null;
         Map<String, Integer> given = new LinkedHashMap<>();
         boolean droppedAtFeet = false;
         int keptBuilding = 0;
@@ -1864,7 +1864,7 @@ public class Helper {
     }
 
     private int bottomStep(ServerLevel world, HelperData.Entry entry) {
-        return Math.max(0, entry.mineOrigin.getY() - (world.getMinBuildHeight() + 6));
+        return Math.max(0, entry.mineOrigin.getY() - (world.getMinY() + 6));
     }
 
     private void startMine(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry,
@@ -1902,7 +1902,7 @@ public class Helper {
                 .limit(20).forEach(p -> ys.add(p.getY()));
         ys.sort(null);
         int median = ys.get(ys.size() / 2);
-        j.mineTargetY = Math.max(world.getMinBuildHeight() + 6, median);
+        j.mineTargetY = Math.max(world.getMinY() + 6, median);
         j.mineState = MineState.DESCEND;
         j.landingScanned = false;
         j.doneLanding = -1;
@@ -2152,7 +2152,7 @@ public class Helper {
     }
 
     private static void scan(ServerLevel world, BlockPos center, int radius, int vertical, Job j) {
-        int minY = Math.max(world.getMinBuildHeight(), center.getY() - vertical);
+        int minY = Math.max(world.getMinY(), center.getY() - vertical);
         int maxY = Math.min(world.getMaxBuildHeight() - 1, center.getY() + vertical);
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
@@ -2172,7 +2172,7 @@ public class Helper {
     private static void scanChunk(ServerLevel world, LevelChunk chunk, int minY, int maxY, Job j,
                                   Set<BlockPos> seen, BlockPos center, int radius) {
         int r2 = radius * radius;
-        int cx = chunk.getPos().x, cz = chunk.getPos().z;
+        int cx = chunk.getPos().x(), cz = chunk.getPos().z();
         LevelChunkSection[] sections = chunk.getSections();
         for (int si = 0; si < sections.length; si++) {
             int baseY = SectionPos.sectionToBlockCoord(world.getMinSection() + si);
@@ -2220,10 +2220,10 @@ public class Helper {
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (java.util.Iterator<ChunkPos> it = j.farPending.iterator(); it.hasNext(); ) {
             ChunkPos cp = it.next();
-            LevelChunk chunk = chunks.getChunkNow(cp.x, cp.z);
+            LevelChunk chunk = chunks.getChunkNow(cp.x(), cp.z());
             if (chunk == null) continue; // still loading / generating
             it.remove();
-            scanChunk(world, chunk, world.getMinBuildHeight(), world.getMaxBuildHeight() - 1, j, seen, null, 0);
+            scanChunk(world, chunk, world.getMinY(), world.getMaxBuildHeight() - 1, j, seen, null, 0);
         }
         while (j.farPending.size() < FAR_PARALLEL) {
             if (j.farQueue.isEmpty()) {
@@ -2251,7 +2251,7 @@ public class Helper {
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
                 if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
-                j.farQueue.add(new ChunkPos(j.farOrigin.x + dx, j.farOrigin.z + dz));
+                j.farQueue.add(new ChunkPos(j.farOrigin.x() + dx, j.farOrigin.z() + dz));
             }
         }
     }
@@ -2764,6 +2764,6 @@ public class Helper {
         MutableComponent text = Component.literal("[Helper] ").withStyle(ChatFormatting.GOLD)
                 .append(Component.literal(message).withStyle(ChatFormatting.WHITE));
         if (Mind.sayToAll(player, text, message)) return; // answering chat: everyone sees the reply
-        player.displayClientMessage(text, false);
+        player.sendSystemMessage(text);
     }
 }

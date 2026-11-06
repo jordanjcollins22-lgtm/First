@@ -80,7 +80,7 @@ final class Loot {
     static List<ItemStack> protectedDiamondSet() {
         List<ItemStack> list = new ArrayList<>();
         for (ItemStack s : diamondSet()) {
-            s.enchant(Enchantments.ALL_DAMAGE_PROTECTION, 4);
+            s.enchant(Enchantments.PROTECTION, 4);
             s.enchant(Enchantments.UNBREAKING, 3);
             list.add(s);
         }
@@ -97,16 +97,16 @@ final class Loot {
     }
 
     static ItemStack sharpDiamondSword() {
-        return enchanted(Items.DIAMOND_SWORD, Enchantments.SHARPNESS, 5, Enchantments.MOB_LOOTING, 3, Enchantments.UNBREAKING, 3);
+        return enchanted(Items.DIAMOND_SWORD, Enchantments.SHARPNESS, 5, Enchantments.LOOTING, 3, Enchantments.UNBREAKING, 3);
     }
 
     static ItemStack powerBow() {
-        return enchanted(Items.BOW, Enchantments.POWER_ARROWS, 5, Enchantments.INFINITY_ARROWS, 1, Enchantments.FLAMING_ARROWS, 1);
+        return enchanted(Items.BOW, Enchantments.POWER, 5, Enchantments.INFINITY, 1, Enchantments.FLAME, 1);
     }
 
     /** The legendary prize: an original sword, only from loot boxes. */
     static ItemStack coinbreaker() {
-        ItemStack s = enchanted(Items.NETHERITE_SWORD, Enchantments.SHARPNESS, 5, Enchantments.MOB_LOOTING, 3,
+        ItemStack s = enchanted(Items.NETHERITE_SWORD, Enchantments.SHARPNESS, 5, Enchantments.LOOTING, 3,
                 Enchantments.FIRE_ASPECT, 2, Enchantments.SWEEPING_EDGE, 3, Enchantments.MENDING, 1, Enchantments.UNBREAKING, 3);
         return named(s, "Coinbreaker", ChatFormatting.GOLD);
     }
@@ -117,7 +117,7 @@ final class Loot {
         String[] names = {"Vaultguard Helm", "Vaultguard Chestplate", "Vaultguard Leggings", "Vaultguard Boots"};
         int i = 0;
         for (ItemStack s : netheriteSet()) {
-            s.enchant(Enchantments.ALL_DAMAGE_PROTECTION, 4);
+            s.enchant(Enchantments.PROTECTION, 4);
             s.enchant(Enchantments.UNBREAKING, 3);
             s.enchant(Enchantments.MENDING, 1);
             list.add(named(s, names[i++], ChatFormatting.GOLD));
@@ -222,7 +222,7 @@ final class Loot {
     static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
         if (boxOf(stack) == null) return InteractionResultHolder.pass(stack);
-        if (!w.isClientSide && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
+        if (!w.isClientSide() && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
         return InteractionResultHolder.success(stack);
     }
 
@@ -230,7 +230,7 @@ final class Loot {
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
         ItemStack stack = p.getItemInHand(hand);
         if (boxOf(stack) == null) return InteractionResult.PASS;
-        if (!w.isClientSide && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
+        if (!w.isClientSide() && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
         return InteractionResult.SUCCESS;
     }
 
@@ -259,9 +259,9 @@ final class Loot {
         Component line = Component.literal(b.name() + ": ").withStyle(ChatFormatting.GRAY)
                 .append(Component.literal(rarity.label + " ").withStyle(rarity.color, ChatFormatting.BOLD))
                 .append(Component.literal(prize.what()).withStyle(rarity.color));
-        player.displayClientMessage(line, false);
-        player.displayClientMessage(Component.literal(rarity.label + "! " + prize.what()).withStyle(rarity.color), true);
-        ServerLevel world = player.serverLevel();
+        player.sendSystemMessage(line);
+        player.sendOverlayMessage(Component.literal(rarity.label + "! " + prize.what()).withStyle(rarity.color));
+        ServerLevel world = player.level();
         double x = player.getX(), y = player.getY() + 1.2, z = player.getZ();
         world.playSound(null, player.blockPosition(), SoundEvents.CHEST_OPEN, SoundSource.PLAYERS, 0.8f, 1.1f);
         switch (rarity) {
@@ -274,7 +274,7 @@ final class Loot {
                 world.sendParticles(ParticleTypes.TOTEM_OF_UNDYING, x, y, z, 60, 0.5, 0.8, 0.5, 0.4);
                 world.playSound(null, player.blockPosition(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8f, 1.0f);
                 if (rarity == Rarity.LEGENDARY) {
-                    player.getServer().getPlayerList().broadcastSystemMessage(Component.literal(player.getName().getString() + " opened a ")
+                    player.level().getServer().getPlayerList().broadcastSystemMessage(Component.literal(player.getName().getString() + " opened a ")
                             .withStyle(ChatFormatting.GOLD).append(Component.literal(b.name()).withStyle(b.color()))
                             .append(Component.literal(" and got the LEGENDARY " + prize.what() + "!").withStyle(ChatFormatting.GOLD)), false);
                 }
@@ -297,15 +297,15 @@ final class Loot {
     static void odds(ServerPlayer player) {
         List<ModGear.Gear> gear = ModGear.all();
         long mods = gear.stream().map(g -> net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(g.item()).getNamespace()).distinct().count();
-        player.displayClientMessage(Component.literal(gear.size() + " weapons and armour pieces from " + mods
-                + " mods are in the shop and the Gear and Mega Boxes.").withStyle(ChatFormatting.GRAY), false);
+        player.sendSystemMessage(Component.literal(gear.size() + " weapons and armour pieces from " + mods
+                + " mods are in the shop and the Gear and Mega Boxes.").withStyle(ChatFormatting.GRAY));
         for (Box b : BOXES) {
             StringBuilder sb = new StringBuilder(b.name() + ": ");
             for (int i = 0; i < 5; i++) {
                 if (b.weights()[i] == 0) continue;
                 sb.append(Rarity.values()[i].label).append(' ').append(b.weights()[i] / 10.0).append("%  ");
             }
-            player.displayClientMessage(Component.literal(sb.toString().trim()).withStyle(b.color()), false);
+            player.sendSystemMessage(Component.literal(sb.toString().trim()).withStyle(b.color()));
         }
     }
 }

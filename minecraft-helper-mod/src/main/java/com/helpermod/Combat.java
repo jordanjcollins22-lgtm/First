@@ -77,7 +77,7 @@ public final class Combat {
         if (target == helper || target == owner || !target.isAlive() || target.isRemoved()) return false;
         if (target.level() != helper.level()) return false;
         if (target instanceof Player) return false;
-        if (target.getTags().contains(Helper.TAG)) return false;
+        if (target.entityTags().contains(Helper.TAG)) return false;
         if (target instanceof TamableAnimal pet && pet.isTame()) return false;
         if (target instanceof Creeper && !ownerStarted) return false;
         if (!ownerStarted && !(target instanceof Enemy)) return false;
@@ -138,7 +138,7 @@ public final class Combat {
                 ItemStack stack = inv.getItem(i);
                 if (!(stack.getItem() instanceof ArmorItem armor) || armor.getEquipmentSlot() != slot) continue;
                 double score = armor.getDefense() + armor.getToughness() * 0.5
-                        + EnchantmentHelper.getItemEnchantmentLevel(Enchantments.ALL_DAMAGE_PROTECTION, stack) * 0.1;
+                        + EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PROTECTION, stack) * 0.1;
                 if (score > bestScore) {
                     bestScore = score;
                     best = stack;
@@ -158,8 +158,8 @@ public final class Combat {
      */
     private static void creditOwner(Mob helper, LivingEntity target) {
         java.util.UUID owner = Helper.ownerOf(helper);
-        if (owner == null || helper.getServer() == null) return;
-        net.minecraft.server.level.ServerPlayer player = helper.getServer().getPlayerList().getPlayer(owner);
+        if (owner == null || helper.level().getServer() == null) return;
+        net.minecraft.server.level.ServerPlayer player = helper.level().getServer().getPlayerList().getPlayer(owner);
         if (player == null) return;
         ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setAttackingPlayer(player);
         ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setPlayerHitTimer(100);
@@ -182,7 +182,7 @@ public final class Combat {
             float yaw = helper.getYRot() * Mth.DEG_TO_RAD;
             target.knockback(0.4 + knockback * 0.5, Mth.sin(yaw), -Mth.cos(yaw));
             int fire = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FIRE_ASPECT, weapon);
-            if (fire > 0) target.setSecondsOnFire(4 * fire);
+            if (fire > 0) target.igniteForSeconds(4 * fire);
             if (!weapon.isEmpty() && weapon.isDamageableItem()) {
                 weapon.hurtAndBreak(1, helper, e -> {});
                 inv.setChanged();

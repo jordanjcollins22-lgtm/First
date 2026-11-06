@@ -12,9 +12,9 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -69,7 +69,7 @@ final class Town {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLong("centre"));
+            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLongOr("centre", 0L));
             return d;
         }
 
@@ -84,7 +84,7 @@ final class Town {
         if (server.getTickCount() % 40 != 0) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             if (!Planets.keyOf(world).equals(PLANET)) continue;
             Data data = Data.get(server);
             if (data.centre == null) {
@@ -103,11 +103,11 @@ final class Town {
 
     /** /helper town */
     static void tellWhere(ServerPlayer player) {
-        if (!Planets.keyOf(player.serverLevel()).equals(PLANET)) {
+        if (!Planets.keyOf(player.level()).equals(PLANET)) {
             Helper.say(player, "Reef Town is on the Bikini Bottom planet. Fly there with a tier 3 Ad Astra rocket.");
             return;
         }
-        BlockPos c = Data.get(player.getServer()).centre;
+        BlockPos c = Data.get(player.level().getServer()).centre;
         if (c == null) {
             Helper.say(player, "Reef Town gets built near you once you reach the sea floor.");
             return;
@@ -133,7 +133,7 @@ final class Town {
         int cx = Mth.floor(player.getX() + Math.cos(angle) * 48);
         int cz = Mth.floor(player.getZ() + Math.sin(angle) * 48);
         int cy = floorY(world, cx, cz);
-        if (cy <= world.getMinBuildHeight() + 8 || cy >= world.getMaxBuildHeight() - 16) return null;
+        if (cy <= world.getMinY() + 8 || cy >= world.getMaxBuildHeight() - 16) return null;
 
         diner(world, new BlockPos(cx, cy, cz));
         for (int i = 0; i < HOUSES.length; i++) {
@@ -141,7 +141,7 @@ final class Town {
             int hx = cx + (int) Math.round(Math.cos(a) * RING);
             int hz = cz + (int) Math.round(Math.sin(a) * RING);
             int hy = floorY(world, hx, hz);
-            if (hy <= world.getMinBuildHeight() + 8) hy = cy;
+            if (hy <= world.getMinY() + 8) hy = cy;
             // The door faces the town centre.
             Direction facing = Direction.getNearest(cx - hx, 0, cz - hz);
             dome(world, new BlockPos(hx, hy, hz), facing, HOUSES[i]);
@@ -213,7 +213,7 @@ final class Town {
 
     private static void bed(ServerLevel world, BlockPos foot, Direction door) {
         Direction head = door.getOpposite();
-        BlockState bed = Blocks.CYAN_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
+        BlockState bed = Blocks.BED.cyan().defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
         set(world, foot, bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
         set(world, foot.relative(head), bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
     }
@@ -291,8 +291,8 @@ final class Town {
     private static void resident(ServerLevel world, BlockPos at, Resident who) {
         Villager v = EntityType.VILLAGER.create(world);
         if (v == null) return;
-        v.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, world.getRandom().nextFloat() * 360f, 0f);
-        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), MobSpawnType.STRUCTURE, null, null);
+        v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, world.getRandom().nextFloat() * 360f, 0f);
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null, null);
         v.setVillagerData(v.getVillagerData().setProfession(who.job()).setLevel(2));
         v.setVillagerXp(10); // keeps the job even if it loses its work block
         v.setCustomName(Component.literal(who.name()).withStyle(ChatFormatting.AQUA));

@@ -15,7 +15,7 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -33,7 +33,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
@@ -118,7 +118,7 @@ final class Furniture {
     }
 
     static final String[] ROOMS = {"Kitchen", "Living room", "Dining room", "Bedroom", "Bathroom", "Other"};
-    private static final Item[] ROOM_ICONS = {Items.SMOKER, Items.RED_BED, Items.OAK_STAIRS, Items.WHITE_BED, Items.CAULDRON, Items.FLOWER_POT};
+    private static final Item[] ROOM_ICONS = {Items.SMOKER, Items.BED.red(), Items.OAK_STAIRS, Items.BED.white(), Items.CAULDRON, Items.FLOWER_POT};
 
     // Pixel coordinates (0-16 per block). The front faces the player who placed it; extra blocks go to their left.
     static final List<Piece> PIECES = List.of(
@@ -141,17 +141,17 @@ final class Furniture {
             b("wall_cabinet", "Kitchen", "Wall Cabinet (storage, hang it up high)", Items.SPRUCE_TRAPDOOR).use(Use.STORAGE).price(40)
                     .p(Role.WOOD, 0, 4, 8, 16, 16, 16).p(Role.LEGS, 1, 5, 7, 15, 15, 8).p(Role.METAL, 6, 6, 6.5, 10, 7, 7).done(),
             // Living room
-            b("sofa", "Living room", "Sofa (2 seats)", Items.RED_BED).size(2, 1).seat(9).price(90)
+            b("sofa", "Living room", "Sofa (2 seats)", Items.BED.red()).size(2, 1).seat(9).price(90)
                     .p(Role.FABRIC, 0, 0, 2, 32, 7, 16).p(Role.FABRIC, 1, 7, 3, 15.6, 9, 13).p(Role.FABRIC, 16.4, 7, 3, 31, 9, 13)
                     .p(Role.FABRIC, 0, 7, 12, 32, 18, 16).p(Role.FABRIC, 0, 7, 2, 2, 13, 12).p(Role.FABRIC, 30, 7, 2, 32, 13, 12)
                     .p(Role.LEGS, 1, -1, 3, 3, 0, 5).p(Role.LEGS, 29, -1, 3, 31, 0, 5).done(),
-            b("armchair", "Living room", "Armchair", Items.RED_WOOL).seat(9).price(60)
+            b("armchair", "Living room", "Armchair", Items.WOOL.red()).seat(9).price(60)
                     .p(Role.FABRIC, 0, 0, 2, 16, 7, 16).p(Role.FABRIC, 2, 7, 3, 14, 9, 13).p(Role.FABRIC, 0, 7, 12, 16, 18, 16)
                     .p(Role.FABRIC, 0, 7, 2, 2, 13, 12).p(Role.FABRIC, 14, 7, 2, 16, 13, 12).done(),
             b("coffee_table", "Living room", "Coffee Table", Items.OAK_PRESSURE_PLATE).price(40)
                     .p(Role.WOOD, 1, 6, 3, 15, 8, 13).p(Role.LEGS, 2, 0, 4, 4, 6, 6).p(Role.LEGS, 12, 0, 4, 14, 6, 6)
                     .p(Role.LEGS, 2, 0, 10, 4, 6, 12).p(Role.LEGS, 12, 0, 10, 14, 6, 12).done(),
-            b("tv", "Living room", "TV (switch it on)", Items.BLACK_CONCRETE).use(Use.TV).price(120)
+            b("tv", "Living room", "TV (switch it on)", Items.CONCRETE.black()).use(Use.TV).price(120)
                     .p(Role.BLACK, 5, 0, 7, 11, 1, 12).p(Role.BLACK, 7, 1, 9, 9, 5, 10).p(Role.BLACK, -4, 5, 9, 20, 18, 10)
                     .p(Role.SCREEN, -3, 6, 8.8, 19, 17, 9).done(),
             b("tv_stand", "Living room", "TV Stand (storage)", Items.SPRUCE_SLAB).size(2, 1).solid().use(Use.STORAGE).price(70)
@@ -190,14 +190,14 @@ final class Furniture {
             b("desk", "Bedroom", "Desk", Items.CRAFTING_TABLE).size(2, 1).solid().price(70)
                     .p(Role.WOOD, 0, 13, 0, 32, 15, 16).p(Role.WOOD, 0, 0, 1, 2, 13, 15).p(Role.WOOD, 22, 0, 1, 32, 13, 15)
                     .p(Role.LEGS, 23, 1, 0.5, 31, 6, 1).p(Role.LEGS, 23, 7, 0.5, 31, 12, 1).done(),
-            b("headboard", "Bedroom", "Bed Headboard (put it behind a bed)", Items.WHITE_BED).size(2, 1).price(40)
+            b("headboard", "Bedroom", "Bed Headboard (put it behind a bed)", Items.BED.white()).size(2, 1).price(40)
                     .p(Role.LEGS, 0, 0, 14, 2, 22, 16).p(Role.LEGS, 30, 0, 14, 32, 22, 16).p(Role.FABRIC, 2, 6, 14.5, 30, 20, 15.5)
                     .p(Role.WOOD, 0, 20, 14, 32, 22, 16).done(),
             b("vanity", "Bedroom", "Vanity Table with Mirror", Items.GLASS).solid().price(70)
                     .p(Role.WOOD, 0, 0, 3, 16, 12, 16).p(Role.LEGS, 1, 7, 2, 15, 11, 3).p(Role.WOOD, 1, 12, 13, 15, 27, 15)
                     .p(Role.GLASS, 2, 13, 12.8, 14, 26, 13).done(),
             // Bathroom
-            b("toilet", "Bathroom", "Toilet", Items.WHITE_CONCRETE).seat(9.5).price(40)
+            b("toilet", "Bathroom", "Toilet", Items.CONCRETE.white()).seat(9.5).price(40)
                     .p(Role.WHITE, 5, 0, 4, 11, 6, 12).p(Role.WHITE, 3, 6, 2, 13, 9, 12).p(Role.WOOD, 3, 9, 2, 13, 9.5, 12)
                     .p(Role.WHITE, 2, 8, 12, 14, 18, 16).p(Role.METAL, 11, 16, 11.5, 13, 17, 12).done(),
             b("bathtub", "Bathroom", "Bathtub (click the tap end for water, the other end to sit)", Items.QUARTZ_SLAB).size(2, 1).seat(3)
@@ -210,14 +210,14 @@ final class Furniture {
                     .p(Role.WHITE, 2, 11, 15, 14, 14, 16).p(Role.WHITE, 2, 11, 5, 3, 14, 15).p(Role.WHITE, 13, 11, 5, 14, 14, 15)
                     .p(Role.WATER, 3, 11, 5, 13, 13, 15).p(Role.METAL, 7, 14, 13, 9, 18, 15).p(Role.METAL, 7, 17, 10, 9, 18, 13)
                     .p(Role.WOOD, 1, 19, 15, 15, 32, 16).p(Role.GLASS, 2, 20, 14.8, 14, 31, 15).done(),
-            b("shower", "Bathroom", "Shower (switch it on)", Items.LIGHT_BLUE_STAINED_GLASS).size(1, 2).use(Use.SHOWER).price(90)
+            b("shower", "Bathroom", "Shower (switch it on)", Items.STAINED_GLASS.lightBlue()).size(1, 2).use(Use.SHOWER).price(90)
                     .p(Role.WHITE, 0, 0, 0, 16, 1, 16).p(Role.GLASS, 0, 1, 0, 0.5, 30, 16).p(Role.GLASS, 15.5, 1, 0, 16, 30, 16)
                     .p(Role.TOP, 0, 1, 15.5, 16, 30, 16).p(Role.METAL, 7, 28, 10, 9, 29, 15.5).p(Role.METAL, 6, 27, 8, 10, 28, 12).done(),
-            b("towel_rack", "Bathroom", "Towel Rack (hang it on a wall)", Items.WHITE_BANNER).price(20)
+            b("towel_rack", "Bathroom", "Towel Rack (hang it on a wall)", Items.BANNER.white()).price(20)
                     .p(Role.METAL, 1, 12, 14, 2, 13, 16).p(Role.METAL, 14, 12, 14, 15, 13, 16).p(Role.METAL, 1, 12, 13.5, 15, 13, 14.5)
                     .p(Role.FABRIC, 2, 3, 13.8, 14, 12.5, 14.3).done(),
             // Other
-            b("office_chair", "Other", "Office Chair", Items.BLACK_WOOL).seat(9).price(50)
+            b("office_chair", "Other", "Office Chair", Items.WOOL.black()).seat(9).price(50)
                     .p(Role.METAL, 2, 0, 7, 14, 1, 9).p(Role.METAL, 7, 0, 2, 9, 1, 14).p(Role.METAL, 7, 1, 7, 9, 7, 9)
                     .p(Role.FABRIC, 2, 7, 2, 14, 9, 14).p(Role.FABRIC, 3, 9, 12, 13, 22, 14).done(),
             b("garden_bench", "Other", "Garden Bench (2 seats)", Items.OAK_FENCE).size(2, 1).seat(9).price(50)
@@ -260,10 +260,10 @@ final class Furniture {
         }
 
         void readMaterials(CompoundTag m) {
-            if (m.contains("wood")) wood = m.getString("wood");
-            if (m.contains("legs")) legs = m.getString("legs");
-            if (m.contains("fabric")) fabric = m.getString("fabric");
-            if (m.contains("top")) top = m.getString("top");
+            if (m.contains("wood")) wood = m.getStringOr("wood", "");
+            if (m.contains("legs")) legs = m.getStringOr("legs", "");
+            if (m.contains("fabric")) fabric = m.getStringOr("fabric", "");
+            if (m.contains("top")) top = m.getStringOr("top", "");
         }
     }
 
@@ -277,19 +277,19 @@ final class Furniture {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            ListTag list = nbt.getList("pieces", Tag.TAG_COMPOUND);
+            ListTag list = nbt.getListOrEmpty("pieces");
             for (int i = 0; i < list.size(); i++) {
-                CompoundTag c = list.getCompound(i);
+                CompoundTag c = list.getCompoundOrEmpty(i);
                 Placed p = new Placed();
-                p.type = c.getString("type");
-                p.world = c.getString("world");
-                p.pos = BlockPos.of(c.getLong("pos"));
-                p.rot = c.getInt("rot");
+                p.type = c.getStringOr("type", "");
+                p.world = c.getStringOr("world", "");
+                p.pos = BlockPos.of(c.getLongOr("pos", 0L));
+                p.rot = c.getIntOr("rot", 0);
                 p.readMaterials(c);
-                p.on = c.getBoolean("on");
+                p.on = c.getBooleanOr("on", false);
                 if (c.contains("items")) {
                     NonNullList<ItemStack> items = NonNullList.withSize(27, ItemStack.EMPTY);
-                    ContainerHelper.loadAllItems(c.getCompound("items"), items);
+                    ContainerHelper.loadAllItems(c.getCompoundOrEmpty("items"), items);
                     p.storage = new SimpleContainer(27);
                     for (int s = 0; s < 27; s++) p.storage.setItem(s, items.get(s));
                     p.storage.addListener(inv -> d.setDirty());
@@ -353,18 +353,18 @@ final class Furniture {
     // ---------------------------------------------------------------------------------------
 
     private static String stripped(String planks) {
-        ResourceLocation id = ResourceLocation.tryParse(planks);
+        Identifier id = Identifier.tryParse(planks);
         if (id == null || !id.getPath().endsWith("_planks")) return planks;
         String wood = id.getPath().substring(0, id.getPath().length() - "_planks".length());
         for (String candidate : new String[]{"stripped_" + wood + "_log", "stripped_" + wood + "_stem", "stripped_" + wood + "_block"}) {
-            ResourceLocation c = new ResourceLocation(id.getNamespace(), candidate);
+            Identifier c = Identifier.fromNamespaceAndPath(id.getNamespace(), candidate);
             if (BuiltInRegistries.BLOCK.containsKey(c)) return c.toString();
         }
         return planks;
     }
 
     private static BlockState state(String id, BlockState fallback) {
-        ResourceLocation key = ResourceLocation.tryParse(id);
+        Identifier key = Identifier.tryParse(id);
         if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)) return fallback;
         return BuiltInRegistries.BLOCK.get(key).defaultBlockState();
     }
@@ -373,17 +373,17 @@ final class Furniture {
         return switch (role) {
             case WOOD -> state(p.wood, Blocks.OAK_PLANKS.defaultBlockState());
             case LEGS -> state(p.legs.isEmpty() ? stripped(p.wood) : p.legs, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
-            case FABRIC -> state(p.fabric, Blocks.RED_WOOL.defaultBlockState());
+            case FABRIC -> state(p.fabric, Blocks.WOOL.red().defaultBlockState());
             case TOP -> state(p.top, Blocks.SMOOTH_QUARTZ.defaultBlockState());
-            case WHITE -> Blocks.WHITE_CONCRETE.defaultBlockState();
-            case BLACK -> Blocks.BLACK_CONCRETE.defaultBlockState();
-            case GRAY -> Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+            case WHITE -> Blocks.CONCRETE.white().defaultBlockState();
+            case BLACK -> Blocks.CONCRETE.black().defaultBlockState();
+            case GRAY -> Blocks.CONCRETE.lightGray().defaultBlockState();
             case METAL -> Blocks.IRON_BLOCK.defaultBlockState();
-            case GLASS -> Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
-            case WATER -> p.on ? Blocks.BLUE_STAINED_GLASS.defaultBlockState() : null;
-            case SCREEN -> p.on ? Blocks.LIGHT_BLUE_CONCRETE.defaultBlockState() : Blocks.GRAY_CONCRETE.defaultBlockState();
-            case LIGHT -> p.on ? Blocks.GLOWSTONE.defaultBlockState() : Blocks.WHITE_STAINED_GLASS.defaultBlockState();
-            case BURNER -> p.on ? Blocks.MAGMA_BLOCK.defaultBlockState() : Blocks.GRAY_CONCRETE.defaultBlockState();
+            case GLASS -> Blocks.STAINED_GLASS.lightBlue().defaultBlockState();
+            case WATER -> p.on ? Blocks.STAINED_GLASS.blue().defaultBlockState() : null;
+            case SCREEN -> p.on ? Blocks.CONCRETE.lightBlue().defaultBlockState() : Blocks.CONCRETE.gray().defaultBlockState();
+            case LIGHT -> p.on ? Blocks.GLOWSTONE.defaultBlockState() : Blocks.STAINED_GLASS.white().defaultBlockState();
+            case BURNER -> p.on ? Blocks.MAGMA_BLOCK.defaultBlockState() : Blocks.CONCRETE.gray().defaultBlockState();
             case BOOKS -> Blocks.BOOKSHELF.defaultBlockState();
             case PLANT -> Blocks.FLOWERING_AZALEA_LEAVES.defaultBlockState();
             case POT -> Blocks.TERRACOTTA.defaultBlockState();
@@ -430,7 +430,7 @@ final class Furniture {
 
     private static Entity spawn(ServerLevel world, CompoundTag nbt, double x, double y, double z, float yaw) {
         Entity e = EntityType.loadEntityRecursive(nbt, world, entity -> {
-            entity.moveTo(x, y, z, yaw, 0);
+            entity.snapTo(x, y, z, yaw, 0);
             return entity;
         });
         if (e != null) world.addFreshEntity(e);
@@ -494,7 +494,7 @@ final class Furniture {
     private static void clearEntities(ServerLevel world, UUID id, Placed p) {
         String tag = PART_TAG + ":" + id;
         AABB box = new AABB(p.pos).inflate(4);
-        for (Entity e : world.getEntitiesOfClass(Entity.class, box, e -> e.getTags().contains(tag))) e.discard();
+        for (Entity e : world.getEntitiesOfClass(Entity.class, box, e -> e.entityTags().contains(tag))) e.discard();
     }
 
     private static void rebuild(ServerLevel world, UUID id, Placed p) {
@@ -507,14 +507,14 @@ final class Furniture {
     // ---------------------------------------------------------------------------------------
 
     private static ResourceKey<Level> worldKey(String id) {
-        return ResourceKey.create(Registries.DIMENSION, new ResourceLocation(id));
+        return ResourceKey.create(Registries.DIMENSION, Identifier.parse(id));
     }
 
     static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
         if (furnitureOf(stack) == null) return InteractionResultHolder.pass(stack);
-        if (!w.isClientSide && p instanceof ServerPlayer player) player.displayClientMessage(Component.literal("Right-click a block to put it there.")
-                .withStyle(ChatFormatting.YELLOW), true);
+        if (!w.isClientSide() && p instanceof ServerPlayer player) player.sendOverlayMessage(Component.literal("Right-click a block to put it there.")
+                .withStyle(ChatFormatting.YELLOW));
         return InteractionResultHolder.success(stack);
     }
 
@@ -522,9 +522,9 @@ final class Furniture {
         ItemStack stack = p.getItemInHand(hand);
         CompoundTag m = furnitureOf(stack);
         if (m == null) return InteractionResult.PASS;
-        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (w.isClientSide()) return InteractionResult.SUCCESS;
         if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
-        Piece piece = piece(m.getString("type"));
+        Piece piece = piece(m.getStringOr("type", ""));
         if (piece == null) return InteractionResult.SUCCESS;
         ServerLevel world = (ServerLevel) w;
         BlockPos pos = hit.getBlockPos();
@@ -534,8 +534,8 @@ final class Furniture {
         for (BlockPos rel : cells(piece, rot)) {
             BlockPos cell = pos.offset(rel);
             if (!world.getBlockState(cell).canBeReplaced() || !world.getEntitiesOfClass(Entity.class, new AABB(cell),
-                    e -> e.getTags().contains(PART_TAG) && e.getType() == EntityType.INTERACTION).isEmpty()) {
-                player.displayClientMessage(Component.literal("There isn't room for the " + piece.name() + " there.").withStyle(ChatFormatting.RED), true);
+                    e -> e.entityTags().contains(PART_TAG) && e.getType() == EntityType.INTERACTION).isEmpty()) {
+                player.sendOverlayMessage(Component.literal("There isn't room for the " + piece.name() + " there.").withStyle(ChatFormatting.RED));
                 return InteractionResult.SUCCESS;
             }
         }
@@ -559,7 +559,7 @@ final class Furniture {
     }
 
     private static UUID idOf(Entity e) {
-        for (String t : e.getTags()) {
+        for (String t : e.entityTags()) {
             if (t.startsWith(PART_TAG + ":")) {
                 try {
                     return UUID.fromString(t.substring(PART_TAG.length() + 1));
@@ -573,8 +573,8 @@ final class Furniture {
 
     /** Punch a piece to pick it up. */
     static InteractionResult onAttackEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
-        if (entity.getType() != EntityType.INTERACTION || !entity.getTags().contains(PART_TAG)) return InteractionResult.PASS;
-        if (w.isClientSide || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
+        if (entity.getType() != EntityType.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
+        if (w.isClientSide() || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
         UUID id = idOf(entity);
         ServerLevel world = (ServerLevel) w;
         Data data = Data.get(world.getServer());
@@ -608,8 +608,8 @@ final class Furniture {
 
     /** Right-click a piece: customize it with what you hold, turn it (sneak), or use it. */
     static InteractionResult onUseEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
-        if (entity.getType() != EntityType.INTERACTION || !entity.getTags().contains(PART_TAG)) return InteractionResult.PASS;
-        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (entity.getType() != EntityType.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
+        if (w.isClientSide()) return InteractionResult.SUCCESS;
         if (hand != InteractionHand.MAIN_HAND || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
         UUID id = idOf(entity);
         ServerLevel world = (ServerLevel) w;
@@ -631,7 +631,7 @@ final class Furniture {
                 BlockPos cell = placed.pos.offset(rel);
                 boolean ours = cells(piece, placed.rot).contains(rel);
                 if (!ours && !world.getBlockState(cell).canBeReplaced()) {
-                    player.displayClientMessage(Component.literal("No room to turn it that way.").withStyle(ChatFormatting.RED), true);
+                    player.sendOverlayMessage(Component.literal("No room to turn it that way.").withStyle(ChatFormatting.RED));
                     return InteractionResult.SUCCESS;
                 }
             }
@@ -670,8 +670,8 @@ final class Furniture {
             }
             default -> {
                 if (piece.use() == Use.NONE && piece.seat() < 0) {
-                    player.displayClientMessage(Component.literal("Hold planks, a log, wool, a dye or a block and right-click to change it. "
-                            + "Sneak to turn it, punch to pick it up.").withStyle(ChatFormatting.GRAY), true);
+                    player.sendOverlayMessage(Component.literal("Hold planks, a log, wool, a dye or a block and right-click to change it. "
+                            + "Sneak to turn it, punch to pick it up.").withStyle(ChatFormatting.GRAY));
                 }
             }
         }
@@ -681,10 +681,10 @@ final class Furniture {
     /** Changes a material if the player holds something that can be one. Never uses the item up. */
     private static boolean customize(ServerPlayer player, Placed placed, ItemStack held) {
         if (held.getItem() instanceof DyeItem dye) {
-            ResourceLocation wool = new ResourceLocation("minecraft", dye.getDyeColor().getName() + "_wool");
+            Identifier wool = Identifier.fromNamespaceAndPath("minecraft", dye.getDyeColor().getName() + "_wool");
             if (BuiltInRegistries.BLOCK.containsKey(wool)) {
                 placed.fabric = wool.toString();
-                player.displayClientMessage(Component.literal("Fabric: " + nice(dye.getDyeColor())).withStyle(ChatFormatting.GREEN), true);
+                player.sendOverlayMessage(Component.literal("Fabric: " + nice(dye.getDyeColor())).withStyle(ChatFormatting.GREEN));
                 return true;
             }
         }
@@ -696,22 +696,22 @@ final class Furniture {
         if (st.is(BlockTags.PLANKS)) {
             placed.wood = id;
             placed.legs = "";
-            player.displayClientMessage(Component.literal("Wood: " + label).withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Wood: " + label).withStyle(ChatFormatting.GREEN));
             return true;
         }
         if (st.is(BlockTags.LOGS)) {
             placed.legs = id;
-            player.displayClientMessage(Component.literal("Legs and frame: " + label).withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Legs and frame: " + label).withStyle(ChatFormatting.GREEN));
             return true;
         }
         if (st.is(BlockTags.WOOL)) {
             placed.fabric = id;
-            player.displayClientMessage(Component.literal("Fabric: " + label).withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Fabric: " + label).withStyle(ChatFormatting.GREEN));
             return true;
         }
         if (st.isSolidRender(EmptyBlockGetter.INSTANCE, BlockPos.ZERO) && !block.defaultBlockState().hasBlockEntity()) {
             placed.top = id;
-            player.displayClientMessage(Component.literal("Top: " + label).withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Top: " + label).withStyle(ChatFormatting.GREEN));
             return true;
         }
         return false;
@@ -729,9 +729,9 @@ final class Furniture {
     private static void sit(ServerLevel world, ServerPlayer player, Placed placed, Piece piece, Entity clicked) {
         if (player.isPassenger()) return;
         BlockPos cell = BlockPos.containing(clicked.getX(), clicked.getY() + 0.1, clicked.getZ());
-        if (!world.getEntitiesOfClass(Entity.class, new AABB(cell).inflate(0.1), e -> e.getTags().contains(SEAT_TAG)
+        if (!world.getEntitiesOfClass(Entity.class, new AABB(cell).inflate(0.1), e -> e.entityTags().contains(SEAT_TAG)
                 && e.isVehicle()).isEmpty()) {
-            player.displayClientMessage(Component.literal("Someone's already sitting there.").withStyle(ChatFormatting.YELLOW), true);
+            player.sendOverlayMessage(Component.literal("Someone's already sitting there.").withStyle(ChatFormatting.YELLOW));
             return;
         }
         Direction front = switch (placed.rot) { case 1 -> Direction.EAST; case 2 -> Direction.SOUTH; case 3 -> Direction.WEST; default -> Direction.NORTH; };
@@ -747,7 +747,7 @@ final class Furniture {
         Entity seat = spawn(world, nbt, cell.getX() + 0.5, y, cell.getZ() + 0.5, front.toYRot());
         if (seat != null) {
             player.startRiding(seat, true);
-            player.displayClientMessage(Component.literal("Sneak to get up.").withStyle(ChatFormatting.GRAY), true);
+            player.sendOverlayMessage(Component.literal("Sneak to get up.").withStyle(ChatFormatting.GRAY));
         }
     }
 
@@ -764,7 +764,7 @@ final class Furniture {
         player.openMenu(new SimpleMenuProvider(
                 (syncId, pinv, p) -> ChestMenu.threeRows(syncId, pinv, inv),
                 Component.literal(piece.name().replaceAll(" \\(.*\\)", ""))));
-        player.serverLevel().playSound(null, placed.pos, SoundEvents.BARREL_OPEN, SoundSource.BLOCKS, 0.6f, 1.1f);
+        player.level().playSound(null, placed.pos, SoundEvents.BARREL_OPEN, SoundSource.BLOCKS, 0.6f, 1.1f);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -779,7 +779,7 @@ final class Furniture {
             if (ticks % 20 == 0) {
                 for (ServerPlayer pl : world.players()) {
                     for (Entity seat : world.getEntitiesOfClass(Entity.class, pl.getBoundingBox().inflate(16),
-                            e -> e.getTags().contains(SEAT_TAG) && !e.isVehicle())) {
+                            e -> e.entityTags().contains(SEAT_TAG) && !e.isVehicle())) {
                         seat.discard();
                     }
                 }
@@ -810,7 +810,7 @@ final class Furniture {
 
     /** Seats left over from before a restart. */
     static void onEntityLoad(Entity entity, ServerLevel world) {
-        if (entity.getTags().contains(SEAT_TAG) && !entity.isVehicle()) world.getServer().execute(() -> {
+        if (entity.entityTags().contains(SEAT_TAG) && !entity.isVehicle()) world.getServer().execute(() -> {
             if (!entity.isVehicle()) entity.discard();
         });
     }
@@ -858,7 +858,7 @@ final class Furniture {
                         p.width() + "x" + p.height() + (p.use() == Use.STORAGE ? ", holds 27 stacks" : ""), "Click to get one");
                 view.setItem(18 + i, b);
             }
-            long coins = Tycoon.Data.get(player.getServer()).coins(player.getUUID());
+            long coins = Tycoon.Data.get(player.level().getServer()).coins(player.getUUID());
             view.setItem(49, Storage.Menu.button(Items.GOLD_INGOT, coins + " coins", "Earn coins with Tycoon Droppers"));
             view.setItem(53, Storage.Menu.button(Items.BOOK, "How to customize",
                     "Right-click a piece holding planks (wood), a log (legs),", "wool or a dye (fabric), or any block (the top).",
@@ -867,12 +867,12 @@ final class Furniture {
         }
 
         @Override
-        public void clicked(int slot, int button, ClickType action, Player p) {
+        public void clicked(int slot, int button, ContainerInput action, Player p) {
             if (slot < 0 || slot >= SIZE) {
-                if (action != ClickType.QUICK_MOVE) super.clicked(slot, button, action, p);
+                if (action != ContainerInput.QUICK_MOVE) super.clicked(slot, button, action, p);
                 return;
             }
-            if (action == ClickType.PICKUP) {
+            if (action == ContainerInput.PICKUP) {
                 if (slot < ROOMS.length) room = slot;
                 else if (slot >= 18 && slot - 18 < shown.size()) get(shown.get(slot - 18));
             }
@@ -881,10 +881,10 @@ final class Furniture {
 
         private void get(Piece piece) {
             if (!player.isCreative()) {
-                Tycoon.Data data = Tycoon.Data.get(player.getServer());
+                Tycoon.Data data = Tycoon.Data.get(player.level().getServer());
                 if (data.coins(player.getUUID()) < piece.price()) {
-                    player.displayClientMessage(Component.literal("You need " + piece.price() + " tycoon coins (you have "
-                            + data.coins(player.getUUID()) + "). /helper tycoon start to begin earning.").withStyle(ChatFormatting.RED), true);
+                    player.sendOverlayMessage(Component.literal("You need " + piece.price() + " tycoon coins (you have "
+                            + data.coins(player.getUUID()) + "). /helper tycoon start to begin earning.").withStyle(ChatFormatting.RED));
                     return;
                 }
                 data.add(player.getUUID(), -piece.price());

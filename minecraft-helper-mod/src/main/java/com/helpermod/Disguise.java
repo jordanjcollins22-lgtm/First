@@ -8,7 +8,7 @@ import com.mojang.authlib.properties.Property;
 import com.mojang.authlib.properties.PropertyMap;
 import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.Nullable;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
@@ -18,7 +18,7 @@ import net.minecraft.network.protocol.game.ClientboundAddPlayerPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -52,7 +52,7 @@ public final class Disguise {
     private static final byte ALL_SKIN_LAYERS = 0x7F;
 
     public static boolean isHelper(Entity entity) {
-        return !entity.level().isClientSide && entity.getTags().contains(Helper.TAG);
+        return !entity.level().isClientSide() && entity.entityTags().contains(Helper.TAG);
     }
 
     /** Every mob a helper can look like: living entities with attributes, except players and armor stands. */
@@ -65,7 +65,7 @@ public final class Disguise {
     @Nullable
     public static EntityType<?> resolveLook(String raw) {
         String name = raw.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
-        ResourceLocation id = ResourceLocation.tryParse(name);
+        Identifier id = Identifier.tryParse(name);
         if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
         EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
         return canLookLike(type) ? type : null;
@@ -75,7 +75,7 @@ public final class Disguise {
         List<String> out = new ArrayList<>();
         for (EntityType<?> type : BuiltInRegistries.ENTITY_TYPE) {
             if (!canLookLike(type)) continue;
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
+            Identifier id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
             out.add(id.getNamespace().equals("minecraft") ? id.getPath() : id.toString());
         }
         out.sort(null);
@@ -86,11 +86,11 @@ public final class Disguise {
     @Nullable
     public static EntityType<?> lookOf(Entity entity) {
         UUID owner = Helper.ownerOf(entity);
-        MinecraftServer server = entity.getServer();
+        MinecraftServer server = entity.level().getServer();
         if (owner == null || server == null) return null;
         HelperData.Entry entry = HelperData.get(server).get(owner);
         if (entry == null || entry.look == null) return null;
-        ResourceLocation id = ResourceLocation.tryParse(entry.look);
+        Identifier id = Identifier.tryParse(entry.look);
         if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
         EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
         return canLookLike(type) ? type : null;
@@ -110,7 +110,7 @@ public final class Disguise {
             return;
         }
         if (SKINS.containsKey(id) || !FETCHING.add(id)) return;
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         GameProfile lookup = new GameProfile(id, player.getGameProfile().getName());
         CompletableFuture.supplyAsync(() -> server.getSessionService().fillProfileProperties(lookup, false),
                         Util.backgroundExecutor())

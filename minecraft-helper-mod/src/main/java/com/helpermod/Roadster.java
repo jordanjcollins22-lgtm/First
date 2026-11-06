@@ -12,9 +12,9 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.animal.horse.Horse;
-import net.minecraft.world.entity.animal.horse.Markings;
-import net.minecraft.world.entity.animal.horse.Variant;
+import net.minecraft.world.entity.animal.equine.Horse;
+import net.minecraft.world.entity.animal.equine.Markings;
+import net.minecraft.world.entity.animal.equine.Variant;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.DyeableLeatherItem;
 import net.minecraft.world.item.ItemStack;
@@ -62,11 +62,11 @@ final class Roadster {
 
     /** Bought in the tycoon shop: park a new roadster next to the player. */
     static boolean spawn(ServerPlayer player) {
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         Horse horse = EntityType.HORSE.create(world);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
-        horse.moveTo(at.x, player.getY(), at.z, player.getYRot(), 0);
+        horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);
         horse.setTamed(true);
         horse.setOwnerUUID(player.getUUID());
         horse.addTag(TAG);
@@ -101,10 +101,10 @@ final class Roadster {
     }
 
     private static Horse mine(ServerPlayer player) {
-        if (player.getVehicle() instanceof Horse h && h.getTags().contains(TAG)) return h;
+        if (player.getVehicle() instanceof Horse h && h.entityTags().contains(TAG)) return h;
         AABB around = player.getBoundingBox().inflate(32);
-        List<Horse> list = player.serverLevel().getEntitiesOfClass(Horse.class, around,
-                h -> h.getTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID()));
+        List<Horse> list = player.level().getEntitiesOfClass(Horse.class, around,
+                h -> h.entityTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID()));
         Horse best = null;
         for (Horse h : list) if (best == null || h.distanceToSqr(player) < best.distanceToSqr(player)) best = h;
         return best;
@@ -188,9 +188,9 @@ final class Roadster {
     /** /helper roadster call: bring it to you (same world). */
     static void call(ServerPlayer player) {
         Horse found = null;
-        for (ServerLevel w : player.getServer().getAllLevels()) {
+        for (ServerLevel w : player.level().getServer().getAllLevels()) {
             for (Entity e : w.getAllEntities()) {
-                if (e instanceof Horse h && h.getTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID())) {
+                if (e instanceof Horse h && h.entityTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID())) {
                     found = h;
                     break;
                 }
@@ -215,14 +215,14 @@ final class Roadster {
 
     static void tick(MinecraftServer server) {
         for (ServerPlayer rider : server.getPlayerList().getPlayers()) {
-            if (!(rider.getVehicle() instanceof Horse h) || !h.getTags().contains(TAG)) continue;
+            if (!(rider.getVehicle() instanceof Horse h) || !h.entityTags().contains(TAG)) continue;
             fly(rider, h);
         }
         // A parked roadster drops back to the ground.
         if (server.getTickCount() % 20 == 0) {
             for (ServerLevel w : server.getAllLevels()) {
                 for (Entity e : w.getAllEntities()) {
-                    if (e instanceof Horse h && h.isNoGravity() && h.getTags().contains(TAG) && !h.isVehicle()) {
+                    if (e instanceof Horse h && h.isNoGravity() && h.entityTags().contains(TAG) && !h.isVehicle()) {
                         land(h);
                     }
                 }
@@ -251,7 +251,7 @@ final class Roadster {
             h.getNavigation().stop(); // its own legs stay out of it while flying
             if (h.isSaddled()) h.getSlot(400).set(ItemStack.EMPTY); // e.g. after a restart mid-flight
         }
-        ServerLevel world = rider.serverLevel();
+        ServerLevel world = rider.level();
         if (autopilot(rider, h, world)) return;
         float forward = rider.zza;
         Vec3 look = rider.getViewVector(1f);
@@ -260,7 +260,7 @@ final class Roadster {
             if (forward > 0 && rider.getXRot() < -25 || WAYPOINTS.containsKey(rider.getUUID())) { // lift off
                 takeOff(h);
                 h.setDeltaMovement(h.getDeltaMovement().add(0, 0.5, 0));
-                h.hurtMarked = true;
+                h.needsSync = true;
                 world.playSound(null, h.blockPosition(), SoundEvents.FIREWORK_ROCKET_LAUNCH, SoundSource.NEUTRAL, 1f, 0.6f);
             }
             return;
@@ -278,7 +278,7 @@ final class Roadster {
         Vec3 v = forward > 0 ? look.scale(speed)
                 : h.getDeltaMovement().multiply(0.6, 0, 0.6); // no W: slow to a hover
         h.setDeltaMovement(h.getDeltaMovement().scale(0.4).add(v.scale(0.6)));
-        h.hurtMarked = true;
+        h.needsSync = true;
         // Rocket smoke and flames out the back.
         Vec3 back = h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(1.4)).add(0, 0.7, 0);
         world.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
@@ -320,7 +320,7 @@ final class Roadster {
     /** /helper roadster waypoint <x> <z> (or "here" to come back to where you're standing). */
     static void setWaypoint(ServerPlayer player, double x, double z) {
         WAYPOINTS.put(player.getUUID(), new Waypoint(player.level().dimension(), x, z));
-        boolean riding = player.getVehicle() instanceof Horse h && h.getTags().contains(TAG);
+        boolean riding = player.getVehicle() instanceof Horse h && h.entityTags().contains(TAG);
         int dist = (int) Math.sqrt(sq(x - player.getX()) + sq(z - player.getZ()));
         Helper.say(player, "Waypoint set at " + (int) Math.floor(x) + ", " + (int) Math.floor(z) + " (" + dist + " blocks away). "
                 + (riding ? "Autopilot on: sit back, I'll fly you there and land. Press S to take over."
@@ -347,7 +347,7 @@ final class Roadster {
         }
         if (rider.zza < 0) { // S: the rider takes over
             WAYPOINTS.remove(rider.getUUID());
-            rider.displayClientMessage(Component.literal("Autopilot off. You're driving.").withStyle(ChatFormatting.YELLOW), true);
+            rider.sendOverlayMessage(Component.literal("Autopilot off. You're driving.").withStyle(ChatFormatting.YELLOW));
             return false;
         }
         wp.ticks++;
@@ -383,7 +383,7 @@ final class Roadster {
                 if (h.onGround() || above < 0.2) {
                     land(h);
                     h.setDeltaMovement(Vec3.ZERO);
-                    h.hurtMarked = true;
+                    h.needsSync = true;
                     WAYPOINTS.remove(rider.getUUID());
                     world.sendParticles(ParticleTypes.CLOUD, h.getX(), h.getY(), h.getZ(), 20, 0.8, 0.1, 0.8, 0.02);
                     world.playSound(null, h.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 0.6f, 1.4f);
@@ -393,7 +393,7 @@ final class Roadster {
             }
         }
         h.setDeltaMovement(h.getDeltaMovement().scale(0.3).add(v.scale(0.7)));
-        h.hurtMarked = true;
+        h.needsSync = true;
         if (flat > 0.5) h.setYRot((float) (Math.toDegrees(Math.atan2(-nx, nz))));
         h.setYBodyRot(h.getYRot());
         // Smoke and flames out the back, same as when you fly it yourself.
@@ -403,7 +403,7 @@ final class Roadster {
         if (wp.phase != Phase.LAND) world.sendParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
         if (wp.ticks % 20 == 0) {
             String what = wp.phase == Phase.CLIMB ? "Taking off" : wp.phase == Phase.CRUISE ? "Autopilot" : "Landing";
-            rider.displayClientMessage(Component.literal(what + ": " + (int) flat + " blocks to go (S to take over)").withStyle(ChatFormatting.AQUA), true);
+            rider.sendOverlayMessage(Component.literal(what + ": " + (int) flat + " blocks to go (S to take over)").withStyle(ChatFormatting.AQUA));
         }
         if (world.getGameTime() % 30 == 0) world.playSound(null, h.blockPosition(), SoundEvents.BLAZE_BURN, SoundSource.NEUTRAL, 0.5f, 0.6f);
         return true;
@@ -412,7 +412,7 @@ final class Roadster {
     /** Top of the ground (ignoring leaves) at x, z; the world bottom when that chunk isn't loaded yet. */
     private static int groundY(ServerLevel world, double x, double z) {
         int bx = (int) Math.floor(x), bz = (int) Math.floor(z);
-        if (!world.hasChunk(bx >> 4, bz >> 4)) return world.getMinBuildHeight();
+        if (!world.hasChunk(bx >> 4, bz >> 4)) return world.getMinY();
         return world.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
     }
 }

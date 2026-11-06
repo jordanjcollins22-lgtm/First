@@ -10,7 +10,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -73,7 +73,7 @@ public final class Devices {
         }
         ItemStack stack = new ItemStack(Items.SPAWNER);
         String name = "Monster Spawner";
-        ResourceLocation id = ResourceLocation.tryParse(mob);
+        Identifier id = Identifier.tryParse(mob);
         if (id != null && !mob.isEmpty()) {
             stack.getOrCreateTag().putString(SPAWNER_MOB_KEY, mob);
             var type = EntityType.byString(mob);
@@ -145,7 +145,7 @@ public final class Devices {
 
     /** All block right-clicks: placing spawners and harvesters, and collecting harvester XP. */
     public static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
-        if (w.isClientSide || !(p instanceof ServerPlayer player) || !(w instanceof ServerLevel world)) {
+        if (w.isClientSide() || !(p instanceof ServerPlayer player) || !(w instanceof ServerLevel world)) {
             return InteractionResult.PASS;
         }
         if (p instanceof FakePlayer) return InteractionResult.PASS;
@@ -157,15 +157,15 @@ public final class Devices {
             if (hand != InteractionHand.MAIN_HAND) return InteractionResult.SUCCESS;
             int xp = data.take(world, clicked);
             if (xp <= 0) {
-                player.displayClientMessage(Component.literal("No XP stored yet.").withStyle(ChatFormatting.GRAY), true);
+                player.sendOverlayMessage(Component.literal("No XP stored yet.").withStyle(ChatFormatting.GRAY));
             } else {
                 int before = player.experienceLevel;
                 player.giveExperiencePoints(xp);
                 world.playSound(null, player.blockPosition(), player.experienceLevel > before
                                 ? SoundEvents.PLAYER_LEVELUP : SoundEvents.EXPERIENCE_ORB_PICKUP,
                         SoundSource.PLAYERS, 0.8f, 1f);
-                player.displayClientMessage(Component.literal("Collected " + xp + " XP from the Monster Harvester!")
-                        .withStyle(ChatFormatting.GREEN), true);
+                player.sendOverlayMessage(Component.literal("Collected " + xp + " XP from the Monster Harvester!")
+                        .withStyle(ChatFormatting.GREEN));
             }
             return InteractionResult.SUCCESS;
         }
@@ -234,7 +234,7 @@ public final class Devices {
 
     private static boolean isHarvestable(Mob mob) {
         if (!(mob instanceof Enemy) || !mob.isAlive() || mob.hasCustomName()) return false;
-        if (mob.getTags().contains(Helper.TAG)) return false;
+        if (mob.entityTags().contains(Helper.TAG)) return false;
         return !(mob instanceof WitherBoss || mob instanceof EnderDragon || mob instanceof Warden
                 || mob instanceof ElderGuardian);
     }
@@ -279,7 +279,7 @@ public final class Devices {
             for (Iterator<Map.Entry<String, int[]>> it = harvesters.entrySet().iterator(); it.hasNext(); ) {
                 Map.Entry<String, int[]> e = it.next();
                 String[] parts = e.getKey().split("\\|");
-                ResourceLocation dim = ResourceLocation.tryParse(parts[0]);
+                Identifier dim = Identifier.tryParse(parts[0]);
                 ServerLevel world = dim == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dim));
                 if (world == null) continue;
                 int before = e.getValue()[0];
@@ -294,10 +294,10 @@ public final class Devices {
 
         private static HarvesterData fromNbt(CompoundTag nbt) {
             HarvesterData data = new HarvesterData();
-            ListTag list = nbt.getList("harvesters", Tag.TAG_COMPOUND);
+            ListTag list = nbt.getListOrEmpty("harvesters");
             for (int i = 0; i < list.size(); i++) {
-                CompoundTag tag = list.getCompound(i);
-                data.harvesters.put(tag.getString("key"), new int[]{tag.getInt("xp")});
+                CompoundTag tag = list.getCompoundOrEmpty(i);
+                data.harvesters.put(tag.getStringOr("key", ""), new int[]{tag.getIntOr("xp", 0)});
             }
             return data;
         }

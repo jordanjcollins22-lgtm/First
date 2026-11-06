@@ -12,7 +12,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -27,7 +27,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -130,20 +130,20 @@ final class Tycoon {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            ListTag players = nbt.getList("players", Tag.TAG_COMPOUND);
+            ListTag players = nbt.getListOrEmpty("players");
             for (int i = 0; i < players.size(); i++) {
-                CompoundTag p = players.getCompound(i);
+                CompoundTag p = players.getCompoundOrEmpty(i);
                 UUID id = p.getUUID("id");
-                d.coins.put(id, p.getLong("coins"));
-                d.earned.put(id, p.getLong("earned"));
-                d.started.put(id, p.getBoolean("started"));
-                if (p.getInt("spare") > 0) d.spare.put(id, p.getInt("spare"));
-                if (p.getInt("rebirths") > 0) d.rebirths.put(id, p.getInt("rebirths"));
-                if (p.getInt("milestones") > 0) d.milestones.put(id, p.getInt("milestones"));
+                d.coins.put(id, p.getLongOr("coins", 0L));
+                d.earned.put(id, p.getLongOr("earned", 0L));
+                d.started.put(id, p.getBooleanOr("started", false));
+                if (p.getIntOr("spare", 0) > 0) d.spare.put(id, p.getIntOr("spare", 0));
+                if (p.getIntOr("rebirths", 0) > 0) d.rebirths.put(id, p.getIntOr("rebirths", 0));
+                if (p.getIntOr("milestones", 0) > 0) d.milestones.put(id, p.getIntOr("milestones", 0));
             }
-            ListTag list = nbt.getList("droppers", Tag.TAG_COMPOUND);
+            ListTag list = nbt.getListOrEmpty("droppers");
             for (int i = 0; i < list.size(); i++) {
-                CompoundTag t = list.getCompound(i);
+                CompoundTag t = list.getCompoundOrEmpty(i);
                 d.droppers.put(t.getString("key"), new Dropper(t.getUUID("owner"), t.getInt("level")));
             }
             return d;
@@ -235,13 +235,13 @@ final class Tycoon {
     /** Tycoon machines by name, for the shop, milestones and Machine Boxes. */
     static ItemStack machine(String kind, int count) {
         return switch (kind) {
-            case "upgrader" -> named(Items.LIME_GLAZED_TERRACOTTA, count, "Upgrader x2", ChatFormatting.GREEN);
-            case "super" -> named(Items.CYAN_GLAZED_TERRACOTTA, count, "Super Upgrader x3", ChatFormatting.AQUA);
-            case "mega" -> named(Items.PURPLE_GLAZED_TERRACOTTA, count, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE);
-            case "speed" -> named(Items.LIGHT_BLUE_GLAZED_TERRACOTTA, count, "Speed Belt", ChatFormatting.BLUE);
-            case "polisher" -> named(Items.ORANGE_GLAZED_TERRACOTTA, count, "Polisher +10", ChatFormatting.GOLD);
-            case "smelter" -> named(Items.BROWN_GLAZED_TERRACOTTA, count, "Smelter x1.5", ChatFormatting.RED);
-            case "lucky" -> named(Items.PINK_GLAZED_TERRACOTTA, count, "Lucky Upgrader", ChatFormatting.LIGHT_PURPLE);
+            case "upgrader" -> named(Items.GLAZED_TERRACOTTA.lime(), count, "Upgrader x2", ChatFormatting.GREEN);
+            case "super" -> named(Items.GLAZED_TERRACOTTA.cyan(), count, "Super Upgrader x3", ChatFormatting.AQUA);
+            case "mega" -> named(Items.GLAZED_TERRACOTTA.purple(), count, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE);
+            case "speed" -> named(Items.GLAZED_TERRACOTTA.lightBlue(), count, "Speed Belt", ChatFormatting.BLUE);
+            case "polisher" -> named(Items.GLAZED_TERRACOTTA.orange(), count, "Polisher +10", ChatFormatting.GOLD);
+            case "smelter" -> named(Items.GLAZED_TERRACOTTA.brown(), count, "Smelter x1.5", ChatFormatting.RED);
+            case "lucky" -> named(Items.GLAZED_TERRACOTTA.pink(), count, "Lucky Upgrader", ChatFormatting.LIGHT_PURPLE);
             default -> ItemStack.EMPTY;
         };
     }
@@ -251,48 +251,48 @@ final class Tycoon {
     }
 
     static ItemStack conveyors(int n) {
-        return named(Items.MAGENTA_GLAZED_TERRACOTTA, n, "Conveyor", ChatFormatting.LIGHT_PURPLE);
+        return named(Items.GLAZED_TERRACOTTA.magenta(), n, "Conveyor", ChatFormatting.LIGHT_PURPLE);
     }
 
     static ItemStack collector() {
-        return named(Items.BLACK_GLAZED_TERRACOTTA, 1, "Collector", ChatFormatting.DARK_GRAY);
+        return named(Items.GLAZED_TERRACOTTA.black(), 1, "Collector", ChatFormatting.DARK_GRAY);
     }
 
     /** Upgrader blocks: which block, how much it multiplies by. */
     private static int multiplier(BlockState state) {
-        if (state.is(Blocks.LIME_GLAZED_TERRACOTTA)) return 2;
-        if (state.is(Blocks.CYAN_GLAZED_TERRACOTTA)) return 3;
-        if (state.is(Blocks.PURPLE_GLAZED_TERRACOTTA)) return 5;
-        if (state.is(Blocks.RED_GLAZED_TERRACOTTA)) return 10;
+        if (state.is(Blocks.GLAZED_TERRACOTTA.lime())) return 2;
+        if (state.is(Blocks.GLAZED_TERRACOTTA.cyan())) return 3;
+        if (state.is(Blocks.GLAZED_TERRACOTTA.purple())) return 5;
+        if (state.is(Blocks.GLAZED_TERRACOTTA.red())) return 10;
         return 1;
     }
 
     /** Yellow Lifters hop ore up one block, so lines can climb to a second floor. */
     private static boolean isLifter(BlockState state) {
-        return state.is(Blocks.YELLOW_GLAZED_TERRACOTTA);
+        return state.is(Blocks.GLAZED_TERRACOTTA.yellow());
     }
 
     private static boolean isSpeedBelt(BlockState state) {
-        return state.is(Blocks.LIGHT_BLUE_GLAZED_TERRACOTTA);
+        return state.is(Blocks.GLAZED_TERRACOTTA.lightBlue());
     }
 
     /** Machines that change ore once each: Polisher (+10), Smelter (x1.5), Lucky Upgrader (1 in 8 for x20). */
     private static boolean isSpecial(BlockState state) {
-        return state.is(Blocks.ORANGE_GLAZED_TERRACOTTA) || state.is(Blocks.BROWN_GLAZED_TERRACOTTA)
-                || state.is(Blocks.PINK_GLAZED_TERRACOTTA);
+        return state.is(Blocks.GLAZED_TERRACOTTA.orange()) || state.is(Blocks.GLAZED_TERRACOTTA.brown())
+                || state.is(Blocks.GLAZED_TERRACOTTA.pink());
     }
 
     private static boolean isBelt(BlockState state) {
-        return state.is(Blocks.MAGENTA_GLAZED_TERRACOTTA) || isLifter(state) || isSpeedBelt(state) || isSpecial(state)
+        return state.is(Blocks.GLAZED_TERRACOTTA.magenta()) || isLifter(state) || isSpeedBelt(state) || isSpecial(state)
                 || multiplier(state) > 1;
     }
 
     static ItemStack lifter() {
-        return named(Items.YELLOW_GLAZED_TERRACOTTA, 1, "Lifter", ChatFormatting.YELLOW);
+        return named(Items.GLAZED_TERRACOTTA.yellow(), 1, "Lifter", ChatFormatting.YELLOW);
     }
 
     static ItemStack starUpgrader() {
-        return named(Items.RED_GLAZED_TERRACOTTA, 1, "Star Upgrader x10", ChatFormatting.RED);
+        return named(Items.GLAZED_TERRACOTTA.red(), 1, "Star Upgrader x10", ChatFormatting.RED);
     }
 
     /** What collected ore is multiplied by: +50% per rebirth. */
@@ -316,7 +316,7 @@ final class Tycoon {
     }
 
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
-        if (w.isClientSide || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
+        if (w.isClientSide() || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
         ItemStack stack = player.getItemInHand(hand);
         if (isDropperItem(stack)) {
             BlockPos pos = new BlockPlaceContext(player, hand, stack, hit).getClickedPos();
@@ -355,7 +355,7 @@ final class Tycoon {
             Helper.say(player, "That's a plain dropper. Only Tycoon Droppers (from the starter kit or the shop) drop ore.");
             return;
         }
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         Dropper existing = data.droppers.get(key(player.level(), pos));
         if (existing != null) {
             Helper.say(player, "That Tycoon Dropper is already working (level " + existing.level + "). Make sure its front isn't blocked "
@@ -368,7 +368,7 @@ final class Tycoon {
 
     /** Old ore left over from before a restart has no dropper to pay out to: remove it. */
     static void onEntityLoad(Entity entity, ServerLevel world) {
-        if (entity instanceof ItemEntity && entity.getTags().contains(ORE_TAG) && !ORES.containsKey(entity.getUUID())) {
+        if (entity instanceof ItemEntity && entity.entityTags().contains(ORE_TAG) && !ORES.containsKey(entity.getUUID())) {
             world.getServer().execute(entity::discard);
         }
     }
@@ -398,7 +398,7 @@ final class Tycoon {
         for (Iterator<Map.Entry<String, Dropper>> it = data.droppers.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, Dropper> e = it.next();
             String[] parts = e.getKey().split("\\|");
-            ResourceLocation dim = ResourceLocation.tryParse(parts[0]);
+            Identifier dim = Identifier.tryParse(parts[0]);
             ServerLevel world = dim == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dim));
             if (world == null) continue;
             BlockPos pos = BlockPos.of(Long.parseLong(parts[1]));
@@ -476,7 +476,7 @@ final class Tycoon {
         CompoundTag tag = stack.getTagElement(ORE_NBT);
         if (tag == null) return true;
 
-        if (state.is(Blocks.BLACK_GLAZED_TERRACOTTA)) { // a Collector: cash in
+        if (state.is(Blocks.GLAZED_TERRACOTTA.black())) { // a Collector: cash in
             UUID owner = tag.getUUID("owner");
             long value = Math.max(1, Math.round(tag.getLong("value") * rebirthBonus(data.rebirths(owner))));
             data.add(owner, value);
@@ -490,7 +490,7 @@ final class Tycoon {
         }
         int mult = multiplier(state);
         if (mult > 1) { // each upgrader block works once per ore
-            ListTag ups = tag.getList("ups", Tag.TAG_LONG);
+            ListTag ups = tag.getListOrEmpty("ups");
             net.minecraft.nbt.LongTag here = net.minecraft.nbt.LongTag.valueOf(under.asLong());
             if (!ups.contains(here) && ups.size() < 16) {
                 ups.add(here);
@@ -502,18 +502,18 @@ final class Tycoon {
             }
         }
         if (isSpecial(state)) {
-            ListTag ups = tag.getList("ups", Tag.TAG_LONG);
+            ListTag ups = tag.getListOrEmpty("ups");
             net.minecraft.nbt.LongTag here = net.minecraft.nbt.LongTag.valueOf(under.asLong());
             if (!ups.contains(here) && ups.size() < 16) {
                 ups.add(here);
                 tag.put("ups", ups);
-                long value = tag.getLong("value");
+                long value = tag.getLongOr("value", 0L);
                 ItemStack next = stack;
-                if (state.is(Blocks.ORANGE_GLAZED_TERRACOTTA)) {
+                if (state.is(Blocks.GLAZED_TERRACOTTA.orange())) {
                     value += 10;
                     world.sendParticles(ParticleTypes.WAX_ON, ore.getX(), ore.getY() + 0.2, ore.getZ(), 6, 0.15, 0.15, 0.15, 0.05);
                     world.playSound(null, under, SoundEvents.HONEYCOMB_WAX_ON, SoundSource.BLOCKS, 0.4f, 1.3f);
-                } else if (state.is(Blocks.BROWN_GLAZED_TERRACOTTA)) {
+                } else if (state.is(Blocks.GLAZED_TERRACOTTA.brown())) {
                     value = value + (value + 1) / 2; // x1.5, rounded up
                     Item ingot = stack.is(Items.RAW_GOLD) ? Items.GOLD_INGOT : stack.is(Items.RAW_IRON) ? Items.IRON_INGOT
                             : stack.is(Items.RAW_COPPER) ? Items.COPPER_INGOT : stack.getItem();
@@ -546,7 +546,7 @@ final class Tycoon {
             double vy = v.y;
             if (isLifter(state) && ore.onGround()) vy = 0.42; // hop up a block
             ore.setDeltaMovement(vx, vy, vz);
-            ore.hurtMarked = true;
+            ore.needsSync = true;
         }
         return false;
     }
@@ -556,7 +556,7 @@ final class Tycoon {
     // ---------------------------------------------------------------------------------------
 
     static void info(ServerPlayer player) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         long mine = data.droppers.values().stream().filter(d -> d.owner.equals(player.getUUID())).count();
         int rb = data.rebirths(player.getUUID());
         Helper.say(player, "You have " + data.coins(player.getUUID()) + " coins and " + mine + " Tycoon Dropper"
@@ -577,11 +577,11 @@ final class Tycoon {
                 "Loot boxes (Gear, Machine, Mega) are in the shop. Right-click one to open it. /helper tycoon odds shows the chances.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
         };
-        for (String line : how) player.displayClientMessage(Component.literal(line).withStyle(ChatFormatting.GRAY), false);
+        for (String line : how) player.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GRAY));
     }
 
     static void start(ServerPlayer player) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         if (data.started.getOrDefault(player.getUUID(), false)) {
             Helper.say(player, "You've already had your starter kit. Earn coins and buy more in /helper tycoon shop.");
             return;
@@ -601,7 +601,7 @@ final class Tycoon {
             Helper.say(player, "Look at your Tycoon Dropper and try again.");
             return;
         }
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         Dropper d = data.droppers.get(key(player.level(), bh.getBlockPos()));
         if (d == null || !d.owner.equals(player.getUUID())) {
             Helper.say(player, "That isn't one of your Tycoon Droppers.");
@@ -641,7 +641,7 @@ final class Tycoon {
 
     /** /helper tycoon rebirth shows the deal; /helper tycoon rebirth confirm does it. */
     static void rebirth(ServerPlayer player, boolean confirm) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         UUID id = player.getUUID();
         int rb = data.rebirths(id);
         long cost = rebirthCost(rb);
@@ -666,7 +666,7 @@ final class Tycoon {
         }
         data.setDirty();
         player.level().playSound(null, player.blockPosition(), SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 0.8f, 1f);
-        broadcast(player.getServer(), player.getName().getString() + " was reborn as a tycoon (rebirth " + (rb + 1)
+        broadcast(player.level().getServer(), player.getName().getString() + " was reborn as a tycoon (rebirth " + (rb + 1)
                 + ", coins now x" + rebirthBonus(rb + 1) + ")!");
     }
 
@@ -683,10 +683,10 @@ final class Tycoon {
         broadcast(server, who + " has earned " + String.format(java.util.Locale.ROOT, "%,d", MILESTONES[got]) + " tycoon coins!");
         if (p == null) return;
         ItemStack[] reward = switch (got) {
-            case 0 -> new ItemStack[]{conveyors(16), named(Items.LIME_GLAZED_TERRACOTTA, 1, "Upgrader x2", ChatFormatting.GREEN), lifter()};
+            case 0 -> new ItemStack[]{conveyors(16), named(Items.GLAZED_TERRACOTTA.lime(), 1, "Upgrader x2", ChatFormatting.GREEN), lifter()};
             case 1 -> new ItemStack[]{dropperItem()};
-            case 2 -> new ItemStack[]{named(Items.CYAN_GLAZED_TERRACOTTA, 2, "Super Upgrader x3", ChatFormatting.AQUA)};
-            default -> new ItemStack[]{named(Items.PURPLE_GLAZED_TERRACOTTA, 2, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE), starUpgrader()};
+            case 2 -> new ItemStack[]{named(Items.GLAZED_TERRACOTTA.cyan(), 2, "Super Upgrader x3", ChatFormatting.AQUA)};
+            default -> new ItemStack[]{named(Items.GLAZED_TERRACOTTA.purple(), 2, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE), starUpgrader()};
         };
         for (ItemStack r : reward) p.getInventory().placeItemBackInInventory(r);
         Helper.say(p, "Milestone reward! I put some free tycoon parts in your inventory.");
@@ -694,35 +694,35 @@ final class Tycoon {
 
     private static void broadcast(MinecraftServer server, String message) {
         Component t = Component.literal("[Tycoon] ").withStyle(ChatFormatting.GOLD).append(Component.literal(message).withStyle(ChatFormatting.YELLOW));
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) p.displayClientMessage(t, false);
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) p.sendSystemMessage(t);
     }
 
     /** /helper tycoon top: the five biggest earners. */
     static void top(ServerPlayer player) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         List<Map.Entry<UUID, Long>> rows = new ArrayList<>(data.earned.entrySet());
         rows.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         if (rows.isEmpty()) {
             Helper.say(player, "Nobody has earned any coins yet. /helper tycoon start to get going!");
             return;
         }
-        player.displayClientMessage(Component.literal("Top tycoons (coins earned):").withStyle(ChatFormatting.GOLD), false);
+        player.sendSystemMessage(Component.literal("Top tycoons (coins earned):").withStyle(ChatFormatting.GOLD));
         for (int i = 0; i < Math.min(5, rows.size()); i++) {
             UUID id = rows.get(i).getKey();
-            String name = player.getServer().getProfileCache() == null ? null
-                    : player.getServer().getProfileCache().get(id).map(com.mojang.authlib.GameProfile::getName).orElse(null);
+            String name = player.level().getServer().getProfileCache() == null ? null
+                    : player.level().getServer().getProfileCache().get(id).map(com.mojang.authlib.GameProfile::getName).orElse(null);
             int rb = data.rebirths(id);
-            player.displayClientMessage(Component.literal((i + 1) + ". " + (name == null ? "A player" : name) + "  "
+            player.sendSystemMessage(Component.literal((i + 1) + ". " + (name == null ? "A player" : name) + "  "
                     + String.format(java.util.Locale.ROOT, "%,d", rows.get(i).getValue())
-                    + (rb > 0 ? "  (rebirth " + rb + ")" : "")).withStyle(id.equals(player.getUUID()) ? ChatFormatting.AQUA : ChatFormatting.GRAY), false);
+                    + (rb > 0 ? "  (rebirth " + rb + ")" : "")).withStyle(id.equals(player.getUUID()) ? ChatFormatting.AQUA : ChatFormatting.GRAY));
         }
     }
 
     /** For quest rewards and admins: /helper tycoon give <player> <amount>. */
     static void give(ServerPlayer target, long amount) {
-        Data data = Data.get(target.getServer());
+        Data data = Data.get(target.level().getServer());
         data.add(target.getUUID(), amount);
-        target.displayClientMessage(Component.literal("+" + amount + " coins (" + data.coins(target.getUUID()) + ")").withStyle(ChatFormatting.GOLD), false);
+        target.sendSystemMessage(Component.literal("+" + amount + " coins (" + data.coins(target.getUUID()) + ")").withStyle(ChatFormatting.GOLD));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -730,7 +730,7 @@ final class Tycoon {
     // ---------------------------------------------------------------------------------------
 
     private static boolean has(ServerPlayer player, String advancement) {
-        Advancement adv = player.getServer().getAdvancements().getAdvancement(new ResourceLocation(advancement));
+        Advancement adv = player.level().getServer().getAdvancements().getAdvancement(Identifier.parse(advancement));
         return adv != null && player.getAdvancements().getOrStartProgress(adv).isDone();
     }
 
@@ -766,14 +766,14 @@ final class Tycoon {
 
     /** Big-ticket shop item: one more helper level, straight away. */
     private static boolean trainHelper(ServerPlayer player) {
-        HelperData hd = HelperData.get(player.getServer());
+        HelperData hd = HelperData.get(player.level().getServer());
         HelperData.Entry e = hd.get(player.getUUID());
         if (e == null) {
-            player.displayClientMessage(Component.literal("Summon your helper first (/helper summon).").withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.literal("Summon your helper first (/helper summon).").withStyle(ChatFormatting.RED));
             return false;
         }
         if (e.level >= HelperData.MAX_LEVEL) {
-            player.displayClientMessage(Component.literal("Your helper is already level " + HelperData.MAX_LEVEL + ".").withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.literal("Your helper is already level " + HelperData.MAX_LEVEL + ".").withStyle(ChatFormatting.RED));
             return false;
         }
         e.level++;
@@ -788,14 +788,14 @@ final class Tycoon {
             new Offer(1, 20, "8 Conveyors", () -> conveyors(8)),
             new Offer(1, 40, "Collector", Tycoon::collector),
             new Offer(1, 60, "Lifter (hops ore up a block)", Tycoon::lifter),
-            new Offer(1, 150, "Upgrader (x2)", () -> named(Items.LIME_GLAZED_TERRACOTTA, 1, "Upgrader x2", ChatFormatting.GREEN)),
+            new Offer(1, 150, "Upgrader (x2)", () -> named(Items.GLAZED_TERRACOTTA.lime(), 1, "Upgrader x2", ChatFormatting.GREEN)),
             new Offer(1, 250, "Tycoon Dropper", Tycoon::dropperItem),
             new Offer(1, 15, "16 Bread", () -> new ItemStack(Items.BREAD, 16)),
             new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
             new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
             new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
-            new Offer(1, 0, "Furniture Catalogue (31 pieces for every room)", () -> new ItemStack(Items.RED_BED), 0, p -> {
-                p.getServer().execute(() -> Furniture.openCatalog(p));
+            new Offer(1, 0, "Furniture Catalogue (31 pieces for every room)", () -> new ItemStack(Items.BED.red()), 0, p -> {
+                p.level().getServer().execute(() -> Furniture.openCatalog(p));
                 return false;
             }),
             // New machines
@@ -827,12 +827,12 @@ final class Tycoon {
                     p -> Loot.giveAll(p, Loot.netheriteSet())),
             new Offer(1, Roadster.PRICE, "Star Roadster (a flying sports car you can repaint)",
                     Roadster::shopIcon, 0, Roadster::spawn),
-            new Offer(2, 800, "Super Upgrader (x3)", () -> named(Items.CYAN_GLAZED_TERRACOTTA, 1, "Super Upgrader x3", ChatFormatting.AQUA)),
+            new Offer(2, 800, "Super Upgrader (x3)", () -> named(Items.GLAZED_TERRACOTTA.cyan(), 1, "Super Upgrader x3", ChatFormatting.AQUA)),
             new Offer(2, 500, "2 Diamonds", () -> new ItemStack(Items.DIAMOND, 2)),
             new Offer(2, 300, "Golden Apple", () -> new ItemStack(Items.GOLDEN_APPLE)),
             new Offer(2, 250, "16 Bottles o' Enchanting", () -> new ItemStack(Items.EXPERIENCE_BOTTLE, 16)),
             new Offer(2, 300, "4 Ender Pearls", () -> new ItemStack(Items.ENDER_PEARL, 4)),
-            new Offer(3, 5000, "Mega Upgrader (x5)", () -> named(Items.PURPLE_GLAZED_TERRACOTTA, 1, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE)),
+            new Offer(3, 5000, "Mega Upgrader (x5)", () -> named(Items.GLAZED_TERRACOTTA.purple(), 1, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE)),
             new Offer(3, 25000, "Star Upgrader (x10)", Tycoon::starUpgrader, 1),
             // Big-ticket items for when you're rich.
             new Offer(3, 25_000, "Shulker Box", () -> new ItemStack(Items.SHULKER_BOX)),
@@ -869,7 +869,7 @@ final class Tycoon {
     }
 
     private static ItemStack adAstra(String id, int count) {
-        ResourceLocation key = new ResourceLocation("ad_astra", id);
+        Identifier key = Identifier.fromNamespaceAndPath("ad_astra", id);
         if (!net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(key)) return ItemStack.EMPTY;
         return new ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.get(key), count);
     }
@@ -935,7 +935,7 @@ final class Tycoon {
         }
 
         private void refresh() {
-            Data data = Data.get(player.getServer());
+            Data data = Data.get(player.level().getServer());
             int tier = tier(player);
             for (int i = 0; i < SIZE; i++) view.setItem(i, ItemStack.EMPTY);
             for (int i = 0; i < PER_PAGE; i++) {
@@ -958,12 +958,12 @@ final class Tycoon {
         }
 
         @Override
-        public void clicked(int slotIndex, int button, ClickType action, Player p) {
+        public void clicked(int slotIndex, int button, ContainerInput action, Player p) {
             if (slotIndex < 0 || slotIndex >= SIZE) {
-                if (action != ClickType.QUICK_MOVE) super.clicked(slotIndex, button, action, p);
+                if (action != ContainerInput.QUICK_MOVE) super.clicked(slotIndex, button, action, p);
                 return;
             }
-            if (action == ClickType.PICKUP) {
+            if (action == ContainerInput.PICKUP) {
                 Offer o = offerAt(slotIndex);
                 if (o != null) buy(o);
                 else if (slotIndex == 45 && page > 0) page--;
@@ -973,14 +973,14 @@ final class Tycoon {
         }
 
         private void buy(Offer o) {
-            Data data = Data.get(player.getServer());
+            Data data = Data.get(player.level().getServer());
             if (tier(player) < o.tier() || data.rebirths(player.getUUID()) < o.rebirths()) {
-                player.displayClientMessage(Component.literal("Locked: " + lockReason(o) + ".").withStyle(ChatFormatting.RED), true);
+                player.sendOverlayMessage(Component.literal("Locked: " + lockReason(o) + ".").withStyle(ChatFormatting.RED));
                 return;
             }
             if (data.coins(player.getUUID()) < o.price()) {
-                player.displayClientMessage(Component.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUUID()) + ").")
-                        .withStyle(ChatFormatting.RED), true);
+                player.sendOverlayMessage(Component.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUUID()) + ").")
+                        .withStyle(ChatFormatting.RED));
                 return;
             }
             if (o.action() != null) {
@@ -990,7 +990,7 @@ final class Tycoon {
             }
             data.add(player.getUUID(), -o.price());
             player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
-            player.displayClientMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN));
         }
 
         @Override

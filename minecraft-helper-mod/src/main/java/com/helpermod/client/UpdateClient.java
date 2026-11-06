@@ -73,7 +73,7 @@ public final class UpdateClient implements ClientModInitializer {
         Component link = Component.literal("[Show update]").withStyle(s -> s.withColor(ChatFormatting.GREEN).withUnderlined(true)
                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/helperupdate"))
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("See what's new and update"))));
-        client.player.displayClientMessage(Component.literal("Helper Buddies " + Updater.available() + " is available. ")
-                .withStyle(ChatFormatting.AQUA).append(link), false);
+        client.player.sendSystemMessage(Component.literal("Helper Buddies " + Updater.available() + " is available. ")
+                .withStyle(ChatFormatting.AQUA).append(link));
     }
 }

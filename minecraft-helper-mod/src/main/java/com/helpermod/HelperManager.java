@@ -68,7 +68,7 @@ public final class HelperManager {
 
     /** Re-apply the helper brain when a helper loads, and clean up stale duplicates. */
     public static void onEntityLoad(Entity entity, ServerLevel world) {
-        if (!(entity instanceof Mob mob) || !entity.getTags().contains(Helper.TAG)) return;
+        if (!(entity instanceof Mob mob) || !entity.entityTags().contains(Helper.TAG)) return;
         UUID owner = Helper.ownerOf(entity);
         HelperData.Entry entry = owner == null ? null : HelperData.get(world.getServer()).get(owner);
         if (entry == null || !entry.active || !entity.getUUID().equals(entry.entity)) {
@@ -81,18 +81,18 @@ public final class HelperManager {
     /** Right-click your helper to open its inventory (give it tools, take out loot). */
     public static InteractionResult onUseEntity(Player player, Level world, InteractionHand hand, Entity entity,
                                            @Nullable EntityHitResult hit) {
-        if (world.isClientSide || !entity.getTags().contains(Helper.TAG)) return InteractionResult.PASS;
+        if (world.isClientSide() || !entity.entityTags().contains(Helper.TAG)) return InteractionResult.PASS;
         if (hand != InteractionHand.MAIN_HAND) return InteractionResult.SUCCESS;
         UUID owner = Helper.ownerOf(entity);
         if (!player.getUUID().equals(owner)) {
-            player.displayClientMessage(Component.literal("That's " + entity.getName().getString().replace("'s Helper", "")
-                    + "'s helper. Get your own with /helper summon"), true);
+            player.sendOverlayMessage(Component.literal("That's " + entity.getName().getString().replace("'s Helper", "")
+                    + "'s helper. Get your own with /helper summon"));
             return InteractionResult.SUCCESS;
         }
         HelperData.Entry entry = HelperData.get(world.getServer()).getOrCreate(owner);
         if (player.getMainHandItem().is(Items.SADDLE) && player instanceof ServerPlayer sp) {
             if (helperFor(owner).ride(sp, entry)) {
-                player.displayClientMessage(Component.literal("Hop on! Steer with your movement keys, sprint to go faster, sneak to get off."), true);
+                player.sendOverlayMessage(Component.literal("Hop on! Steer with your movement keys, sprint to go faster, sneak to get off."));
             }
             return InteractionResult.SUCCESS;
         }

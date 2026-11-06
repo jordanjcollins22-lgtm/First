@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -39,7 +39,7 @@ final class ModGear {
         if (cache != null) return cache;
         List<Gear> list = new ArrayList<>();
         for (Item item : BuiltInRegistries.ITEM) {
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+            Identifier id = BuiltInRegistries.ITEM.getKey(item);
             String path = id.getPath().toLowerCase(Locale.ROOT);
             boolean skip = false;
             for (String s : SKIP) if (path.contains(s)) skip = true;
@@ -104,7 +104,7 @@ final class ModGear {
         return Math.max(20, Math.min(5_000_000, Math.round(p / 10.0) * 10));
     }
 
-    private static String name(Item item, ResourceLocation id) {
+    private static String name(Item item, Identifier id) {
         String n = new ItemStack(item).getHoverName().getString();
         if (n.isEmpty() || n.equals(item.getDescriptionId())) {
             StringBuilder sb = new StringBuilder();

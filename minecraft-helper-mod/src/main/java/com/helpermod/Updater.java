@@ -135,8 +135,8 @@ public final class Updater {
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.SERVER) return; // players' PCs get UpdateScreen
         String v = readyVersion;
         if (v == null) return;
-        player.displayClientMessage(Component.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
-                .withStyle(ChatFormatting.AQUA), false);
+        player.sendSystemMessage(Component.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
+                .withStyle(ChatFormatting.AQUA));
     }
 
     private static String mode() {

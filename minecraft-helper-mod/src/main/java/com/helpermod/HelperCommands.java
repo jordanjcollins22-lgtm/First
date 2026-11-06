@@ -208,10 +208,10 @@ public final class HelperCommands {
     }
 
     private static HelperData.Entry ensureSummoned(ServerPlayer player) {
-        HelperData data = HelperData.get(player.getServer());
+        HelperData data = HelperData.get(player.level().getServer());
         HelperData.Entry entry = data.getOrCreate(player.getUUID());
         Helper helper = HelperManager.helperFor(player.getUUID());
-        if (!entry.active || helper.findEntity(player.getServer(), entry) == null) {
+        if (!entry.active || helper.findEntity(player.level().getServer(), entry) == null) {
             helper.spawnNear(player, entry);
         }
         return entry;
@@ -227,7 +227,7 @@ public final class HelperCommands {
 
     /** /helper send <player> [hand|haul]: the helper walks the items over to another player. */
     static void send(ServerPlayer player, String targetName, String what) {
-        ServerPlayer target = onlinePlayer(player.getServer(), targetName);
+        ServerPlayer target = onlinePlayer(player.level().getServer(), targetName);
         if (target == null) {
             Helper.say(player, "I can't find a player called " + targetName + " online.");
             return;
@@ -268,7 +268,7 @@ public final class HelperCommands {
             if (!helper.send(player, target, items)) return;
             player.getInventory().removeItemNoUpdate(player.getInventory().selected);
         }
-        target.displayClientMessage(Component.literal(player.getName().getString() + "'s helper is bringing you something!").withStyle(ChatFormatting.GOLD), true);
+        target.sendOverlayMessage(Component.literal(player.getName().getString() + "'s helper is bringing you something!").withStyle(ChatFormatting.GOLD));
     }
 
     /** /helper unstick, or "helper, are you stuck?" when it is. */
@@ -280,7 +280,7 @@ public final class HelperCommands {
 
     private static int summon(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        HelperData.Entry entry = HelperData.get(player.getServer()).getOrCreate(player.getUUID());
+        HelperData.Entry entry = HelperData.get(player.level().getServer()).getOrCreate(player.getUUID());
         HelperManager.helperFor(player.getUUID()).spawnNear(player, entry);
         Helper.say(player, "Hi! Tell me what to get with /helper collect <material> [amount]. "
                 + "Right-click me to give me tools.");
@@ -303,12 +303,12 @@ public final class HelperCommands {
         amount = Math.max(1, Math.min(MAX_AMOUNT, amount));
         Materials.Spec spec;
         try {
-            spec = Materials.resolve(player.getServer(), raw);
+            spec = Materials.resolve(player.level().getServer(), raw);
         } catch (Materials.ResolveException e) {
             Helper.say(player, e.getMessage());
             return 0;
         }
-        String wrongDim = Materials.wrongDimension(player.getServer(), spec, player.serverLevel());
+        String wrongDim = Materials.wrongDimension(player.level().getServer(), spec, player.level());
         if (wrongDim != null) {
             Helper.say(player, wrongDim);
             return 0;
@@ -335,7 +335,7 @@ public final class HelperCommands {
 
     private static int status(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
+        HelperData.Entry entry = HelperData.get(player.level().getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out. Use /helper summon");
             return 0;
@@ -346,7 +346,7 @@ public final class HelperCommands {
 
     private static int guard(CommandContext<CommandSourceStack> ctx, boolean on) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        HelperData data = HelperData.get(player.getServer());
+        HelperData data = HelperData.get(player.level().getServer());
         data.getOrCreate(player.getUUID()).guard = on;
         data.setDirty();
         Helper.say(player, on
@@ -365,7 +365,7 @@ public final class HelperCommands {
     private static int look(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
         String raw = StringArgumentType.getString(ctx, "mob").trim();
-        HelperData data = HelperData.get(player.getServer());
+        HelperData data = HelperData.get(player.level().getServer());
         HelperData.Entry entry = data.getOrCreate(player.getUUID());
         String lower = raw.toLowerCase(java.util.Locale.ROOT);
         String newLook;
@@ -387,7 +387,7 @@ public final class HelperCommands {
         }
         entry.look = newLook;
         data.setDirty();
-        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUUID());
+        if (entry.active) HelperManager.refreshDisguise(player.level().getServer(), player.getUUID());
         Helper.say(player, entry.active ? reply : reply + " You'll see it when you /helper summon me.");
         return 1;
     }
@@ -423,11 +423,11 @@ public final class HelperCommands {
             Helper.say(player, "I can only be between " + Size.MIN + " and " + Size.MAX + " times my normal size.");
             return 0;
         }
-        HelperData data = HelperData.get(player.getServer());
+        HelperData data = HelperData.get(player.level().getServer());
         HelperData.Entry entry = data.getOrCreate(player.getUUID());
         entry.size = size;
         data.setDirty();
-        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUUID());
+        if (entry.active) HelperManager.refreshDisguise(player.level().getServer(), player.getUUID());
         String reply;
         if (size == 1f) {
             reply = "Back to normal size!";
@@ -459,7 +459,7 @@ public final class HelperCommands {
 
     private static int ride(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
+        HelperData.Entry entry = HelperData.get(player.level().getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out. Use /helper summon");
             return 0;
@@ -474,12 +474,12 @@ public final class HelperCommands {
 
     private static int dismiss(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         ServerPlayer player = ctx.getSource().getPlayerOrException();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
+        HelperData.Entry entry = HelperData.get(player.level().getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out.");
             return 0;
         }
-        HelperManager.helperFor(player.getUUID()).dismiss(player.getServer(), entry);
+        HelperManager.helperFor(player.getUUID()).dismiss(player.level().getServer(), entry);
         String held = Helper.summarize(entry.inventory, false);
         Helper.say(player, "Bye for now!" + (held.isEmpty() ? "" : " I'll hold on to " + held
                 + " until you summon me again."));

@@ -44,7 +44,7 @@ public final class Mining {
         if (isTarget && !tool.isEmpty()) {
             boolean silk = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, tool) > 0;
             if (silk != preferSilk) score += 10_000;
-            score -= EnchantmentHelper.getItemEnchantmentLevel(Enchantments.BLOCK_FORTUNE, tool) * 20;
+            score -= EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FORTUNE, tool) * 20;
         }
         return score;
     }
@@ -60,7 +60,7 @@ public final class Mining {
         if (hardness == 0) return 1;
         float speed = tool.isEmpty() ? 1f : tool.getDestroySpeed(state);
         if (speed > 1f) {
-            int efficiency = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.BLOCK_EFFICIENCY, tool);
+            int efficiency = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.EFFICIENCY, tool);
             if (efficiency > 0) speed += efficiency * efficiency + 1;
         }
         float delta = speed / hardness / (canHarvest(tool, state) ? 30f : 100f);

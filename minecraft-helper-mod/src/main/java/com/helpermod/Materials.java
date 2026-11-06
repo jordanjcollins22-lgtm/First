@@ -3,7 +3,7 @@ package com.helpermod;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
@@ -34,7 +34,7 @@ import java.util.Set;
 public final class Materials {
     private Materials() {}
 
-    public static final TagKey<Block> C_ORES = TagKey.create(Registries.BLOCK, new ResourceLocation("c", "ores"));
+    public static final TagKey<Block> C_ORES = TagKey.create(Registries.BLOCK, Identifier.fromNamespaceAndPath("c", "ores"));
 
     /** Terrain a helper may dig through on its way to a target. */
     private static final List<TagKey<Block>> TERRAIN_TAGS = List.of(
@@ -93,7 +93,7 @@ public final class Materials {
 
     /** Planet ground from Ad Astra (moon stone, mars sand, venus stone, permafrost...), so the helper can mine in space. */
     private static boolean isSpaceGround(Block block) {
-        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
+        Identifier id = BuiltInRegistries.BLOCK.getKey(block);
         if (!id.getNamespace().equals("ad_astra")) return false;
         String path = id.getPath();
         for (String word : BUILD_WORDS) if (path.contains(word)) return false;
@@ -187,7 +187,7 @@ public final class Materials {
     }
 
     public static String dimensionName(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> key) {
-        ResourceLocation id = key.location();
+        Identifier id = key.location();
         if (id.equals(net.minecraft.world.level.Level.OVERWORLD.location())) return "the Overworld";
         if (id.equals(net.minecraft.world.level.Level.NETHER.location())) return "the Nether";
         if (id.equals(net.minecraft.world.level.Level.END.location())) return "the End";
@@ -297,7 +297,7 @@ public final class Materials {
     }
 
     private static Spec resolveTag(String id, String input) throws ResolveException {
-        ResourceLocation tagId = ResourceLocation.tryParse(id.contains(":") ? id : "minecraft:" + id);
+        Identifier tagId = Identifier.tryParse(id.contains(":") ? id : "minecraft:" + id);
         if (tagId == null) throw new ResolveException("\"" + input + "\" isn't a valid tag.");
         TagKey<Block> tag = TagKey.create(Registries.BLOCK, tagId);
         Set<Block> blocks = new LinkedHashSet<>();
@@ -328,14 +328,14 @@ public final class Materials {
 
     private static Item lookupItem(String s) {
         if (s.contains(":")) {
-            ResourceLocation id = ResourceLocation.tryParse(s);
+            Identifier id = Identifier.tryParse(s);
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
             return BuiltInRegistries.ITEM.get(id);
         }
-        ResourceLocation vanilla = ResourceLocation.tryParse("minecraft:" + s);
+        Identifier vanilla = Identifier.tryParse("minecraft:" + s);
         if (vanilla != null && BuiltInRegistries.ITEM.containsKey(vanilla)) return BuiltInRegistries.ITEM.get(vanilla);
         // Modded item with the same name, e.g. "raw_tin".
-        for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
+        for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
             if (id.getPath().equals(s)) return BuiltInRegistries.ITEM.get(id);
         }
         return null;

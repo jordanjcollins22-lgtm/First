@@ -11,7 +11,7 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -30,7 +30,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -72,7 +72,7 @@ import java.util.UUID;
 final class BlackHole {
     private BlackHole() {}
 
-    static final ResourceKey<Level> WORLD = ResourceKey.create(Registries.DIMENSION, new ResourceLocation(HelperMod.MOD_ID, "black_hole"));
+    static final ResourceKey<Level> WORLD = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "black_hole"));
     private static final String NBT = "HelperRift";
     private static final String BOSS_TAG = "helpermod_rift_boss";
     private static final int Y = 100; // floor height of everything in the Black Hole
@@ -136,23 +136,23 @@ final class BlackHole {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            d.built = nbt.getBoolean("built");
-            d.cachesBuilt = nbt.getBoolean("cachesBuilt");
-            CompoundTag a = nbt.getCompound("arcane");
-            for (String k : a.getAllKeys()) d.arcane.put(UUID.fromString(k), a.getInt(k));
-            CompoundTag lo = nbt.getCompound("looted");
-            for (String k : lo.getAllKeys()) d.looted.put(k, lo.getLong(k));
-            CompoundTag b = nbt.getCompound("beaten");
-            for (String k : b.getAllKeys()) {
+            d.built = nbt.getBooleanOr("built", false);
+            d.cachesBuilt = nbt.getBooleanOr("cachesBuilt", false);
+            CompoundTag a = nbt.getCompoundOrEmpty("arcane");
+            for (String k : a.keySet()) d.arcane.put(UUID.fromString(k), a.getIntOr(k, 0));
+            CompoundTag lo = nbt.getCompoundOrEmpty("looted");
+            for (String k : lo.keySet()) d.looted.put(k, lo.getLongOr(k, 0L));
+            CompoundTag b = nbt.getCompoundOrEmpty("beaten");
+            for (String k : b.keySet()) {
                 Set<String> set = new HashSet<>();
-                ListTag l = b.getList(k, Tag.TAG_STRING);
-                for (int i = 0; i < l.size(); i++) set.add(l.getString(i));
+                ListTag l = b.getListOrEmpty(k);
+                for (int i = 0; i < l.size(); i++) set.add(l.getStringOr(i, ""));
                 d.beaten.put(UUID.fromString(k), set);
             }
-            CompoundTag r = nbt.getCompound("rematch");
-            for (String k : r.getAllKeys()) d.rematchAt.put(k, r.getLong(k));
-            CompoundTag h = nbt.getCompound("home");
-            for (String k : h.getAllKeys()) d.home.put(UUID.fromString(k), h.getCompound(k));
+            CompoundTag r = nbt.getCompoundOrEmpty("rematch");
+            for (String k : r.keySet()) d.rematchAt.put(k, r.getLongOr(k, 0L));
+            CompoundTag h = nbt.getCompoundOrEmpty("home");
+            for (String k : h.keySet()) d.home.put(UUID.fromString(k), h.getCompoundOrEmpty(k));
             return d;
         }
 
@@ -261,7 +261,7 @@ final class BlackHole {
             world.playSound(null, BlockPos.containing(centre), SoundEvents.PORTAL_TRIGGER, SoundSource.BLOCKS, 0.6f, 1.6f);
             for (ServerPlayer p : world.players()) {
                 if (p.distanceToSqr(centre) < 32 * 32) {
-                    p.displayClientMessage(Component.literal("The ore pile is starting to spin...").withStyle(ChatFormatting.DARK_PURPLE), true);
+                    p.sendOverlayMessage(Component.literal("The ore pile is starting to spin...").withStyle(ChatFormatting.DARK_PURPLE));
                 }
             }
         }
@@ -273,7 +273,7 @@ final class BlackHole {
     }
 
     private static boolean isOre(Entity e) {
-        return e instanceof ItemEntity && e.getTags().contains("helpermod_ore");
+        return e instanceof ItemEntity && e.entityTags().contains("helpermod_ore");
     }
 
     private static void tickVortices() {
@@ -291,7 +291,7 @@ final class BlackHole {
                 double tx = -dz / r * spin, tz = dx / r * spin; // around the circle
                 double in = (target - r) * 0.25; // towards the ring
                 e.setDeltaMovement(tx + dx / r * in, 0.04 + 0.06 * pull + (v.centre.y + 0.4 - e.getY()) * 0.1, tz + dz / r * in);
-                e.hurtMarked = true;
+                e.needsSync = true;
                 e.setNoGravity(true);
             }
             if (v.ticks % 4 == 0) {
@@ -381,12 +381,12 @@ final class BlackHole {
         ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
         if (kind == null || kind.startsWith("set:")) return InteractionResultHolder.pass(stack); // armor equips as normal
-        if (w.isClientSide) return InteractionResultHolder.success(stack);
+        if (w.isClientSide()) return InteractionResultHolder.success(stack);
         if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResultHolder.pass(stack);
         if (kind.startsWith("tome:")) {
             readTome(player, stack, kind);
         } else if (kind.equals("singularity")) {
-            if (player.serverLevel().dimension().equals(WORLD)) leave(player);
+            if (player.level().dimension().equals(WORLD)) leave(player);
             else enter(player);
         } else {
             skill(player, kind);
@@ -395,7 +395,7 @@ final class BlackHole {
     }
 
     static void enter(ServerPlayer player) {
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         ServerLevel hole = server.getLevel(WORLD);
         if (hole == null) {
             Helper.say(player, "The Black Hole didn't load. Restart the world once after installing this version.");
@@ -411,13 +411,13 @@ final class BlackHole {
             data.cachesBuilt = true;
         }
         CompoundTag home = new CompoundTag();
-        home.putString("dim", player.serverLevel().dimension().location().toString());
+        home.putString("dim", player.level().dimension().location().toString());
         home.putDouble("x", player.getX());
         home.putDouble("y", player.getY());
         home.putDouble("z", player.getZ());
         data.home.put(player.getUUID(), home);
         data.setDirty();
-        ServerLevel from = player.serverLevel();
+        ServerLevel from = player.level();
         from.sendParticles(ParticleTypes.REVERSE_PORTAL, player.getX(), player.getY() + 1, player.getZ(), 60, 0.4, 0.8, 0.4, 0.1);
         from.playSound(null, player.blockPosition(), SoundEvents.END_PORTAL_SPAWN, SoundSource.PLAYERS, 0.6f, 1.4f);
         player.teleportTo(hole, 0.5, Y + 1, 4.5, 180f, 0f);
@@ -429,18 +429,18 @@ final class BlackHole {
     }
 
     static void leave(ServerPlayer player) {
-        MinecraftServer server = player.getServer();
+        MinecraftServer server = player.level().getServer();
         Data data = Data.get(server);
         CompoundTag home = data.home.get(player.getUUID());
         ServerLevel to = server.overworld();
         double x, y, z;
         if (home != null) {
-            ResourceLocation dim = ResourceLocation.tryParse(home.getString("dim"));
+            Identifier dim = Identifier.tryParse(home.getString("dim"));
             ServerLevel w = dim == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dim));
             if (w != null) to = w;
-            x = home.getDouble("x");
-            y = home.getDouble("y");
-            z = home.getDouble("z");
+            x = home.getDoubleOr("x", 0.0);
+            y = home.getDoubleOr("y", 0.0);
+            z = home.getDoubleOr("z", 0.0);
         } else {
             BlockPos spawn = to.getSharedSpawnPos();
             x = spawn.getX() + 0.5;
@@ -453,25 +453,25 @@ final class BlackHole {
 
     /** /helper blackhole */
     static void info(ServerPlayer player) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         Set<String> beaten = data.beaten(player.getUUID());
         Helper.say(player, "Black Hole: pile up " + PILE + " or more Tycoon ore in one spot (let it drop into a pit, or run your "
                 + "conveyors in a loop with no collector). The pile spins in a circle and collapses into a Singularity. "
                 + "Right-click with it to fall in.");
         int arcane = data.arcane.getOrDefault(player.getUUID(), 0);
-        player.displayClientMessage(Component.literal("  Magic level " + arcane + "/" + MAX_ARCANE + " (skills +" + (arcane * 10) + "% damage, -"
-                + (arcane * 5) + "% cooldown). Read Rift Tomes to level up.").withStyle(ChatFormatting.LIGHT_PURPLE), false);
+        player.sendSystemMessage(Component.literal("  Magic level " + arcane + "/" + MAX_ARCANE + " (skills +" + (arcane * 10) + "% damage, -"
+                + (arcane * 5) + "% cooldown). Read Rift Tomes to level up.").withStyle(ChatFormatting.LIGHT_PURPLE));
         for (BossDef b : BOSSES) {
             String where = b.dx() > 0 ? "east" : b.dx() < 0 ? "west" : b.dz() > 0 ? "south" : "north";
-            player.displayClientMessage(Component.literal((beaten.contains(b.id()) ? "  [beaten] " : "  ") + b.title() + " (" + where
+            player.sendSystemMessage(Component.literal((beaten.contains(b.id()) ? "  [beaten] " : "  ") + b.title() + " (" + where
                     + " bridge): drops " + b.reward() + " and " + b.coins() + " coins").withStyle(
-                    beaten.contains(b.id()) ? ChatFormatting.GREEN : ChatFormatting.GRAY), false);
+                    beaten.contains(b.id()) ? ChatFormatting.GREEN : ChatFormatting.GRAY));
         }
     }
 
     /** /helper blackhole leave, in case the Singularity got lost. */
     static void leaveCommand(ServerPlayer player) {
-        if (!player.serverLevel().dimension().equals(WORLD)) {
+        if (!player.level().dimension().equals(WORLD)) {
             Helper.say(player, "You're not in the Black Hole.");
             return;
         }
@@ -567,15 +567,15 @@ final class BlackHole {
                 if (b.id().equals("sovereign")) {
                     Set<String> beaten = data.beaten(player.getUUID());
                     if (!(beaten.contains("ashen") && beaten.contains("dusk") && beaten.contains("colossus"))) {
-                        player.displayClientMessage(Component.literal("The Singularity Sovereign sleeps. Beat the other three bosses first.")
-                                .withStyle(ChatFormatting.DARK_PURPLE), true);
+                        player.sendOverlayMessage(Component.literal("The Singularity Sovereign sleeps. Beat the other three bosses first.")
+                                .withStyle(ChatFormatting.DARK_PURPLE));
                         continue;
                     }
                 }
                 long ready = data.rematchAt.getOrDefault(b.id(), 0L);
                 if (hole.getGameTime() < ready) {
-                    player.displayClientMessage(Component.literal(b.name() + " is gathering strength. Back in "
-                            + Math.max(1, (ready - hole.getGameTime()) / 1200) + " minutes."), true);
+                    player.sendOverlayMessage(Component.literal(b.name() + " is gathering strength. Back in "
+                            + Math.max(1, (ready - hole.getGameTime()) / 1200) + " minutes."));
                     continue;
                 }
                 start(hole, b);
@@ -598,8 +598,8 @@ final class BlackHole {
         }
         BlockPos at = altar(b).above();
         double ox = -Math.signum(b.dx()) * 7, oz = -Math.signum(b.dz()) * 7; // between the altar and the far edge
-        boss.moveTo(at.getX() + 0.5 - ox, at.getY(), at.getZ() + 0.5 - oz, 0f, 0f);
-        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), MobSpawnType.EVENT, null, null);
+        boss.snapTo(at.getX() + 0.5 - ox, at.getY(), at.getZ() + 0.5 - oz, 0f, 0f);
+        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null, null);
         attr(boss, Attributes.MAX_HEALTH, b.health());
         attr(boss, Attributes.ATTACK_DAMAGE, b.damage());
         attr(boss, Attributes.MOVEMENT_SPEED, b.speed());
@@ -622,7 +622,7 @@ final class BlackHole {
         world.sendParticles(ParticleTypes.SCULK_SOUL, boss.getX(), boss.getY() + 1, boss.getZ(), 40, 0.6, 1, 0.6, 0.05);
         for (ServerPlayer p : world.players()) {
             if (p.distanceToSqr(Vec3.atCenterOf(at)) < 64 * 64) {
-                p.displayClientMessage(Component.literal(b.title().toUpperCase(java.util.Locale.ROOT)).withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD), false);
+                p.sendSystemMessage(Component.literal(b.title().toUpperCase(java.util.Locale.ROOT)).withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.BOLD));
             }
         }
     }
@@ -665,8 +665,8 @@ final class BlackHole {
         if (!f.enraged && boss.getHealth() < boss.getMaxHealth() / 2) {
             f.enraged = true;
             f.bar.setColor(BossEvent.BossBarColor.RED);
-            boss.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 600, 1));
-            boss.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, 20 * 600, 1));
+            boss.addEffect(new MobEffectInstance(MobEffects.SPEED, 20 * 600, 1));
+            boss.addEffect(new MobEffectInstance(MobEffects.STRENGTH, 20 * 600, 1));
             boss.addEffect(new MobEffectInstance(MobEffects.GLOWING, 20 * 600, 0));
             world.playSound(null, boss.blockPosition(), SoundEvents.ENDER_DRAGON_GROWL, SoundSource.HOSTILE, 1.2f, 0.8f);
             world.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, boss.getX(), boss.getY() + 1, boss.getZ(), 60, 1, 1, 1, 0.1);
@@ -675,14 +675,13 @@ final class BlackHole {
                 Entity m = minion.create(world);
                 if (m == null) continue;
                 double a = i * Math.PI * 2 / 3;
-                m.moveTo(boss.getX() + Math.cos(a) * 3, boss.getY() + (minion == EntityType.VEX ? 2 : 0),
-                        boss.getZ() + Math.sin(a) * 3, 0, 0);
+                m.snapTo(boss.getX() + Math.cos(a) * 3, boss.getY() + (minion == EntityType.VEX ? 2 : 0), boss.getZ() + Math.sin(a) * 3, 0, 0);
                 m.addTag(Planets.MOB_TAG);
                 world.addFreshEntity(m);
             }
             for (ServerPlayer p : world.players()) {
                 if (p.blockPosition().distSqr(altar) < 48 * 48) {
-                    p.displayClientMessage(Component.literal(f.def.name() + " is enraged!").withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
+                    p.sendOverlayMessage(Component.literal(f.def.name() + " is enraged!").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
                 }
             }
         }
@@ -716,7 +715,7 @@ final class BlackHole {
             p.giveExperiencePoints(b.id().equals("sovereign") ? 2000 : 500);
             coins.add(p.getUUID(), b.coins());
             data.beaten(p.getUUID()).add(b.id());
-            p.displayClientMessage(Component.literal("ENEMY FELLED").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), false);
+            p.sendSystemMessage(Component.literal("ENEMY FELLED").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             Helper.say(p, "We beat " + b.title() + "! You got " + b.reward() + " and " + b.coins() + " coins.");
             Set<String> beaten = data.beaten(p.getUUID());
             if (!b.id().equals("sovereign") && beaten.contains("ashen") && beaten.contains("dusk") && beaten.contains("colossus")) {
@@ -741,13 +740,13 @@ final class BlackHole {
 
     private static final ArmorSet[] SETS = {
             new ArmorSet("ashen", "Cinderwarden", ChatFormatting.GOLD, "Fire Resistance and Strength",
-                    new MobEffectInstance[]{fx(MobEffects.FIRE_RESISTANCE, 0), fx(MobEffects.DAMAGE_BOOST, 0)}),
+                    new MobEffectInstance[]{fx(MobEffects.FIRE_RESISTANCE, 0), fx(MobEffects.STRENGTH, 0)}),
             new ArmorSet("dusk", "Moonless", ChatFormatting.LIGHT_PURPLE, "Speed II and Night Vision",
-                    new MobEffectInstance[]{fx(MobEffects.MOVEMENT_SPEED, 1), fx(MobEffects.NIGHT_VISION, 0)}),
+                    new MobEffectInstance[]{fx(MobEffects.SPEED, 1), fx(MobEffects.NIGHT_VISION, 0)}),
             new ArmorSet("colossus", "Hollow Bulwark", ChatFormatting.DARK_AQUA, "Resistance and Haste II",
-                    new MobEffectInstance[]{fx(MobEffects.DAMAGE_RESISTANCE, 0), fx(MobEffects.DIG_SPEED, 1)}),
+                    new MobEffectInstance[]{fx(MobEffects.RESISTANCE, 0), fx(MobEffects.HASTE, 1)}),
             new ArmorSet("sovereign", "Event Horizon", ChatFormatting.DARK_PURPLE, "Regeneration, Strength II and Slow Falling",
-                    new MobEffectInstance[]{fx(MobEffects.REGENERATION, 0), fx(MobEffects.DAMAGE_BOOST, 1), fx(MobEffects.SLOW_FALLING, 0)}),
+                    new MobEffectInstance[]{fx(MobEffects.REGENERATION, 0), fx(MobEffects.STRENGTH, 1), fx(MobEffects.SLOW_FALLING, 0)}),
     };
 
     private static ArmorSet set(String id) {
@@ -768,9 +767,9 @@ final class BlackHole {
         }
         ItemStack s = tagged(item, "set:" + a.id(), a.name() + " " + piece, a.color(),
                 "Part of the " + a.name() + " set.", "Wear all four pieces: " + a.bonus() + ".");
-        s.enchant(Enchantments.ALL_DAMAGE_PROTECTION, 4);
+        s.enchant(Enchantments.PROTECTION, 4);
         s.enchant(Enchantments.UNBREAKING, 3);
-        if (slot == EquipmentSlot.FEET) s.enchant(Enchantments.FALL_PROTECTION, 4);
+        if (slot == EquipmentSlot.FEET) s.enchant(Enchantments.FEATHER_FALLING, 4);
         if (slot == EquipmentSlot.HEAD) s.enchant(Enchantments.RESPIRATION, 3);
         return s;
     }
@@ -801,7 +800,7 @@ final class BlackHole {
     }
 
     private static void readTome(ServerPlayer player, ItemStack stack, String kind) {
-        Data data = Data.get(player.getServer());
+        Data data = Data.get(player.level().getServer());
         int level = data.arcane.getOrDefault(player.getUUID(), 0);
         if (level >= MAX_ARCANE) {
             Helper.say(player, "Your magic is already at the top level (" + MAX_ARCANE + "). Keep this tome for a friend.");
@@ -811,19 +810,19 @@ final class BlackHole {
         data.setDirty();
         stack.shrink(1);
         player.giveExperienceLevels(5);
-        ServerLevel w = player.serverLevel();
+        ServerLevel w = player.level();
         w.sendParticles(ParticleTypes.ENCHANT, player.getX(), player.getY() + 1.5, player.getZ(), 60, 0.6, 0.8, 0.6, 1.0);
         w.playSound(null, player.blockPosition(), SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1f, 0.8f);
-        player.displayClientMessage(Component.literal("Magic level " + (level + 1) + "! Weapon skills now do +" + ((level + 1) * 10)
-                + "% damage with " + ((level + 1) * 5) + "% shorter cooldowns. (+5 XP levels for enchanting)").withStyle(ChatFormatting.AQUA), false);
+        player.sendSystemMessage(Component.literal("Magic level " + (level + 1) + "! Weapon skills now do +" + ((level + 1) * 10)
+                + "% damage with " + ((level + 1) * 5) + "% shorter cooldowns. (+5 XP levels for enchanting)").withStyle(ChatFormatting.AQUA));
     }
 
     /** A strong enchanted book: one of the best enchantments at its top level. */
     static ItemStack book(RandomSource rnd) {
-        Enchantment[] good = {Enchantments.SHARPNESS, Enchantments.ALL_DAMAGE_PROTECTION, Enchantments.BLOCK_EFFICIENCY, Enchantments.UNBREAKING,
-                Enchantments.BLOCK_FORTUNE, Enchantments.MOB_LOOTING, Enchantments.POWER_ARROWS, Enchantments.FALL_PROTECTION,
+        Enchantment[] good = {Enchantments.SHARPNESS, Enchantments.PROTECTION, Enchantments.EFFICIENCY, Enchantments.UNBREAKING,
+                Enchantments.FORTUNE, Enchantments.LOOTING, Enchantments.POWER, Enchantments.FEATHER_FALLING,
                 Enchantments.MENDING, Enchantments.SWEEPING_EDGE, Enchantments.FIRE_ASPECT, Enchantments.SILK_TOUCH,
-                Enchantments.INFINITY_ARROWS, Enchantments.DEPTH_STRIDER, Enchantments.SOUL_SPEED, Enchantments.SWIFT_SNEAK};
+                Enchantments.INFINITY, Enchantments.DEPTH_STRIDER, Enchantments.SOUL_SPEED, Enchantments.SWIFT_SNEAK};
         Enchantment e = good[rnd.nextInt(good.length)];
         return EnchantedBookItem.createForEnchantment(new EnchantmentInstance(e, e.getMaxLevel()));
     }
@@ -882,7 +881,7 @@ final class BlackHole {
 
     /** Right-clicking a Rift Cache gives that player their own loot (everyone gets their own, nobody steals it). */
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
-        if (w.isClientSide || !w.dimension().equals(WORLD)) return InteractionResult.PASS;
+        if (w.isClientSide() || !w.dimension().equals(WORLD)) return InteractionResult.PASS;
         BlockPos pos = hit.getBlockPos();
         if (!w.getBlockState(pos).is(Blocks.CHEST) || !cachePositions().contains(pos)) return InteractionResult.PASS;
         if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
@@ -892,8 +891,8 @@ final class BlackHole {
         String key = player.getStringUUID() + "|" + pos.asLong();
         long ready = data.looted.getOrDefault(key, 0L);
         if (world.getGameTime() < ready) {
-            player.displayClientMessage(Component.literal("This Rift Cache is empty for you. It refills in "
-                    + Math.max(1, (ready - world.getGameTime()) / 1200) + " minutes.").withStyle(ChatFormatting.GRAY), true);
+            player.sendOverlayMessage(Component.literal("This Rift Cache is empty for you. It refills in "
+                    + Math.max(1, (ready - world.getGameTime()) / 1200) + " minutes.").withStyle(ChatFormatting.GRAY));
             return InteractionResult.SUCCESS;
         }
         data.looted.put(key, world.getGameTime() + CACHE_COOLDOWN);
@@ -902,8 +901,8 @@ final class BlackHole {
         for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s);
         world.playSound(null, pos, SoundEvents.CHEST_OPEN, SoundSource.BLOCKS, 0.8f, 0.7f);
         world.sendParticles(ParticleTypes.REVERSE_PORTAL, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 30, 0.3, 0.4, 0.3, 0.05);
-        player.displayClientMessage(Component.literal("Rift Cache: " + items.size() + " items! It refills for you in 15 minutes.")
-                .withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        player.sendOverlayMessage(Component.literal("Rift Cache: " + items.size() + " items! It refills for you in 15 minutes.")
+                .withStyle(ChatFormatting.LIGHT_PURPLE));
         return InteractionResult.SUCCESS;
     }
 
@@ -913,16 +912,16 @@ final class BlackHole {
 
     private static boolean target(Entity e, Player owner) {
         return e instanceof LivingEntity le && le.isAlive() && e instanceof Enemy && e != owner
-                && !e.getTags().contains(Helper.TAG);
+                && !e.entityTags().contains(Helper.TAG);
     }
 
     private static void skill(ServerPlayer player, String kind) {
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         String key = player.getStringUUID() + "|" + kind;
         long now = world.getServer().getTickCount();
         long ready = COOLDOWNS.getOrDefault(key, 0L);
         if (now < ready) {
-            player.displayClientMessage(Component.literal("Skill ready in " + ((ready - now) / 20 + 1) + " s").withStyle(ChatFormatting.GRAY), true);
+            player.sendOverlayMessage(Component.literal("Skill ready in " + ((ready - now) / 20 + 1) + " s").withStyle(ChatFormatting.GRAY));
             return;
         }
         int arcane = Data.get(world.getServer()).arcane.getOrDefault(player.getUUID(), 0);
@@ -933,10 +932,10 @@ final class BlackHole {
                 for (Entity e : world.getEntities(player, player.getBoundingBox().inflate(4.5, 1.5, 4.5), x -> target(x, player))) {
                     LivingEntity le = (LivingEntity) e;
                     le.hurt(player.damageSources().playerAttack(player), 12 * power);
-                    le.setSecondsOnFire(5);
+                    le.igniteForSeconds(5);
                     Vec3 push = e.position().subtract(player.position()).multiply(1, 0, 1).normalize().scale(0.8);
                     le.push(push.x, 0.3, push.z);
-                    le.hurtMarked = true;
+                    le.needsSync = true;
                 }
                 for (int i = 0; i < 24; i++) {
                     double a = i * Math.PI / 12;
@@ -955,8 +954,8 @@ final class BlackHole {
                     ((LivingEntity) e).hurt(player.damageSources().playerAttack(player), 11 * power);
                 }
                 player.setDeltaMovement(look.x * 2.4, 0.15, look.z * 2.4);
-                player.hurtMarked = true;
-                player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 20, 2));
+                player.needsSync = true;
+                player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 20, 2));
                 for (int i = 0; i <= 8; i++) {
                     Vec3 p = start.add(look.scale(i));
                     world.sendParticles(ParticleTypes.PORTAL, p.x, p.y + 1, p.z, 6, 0.2, 0.4, 0.2, 0.2);
@@ -969,7 +968,7 @@ final class BlackHole {
                 for (Entity e : near) {
                     Vec3 to = player.position().subtract(e.position());
                     e.setDeltaMovement(to.x * 0.25, 0.9, to.z * 0.25);
-                    e.hurtMarked = true;
+                    e.needsSync = true;
                     ((LivingEntity) e).hurt(player.damageSources().playerAttack(player), 14 * power);
                 }
                 world.sendParticles(ParticleTypes.REVERSE_PORTAL, player.getX(), player.getY() + 0.5, player.getZ(), 120, 4, 0.5, 4, 0.05);

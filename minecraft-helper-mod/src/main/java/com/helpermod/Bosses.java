@@ -8,7 +8,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
@@ -21,12 +21,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.animal.IronGolem;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -89,13 +89,13 @@ final class Bosses {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            ListTag list = nbt.getList("planets", Tag.TAG_COMPOUND);
+            ListTag list = nbt.getListOrEmpty("planets");
             for (int i = 0; i < list.size(); i++) {
-                CompoundTag t = list.getCompound(i);
-                String key = t.getString("planet");
-                d.arenas.put(key, BlockPos.of(t.getLong("arena")));
-                d.rematchAt.put(key, t.getLong("rematch"));
-                d.wins.put(key, t.getInt("wins"));
+                CompoundTag t = list.getCompoundOrEmpty(i);
+                String key = t.getStringOr("planet", "");
+                d.arenas.put(key, BlockPos.of(t.getLongOr("arena", 0L)));
+                d.rematchAt.put(key, t.getLongOr("rematch", 0L));
+                d.wins.put(key, t.getIntOr("wins", 0));
             }
             return d;
         }
@@ -126,7 +126,7 @@ final class Bosses {
         Data data = Data.get(server);
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             Planets.Theme theme = Planets.themeOf(world);
             if (theme == null) continue;
             String key = Planets.keyOf(world);
@@ -148,8 +148,8 @@ final class Bosses {
             long now = world.getGameTime();
             long ready = data.rematchAt.getOrDefault(key, 0L);
             if (now < ready) {
-                player.displayClientMessage(Component.literal("The " + theme.boss().name() + " is resting. Come back in "
-                        + Math.max(1, (ready - now) / 1200) + " minutes."), true);
+                player.sendOverlayMessage(Component.literal("The " + theme.boss().name() + " is resting. Come back in "
+                        + Math.max(1, (ready - now) / 1200) + " minutes."));
                 continue;
             }
             start(world, arena, theme, key);
@@ -162,14 +162,14 @@ final class Bosses {
 
     /** /helper boss: where's this planet's arena? */
     static void tellWhere(ServerPlayer player) {
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         Planets.Theme theme = Planets.themeOf(world);
         if (theme == null) {
             Helper.say(player, "There are planet bosses on the Moon, Mars, Mercury, Venus, Glacio, Europa, Io, Ceres, Titan and Pluto. "
                     + "Fly there with an Ad Astra rocket.");
             return;
         }
-        BlockPos arena = Data.get(player.getServer()).arenas.get(Planets.keyOf(world));
+        BlockPos arena = Data.get(player.level().getServer()).arenas.get(Planets.keyOf(world));
         if (arena == null) {
             Helper.say(player, "The boss arena on " + theme.display() + " appears near you once you're standing on the ground.");
             return;
@@ -193,7 +193,7 @@ final class Bosses {
     // ---------------------------------------------------------------------------------------
 
     private static BlockState block(String id, BlockState fallback) {
-        ResourceLocation i = ResourceLocation.tryParse(id);
+        Identifier i = Identifier.tryParse(id);
         if (i == null || !BuiltInRegistries.BLOCK.containsKey(i)) return fallback;
         Block b = BuiltInRegistries.BLOCK.get(i);
         return b == Blocks.AIR ? fallback : b.defaultBlockState();
@@ -206,7 +206,7 @@ final class Bosses {
         int cz = Mth.floor(player.getZ() + Math.sin(angle) * 40);
         world.getChunk(cx >> 4, cz >> 4); // make sure it's loaded
         int y = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, cx, cz);
-        if (y <= world.getMinBuildHeight() + 4 || y >= world.getMaxBuildHeight() - 12) return null;
+        if (y <= world.getMinY() + 4 || y >= world.getMaxBuildHeight() - 12) return null;
         BlockState floor = block(theme.floor(), Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState());
         BlockState pillar = block(theme.pillar(), Blocks.CHISELED_POLISHED_BLACKSTONE.defaultBlockState());
         BlockState under = Blocks.COBBLED_DEEPSLATE.defaultBlockState();
@@ -255,8 +255,8 @@ final class Bosses {
             if (e != null) e.discard();
             return;
         }
-        boss.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 180f, 0f);
-        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), MobSpawnType.EVENT, null, null);
+        boss.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 180f, 0f);
+        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null, null);
         if (boss instanceof MagmaCube cube) cube.setSize(6, true);
         Planets.Boss b = theme.boss();
         set(boss, Attributes.MAX_HEALTH, b.health());
@@ -265,7 +265,7 @@ final class Bosses {
         set(boss, Attributes.FOLLOW_RANGE, 48);
         boss.setHealth(boss.getMaxHealth());
         if (b.weapon() != null) {
-            ResourceLocation w = ResourceLocation.tryParse(b.weapon());
+            Identifier w = Identifier.tryParse(b.weapon());
             if (w != null && BuiltInRegistries.ITEM.containsKey(w)) boss.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(BuiltInRegistries.ITEM.get(w)));
         }
         for (EquipmentSlot slot : EquipmentSlot.values()) boss.setDropChance(slot, 0f);
@@ -358,7 +358,7 @@ final class Bosses {
                 if (t == null) continue;
                 double a = spawned * Math.PI / 2;
                 BlockPos at = arena.above().offset((int) Math.round(Math.cos(a) * 8), 0, (int) Math.round(Math.sin(a) * 8));
-                Entity minion = t.spawn(world, at, MobSpawnType.EVENT);
+                Entity minion = t.spawn(world, at, EntitySpawnReason.EVENT);
                 if (minion != null) minion.addTag(Planets.MOB_TAG);
                 if (++spawned >= 4) break;
             }
@@ -400,7 +400,7 @@ final class Bosses {
 
     /** A boss left over from before a restart has no fight to belong to: remove it (the arena re-arms). */
     static void onEntityLoad(Entity entity, ServerLevel world) {
-        if (!entity.getTags().contains(TAG)) return;
+        if (!entity.entityTags().contains(TAG)) return;
         world.getServer().execute(() -> {
             for (Fight f : FIGHTS.values()) if (f.boss == entity) return;
             if (!entity.isRemoved()) entity.discard();

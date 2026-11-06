@@ -56,7 +56,7 @@ final class MineMarker {
     }
 
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
-        if (w.isClientSide || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
+        if (w.isClientSide() || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
         ItemStack stack = player.getItemInHand(hand);
         if (isMarker(stack)) {
             BlockPos pos = new BlockPlaceContext(player, hand, stack, hit).getClickedPos();
@@ -84,8 +84,8 @@ final class MineMarker {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             HelperData.Entry e = data.get(player.getUUID());
             if (e == null || e.mineMarker == null || e.mineDim == null) continue;
-            ServerLevel world = player.getServer().getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
-                    new net.minecraft.resources.ResourceLocation(e.mineDim)));
+            ServerLevel world = player.level().getServer().getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
+                    new net.minecraft.resources.Identifier(e.mineDim)));
             if (world == null || !world.hasChunkAt(e.mineMarker)) continue;
             if (!world.getBlockState(e.mineMarker).is(Blocks.LODESTONE)) {
                 e.mineMarker = null;

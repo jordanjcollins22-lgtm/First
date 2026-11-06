@@ -22,16 +22,16 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.entity.animal.equine.Horse;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.DyeableLeatherItem;
 import net.minecraft.world.item.Item;
@@ -119,8 +119,8 @@ final class Golf {
 
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLong("centre"));
-            ListTag list = nbt.getList("welcomed", Tag.TAG_INT_ARRAY);
+            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLongOr("centre", 0L));
+            ListTag list = nbt.getListOrEmpty("welcomed");
             for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.NbtUtils.loadUUID(list.get(i)));
             return d;
         }
@@ -215,7 +215,7 @@ final class Golf {
         if (server.getTickCount() % 40 != 0) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerLevel world = player.serverLevel();
+            ServerLevel world = player.level();
             if (!Planets.keyOf(world).equals(PLANET)) continue;
             Data data = Data.get(server);
             if (data.centre == null) {
@@ -244,7 +244,7 @@ final class Golf {
         int cz = Mth.floor(player.getZ()) + AREA_Z1 + 24;
         world.getChunk(cx >> 4, cz >> 4);
         int g = world.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, cx, cz) - 1;
-        if (g < world.getMinBuildHeight() + 16 || g > world.getMaxBuildHeight() - 40) return null;
+        if (g < world.getMinY() + 16 || g > world.getMaxBuildHeight() - 40) return null;
         g = Math.max(g, 52); // above the lakes
         BlockPos c = new BlockPos(cx, g, cz);
         flatten(world, c);
@@ -297,7 +297,7 @@ final class Golf {
                 for (int y = 1; y < h; y++) {
                     BlockPos p = at(c, x, y, z);
                     if (corner) set(world, p, Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
-                    else if (edge) set(world, p, y == 2 && (x + z) % 2 == 0 ? Blocks.GLASS_PANE.defaultBlockState() : Blocks.WHITE_CONCRETE.defaultBlockState());
+                    else if (edge) set(world, p, y == 2 && (x + z) % 2 == 0 ? Blocks.GLASS_PANE.defaultBlockState() : Blocks.CONCRETE.white().defaultBlockState());
                     else set(world, p, Blocks.AIR.defaultBlockState());
                 }
                 set(world, at(c, x, h, z), Blocks.DARK_OAK_SLAB.defaultBlockState());
@@ -327,8 +327,8 @@ final class Golf {
     private static void pro(ServerLevel world, BlockPos at) {
         Villager v = EntityType.VILLAGER.create(world);
         if (v == null) return;
-        v.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
-        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), MobSpawnType.STRUCTURE, null, null);
+        v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null, null);
         v.setVillagerData(v.getVillagerData().setProfession(VillagerProfession.NITWIT));
         v.setCustomName(Component.literal("Golf Pro").withStyle(ChatFormatting.GREEN));
         v.setCustomNameVisible(true);
@@ -379,7 +379,7 @@ final class Golf {
         for (Hazard z : h.hazards()) {
             disc(world, c, z.x(), z.z(), z.r(), z.water() ? Blocks.WATER.defaultBlockState() : Blocks.SAND.defaultBlockState());
         }
-        disc(world, c, h.cupX(), h.cupZ(), 4, Blocks.GREEN_CONCRETE.defaultBlockState());
+        disc(world, c, h.cupX(), h.cupZ(), 4, Blocks.CONCRETE.green().defaultBlockState());
         for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++) set(world, at(c, h.teeX() + ox, 0, h.teeZ() + oz), Blocks.SMOOTH_STONE.defaultBlockState());
         cup(world, c, h, true);
         Direction back = Direction.getNearest(-dx, 0, -dz);
@@ -391,7 +391,7 @@ final class Golf {
     /** A mini golf lane: a walled carpet-green strip with a few obstacles. */
     private static void miniLane(ServerLevel world, BlockPos c, Hole h) {
         int z0 = h.teeZ();
-        BlockState lane = Blocks.LIME_CONCRETE.defaultBlockState(), wall = Blocks.STRIPPED_OAK_LOG.defaultBlockState()
+        BlockState lane = Blocks.CONCRETE.lime().defaultBlockState(), wall = Blocks.STRIPPED_OAK_LOG.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS, Direction.Axis.X);
         for (int x = MINI_X0 - 1; x <= MINI_X1 + 1; x++) {
             for (int z = -2; z <= 2; z++) {
@@ -408,7 +408,7 @@ final class Golf {
             set(world, at(c, 27, 1, z0 + 1), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
             set(world, at(c, 27, 1, z0), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
         }
-        set(world, at(c, h.teeX(), 0, h.teeZ()), Blocks.WHITE_CONCRETE.defaultBlockState());
+        set(world, at(c, h.teeX(), 0, h.teeZ()), Blocks.CONCRETE.white().defaultBlockState());
         cup(world, c, h, false);
         sign(world, at(c, MINI_X0 - 1, 2, z0), Direction.WEST, "Hole " + h.number(), "Mini golf", "Par " + h.par(), "");
     }
@@ -416,11 +416,11 @@ final class Golf {
     private static void cup(ServerLevel world, BlockPos c, Hole h, boolean flag) {
         BlockPos cup = at(c, h.cupX(), 0, h.cupZ());
         set(world, cup, Blocks.AIR.defaultBlockState());
-        set(world, cup.below(), Blocks.WHITE_CONCRETE.defaultBlockState());
+        set(world, cup.below(), Blocks.CONCRETE.white().defaultBlockState());
         if (flag) {
             BlockPos pole = cup.offset(1, 0, 1);
             for (int y = 1; y <= 3; y++) set(world, pole.above(y), Blocks.BIRCH_FENCE.defaultBlockState());
-            set(world, pole.above(4), Blocks.RED_WOOL.defaultBlockState());
+            set(world, pole.above(4), Blocks.WOOL.red().defaultBlockState());
         }
     }
 
@@ -441,10 +441,10 @@ final class Golf {
         ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
         if (kind == null) return InteractionResultHolder.pass(stack);
-        if (w.isClientSide) return kind.equals("cap") ? InteractionResultHolder.pass(stack) : InteractionResultHolder.success(stack);
+        if (w.isClientSide()) return kind.equals("cap") ? InteractionResultHolder.pass(stack) : InteractionResultHolder.success(stack);
         if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResultHolder.pass(stack);
         if (kind.equals("ball") || kind.startsWith("deed:")) {
-            player.displayClientMessage(Component.literal("Right-click the ground to use it.").withStyle(ChatFormatting.YELLOW), true);
+            player.sendOverlayMessage(Component.literal("Right-click the ground to use it.").withStyle(ChatFormatting.YELLOW));
             return InteractionResultHolder.success(stack);
         }
         Club club = clubOf(stack);
@@ -459,7 +459,7 @@ final class Golf {
         ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
         if (kind == null || kind.equals("cap")) return InteractionResult.PASS;
-        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (w.isClientSide()) return InteractionResult.SUCCESS;
         if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
         BlockPos top = hit.getBlockPos().above();
         if (kind.equals("ball")) {
@@ -480,8 +480,8 @@ final class Golf {
     }
 
     static InteractionResult onUseEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
-        if (!entity.getTags().contains(PRO_TAG)) return InteractionResult.PASS;
-        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (!entity.entityTags().contains(PRO_TAG)) return InteractionResult.PASS;
+        if (w.isClientSide()) return InteractionResult.SUCCESS;
         if (hand == InteractionHand.MAIN_HAND && p instanceof ServerPlayer player) openShop(player);
         return InteractionResult.SUCCESS;
     }
@@ -502,45 +502,45 @@ final class Golf {
         Round r = ROUNDS.computeIfAbsent(player.getUUID(), k -> new Round());
         r.ball = ball.getUUID();
         r.strokes = 0;
-        player.displayClientMessage(Component.literal("Ball placed. Stand next to it and right-click with a club to hit it the way you look. Sneak for a softer shot.")
-                .withStyle(ChatFormatting.GREEN), true);
+        player.sendOverlayMessage(Component.literal("Ball placed. Stand next to it and right-click with a club to hit it the way you look. Sneak for a softer shot.")
+                .withStyle(ChatFormatting.GREEN));
     }
 
     private static ItemEntity ball(ServerPlayer player) {
         Round r = ROUNDS.get(player.getUUID());
         if (r == null || r.ball == null) return null;
-        Entity e = player.serverLevel().getEntity(r.ball);
+        Entity e = player.level().getEntity(r.ball);
         return e instanceof ItemEntity ie && ie.isAlive() ? ie : null;
     }
 
     private static void swing(ServerPlayer player, Club club) {
         ItemEntity ball = ball(player);
         if (ball == null) {
-            player.displayClientMessage(Component.literal("Place a Golf Ball first (right-click the ground with one).").withStyle(ChatFormatting.YELLOW), true);
+            player.sendOverlayMessage(Component.literal("Place a Golf Ball first (right-click the ground with one).").withStyle(ChatFormatting.YELLOW));
             return;
         }
         if (ball.distanceToSqr(player) > 3.5 * 3.5) {
-            player.displayClientMessage(Component.literal("Get closer to your ball (it's " + (int) Math.sqrt(ball.distanceToSqr(player)) + " blocks away).")
-                    .withStyle(ChatFormatting.YELLOW), true);
+            player.sendOverlayMessage(Component.literal("Get closer to your ball (it's " + (int) Math.sqrt(ball.distanceToSqr(player)) + " blocks away).")
+                    .withStyle(ChatFormatting.YELLOW));
             return;
         }
         if (ball.getDeltaMovement().horizontalDistanceSqr() > 0.003) {
-            player.displayClientMessage(Component.literal("Wait for the ball to stop.").withStyle(ChatFormatting.YELLOW), true);
+            player.sendOverlayMessage(Component.literal("Wait for the ball to stop.").withStyle(ChatFormatting.YELLOW));
             return;
         }
         double yaw = Math.toRadians(player.getYRot());
         double soft = player.isShiftKeyDown() ? 0.5 : 1.0;
         double h = club.power() * soft, v = club.lift() * soft;
         ball.setDeltaMovement(-Math.sin(yaw) * h, v + 0.05, Math.cos(yaw) * h);
-        ball.hurtMarked = true;
+        ball.needsSync = true;
         Round r = ROUNDS.get(player.getUUID());
         r.strokes++;
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         world.playSound(null, ball.blockPosition(), club.id().equals("putter") ? SoundEvents.WOOD_HIT : SoundEvents.PLAYER_ATTACK_STRONG,
                 SoundSource.PLAYERS, 0.8f, 1.6f);
         world.sendParticles(ParticleTypes.CRIT, ball.getX(), ball.getY() + 0.1, ball.getZ(), 6, 0.1, 0.1, 0.1, 0.1);
         player.swing(InteractionHand.MAIN_HAND, true);
-        player.displayClientMessage(Component.literal(club.name() + " - stroke " + r.strokes).withStyle(ChatFormatting.AQUA), true);
+        player.sendOverlayMessage(Component.literal(club.name() + " - stroke " + r.strokes).withStyle(ChatFormatting.AQUA));
     }
 
     /** Pick your ball back up: /helper golf ball */
@@ -599,17 +599,17 @@ final class Golf {
         else if (diff == 0) { name = "Par."; coins = 500; }
         else if (diff == 1) { name = "Bogey."; coins = 200; }
         else { name = "Finished."; coins = 50; }
-        Tycoon.Data td = Tycoon.Data.get(player.getServer());
+        Tycoon.Data td = Tycoon.Data.get(player.level().getServer());
         td.add(player.getUUID(), coins);
         player.getInventory().placeItemBackInInventory(balls(1));
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         world.playSound(null, player.blockPosition(), strokes == 1 ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
                 SoundSource.PLAYERS, 0.8f, 1.2f);
         Component msg = Component.literal("[Golf] ").withStyle(ChatFormatting.GREEN).append(Component.literal(player.getName().getString() + " sank hole "
                 + h.number() + " (" + h.kind().toLowerCase(java.util.Locale.ROOT) + ", par " + h.par() + ") in " + strokes
                 + (strokes == 1 ? " stroke. " : " strokes. ") + name + " +" + coins + " coins").withStyle(ChatFormatting.WHITE));
-        for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
-            if (p == player || p.level() == player.level()) p.displayClientMessage(msg, false);
+        for (ServerPlayer p : player.level().getServer().getPlayerList().getPlayers()) {
+            if (p == player || p.level() == player.level()) p.sendSystemMessage(msg);
         }
     }
 
@@ -619,8 +619,8 @@ final class Golf {
 
     /** /helper golf */
     static void info(ServerPlayer player) {
-        Data data = Data.get(player.getServer());
-        if (!Planets.keyOf(player.serverLevel()).equals(PLANET)) {
+        Data data = Data.get(player.level().getServer());
+        if (!Planets.keyOf(player.level()).equals(PLANET)) {
             Helper.say(player, "The golf course is on Fairway, a grassy planet. Fly there with a tier 1 Ad Astra rocket "
                     + "(the same one that reaches the Moon).");
         } else if (data.centre == null) {
@@ -636,7 +636,7 @@ final class Golf {
                 "Holes 1-3 are mini golf, 4-5 short (par 3), 6-7 middle (par 4), 8-9 long (par 5).",
                 "/helper golf shop (on Fairway) or talk to the Golf Pro.  /helper golf ball picks your ball back up.",
         };
-        for (String line : how) player.displayClientMessage(Component.literal(line).withStyle(ChatFormatting.GRAY), false);
+        for (String line : how) player.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GRAY));
     }
 
     private record Offer(long price, String what, java.util.function.Supplier<ItemStack> item,
@@ -664,11 +664,11 @@ final class Golf {
 
     /** A golf cart: a fast, tame, saddled white horse that's yours. */
     private static boolean cart(ServerPlayer player) {
-        ServerLevel world = player.serverLevel();
+        ServerLevel world = player.level();
         Horse horse = EntityType.HORSE.create(world);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
-        horse.moveTo(at.x, player.getY(), at.z, player.getYRot(), 0);
+        horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);
         horse.setTamed(true);
         horse.setOwnerUUID(player.getUUID());
         horse.equipSaddle(SoundSource.NEUTRAL);
@@ -687,7 +687,7 @@ final class Golf {
     }
 
     static void openShop(ServerPlayer player) {
-        if (!Planets.keyOf(player.serverLevel()).equals(PLANET)) {
+        if (!Planets.keyOf(player.level()).equals(PLANET)) {
             Helper.say(player, "The golf shop is in the Fairway Golf Club, on the planet Fairway.");
             return;
         }
@@ -716,26 +716,26 @@ final class Golf {
                 b.setCount(Math.max(1, shown.getCount()));
                 view.setItem(i, b);
             }
-            view.setItem(26, Storage.Menu.button(Items.GOLD_INGOT, Tycoon.Data.get(player.getServer()).coins(player.getUUID()) + " coins",
+            view.setItem(26, Storage.Menu.button(Items.GOLD_INGOT, Tycoon.Data.get(player.level().getServer()).coins(player.getUUID()) + " coins",
                     "Earn coins with the tycoon", "or by sinking putts"));
             broadcastChanges();
         }
 
         @Override
-        public void clicked(int slotIndex, int button, ClickType action, Player p) {
+        public void clicked(int slotIndex, int button, ContainerInput action, Player p) {
             if (slotIndex < 0 || slotIndex >= 27) {
-                if (action != ClickType.QUICK_MOVE) super.clicked(slotIndex, button, action, p);
+                if (action != ContainerInput.QUICK_MOVE) super.clicked(slotIndex, button, action, p);
                 return;
             }
-            if (action == ClickType.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
+            if (action == ContainerInput.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
             refresh();
         }
 
         private void buy(Offer o) {
-            Tycoon.Data data = Tycoon.Data.get(player.getServer());
+            Tycoon.Data data = Tycoon.Data.get(player.level().getServer());
             if (data.coins(player.getUUID()) < o.price()) {
-                player.displayClientMessage(Component.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUUID()) + ").")
-                        .withStyle(ChatFormatting.RED), true);
+                player.sendOverlayMessage(Component.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUUID()) + ").")
+                        .withStyle(ChatFormatting.RED));
                 return;
             }
             if (o.action() != null) {
@@ -745,7 +745,7 @@ final class Golf {
             }
             data.add(player.getUUID(), -o.price());
             player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
-            player.displayClientMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN));
         }
 
         @Override
@@ -814,7 +814,7 @@ final class Golf {
             if (villa) {
                 world.setBlockAndUpdate(backRight.relative(right.getOpposite()), Blocks.CHEST.defaultBlockState());
                 world.setBlockAndUpdate(backRight.relative(front, 3), Blocks.SMOKER.defaultBlockState());
-                world.setBlockAndUpdate(origin.relative(right, w / 2).relative(front, d / 2).above(), Blocks.LIGHT_GRAY_CARPET.defaultBlockState());
+                world.setBlockAndUpdate(origin.relative(right, w / 2).relative(front, d / 2).above(), Blocks.CARPET.lightGray().defaultBlockState());
             }
             world.setBlockAndUpdate(origin.relative(right, w / 2).relative(front, d / 2).above(h), Blocks.LANTERN.defaultBlockState()
                     .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true));
@@ -826,7 +826,7 @@ final class Golf {
             // Head against the back wall: the head is one block further back than the foot.
             Direction head = front.getOpposite();
             BlockPos footPos = foot.relative(front);
-            BlockState bed = Blocks.WHITE_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
+            BlockState bed = Blocks.BED.white().defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
             world.setBlockAndUpdate(footPos, bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
             world.setBlockAndUpdate(footPos.relative(head), bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
         }
