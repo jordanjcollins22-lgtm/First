@@ -22,6 +22,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.equine.Horse;
@@ -166,7 +167,7 @@ final class Golf {
     private static ItemStack tagged(Item item, int count, String kind, String name, ChatFormatting color, String lore) {
         ItemStack stack = new ItemStack(item, count);
         stack.getOrCreateTag().putString(NBT, kind);
-        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         if (lore != null) {
             CompoundTag display = stack.getOrCreateTagElement("display");
             ListTag l = new ListTag();
@@ -232,8 +233,8 @@ final class Golf {
             }
             if (data.welcomed.add(player.getUUID())) {
                 data.setDirty();
-                player.getInventory().placeItemBackInInventory(club(CLUBS[0]));
-                player.getInventory().placeItemBackInInventory(balls(3));
+                player.getInventory().placeItemBackInInventory(club(CLUBS[0]), net.minecraft.util.Prediction.SERVER_ONLY);
+                player.getInventory().placeItemBackInInventory(balls(3), net.minecraft.util.Prediction.SERVER_ONLY);
                 Helper.say(player, "Here's a free Putter and 3 Golf Balls to get you started. Try the mini golf first!");
             }
         }
@@ -326,7 +327,7 @@ final class Golf {
     }
 
     private static void pro(ServerLevel world, BlockPos at) {
-        Villager v = EntityType.VILLAGER.create(world);
+        Villager v = EntityTypes.VILLAGER.create(world);
         if (v == null) return;
         v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
         v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null, null);
@@ -491,7 +492,7 @@ final class Golf {
         ItemEntity old = ball(player);
         if (old != null) {
             old.discard();
-            player.getInventory().placeItemBackInInventory(balls(1));
+            player.getInventory().placeItemBackInInventory(balls(1), net.minecraft.util.Prediction.SERVER_ONLY);
         }
         ItemStack look = new ItemStack(Items.SNOWBALL);
         look.getOrCreateTag().putLong("HelperGolfId", world.getRandom().nextLong()); // never merges
@@ -553,7 +554,7 @@ final class Golf {
         }
         ball.discard();
         ROUNDS.remove(player.getUUID());
-        player.getInventory().placeItemBackInInventory(balls(1));
+        player.getInventory().placeItemBackInInventory(balls(1), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Ball picked up.");
     }
 
@@ -573,7 +574,7 @@ final class Golf {
             if (ball.isInWater()) {
                 ball.discard();
                 it.remove();
-                player.getInventory().placeItemBackInInventory(balls(1));
+                player.getInventory().placeItemBackInInventory(balls(1), net.minecraft.util.Prediction.SERVER_ONLY);
                 Helper.say(player, "Splash! Your ball went in the water. Here it is back; place it again and add a stroke.");
                 continue;
             }
@@ -602,7 +603,7 @@ final class Golf {
         else { name = "Finished."; coins = 50; }
         Tycoon.Data td = Tycoon.Data.get(player.level().getServer());
         td.add(player.getUUID(), coins);
-        player.getInventory().placeItemBackInInventory(balls(1));
+        player.getInventory().placeItemBackInInventory(balls(1), net.minecraft.util.Prediction.SERVER_ONLY);
         ServerLevel world = player.level();
         world.playSound(null, player.blockPosition(), strokes == 1 ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
                 SoundSource.PLAYERS, 0.8f, 1.2f);
@@ -659,14 +660,14 @@ final class Golf {
 
     private static ItemStack named(Item item, String name) {
         ItemStack s = new ItemStack(item);
-        s.setHoverName(Component.literal(name));
+        s.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name));
         return s;
     }
 
     /** A golf cart: a fast, tame, saddled white horse that's yours. */
     private static boolean cart(ServerPlayer player) {
         ServerLevel world = player.level();
-        Horse horse = EntityType.HORSE.create(world);
+        Horse horse = EntityTypes.HORSE.create(world);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
         horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);
@@ -742,10 +743,10 @@ final class Golf {
             if (o.action() != null) {
                 if (!o.action().test(player)) return;
             } else {
-                player.getInventory().placeItemBackInInventory(o.item().get());
+                player.getInventory().placeItemBackInInventory(o.item().get(), net.minecraft.util.Prediction.SERVER_ONLY);
             }
             data.add(player.getUUID(), -o.price());
-            player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
+            Compat.notifySound(player, SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
             player.sendOverlayMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN));
         }
 

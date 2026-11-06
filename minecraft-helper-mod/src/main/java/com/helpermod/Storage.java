@@ -71,12 +71,12 @@ public final class Storage {
     // ---------------------------------------------------------------------------------------
 
     public static boolean isStorageItem(ItemStack stack) {
-        return stack.is(Items.BARREL) && stack.hasCustomHoverName() && stack.getHoverName().getString().equals(NAME);
+        return stack.is(Items.BARREL) && stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME) && stack.getHoverName().getString().equals(NAME);
     }
 
     public static ItemStack storageItem() {
         ItemStack stack = new ItemStack(Items.BARREL);
-        stack.setHoverName(Component.literal(NAME).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.AQUA));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(NAME).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.AQUA));
         return stack;
     }
 
@@ -95,7 +95,7 @@ public final class Storage {
             return;
         }
         if (!player.isCreative()) held.shrink(1);
-        player.getInventory().placeItemBackInInventory(storageItem());
+        player.getInventory().placeItemBackInInventory(storageItem(), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Here's your Helper Storage! Place it and right-click it. It holds as much as you want, "
                 + "and every Helper Storage you place opens the same storage, so make as many as you like.");
     }
@@ -168,8 +168,8 @@ public final class Storage {
                 case ALL -> true;
                 case BLOCKS -> i instanceof BlockItem;
                 case GEAR -> gear;
-                case FOOD -> i.isEdible();
-                case ITEMS -> !(i instanceof BlockItem) && !gear && !i.isEdible();
+                case FOOD -> Compat.edible(i);
+                case ITEMS -> !(i instanceof BlockItem) && !gear && !Compat.edible(i);
             };
         }
     }
@@ -629,7 +629,7 @@ public final class Storage {
 
         static ItemStack button(Item item, String name, String... lines) {
             ItemStack stack = new ItemStack(item);
-            stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
+            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
             Component[] texts = new Component[lines.length];
             for (int i = 0; i < lines.length; i++) texts[i] = Component.literal(lines[i]).withStyle(ChatFormatting.GRAY);
             lore(stack, texts);
@@ -663,7 +663,7 @@ public final class Storage {
             this.look = look;
             this.text = current;
             ItemStack paper = new ItemStack(Items.PAPER);
-            paper.setHoverName(Component.literal(current));
+            paper.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(current));
             inputSlots.setItem(0, paper);
             showResult();
         }

@@ -80,7 +80,7 @@ public final class Devices {
             var type = EntityType.byString(mob);
             if (type.isPresent()) name = type.get().getDescription().getString() + " Spawner";
         }
-        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
         return stack;
     }
 
@@ -111,13 +111,13 @@ public final class Devices {
     // ---------------------------------------------------------------------------------------
 
     public static boolean isHarvesterItem(ItemStack stack) {
-        return stack.is(Items.HOPPER) && stack.hasCustomHoverName()
+        return stack.is(Items.HOPPER) && stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME)
                 && stack.getHoverName().getString().equals(HARVESTER_NAME);
     }
 
     public static ItemStack harvesterItem() {
         ItemStack stack = new ItemStack(Items.HOPPER);
-        stack.setHoverName(Component.literal(HARVESTER_NAME).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(HARVESTER_NAME).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
         return stack;
     }
 
@@ -130,7 +130,7 @@ public final class Devices {
             return;
         }
         if (!player.isCreative()) held.shrink(1);
-        player.getInventory().placeItemBackInInventory(harvesterItem());
+        player.getInventory().placeItemBackInInventory(harvesterItem(), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Here's your Monster Harvester! Place it right below where the spawner's monsters "
                 + "appear (within " + RANGE + " blocks) and put a chest under it for the loot. "
                 + "Sneak + right-click it to collect the XP.");
@@ -252,7 +252,7 @@ public final class Devices {
         }
 
         private static String key(Level world, BlockPos pos) {
-            return world.dimension().location() + "|" + pos.asLong();
+            return world.dimension().identifier() + "|" + pos.asLong();
         }
 
         boolean has(Level world, BlockPos pos) {

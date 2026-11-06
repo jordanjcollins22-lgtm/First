@@ -54,7 +54,7 @@ public final class HelperManager {
             try {
                 helperFor(player.getUUID()).tick(server, player, entry);
             } catch (Exception ex) {
-                HelperMod.LOG.error("Helper for {} hit an error", player.getGameProfile().getName(), ex);
+                HelperMod.LOG.error("Helper for {} hit an error", player.getGameProfile().name(), ex);
             }
         }
     }

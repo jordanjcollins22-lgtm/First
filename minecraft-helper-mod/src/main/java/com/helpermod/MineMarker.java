@@ -37,16 +37,16 @@ final class MineMarker {
 
     static ItemStack item() {
         ItemStack stack = new ItemStack(Items.LODESTONE);
-        stack.setHoverName(Component.literal(NAME).withStyle(ChatFormatting.AQUA).withStyle(s -> s.withItalic(false)));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(NAME).withStyle(ChatFormatting.AQUA).withStyle(s -> s.withItalic(false)));
         return stack;
     }
 
     static boolean isMarker(ItemStack stack) {
-        return stack.is(Items.LODESTONE) && stack.hasCustomHoverName() && stack.getHoverName().getString().equals(NAME);
+        return stack.is(Items.LODESTONE) && stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME) && stack.getHoverName().getString().equals(NAME);
     }
 
     static void give(ServerPlayer player) {
-        player.getInventory().placeItemBackInInventory(item());
+        player.getInventory().placeItemBackInInventory(item(), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Here's a Mine Marker. Place it on open ground where you want my mine, away from your house, "
                 + "and I'll dig my staircase down right next to it.");
     }
@@ -85,7 +85,7 @@ final class MineMarker {
             HelperData.Entry e = data.get(player.getUUID());
             if (e == null || e.mineMarker == null || e.mineDim == null) continue;
             ServerLevel world = player.level().getServer().getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
-                    new net.minecraft.resources.Identifier(e.mineDim)));
+                    net.minecraft.resources.Identifier.parse(e.mineDim)));
             if (world == null || !world.hasChunkAt(e.mineMarker)) continue;
             if (!world.getBlockState(e.mineMarker).is(Blocks.LODESTONE)) {
                 e.mineMarker = null;
@@ -99,11 +99,11 @@ final class MineMarker {
     private static void mark(MinecraftServer server, ServerLevel world, BlockPos pos, UUID owner) {
         HelperData data = HelperData.get(server);
         HelperData.Entry e = data.getOrCreate(owner);
-        boolean same = e.mineOrigin != null && world.dimension().location().toString().equals(e.mineDim)
+        boolean same = e.mineOrigin != null && world.dimension().identifier().toString().equals(e.mineDim)
                 && e.mineOrigin.equals(pos.above());
         e.mineMarker = pos.immutable();
         e.mineOrigin = pos.above().immutable(); // the staircase starts beside the marker; the marker itself stays
-        e.mineDim = world.dimension().location().toString();
+        e.mineDim = world.dimension().identifier().toString();
         if (!same) e.mineDepth = 0;
         data.setDirty();
         ServerPlayer player = server.getPlayerList().getPlayer(owner);

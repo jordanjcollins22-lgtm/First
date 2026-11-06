@@ -138,7 +138,7 @@ public final class Combat {
                 ItemStack stack = inv.getItem(i);
                 if (!(stack.getItem() instanceof ArmorItem armor) || armor.getEquipmentSlot() != slot) continue;
                 double score = armor.getDefense() + armor.getToughness() * 0.5
-                        + EnchantmentHelper.getItemEnchantmentLevel(Enchantments.PROTECTION, stack) * 0.1;
+                        + Compat.enchLevel(Enchantments.PROTECTION, stack) * 0.1;
                 if (score > bestScore) {
                     bestScore = score;
                     best = stack;
@@ -174,14 +174,14 @@ public final class Combat {
             helper.setItemSlot(EquipmentSlot.MAINHAND, weapon.copy());
         }
         float damage = damageOf(weapon) + EnchantmentHelper.getDamageBonus(weapon, target.getMobType());
-        helper.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+        Compat.swing(helper, net.minecraft.world.InteractionHand.MAIN_HAND);
         creditOwner(helper, target);
         boolean hit = target.hurt(helper.damageSources().mobAttack(helper), damage);
         if (hit) {
-            int knockback = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.KNOCKBACK, weapon);
+            int knockback = Compat.enchLevel(Enchantments.KNOCKBACK, weapon);
             float yaw = helper.getYRot() * Mth.DEG_TO_RAD;
-            target.knockback(0.4 + knockback * 0.5, Mth.sin(yaw), -Mth.cos(yaw));
-            int fire = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FIRE_ASPECT, weapon);
+            Compat.knockback(target, 0.4 + knockback * 0.5, Mth.sin(yaw), -Mth.cos(yaw));
+            int fire = Compat.enchLevel(Enchantments.FIRE_ASPECT, weapon);
             if (fire > 0) target.igniteForSeconds(4 * fire);
             if (!weapon.isEmpty() && weapon.isDamageableItem()) {
                 weapon.hurtAndBreak(1, helper, e -> {});

@@ -11,6 +11,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.animal.equine.Horse;
 import net.minecraft.world.entity.animal.equine.Markings;
@@ -45,7 +46,7 @@ final class Roadster {
     static ItemStack shopIcon() {
         ItemStack s = new ItemStack(Items.LEATHER_HORSE_ARMOR);
         ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(s, DEFAULT_PAINT);
-        s.setHoverName(Component.literal("Star Roadster").withStyle(ChatFormatting.RED));
+        s.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal("Star Roadster").withStyle(ChatFormatting.RED));
         return s;
     }
 
@@ -63,7 +64,7 @@ final class Roadster {
     /** Bought in the tycoon shop: park a new roadster next to the player. */
     static boolean spawn(ServerPlayer player) {
         ServerLevel world = player.level();
-        Horse horse = EntityType.HORSE.create(world);
+        Horse horse = EntityTypes.HORSE.create(world);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
         horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);

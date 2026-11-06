@@ -22,6 +22,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.LivingEntity;
@@ -298,16 +299,16 @@ public class Helper {
             clearBreaking(existing);
             existing.discard();
         }
-        WanderingTrader helper = EntityType.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world);
         if (helper == null) return;
         mineStep = -1;
         branchFrom = -1;
         helper.snapTo(spot.x, spot.y, spot.z, player.getYRot() + 180f, 0f);
-        helper.setCustomName(Component.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.setCustomName(Component.literal(player.getGameProfile().name() + "'s Helper"));
         helper.setCustomNameVisible(true);
         helper.addTag(TAG);
         helper.addTag(OWNER_TAG + owner);
-        helper.addTag(NAME_TAG + player.getGameProfile().getName());
+        helper.addTag(NAME_TAG + player.getGameProfile().name());
         applyBrain(helper);
         if (entry.size != 1f) Size.apply(helper, entry.size);
         entry.entity = helper.getUUID();
@@ -331,14 +332,14 @@ public class Helper {
         float yaw = old.getYRot();
         old.discard();
         mob = null;
-        WanderingTrader helper = EntityType.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world);
         if (helper == null) return;
         helper.snapTo(pos.x, pos.y, pos.z, yaw, 0f);
-        helper.setCustomName(Component.literal(player.getGameProfile().getName() + "'s Helper"));
+        helper.setCustomName(Component.literal(player.getGameProfile().name() + "'s Helper"));
         helper.setCustomNameVisible(true);
         helper.addTag(TAG);
         helper.addTag(OWNER_TAG + owner);
-        helper.addTag(NAME_TAG + player.getGameProfile().getName());
+        helper.addTag(NAME_TAG + player.getGameProfile().name());
         applyBrain(helper);
         if (entry.size != 1f) Size.apply(helper, entry.size);
         entry.entity = helper.getUUID();
@@ -495,7 +496,7 @@ public class Helper {
         if (fishTimer <= 0) { // cast: wait 5 to 30 seconds like a player, less with Lure
             int lure = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingSpeedBonus(rod);
             fishTimer = Math.max(40, 100 + world.getRandom().nextInt(500) - lure * 100);
-            m.swing(InteractionHand.MAIN_HAND);
+            Compat.swing(m, InteractionHand.MAIN_HAND);
             world.playSound(null, fishSpot, SoundEvents.FISHING_BOBBER_THROW, SoundSource.NEUTRAL, 0.5f, 0.4f);
             return;
         }
@@ -508,7 +509,7 @@ public class Helper {
         world.playSound(null, fishSpot, SoundEvents.FISHING_BOBBER_SPLASH, SoundSource.NEUTRAL, 0.6f, 1f);
         world.sendParticles(net.minecraft.core.particles.ParticleTypes.SPLASH, fishSpot.getX() + 0.5, fishSpot.getY() + 1,
                 fishSpot.getZ() + 0.5, 12, 0.3, 0.1, 0.3, 0.1);
-        m.swing(InteractionHand.MAIN_HAND);
+        Compat.swing(m, InteractionHand.MAIN_HAND);
         float luck = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingLuckBonus(rod);
         net.minecraft.world.level.storage.loot.LootParams params = new net.minecraft.world.level.storage.loot.LootParams.Builder(world)
                 .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, Vec3.atCenterOf(fishSpot))
@@ -668,7 +669,7 @@ public class Helper {
             return;
         }
         m.getNavigation().stop();
-        m.swing(InteractionHand.MAIN_HAND);
+        Compat.swing(m, InteractionHand.MAIN_HAND);
         BlockState ripe = world.getBlockState(farmTarget);
         List<ItemStack> drops = Block.getDrops(ripe, world, farmTarget, world.getBlockEntity(farmTarget), m, m.getMainHandItem());
         // Replant with one of the seeds it just harvested (or one it was carrying).
@@ -762,7 +763,7 @@ public class Helper {
         if (mode == Mode.SEND) mode = Mode.FOLLOW;
         sendTo = null;
         if (parcel.isEmpty()) return;
-        for (ItemStack s : parcel) player.getInventory().placeItemBackInInventory(s);
+        for (ItemStack s : parcel) player.getInventory().placeItemBackInInventory(s, net.minecraft.util.Prediction.SERVER_ONLY);
         parcel.clear();
         say(player, why);
     }
@@ -834,7 +835,7 @@ public class Helper {
         sendTo = null;
         mode = Mode.FOLLOW;
         m.getNavigation().stop();
-        target.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.6f, 1.2f);
+        Compat.notifySound(target, SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.6f, 1.2f);
         if (otherWorld) {
             ((ServerLevel) target.level()).sendParticles(net.minecraft.core.particles.ParticleTypes.PORTAL,
                     target.getX(), target.getY() + 1, target.getZ(), 30, 0.5, 0.5, 0.5, 0.2);
@@ -884,7 +885,7 @@ public class Helper {
         Mob m = mob;
         if (m == null || !m.isAlive()) return "I'm not out in the world right now. /helper summon brings me to you.";
         if (m.level() != player.level()) {
-            return "I'm in a different dimension (" + m.level().dimension().location().getPath() + "). I'll come over in a moment.";
+            return "I'm in a different dimension (" + m.level().dimension().identifier().getPath() + "). I'll come over in a moment.";
         }
         BlockPos at = m.blockPosition();
         double dx = m.getX() - player.getX(), dz = m.getZ() - player.getZ(), dy = m.getY() - player.getY();
@@ -984,8 +985,8 @@ public class Helper {
             if (here != null && !dim.equals(lastPlanet)) {
                 lastPlanet = dim;
                 say(player, "We made it to " + here.display() + "! I can mine the ores here too, e.g. /helper collect "
-                        + ("moon".equals(m.level().dimension().location().getPath()) ? "desh"
-                        : "mars".equals(m.level().dimension().location().getPath()) ? "ostrum" : "calorite")
+                        + ("moon".equals(m.level().dimension().identifier().getPath()) ? "desh"
+                        : "mars".equals(m.level().dimension().identifier().getPath()) ? "ostrum" : "calorite")
                         + ". Try /helper boss to find this planet's boss.");
             }
         }
@@ -1479,7 +1480,7 @@ public class Helper {
                 ItemStack give = stack.split(stack.getCount() - keep);
                 given.merge(give.getHoverName().getString(), give.getCount(), Integer::sum);
                 if (store != null) store.add(player.getUUID(), give);
-                else player.getInventory().placeItemBackInInventory(give);
+                else player.getInventory().placeItemBackInInventory(give, net.minecraft.util.Prediction.SERVER_ONLY);
                 continue;
             }
             given.merge(stack.getHoverName().getString(), stack.getCount(), Integer::sum);
@@ -1870,7 +1871,7 @@ public class Helper {
     private void startMine(Mob m, ServerPlayer player, ServerLevel world, HelperData.Entry entry,
                            BlockPos target) {
         Job j = job;
-        String dim = world.dimension().location().toString();
+        String dim = world.dimension().identifier().toString();
         boolean marked = entry.mineMarker != null && entry.mineOrigin != null && dim.equals(entry.mineDim);
         boolean reuse = marked || (entry.mineOrigin != null && dim.equals(entry.mineDim)
                 && horizontalDistanceSq(entry.mineOrigin, m.blockPosition()) < 256 * 256);
@@ -2434,7 +2435,7 @@ public class Helper {
     private boolean protectedHere(ServerLevel world, BlockPos pos, BlockState s) {
         HelperData.Entry e = currentEntry;
         if (e != null && e.mineMarker != null && e.mineOrigin != null
-                && world.dimension().location().toString().equals(e.mineDim)
+                && world.dimension().identifier().toString().equals(e.mineDim)
                 && Math.abs(pos.getX() - e.mineOrigin.getX()) <= 3 && Math.abs(pos.getZ() - e.mineOrigin.getZ()) <= 3) {
             if (pos.equals(e.mineMarker)) return true; // never dig up the marker itself
             if (s.is(net.minecraft.world.level.block.Blocks.SPAWNER)) return false;
@@ -2621,7 +2622,7 @@ public class Helper {
         m.getLookControl().setLookAt(Vec3.atCenterOf(pos));
         j.breakProgress++;
         if (j.breakProgress % 4 == 1) {
-            m.swing(InteractionHand.MAIN_HAND);
+            Compat.swing(m, InteractionHand.MAIN_HAND);
             world.playSound(null, pos, state.getSoundType().getHitSound(), SoundSource.NEUTRAL, 0.25f, 0.6f);
         }
         int stage = Math.min(9, (int) (10f * j.breakProgress / j.breakTotal));

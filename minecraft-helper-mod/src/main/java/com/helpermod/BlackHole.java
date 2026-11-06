@@ -27,6 +27,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -329,7 +330,7 @@ final class BlackHole {
     private static ItemStack tagged(Item item, String kind, String name, ChatFormatting color, String... lore) {
         ItemStack stack = new ItemStack(item);
         stack.getOrCreateTag().putString(NBT, kind);
-        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         CompoundTag display = stack.getOrCreateTagElement("display");
         ListTag l = new ListTag();
         for (String line : lore) l.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(line).withStyle(ChatFormatting.GRAY))));
@@ -412,7 +413,7 @@ final class BlackHole {
             data.cachesBuilt = true;
         }
         CompoundTag home = new CompoundTag();
-        home.putString("dim", player.level().dimension().location().toString());
+        home.putString("dim", player.level().dimension().identifier().toString());
         home.putDouble("x", player.getX());
         home.putDouble("y", player.getY());
         home.putDouble("z", player.getZ());
@@ -421,7 +422,7 @@ final class BlackHole {
         ServerLevel from = player.level();
         from.sendParticles(ParticleTypes.REVERSE_PORTAL, player.getX(), player.getY() + 1, player.getZ(), 60, 0.4, 0.8, 0.4, 0.1);
         from.playSound(null, player.blockPosition(), SoundEvents.END_PORTAL_SPAWN, SoundSource.PLAYERS, 0.6f, 1.4f);
-        player.teleportTo(hole, 0.5, Y + 1, 4.5, 180f, 0f);
+        Compat.teleport(player, hole, 0.5, Y + 1, 4.5, 180f, 0f);
         player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 200, 0));
         Helper.say(player, "Welcome to the Black Hole. Four bosses wait at the end of the bridges: the Ashen Warden (east), "
                 + "Duskfang (west) and the Hollow Colossus (south). Beat all three and the Singularity Sovereign (north) wakes up. "
@@ -448,7 +449,7 @@ final class BlackHole {
             y = spawn.getY();
             z = spawn.getZ() + 0.5;
         }
-        player.teleportTo(to, x, y, z, player.getYRot(), player.getXRot());
+        Compat.teleport(player, to, x, y, z, player.getYRot(), player.getXRot());
         Helper.say(player, "Back home. The Black Hole will be there when you need it.");
     }
 
@@ -557,7 +558,7 @@ final class BlackHole {
         for (ServerPlayer player : hole.players()) {
             if (player.isSpectator()) continue;
             if (player.getY() < -20) { // fell off: back to the hub instead of dying in the void
-                player.teleportTo(hole, 0.5, Y + 1, 4.5, player.getYRot(), player.getXRot());
+                Compat.teleport(player, hole, 0.5, Y + 1, 4.5, player.getYRot(), player.getXRot());
                 player.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 100, 0));
                 Helper.say(player, "Careful! The Black Hole spat you back out at the hub.");
                 continue;
@@ -676,7 +677,7 @@ final class BlackHole {
                 Entity m = minion.create(world);
                 if (m == null) continue;
                 double a = i * Math.PI * 2 / 3;
-                m.snapTo(boss.getX() + Math.cos(a) * 3, boss.getY() + (minion == EntityType.VEX ? 2 : 0), boss.getZ() + Math.sin(a) * 3, 0, 0);
+                m.snapTo(boss.getX() + Math.cos(a) * 3, boss.getY() + (minion == EntityTypes.VEX ? 2 : 0), boss.getZ() + Math.sin(a) * 3, 0, 0);
                 m.addTag(Planets.MOB_TAG);
                 world.addFreshEntity(m);
             }
@@ -706,13 +707,13 @@ final class BlackHole {
         world.sendParticles(ParticleTypes.END_ROD, altar.getX() + 0.5, Y + 2, altar.getZ() + 0.5, 80, 2, 2, 2, 0.1);
         for (ServerPlayer p : world.players()) {
             if (p.isSpectator() || p.blockPosition().distSqr(altar) > 48 * 48) continue;
-            p.getInventory().placeItemBackInInventory(weapon(weapon));
+            p.getInventory().placeItemBackInInventory(weapon(weapon), net.minecraft.util.Prediction.SERVER_ONLY);
             RandomSource rnd = world.getRandom();
-            p.getInventory().placeItemBackInInventory(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)])); // one piece of its set each time
-            if (b.id().equals("sovereign")) p.getInventory().placeItemBackInInventory(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)]));
-            p.getInventory().placeItemBackInInventory(tome(b.id().equals("sovereign") ? 3 : 1));
-            p.getInventory().placeItemBackInInventory(book(rnd));
-            if (b.id().equals("sovereign")) p.getInventory().placeItemBackInInventory(new ItemStack(Items.NETHER_STAR));
+            p.getInventory().placeItemBackInInventory(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)]), net.minecraft.util.Prediction.SERVER_ONLY); // one piece of its set each time
+            if (b.id().equals("sovereign")) p.getInventory().placeItemBackInInventory(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)]), net.minecraft.util.Prediction.SERVER_ONLY);
+            p.getInventory().placeItemBackInInventory(tome(b.id().equals("sovereign") ? 3 : 1), net.minecraft.util.Prediction.SERVER_ONLY);
+            p.getInventory().placeItemBackInInventory(book(rnd), net.minecraft.util.Prediction.SERVER_ONLY);
+            if (b.id().equals("sovereign")) p.getInventory().placeItemBackInInventory(new ItemStack(Items.NETHER_STAR), net.minecraft.util.Prediction.SERVER_ONLY);
             p.giveExperiencePoints(b.id().equals("sovereign") ? 2000 : 500);
             coins.add(p.getUUID(), b.coins());
             data.beaten(p.getUUID()).add(b.id());
@@ -899,7 +900,7 @@ final class BlackHole {
         data.looted.put(key, world.getGameTime() + CACHE_COOLDOWN);
         data.setDirty();
         List<ItemStack> items = loot(world.getRandom());
-        for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s);
+        for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s, net.minecraft.util.Prediction.SERVER_ONLY);
         world.playSound(null, pos, SoundEvents.CHEST_OPEN, SoundSource.BLOCKS, 0.8f, 0.7f);
         world.sendParticles(ParticleTypes.REVERSE_PORTAL, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 30, 0.3, 0.4, 0.3, 0.05);
         player.sendOverlayMessage(Component.literal("Rift Cache: " + items.size() + " items! It refills for you in 15 minutes.")

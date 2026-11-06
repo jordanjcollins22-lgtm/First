@@ -268,7 +268,7 @@ final class Mind {
         } else if (has(ask, "hungry")) {
             Helper.say(player, "Helpers don't eat, but thanks for asking! Are YOU hungry? Keep some food on you.");
         } else if (has(ask, "tired", "sleepy")) {
-            Helper.say(player, "Never tired! " + (player.level().isNight() ? "It is night though, maybe you should sleep." : "Let's keep going."));
+            Helper.say(player, "Never tired! " + (player.level().isDarkOutside() ? "It is night though, maybe you should sleep." : "Let's keep going."));
         } else if (has(ask, "are you happy", "do you like me")) {
             Helper.say(player, pick(player, "Of course! You're the best boss.", "Very happy. I love a good job.", "Yes! Thanks for keeping me busy."));
         } else { // are you ok / hurt / health / alive
@@ -311,7 +311,7 @@ final class Mind {
             boolean first = mem.dim == null;
             mem.dim = world.dimension();
             if (!first) {
-                String where = world.dimension().location().toString();
+                String where = world.dimension().identifier().toString();
                 if (world.dimension() == Level.NETHER) Helper.say(player, "Phew, it's hot in here. Watch out for the lava, I'll watch your back.");
                 else if (world.dimension() == Level.END) Helper.say(player, "The End... Don't look the Endermen in the eye. I'll stay close.");
                 else if (world.dimension() == Level.OVERWORLD) Helper.say(player, "Home sweet home.");
@@ -320,8 +320,8 @@ final class Mind {
             }
         }
         if (world.dimensionType().hasSkyLight() && world.dimension() == Level.OVERWORLD) {
-            long day = world.getDayTime() / 24000L;
-            long time = world.getDayTime() % 24000L;
+            long day = world.getDefaultClockTime() / 24000L;
+            long time = world.getDefaultClockTime() % 24000L;
             if (time >= 12800 && time < 13600 && mem.night != day) {
                 mem.night = day;
                 Helper.say(player, "The sun's going down. Monsters will be out soon, so stay close to me.");
@@ -349,11 +349,11 @@ final class Mind {
         if (player.getFoodData().getFoodLevel() > 12 || now - mem.fedAt < 600) return;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
-            if (!s.isEdible() || s.is(Items.ROTTEN_FLESH) || s.is(Items.SPIDER_EYE) || s.is(Items.POISONOUS_POTATO)
+            if (!Compat.edible(s) || s.is(Items.ROTTEN_FLESH) || s.is(Items.SPIDER_EYE) || s.is(Items.POISONOUS_POTATO)
                     || s.is(Items.PUFFERFISH) || s.is(Items.CHORUS_FRUIT) || s.is(Items.SUSPICIOUS_STEW)) continue;
             ItemStack give = s.split(Math.min(s.getCount(), 4));
             inv.setChanged();
-            player.getInventory().placeItemBackInInventory(give);
+            player.getInventory().placeItemBackInInventory(give, net.minecraft.util.Prediction.SERVER_ONLY);
             mem.fedAt = now;
             Helper.say(player, "You look hungry. Here, have some " + give.getHoverName().getString() + ".");
             return;

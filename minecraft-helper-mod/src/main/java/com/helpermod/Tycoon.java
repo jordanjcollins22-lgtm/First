@@ -203,7 +203,7 @@ final class Tycoon {
     }
 
     private static String key(Level world, BlockPos pos) {
-        return world.dimension().location() + "|" + pos.asLong();
+        return world.dimension().identifier() + "|" + pos.asLong();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -212,7 +212,7 @@ final class Tycoon {
 
     private static ItemStack named(Item item, int count, String name, ChatFormatting color) {
         ItemStack stack = new ItemStack(item, count);
-        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         return stack;
     }
 
@@ -248,7 +248,7 @@ final class Tycoon {
     }
 
     static boolean isDropperItem(ItemStack stack) {
-        return stack.is(Items.DROPPER) && stack.hasCustomHoverName() && stack.getHoverName().getString().equals(DROPPER_NAME);
+        return stack.is(Items.DROPPER) && stack.has(net.minecraft.core.component.DataComponents.CUSTOM_NAME) && stack.getHoverName().getString().equals(DROPPER_NAME);
     }
 
     static ItemStack conveyors(int n) {
@@ -589,9 +589,9 @@ final class Tycoon {
         }
         data.started.put(player.getUUID(), true);
         data.setDirty();
-        player.getInventory().placeItemBackInInventory(dropperItem());
-        player.getInventory().placeItemBackInInventory(conveyors(16));
-        player.getInventory().placeItemBackInInventory(collector());
+        player.getInventory().placeItemBackInInventory(dropperItem(), net.minecraft.util.Prediction.SERVER_ONLY);
+        player.getInventory().placeItemBackInInventory(conveyors(16), net.minecraft.util.Prediction.SERVER_ONLY);
+        player.getInventory().placeItemBackInInventory(collector(), net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(player, "Here's your tycoon starter kit! Place the Tycoon Dropper, put conveyors in front of it "
                 + "with the arrows pointing away, and end the line on the Collector.");
     }
@@ -689,7 +689,7 @@ final class Tycoon {
             case 2 -> new ItemStack[]{named(Items.GLAZED_TERRACOTTA.cyan(), 2, "Super Upgrader x3", ChatFormatting.AQUA)};
             default -> new ItemStack[]{named(Items.GLAZED_TERRACOTTA.purple(), 2, "Mega Upgrader x5", ChatFormatting.LIGHT_PURPLE), starUpgrader()};
         };
-        for (ItemStack r : reward) p.getInventory().placeItemBackInInventory(r);
+        for (ItemStack r : reward) p.getInventory().placeItemBackInInventory(r, net.minecraft.util.Prediction.SERVER_ONLY);
         Helper.say(p, "Milestone reward! I put some free tycoon parts in your inventory.");
     }
 
@@ -872,7 +872,7 @@ final class Tycoon {
     private static ItemStack adAstra(String id, int count) {
         Identifier key = Identifier.fromNamespaceAndPath("ad_astra", id);
         if (!net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(key)) return ItemStack.EMPTY;
-        return new ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.get(key), count);
+        return new ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(key), count);
     }
 
     /**
@@ -987,10 +987,10 @@ final class Tycoon {
             if (o.action() != null) {
                 if (!o.action().test(player)) return;
             } else {
-                player.getInventory().placeItemBackInInventory(o.item().get());
+                player.getInventory().placeItemBackInInventory(o.item().get(), net.minecraft.util.Prediction.SERVER_ONLY);
             }
             data.add(player.getUUID(), -o.price());
-            player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
+            Compat.notifySound(player, SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
             player.sendOverlayMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN));
         }
 

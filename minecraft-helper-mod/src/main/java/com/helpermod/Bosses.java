@@ -196,7 +196,7 @@ final class Bosses {
     private static BlockState block(String id, BlockState fallback) {
         Identifier i = Identifier.tryParse(id);
         if (i == null || !BuiltInRegistries.BLOCK.containsKey(i)) return fallback;
-        Block b = BuiltInRegistries.BLOCK.get(i);
+        Block b = BuiltInRegistries.BLOCK.getValue(i);
         return b == Blocks.AIR ? fallback : b.defaultBlockState();
     }
 
@@ -267,7 +267,7 @@ final class Bosses {
         boss.setHealth(boss.getMaxHealth());
         if (b.weapon() != null) {
             Identifier w = Identifier.tryParse(b.weapon());
-            if (w != null && BuiltInRegistries.ITEM.containsKey(w)) boss.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(BuiltInRegistries.ITEM.get(w)));
+            if (w != null && BuiltInRegistries.ITEM.containsKey(w)) boss.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(BuiltInRegistries.ITEM.getValue(w)));
         }
         for (EquipmentSlot slot : EquipmentSlot.values()) boss.setDropChance(slot, 0f);
         boss.setCustomName(Component.literal(b.name()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));

@@ -120,25 +120,25 @@ final class Planets {
 
     /** The planet a world is (by its name, e.g. ad_astra:moon or helpermod:europa), or null for Earth, orbits and the rest. */
     static Theme themeOf(Level world) {
-        Identifier id = world.dimension().location();
+        Identifier id = world.dimension().identifier();
         if (!id.getNamespace().equals("ad_astra") && !id.getNamespace().equals(HelperMod.MOD_ID)) return null;
         return THEMES.get(id.getPath());
     }
 
     static String keyOf(Level world) {
-        return world.dimension().location().toString();
+        return world.dimension().identifier().toString();
     }
 
     /** Ad Astra planets and orbits (any world from Ad Astra or this mod's planet pack). */
     static boolean isSpace(Level world) {
-        String ns = world.dimension().location().getNamespace();
+        String ns = world.dimension().identifier().getNamespace();
         return ns.equals("ad_astra") || ns.equals(HelperMod.MOD_ID);
     }
 
     static EntityType<?> type(String ids) {
         for (String s : ids.split("\\|")) {
             Identifier id = Identifier.tryParse(s);
-            if (id != null && BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return BuiltInRegistries.ENTITY_TYPE.get(id);
+            if (id != null && BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return BuiltInRegistries.ENTITY_TYPE.getValue(id);
         }
         return null;
     }
@@ -149,7 +149,7 @@ final class Planets {
             for (String s : reward.ids()) {
                 Identifier id = Identifier.tryParse(s);
                 if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) continue;
-                Item item = BuiltInRegistries.ITEM.get(id);
+                Item item = BuiltInRegistries.ITEM.getValue(id);
                 if (item == Items.AIR) continue;
                 int left = reward.count();
                 while (left > 0) {

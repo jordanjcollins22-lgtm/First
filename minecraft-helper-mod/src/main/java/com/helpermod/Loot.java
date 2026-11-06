@@ -63,7 +63,7 @@ final class Loot {
     }
 
     static ItemStack named(ItemStack stack, String name, ChatFormatting color) {
-        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         return stack;
     }
 
@@ -126,7 +126,7 @@ final class Loot {
     }
 
     static boolean giveAll(ServerPlayer player, List<ItemStack> items) {
-        for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s.copy());
+        for (ItemStack s : items) player.getInventory().placeItemBackInInventory(s.copy(), net.minecraft.util.Prediction.SERVER_ONLY);
         return true;
     }
 

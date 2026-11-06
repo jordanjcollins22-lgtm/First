@@ -187,10 +187,10 @@ public final class Materials {
     }
 
     public static String dimensionName(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> key) {
-        Identifier id = key.location();
-        if (id.equals(net.minecraft.world.level.Level.OVERWORLD.location())) return "the Overworld";
-        if (id.equals(net.minecraft.world.level.Level.NETHER.location())) return "the Nether";
-        if (id.equals(net.minecraft.world.level.Level.END.location())) return "the End";
+        Identifier id = key.identifier();
+        if (id.equals(net.minecraft.world.level.Level.OVERWORLD.identifier())) return "the Overworld";
+        if (id.equals(net.minecraft.world.level.Level.NETHER.identifier())) return "the Nether";
+        if (id.equals(net.minecraft.world.level.Level.END.identifier())) return "the End";
         String[] words = id.getPath().split("_");
         StringBuilder sb = new StringBuilder("the");
         for (String w : words) if (!w.isEmpty()) sb.append(' ').append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
@@ -330,19 +330,19 @@ public final class Materials {
         if (s.contains(":")) {
             Identifier id = Identifier.tryParse(s);
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
-            return BuiltInRegistries.ITEM.get(id);
+            return BuiltInRegistries.ITEM.getValue(id);
         }
         Identifier vanilla = Identifier.tryParse("minecraft:" + s);
-        if (vanilla != null && BuiltInRegistries.ITEM.containsKey(vanilla)) return BuiltInRegistries.ITEM.get(vanilla);
+        if (vanilla != null && BuiltInRegistries.ITEM.containsKey(vanilla)) return BuiltInRegistries.ITEM.getValue(vanilla);
         // Modded item with the same name, e.g. "raw_tin".
         for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
-            if (id.getPath().equals(s)) return BuiltInRegistries.ITEM.get(id);
+            if (id.getPath().equals(s)) return BuiltInRegistries.ITEM.getValue(id);
         }
         return null;
     }
 
     private static Spec resolveItem(Item item) throws ResolveException {
-        String name = item.getDescription().getString();
+        String name = Compat.name(item).getString();
         Set<Block> blocks = new LinkedHashSet<>();
         Set<Item> count = new HashSet<>();
         boolean preferSilk = false;

@@ -30,6 +30,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
@@ -336,7 +337,7 @@ final class Furniture {
         CompoundTag m = materials == null ? new CompoundTag() : materials.copy();
         m.putString("type", piece.id());
         stack.getOrCreateTag().put(ITEM_TAG, m);
-        stack.setHoverName(Component.literal(piece.name()).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
+        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(piece.name()).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
         ListTag lore = new ListTag();
         lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(piece.room() + " furniture. Right-click a block to place it.")
                 .withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY))));
@@ -367,7 +368,7 @@ final class Furniture {
     private static BlockState state(String id, BlockState fallback) {
         Identifier key = Identifier.tryParse(id);
         if (key == null || !BuiltInRegistries.BLOCK.containsKey(key)) return fallback;
-        return BuiltInRegistries.BLOCK.get(key).defaultBlockState();
+        return BuiltInRegistries.BLOCK.getValue(key).defaultBlockState();
     }
 
     private static BlockState stateFor(Role role, Placed p) {
@@ -535,14 +536,14 @@ final class Furniture {
         for (BlockPos rel : cells(piece, rot)) {
             BlockPos cell = pos.offset(rel);
             if (!world.getBlockState(cell).canBeReplaced() || !world.getEntitiesOfClass(Entity.class, new AABB(cell),
-                    e -> e.entityTags().contains(PART_TAG) && e.getType() == EntityType.INTERACTION).isEmpty()) {
+                    e -> e.entityTags().contains(PART_TAG) && e.getType() == EntityTypes.INTERACTION).isEmpty()) {
                 player.sendOverlayMessage(Component.literal("There isn't room for the " + piece.name() + " there.").withStyle(ChatFormatting.RED));
                 return InteractionResult.SUCCESS;
             }
         }
         Placed placed = new Placed();
         placed.type = piece.id();
-        placed.world = world.dimension().location().toString();
+        placed.world = world.dimension().identifier().toString();
         placed.pos = pos.immutable();
         placed.rot = rot;
         placed.readMaterials(m);
@@ -574,7 +575,7 @@ final class Furniture {
 
     /** Punch a piece to pick it up. */
     static InteractionResult onAttackEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
-        if (entity.getType() != EntityType.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
+        if (entity.getType() != EntityTypes.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
         if (w.isClientSide() || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
         UUID id = idOf(entity);
         ServerLevel world = (ServerLevel) w;
@@ -609,7 +610,7 @@ final class Furniture {
 
     /** Right-click a piece: customize it with what you hold, turn it (sneak), or use it. */
     static InteractionResult onUseEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
-        if (entity.getType() != EntityType.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
+        if (entity.getType() != EntityTypes.INTERACTION || !entity.entityTags().contains(PART_TAG)) return InteractionResult.PASS;
         if (w.isClientSide()) return InteractionResult.SUCCESS;
         if (hand != InteractionHand.MAIN_HAND || !(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.SUCCESS;
         UUID id = idOf(entity);
@@ -648,7 +649,7 @@ final class Furniture {
         if (piece.use() == Use.WATER && held.is(Items.GLASS_BOTTLE)) {
             held.shrink(1);
             player.getInventory().placeItemBackInInventory(net.minecraft.world.item.alchemy.PotionUtils.setPotion(new ItemStack(Items.POTION),
-                    net.minecraft.world.item.alchemy.Potions.WATER));
+                    net.minecraft.world.item.alchemy.Potions.WATER), net.minecraft.util.Prediction.SERVER_ONLY);
             world.playSound(null, placed.pos, SoundEvents.BOTTLE_FILL, SoundSource.BLOCKS, 1f, 1f);
             return InteractionResult.SUCCESS;
         }
@@ -890,8 +891,8 @@ final class Furniture {
                 }
                 data.add(player.getUUID(), -piece.price());
             }
-            player.getInventory().placeItemBackInInventory(item(piece, null));
-            player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
+            player.getInventory().placeItemBackInInventory(item(piece, null), net.minecraft.util.Prediction.SERVER_ONLY);
+            Compat.notifySound(player, SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
         }
 
         @Override

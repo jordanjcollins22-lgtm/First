@@ -220,7 +220,7 @@ public final class HelperCommands {
     /** Online player by name, ignoring case, or null. */
     static ServerPlayer onlinePlayer(net.minecraft.server.MinecraftServer server, String name) {
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (p.getGameProfile().getName().equalsIgnoreCase(name)) return p;
+            if (p.getGameProfile().name().equalsIgnoreCase(name)) return p;
         }
         return null;
     }

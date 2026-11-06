@@ -24,6 +24,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -57,7 +58,7 @@ public final class Disguise {
 
     /** Every mob a helper can look like: living entities with attributes, except players and armor stands. */
     public static boolean canLookLike(EntityType<?> type) {
-        return type != EntityType.PLAYER && type != EntityType.ARMOR_STAND
+        return type != EntityTypes.PLAYER && type != EntityTypes.ARMOR_STAND
                 && DefaultAttributes.hasSupplier(type);
     }
 
@@ -67,7 +68,7 @@ public final class Disguise {
         String name = raw.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
         Identifier id = Identifier.tryParse(name);
         if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
-        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(id);
         return canLookLike(type) ? type : null;
     }
 
@@ -92,7 +93,7 @@ public final class Disguise {
         if (entry == null || entry.look == null) return null;
         Identifier id = Identifier.tryParse(entry.look);
         if (id == null || !BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return null;
-        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(id);
+        EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.getValue(id);
         return canLookLike(type) ? type : null;
     }
 
@@ -111,7 +112,7 @@ public final class Disguise {
         }
         if (SKINS.containsKey(id) || !FETCHING.add(id)) return;
         MinecraftServer server = player.level().getServer();
-        GameProfile lookup = new GameProfile(id, player.getGameProfile().getName());
+        GameProfile lookup = new GameProfile(id, player.getGameProfile().name());
         CompletableFuture.supplyAsync(() -> server.getSessionService().fillProfileProperties(lookup, false),
                         Util.backgroundExecutor())
                 .whenComplete((filled, error) -> server.execute(() -> {
@@ -208,7 +209,7 @@ public final class Disguise {
     public static Collection<AttributeInstance> filterAttributes(Entity entity,
                                                                        Collection<AttributeInstance> in) {
         EntityType<?> look = lookOf(entity);
-        AttributeSupplier known = DefaultAttributes.getSupplier(look == null ? EntityType.PLAYER
+        AttributeSupplier known = DefaultAttributes.getSupplier(look == null ? EntityTypes.PLAYER
                 : (EntityType<? extends LivingEntity>) look);
         List<AttributeInstance> out = new ArrayList<>();
         for (AttributeInstance instance : in) if (known.hasAttribute(instance.getAttribute())) out.add(instance);
