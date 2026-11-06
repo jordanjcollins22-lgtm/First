@@ -53,6 +53,7 @@ ask for. It works out the best way to get it:
 | `/helper farm [radius]` | Look after the crops around you (16 blocks unless you say): harvest ripe wheat, carrots, potatoes, beetroot, nether wart and modded crops, plant them again, and bring you the harvest. `/helper stop` ends it |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
 | `/helper golf` | Fairway golf: where's the club, how to play. `/helper golf shop` opens the Pro Shop, `/helper golf ball` picks your ball up |
+| `/helper blackhole` | How to make a Singularity, and the Black Hole's bosses. `/helper blackhole leave` gets you out |
 | `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
 | `/helper ride` | Ride your helper (or right-click it holding a saddle). Steer with your movement keys, jump with space, sprint to go faster, sneak to get off. It swims at full speed in water, and if it looks like a flying mob (`/helper look phantom`, bat, parrot, ghast, allay, bee...) it flies where you look |
 | `/helper look <mob>` | Make your helper look like any mob, e.g. `/helper look creeper` or `/helper look iron golem`. Modded mobs work too (`/helper look somemod:thing`). Press Tab to see them all |
@@ -260,6 +261,25 @@ else 50. Everyone on the planet sees your score.
 
 The Pro Shop sells clubs (200-1000), balls, a golf cap, a Golf Cart (a fast tame horse, 5000), a Cottage Deed
 (20,000) and a Villa Deed (100,000). Right-click the ground with a deed to build the house there.
+
+## The Black Hole (from the Dropper Tycoon)
+
+If 16 or more Tycoon ore pile up in one spot (a dropper dropping into a pit, or conveyors running in a loop
+with no Collector), the pile starts spinning in a circle and collapses into a **Singularity**. Right-click
+with it to fall into the Black Hole: a dark void with a hub island and four bridges that lead to four boss arenas.
+Stand on the lodestone in an arena to call its boss. Each boss gets faster and stronger at half health and
+calls minions.
+
+| Boss | Where | Drops |
+| --- | --- | --- |
+| Ashen Warden, Keeper of Cinders | east bridge | Ashfall Greatsword (skill: Ash Whirl, a burning spin) + 100k coins |
+| Duskfang, the Moonless Hunter | west bridge | Duskfang Blade (skill: Moonless Step, a dash that cuts through) + 100k coins |
+| The Hollow Colossus | south bridge | Collapse Maul (skill: Collapse, pulls monsters in and slams them up) + 150k coins |
+| The Singularity Sovereign (after the other three) | north bridge | Starless Staff (skill: Starless Beam) + Nether Star + 1M coins |
+
+Right-click a weapon to use its skill (it has a cooldown). Bosses can be fought again 5 minutes later.
+If you fall off, you're put back on the hub. Right-click the Singularity again (or `/helper blackhole leave`)
+to go home. `/helper blackhole` shows which bosses you've beaten.
 
 ## Safety on shared worlds
 

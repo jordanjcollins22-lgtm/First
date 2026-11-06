@@ -372,6 +372,8 @@ final class Tycoon {
         }
 
         // Move the ore.
+        boolean checkPiles = server.getTicks() % 20 == 0;
+        List<ItemEntity> live = checkPiles ? new ArrayList<>() : null;
         for (Iterator<Map.Entry<UUID, String>> it = ORES.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<UUID, String> e = it.next();
             Dropper source = data.droppers.get(e.getValue());
@@ -391,8 +393,11 @@ final class Tycoon {
             if (moveOre((ServerWorld) ore.getWorld(), ore, data)) {
                 if (source != null) source.live = Math.max(0, source.live - 1);
                 it.remove();
+            } else if (live != null) {
+                live.add(ore);
             }
         }
+        if (live != null && !live.isEmpty()) BlackHole.checkPiles(live); // big piles spin into a Singularity
     }
 
     private static void drop(ServerWorld world, BlockPos pos, Direction facing, Dropper d, String key) {
