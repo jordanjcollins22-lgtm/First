@@ -71,7 +71,23 @@ public final class HelperCommands {
                                             Storage.find(ctx.getSource().getPlayerOrException(),
                                                     StringArgumentType.getString(ctx, "name"));
                                             return 1;
-                                        }))))
+                                        })))
+                        .then(literal("open").executes(ctx -> { // storage anywhere: no barrel needed
+                            Storage.open(ctx.getSource().getPlayerOrException());
+                            return 1;
+                        }))
+                        .then(literal("send").executes(ctx -> {
+                            ServerPlayer player = ctx.getSource().getPlayerOrException();
+                            HelperData.Entry entry = ensureSummoned(player);
+                            HelperManager.helperFor(player.getUUID()).sendToStorage(player, entry);
+                            return 1;
+                        }))
+                        .then(literal("auto")
+                                .then(literal("on").executes(ctx -> autoStore(ctx, true)))
+                                .then(literal("off").executes(ctx -> autoStore(ctx, false)))))
+                .then(literal("fetch")
+                        .then(argument("item", StringArgumentType.greedyString())
+                                .executes(ctx -> fetch(ctx, StringArgumentType.getString(ctx, "item")))))
                 .then(literal("look")
                         .executes(HelperCommands::lookHelp)
                         .then(argument("mob", StringArgumentType.greedyString())
@@ -195,6 +211,10 @@ public final class HelperCommands {
                 "  (kills monsters around it, loot goes into a chest below, sneak + right-click for XP)",
                 "/helper storage  - turn the barrel in your hand into a Helper Storage (no size limit)",
                 "/helper storage find <name>  - search your storage",
+                "/helper storage open  - open your Helper Storage from anywhere",
+                "/helper fetch <item> [amount]  - your helper brings it out of your storage, wherever you are",
+                "/helper storage send  - your helper puts what it's carrying into your storage from where it is",
+                "/helper storage auto on|off  - when its pockets fill up, it sends the haul to storage and keeps working",
                 "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
                 "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
@@ -211,6 +231,35 @@ public final class HelperCommands {
         };
         ctx.getSource().sendSuccess(() -> Component.literal("Helper commands:").withStyle(ChatFormatting.GOLD), false);
         for (String line : lines) ctx.getSource().sendSuccess(() -> Component.literal(line), false);
+        return 1;
+    }
+
+    private static int autoStore(CommandContext<CommandSourceStack> ctx, boolean on) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperData data = HelperData.get(player.level().getServer());
+        data.getOrCreate(player.getUUID()).autoStore = on;
+        data.setDirty();
+        Helper.say(player, on ? "Okay! When my pockets fill up I'll send everything to your Helper Storage from wherever "
+                + "I am and keep working. /helper deliver still brings things to you."
+                : "Okay, I'll bring things back to you (or to a Helper Storage nearby) again.");
+        return 1;
+    }
+
+    /** /helper fetch <item> [amount] or /helper fetch <amount> <item>: from Helper Storage to you, anywhere. */
+    private static int fetch(CommandContext<CommandSourceStack> ctx, String raw) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        String text = raw.trim();
+        int amount = 64;
+        java.util.regex.Matcher end = java.util.regex.Pattern.compile("^(.*?)\\s+(\\d{1,5})$").matcher(text);
+        java.util.regex.Matcher start = java.util.regex.Pattern.compile("^(\\d{1,5})\\s+(.*)$").matcher(text);
+        if (end.matches()) {
+            text = end.group(1);
+            amount = Integer.parseInt(end.group(2));
+        } else if (start.matches()) {
+            amount = Integer.parseInt(start.group(1));
+            text = start.group(2);
+        }
+        Storage.fetch(player, text, Math.max(1, Math.min(amount, 2304)));
         return 1;
     }
 

@@ -29,6 +29,8 @@ public class HelperData extends SavedData {
         public boolean active;
         /** Fight mobs that threaten the owner. */
         public boolean guard = true;
+        /** Storage anywhere: when its pockets fill up, send the haul to Helper Storage from wherever it is. */
+        public boolean autoStore;
         public final Pockets inventory = new Pockets();
         /** Work points: 1 per block mined, 5 per mob beaten. The level comes from these. */
         public int work;
@@ -156,6 +158,7 @@ public class HelperData extends SavedData {
             if (tag.contains("entity")) entry.entity = Compat.getUUID(tag, "entity");
             entry.active = tag.getBooleanOr("active", false);
             entry.guard = tag.getBooleanOr("guard", true);
+            entry.autoStore = tag.getBooleanOr("autoStore", false);
             entry.work = tag.getIntOr("work", 0); // before the items, so every unlocked pocket is there to fill
             entry.level = levelFor(entry.work);
             entry.inventory.unlocked = pocketsFor(entry.level);
@@ -188,6 +191,7 @@ public class HelperData extends SavedData {
             if (entry.entity != null) Compat.putUUID(tag, "entity", entry.entity);
             tag.putBoolean("active", entry.active);
             tag.putBoolean("guard", entry.guard);
+            tag.putBoolean("autoStore", entry.autoStore);
             tag.put("items", entry.inventory.createTag());
             if (entry.mineDim != null && entry.mineOrigin != null) {
                 tag.putString("mineDim", entry.mineDim);

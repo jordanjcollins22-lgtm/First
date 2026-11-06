@@ -122,6 +122,66 @@ public final class Storage {
 
     private static final Map<UUID, String> SEARCH = new HashMap<>();
 
+    // ---------------------------------------------------------------------------------------
+    // Storage anywhere: the helper reaches into your storage wherever it is
+    // ---------------------------------------------------------------------------------------
+
+    /** Take one item that passes the test out of the owner's storage, or EMPTY if there's none. */
+    static ItemStack takeOne(net.minecraft.server.MinecraftServer server, UUID owner, java.util.function.Predicate<ItemStack> test) {
+        Data data = Data.get(server);
+        for (Stored s : new ArrayList<>(data.of(owner))) {
+            if (s.count > 0 && test.test(s.template)) return data.take(owner, s, 1);
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /** The stored item best matching what the player typed: exact name or id first, then the most plentiful partial match. */
+    private static Stored match(Data data, UUID owner, String text) {
+        String w = text.trim().toLowerCase(Locale.ROOT);
+        List<String> forms = new ArrayList<>(List.of(w)); // "torches" should find Torch, "iron ingots" Iron Ingot
+        if (w.endsWith("es")) forms.add(w.substring(0, w.length() - 2));
+        if (w.endsWith("s")) forms.add(w.substring(0, w.length() - 1));
+        Stored exact = null, partial = null;
+        for (Stored s : data.of(owner)) {
+            String name = s.name().toLowerCase(Locale.ROOT);
+            String key = BuiltInRegistries.ITEM.getKey(s.template.getItem()).getPath();
+            boolean isExact = false, isPartial = false;
+            for (String f : forms) {
+                if (name.equals(f) || key.equals(f.replace(' ', '_'))) isExact = true;
+                else if (name.contains(f) || key.contains(f.replace(' ', '_'))) isPartial = true;
+            }
+            if (isExact && (exact == null || s.count > exact.count)) exact = s;
+            else if (isPartial && (partial == null || s.count > partial.count)) partial = s;
+        }
+        return exact != null ? exact : partial;
+    }
+
+    /** /helper fetch <item> [amount]: the helper pulls it out of your storage and hands it to you, wherever you are. */
+    public static void fetch(ServerPlayer player, String text, int amount) {
+        Data data = Data.get(player.level().getServer());
+        Stored s = match(data, player.getUUID(), text);
+        if (s == null) {
+            Helper.say(player, "There's no \"" + text.trim() + "\" in your Helper Storage.");
+            return;
+        }
+        String name = s.name();
+        long had = s.count;
+        int left = (int) Math.min(amount, had);
+        int given = 0;
+        while (left > 0) {
+            int n = Math.min(left, s.template.getMaxStackSize());
+            ItemStack stack = data.take(player.getUUID(), s, n);
+            if (stack.isEmpty()) break;
+            given += stack.getCount();
+            left -= stack.getCount();
+            player.getInventory().add(stack);
+            if (!stack.isEmpty()) player.drop(stack, false, net.minecraft.util.Prediction.SERVER_ONLY);
+        }
+        Compat.notifySound(player, net.minecraft.sounds.SoundEvents.ITEM_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.6f, 1.2f);
+        Helper.say(player, "Here you go: " + given + " " + name + " from your Helper Storage."
+                + (given < amount ? " That was all of it." : " " + NUM.format(had - given) + " left in there."));
+    }
+
     public static void reset() {
         SEARCH.clear();
         LOOK.clear();
