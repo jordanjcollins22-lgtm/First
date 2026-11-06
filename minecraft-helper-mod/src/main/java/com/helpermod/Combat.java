@@ -161,8 +161,7 @@ public final class Combat {
         if (owner == null || helper.level().getServer() == null) return;
         net.minecraft.server.level.ServerPlayer player = helper.level().getServer().getPlayerList().getPlayer(owner);
         if (player == null) return;
-        ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setAttackingPlayer(player);
-        ((com.helpermod.mixin.LivingEntityAccessor) target).helpermod$setPlayerHitTimer(100);
+        target.setLastHurtByPlayer(player, 100);
     }
 
     /** Swing at the target with the best weapon. Returns the cooldown in ticks before the next swing. */

@@ -8,8 +8,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(SynchedEntityData.class)
 public interface DataTrackerAccessor {
-    @Accessor("TRACKED_ENTITIES")
-    static Object2IntMap<Class<? extends Entity>> helpermod$getTrackedEntities() {
+    @Accessor("ID_REGISTRY")
+    static net.minecraft.util.ClassTreeIdRegistry helpermod$getIdRegistry() {
         throw new AssertionError();
     }
 }

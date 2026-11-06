@@ -14,7 +14,6 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.network.protocol.game.ClientboundAddPlayerPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -105,7 +104,7 @@ public final class Disguise {
     /** Remember the owner's skin. Fetches it from Mojang if the server doesn't have it yet. */
     public static void prepare(ServerPlayer player) {
         UUID id = player.getUUID();
-        Property textures = Iterables.getFirst(player.getGameProfile().getProperties().get("textures"), null);
+        Property textures = Iterables.getFirst(player.getGameProfile().properties().get("textures"), null);
         if (textures != null) {
             SKINS.put(id, textures);
             return;
@@ -113,12 +112,14 @@ public final class Disguise {
         if (SKINS.containsKey(id) || !FETCHING.add(id)) return;
         MinecraftServer server = player.level().getServer();
         GameProfile lookup = new GameProfile(id, player.getGameProfile().name());
-        CompletableFuture.supplyAsync(() -> server.getSessionService().fillProfileProperties(lookup, false),
-                        Util.backgroundExecutor())
+        CompletableFuture.supplyAsync(() -> {
+                    var result = server.services().sessionService().fetchProfile(id, false);
+                    return result == null ? null : result.profile();
+                }, Util.backgroundExecutor())
                 .whenComplete((filled, error) -> server.execute(() -> {
                     FETCHING.remove(id);
                     Property t = filled == null ? null
-                            : Iterables.getFirst(filled.getProperties().get("textures"), null);
+                            : Iterables.getFirst(filled.properties().get("textures"), null);
                     if (t != null) {
                         SKINS.put(id, t);
                         HelperManager.refreshDisguise(server, id); // re-show with the real skin
@@ -140,22 +141,22 @@ public final class Disguise {
     }
 
     private static PropertyMap properties(Entity entity) {
-        PropertyMap map = new PropertyMap();
         UUID owner = Helper.ownerOf(entity);
         Property skin = owner == null ? null : SKINS.get(owner);
-        if (skin != null) map.put("textures", skin);
-        return map;
+        if (skin == null) return PropertyMap.EMPTY;
+        return new PropertyMap(com.google.common.collect.ImmutableMultimap.of("textures", skin));
     }
 
     /** Adds a hidden (not in the tab list) player entry so the client knows the name and skin. */
     public static ClientboundPlayerInfoUpdatePacket playerListAdd(Entity entity) {
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+        net.minecraft.network.RegistryFriendlyByteBuf buf = new net.minecraft.network.RegistryFriendlyByteBuf(
+                Unpooled.buffer(), entity.level().registryAccess());
         buf.writeEnumSet(EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER), ClientboundPlayerInfoUpdatePacket.Action.class);
         buf.writeVarInt(1);
         buf.writeUUID(entity.getUUID());
         buf.writeUtf(profileName(entity), 16);
-        buf.writeGameProfileProperties(properties(entity));
-        return new ClientboundPlayerInfoUpdatePacket(buf);
+        net.minecraft.network.codec.ByteBufCodecs.GAME_PROFILE_PROPERTIES.encode(buf, properties(entity));
+        return ClientboundPlayerInfoUpdatePacket.STREAM_CODEC.decode(buf);
     }
 
     public static ClientboundPlayerInfoRemovePacket playerListRemove(Entity entity) {
@@ -171,16 +172,9 @@ public final class Disguise {
         return playerSpawnPacket(entity);
     }
 
-    private static ClientboundAddPlayerPacket playerSpawnPacket(Entity entity) {
-        FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
-        buf.writeVarInt(entity.getId());
-        buf.writeUUID(entity.getUUID());
-        buf.writeDouble(entity.getX());
-        buf.writeDouble(entity.getY());
-        buf.writeDouble(entity.getZ());
-        buf.writeByte((byte) Mth.floor(entity.getYRot() * 256f / 360f));
-        buf.writeByte((byte) Mth.floor(entity.getXRot() * 256f / 360f));
-        return new ClientboundAddPlayerPacket(buf);
+    private static Packet<ClientGamePacketListener> playerSpawnPacket(Entity entity) {
+        return new ClientboundAddEntityPacket(entity.getId(), entity.getUUID(), entity.getX(), entity.getY(),
+                entity.getZ(), entity.getXRot(), entity.getYRot(), EntityTypes.PLAYER, 0, Vec3.ZERO, entity.getYHeadRot());
     }
 
     /**
@@ -190,7 +184,7 @@ public final class Disguise {
     public static List<SynchedEntityData.DataValue<?>> filterData(Entity entity,
                                                                    List<SynchedEntityData.DataValue<?>> list,
                                                                    boolean initial) {
-        int lastLivingId = DataTrackerAccessor.helpermod$getTrackedEntities().getInt(LivingEntity.class);
+        int lastLivingId = DataTrackerAccessor.helpermod$getIdRegistry().getLastIdFor(LivingEntity.class);
         List<SynchedEntityData.DataValue<?>> out = new ArrayList<>();
         if (list != null) {
             for (SynchedEntityData.DataValue<?> entry : list) if (entry.id() <= lastLivingId) out.add(entry);

@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /** Helpers are sent to clients as players (their owner's skin) or as the mob their owner picked. */
 @Mixin(Entity.class)
 public abstract class EntitySpawnPacketMixin {
-    @Inject(method = "createSpawnPacket", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getAddEntityPacket", at = @At("HEAD"), cancellable = true)
     private void helpermod$spawnAsPlayer(CallbackInfoReturnable<Packet<ClientGamePacketListener>> cir) {
         Entity self = (Entity) (Object) this;
         if (Disguise.isHelper(self)) cir.setReturnValue(Disguise.spawnPacket(self));

@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ChatPacketMixin {
     @Shadow public ServerPlayer player;
 
-    @Inject(method = "onChatMessage", at = @At("HEAD"), require = 0)
+    @Inject(method = "handleChat", at = @At("HEAD"), require = 0)
     private void helpermod$hearChat(ServerboundChatPacket packet, CallbackInfo ci) {
         HelperHooks.chatPacket(player, packet.message());
     }

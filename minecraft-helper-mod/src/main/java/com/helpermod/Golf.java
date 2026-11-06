@@ -336,7 +336,7 @@ final class Golf {
         v.setCustomNameVisible(true);
         v.setPersistenceRequired();
         v.setNoAi(true);
-        v.setInvulnerable(true);
+        ((com.helpermod.mixin.EntityAccessor) v).helpermod$setInvulnerable(true);
         v.addTag(PRO_TAG);
         world.addFreshEntity(v);
     }

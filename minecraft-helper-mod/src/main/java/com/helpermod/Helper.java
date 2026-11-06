@@ -256,7 +256,7 @@ public class Helper {
         accessor.helpermod$getGoalSelector().addGoal(8, new LookAtPlayerGoal(mob, Player.class, 8f));
         mob.getNavigation().setCanFloat(true);
         mob.setPersistenceRequired();
-        mob.setInvulnerable(true);
+        ((com.helpermod.mixin.EntityAccessor) mob).helpermod$setInvulnerable(true);
         mob.setSilent(true);
         if (mob instanceof WanderingTrader trader) trader.setDespawnDelay(0);
         for (EquipmentSlot slot : EquipmentSlot.values()) mob.setDropChance(slot, 0f);

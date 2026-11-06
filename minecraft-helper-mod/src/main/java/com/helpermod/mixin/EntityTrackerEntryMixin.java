@@ -28,33 +28,33 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 public abstract class EntityTrackerEntryMixin {
     @Shadow @Final private Entity entity;
 
-    @Inject(method = "sendPackets", at = @At("HEAD"))
+    @Inject(method = "sendPairingData", at = @At("HEAD"))
     private void helpermod$announcePlayer(ServerPlayer player,
                                           Consumer<Packet<ClientGamePacketListener>> sender, CallbackInfo ci) {
         if (Disguise.looksLikePlayer(entity)) sender.accept(Disguise.playerListAdd(entity));
     }
 
-    @Inject(method = "stopTracking", at = @At("TAIL"))
+    @Inject(method = "removePairing", at = @At("TAIL"))
     private void helpermod$forgetPlayer(ServerPlayer player, CallbackInfo ci) {
         if (Disguise.looksLikePlayer(entity)) player.connection.send(Disguise.playerListRemove(entity));
     }
 
-    @ModifyArg(method = "sendPackets", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/network/packet/s2c/play/EntityTrackerUpdateS2CPacket;<init>(ILjava/util/List;)V"),
+    @ModifyArg(method = "sendPairingData", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/protocol/game/ClientboundSetEntityDataPacket;<init>(ILjava/util/List;)V"),
             index = 1)
     private List<SynchedEntityData.DataValue<?>> helpermod$initialData(List<SynchedEntityData.DataValue<?>> list) {
         return Disguise.isHelper(entity) ? Disguise.filterData(entity, list, true) : list;
     }
 
-    @ModifyArg(method = "syncEntityData", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/network/packet/s2c/play/EntityTrackerUpdateS2CPacket;<init>(ILjava/util/List;)V"),
+    @ModifyArg(method = "sendDirtyEntityData", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/protocol/game/ClientboundSetEntityDataPacket;<init>(ILjava/util/List;)V"),
             index = 1)
     private List<SynchedEntityData.DataValue<?>> helpermod$syncData(List<SynchedEntityData.DataValue<?>> list) {
         return Disguise.isHelper(entity) ? Disguise.filterData(entity, list, false) : list;
     }
 
-    @ModifyArg(method = {"sendPackets", "syncEntityData"}, at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/network/packet/s2c/play/EntityAttributesS2CPacket;<init>(ILjava/util/Collection;)V"),
+    @ModifyArg(method = {"sendPairingData", "sendDirtyEntityData"}, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/network/protocol/game/ClientboundUpdateAttributesPacket;<init>(ILjava/util/Collection;)V"),
             index = 1)
     private Collection<AttributeInstance> helpermod$attributes(Collection<AttributeInstance> attributes) {
         return Disguise.isHelper(entity) ? Disguise.filterAttributes(entity, attributes) : attributes;

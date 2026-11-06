@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 /** The baby flag, so a small helper can be shown as the baby version of its mob. */
 @Mixin(Zombie.class)
 public interface ZombieEntityAccessor {
-    @Accessor("BABY")
+    @Accessor("DATA_BABY_ID")
     static EntityDataAccessor<Boolean> helpermod$getBaby() {
         throw new AssertionError();
     }

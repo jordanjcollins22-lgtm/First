@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "MobEntityAccessor",
+    "EntityAccessor",
     "DataTrackerAccessor",
     "PlayerEntityAccessor",
     "EntitySpawnPacketMixin",
