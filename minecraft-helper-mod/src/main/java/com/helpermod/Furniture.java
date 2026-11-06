@@ -963,14 +963,10 @@ final class Furniture {
     private static String tvText(ServerLevel world) {
         long slot = world.getGameTime() / 120; // a new channel every 6 seconds
         return switch ((int) (slot % 4)) {
-            case 0 -> "Helper TV
-" + clockText(world);
-            case 1 -> "Weather
-" + (world.isThundering() ? "Thunderstorms" : world.isRaining() ? "Rain" : world.isDarkOutside() ? "Clear night" : "Sunny");
-            case 2 -> "Helper News
-" + NEWS[(int) ((slot / 4) % NEWS.length)];
-            default -> "Tonight
-" + (world.isDarkOutside() ? "Stay inside, mobs about" : "Good day for mining");
+            case 0 -> "Helper TV\n" + clockText(world);
+            case 1 -> "Weather\n" + (world.isThundering() ? "Thunderstorms" : world.isRaining() ? "Rain" : world.isDarkOutside() ? "Clear night" : "Sunny");
+            case 2 -> "Helper News\n" + NEWS[(int) ((slot / 4) % NEWS.length)];
+            default -> "Tonight\n" + (world.isDarkOutside() ? "Stay inside, mobs about" : "Good day for mining");
         };
     }
 
