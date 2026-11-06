@@ -416,7 +416,16 @@ final class Tycoon {
             if (++d.timer < d.interval() || d.live >= MAX_ORES_PER_DROPPER) continue;
             d.timer = 0;
             if (world.hasNeighborSignal(pos)) continue; // a redstone signal pauses it
-            drop(world, pos, state.getValue(DispenserBlock.FACING), d, e.getKey());
+            Direction facing = state.getValue(DispenserBlock.FACING);
+            TycoonFactory.Made made = world.getBlockEntity(pos) instanceof net.minecraft.world.Container box && !box.isEmpty()
+                    ? TycoonFactory.make(box, d.oreValue()) : null;
+            if (made != null) { // a factory dropper: what you put in comes out as something worth more
+                drop(world, pos, facing, d, e.getKey(), made.item(), made.value());
+                if (made.recipe() != null) world.sendParticles(ParticleTypes.HAPPY_VILLAGER, pos.getX() + 0.5, pos.getY() + 1.1,
+                        pos.getZ() + 0.5, 3, 0.25, 0.1, 0.25, 0);
+            } else {
+                drop(world, pos, facing, d, e.getKey());
+            }
         }
 
         // Move the ore.
@@ -450,9 +459,12 @@ final class Tycoon {
 
     private static void drop(ServerLevel world, BlockPos pos, Direction facing, Dropper d, String key) {
         Item look = d.level >= 8 ? Items.RAW_GOLD : d.level >= 4 ? Items.RAW_IRON : Items.RAW_COPPER;
-        ItemStack stack = new ItemStack(look);
+        drop(world, pos, facing, d, key, new ItemStack(look), d.oreValue());
+    }
+
+    private static void drop(ServerLevel world, BlockPos pos, Direction facing, Dropper d, String key, ItemStack stack, long value) {
         CompoundTag tag = new CompoundTag();
-        tag.putLong("value", d.oreValue());
+        tag.putLong("value", value);
         Compat.putUUID(tag, "owner", d.owner);
         tag.putLong("id", world.getRandom().nextLong()); // never stacks with other ore
         tag.put("ups", new ListTag());
@@ -583,6 +595,9 @@ final class Tycoon {
                 "into ingots, pink Lucky Upgraders have a 1 in 8 chance of x20. Put Polishers before upgraders so the +10 gets multiplied too.",
                 "Loot boxes (Gear, Machine, Mega) are in the shop. Right-click one to open it. /helper tycoon odds shows the chances.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
+                "Big update: put items in a Tycoon Dropper (or feed it with a hopper) and it drops what they make, worth more than",
+                "the parts: 3 wheat -> bread, wheat + sugar + egg -> cake, apple + 8 gold -> golden apple... /helper tycoon recipes lists them.",
+                "/helper tycoon sell  - a Sell Box: food, ores, mob drops and more turn into coins. /helper tycoon price  - what your held item is worth",
         };
         for (String line : how) player.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.GRAY));
     }
@@ -800,6 +815,10 @@ final class Tycoon {
             new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
             new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
             new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
+            new Offer(1, 0, "Sell Box (sell food, ores, mob drops and more for coins)", () -> new ItemStack(Items.EMERALD), 0, p -> {
+                p.level().getServer().execute(() -> TycoonFactory.openSell(p));
+                return false;
+            }),
             new Offer(1, 0, "Furniture Catalogue (every room, with tabs)", () -> new ItemStack(Items.BED.red()), 0, p -> {
                 p.level().getServer().execute(() -> Furniture.openCatalog(p));
                 return false;
