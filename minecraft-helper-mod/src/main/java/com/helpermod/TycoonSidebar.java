@@ -47,13 +47,13 @@ final class TycoonSidebar {
         private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
             ListTag l = nbt.getListOrEmpty("hidden");
-            for (int i = 0; i < l.size(); i++) d.hidden.add(NbtUtils.loadUUID(l.get(i)));
+            for (int i = 0; i < l.size(); i++) d.hidden.add(Compat.uuidOf(l.get(i)));
             return d;
         }
 
                 public CompoundTag save(CompoundTag nbt) {
             ListTag l = new ListTag();
-            for (UUID id : hidden) l.add(NbtUtils.createUUID(id));
+            for (UUID id : hidden) l.add(Compat.uuidTag(id));
             nbt.put("hidden", l);
             return nbt;
         }

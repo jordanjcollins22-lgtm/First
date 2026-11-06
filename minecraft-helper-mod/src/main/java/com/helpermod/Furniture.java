@@ -25,7 +25,6 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
@@ -297,7 +296,7 @@ final class Furniture {
                     for (int s = 0; s < 27; s++) p.storage.setItem(s, items.get(s));
                     p.storage.addListener(inv -> d.setDirty());
                 }
-                d.placed.put(c.getUUID("id"), p);
+                d.placed.put(Compat.getUUID(c, "id"), p);
             }
             return d;
         }
@@ -307,7 +306,7 @@ final class Furniture {
             for (Map.Entry<UUID, Placed> e : placed.entrySet()) {
                 Placed p = e.getValue();
                 CompoundTag c = p.materials();
-                c.putUUID("id", e.getKey());
+                Compat.putUUID(c, "id", e.getKey());
                 c.putString("world", p.world);
                 c.putLong("pos", p.pos.asLong());
                 c.putInt("rot", p.rot);
@@ -336,18 +335,18 @@ final class Furniture {
         ItemStack stack = new ItemStack(piece.icon());
         CompoundTag m = materials == null ? new CompoundTag() : materials.copy();
         m.putString("type", piece.id());
-        stack.getOrCreateTag().put(ITEM_TAG, m);
+        Compat.editTag(stack, t -> t.put(ITEM_TAG, m));
         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(piece.name()).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
         ListTag lore = new ListTag();
         lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(piece.room() + " furniture. Right-click a block to place it.")
                 .withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY))));
-        stack.getOrCreateTagElement("display").put("Lore", lore);
+        Compat.lore(stack, lore);
         return stack;
     }
 
     private static CompoundTag furnitureOf(ItemStack stack) {
-        if (!stack.hasTag() || !stack.getTag().contains(ITEM_TAG, Tag.TAG_COMPOUND)) return null;
-        return stack.getTag().getCompound(ITEM_TAG);
+        if (!Compat.hasTag(stack) || !Compat.tag(stack).contains(ITEM_TAG)) return null;
+        return Compat.tag(stack).getCompoundOrEmpty(ITEM_TAG);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -512,12 +511,12 @@ final class Furniture {
         return ResourceKey.create(Registries.DIMENSION, Identifier.parse(id));
     }
 
-    static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
+    static InteractionResult onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
-        if (furnitureOf(stack) == null) return InteractionResultHolder.pass(stack);
+        if (furnitureOf(stack) == null) return InteractionResult.PASS;
         if (!w.isClientSide() && p instanceof ServerPlayer player) player.sendOverlayMessage(Component.literal("Right-click a block to put it there.")
                 .withStyle(ChatFormatting.YELLOW));
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {

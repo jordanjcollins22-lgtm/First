@@ -132,8 +132,8 @@ public class HelperData extends SavedData {
         for (int i = 0; i < list.size(); i++) {
             CompoundTag tag = list.getCompoundOrEmpty(i);
             Entry entry = data.new Entry();
-            UUID owner = tag.getUUID("owner");
-            if (tag.hasUUID("entity")) entry.entity = tag.getUUID("entity");
+            UUID owner = Compat.getUUID(tag, "owner");
+            if (tag.contains("entity")) entry.entity = Compat.getUUID(tag, "entity");
             entry.active = tag.getBooleanOr("active", false);
             entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
             entry.work = tag.getIntOr("work", 0); // before the items, so every unlocked pocket is there to fill
@@ -158,8 +158,8 @@ public class HelperData extends SavedData {
         ListTag list = new ListTag();
         entries.forEach((owner, entry) -> {
             CompoundTag tag = new CompoundTag();
-            tag.putUUID("owner", owner);
-            if (entry.entity != null) tag.putUUID("entity", entry.entity);
+            Compat.putUUID(tag, "owner", owner);
+            if (entry.entity != null) Compat.putUUID(tag, "entity", entry.entity);
             tag.putBoolean("active", entry.active);
             tag.putBoolean("guard", entry.guard);
             tag.put("items", entry.inventory.createTag());

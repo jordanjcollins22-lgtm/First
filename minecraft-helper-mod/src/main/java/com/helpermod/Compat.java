@@ -82,4 +82,80 @@ public final class Compat {
     public static net.minecraft.network.chat.Component name(net.minecraft.world.item.Item item) {
         return net.minecraft.network.chat.Component.translatable(item.getDescriptionId());
     }
+
+    // ---- item custom data (1.20.1 item NBT) ----
+
+    /** A copy of the item's custom data, or null when it has none (like 1.20.1's getTag()). */
+    @org.jetbrains.annotations.Nullable
+    public static CompoundTag tag(ItemStack stack) {
+        net.minecraft.world.item.component.CustomData data = stack.get(DataComponents.CUSTOM_DATA);
+        return data == null ? null : data.copyTag();
+    }
+
+    public static boolean hasTag(ItemStack stack) {
+        return stack.has(DataComponents.CUSTOM_DATA);
+    }
+
+    /** Change the item's custom data in place (like editing 1.20.1's getOrCreateTag()). */
+    public static void editTag(ItemStack stack, java.util.function.Consumer<CompoundTag> edit) {
+        net.minecraft.world.item.component.CustomData.update(DataComponents.CUSTOM_DATA, stack, edit);
+    }
+
+    /** Lore lines under the item name. */
+    public static void lore(ItemStack stack, java.util.List<net.minecraft.network.chat.Component> lines) {
+        stack.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(lines));
+    }
+
+    // ---- saving item stacks ----
+
+    private static net.minecraft.server.MinecraftServer server;
+
+    static void serverStarting(net.minecraft.server.MinecraftServer s) { server = s; }
+
+    static void serverStopped() { server = null; }
+
+    public static net.minecraft.core.HolderLookup.Provider registries() {
+        return server != null ? server.registryAccess() : net.minecraft.core.RegistryAccess.EMPTY;
+    }
+
+    /** An item stack as a compound tag (empty tag for an empty stack). */
+    public static CompoundTag saveStack(ItemStack stack) {
+        if (stack.isEmpty()) return new CompoundTag();
+        net.minecraft.nbt.Tag t = ItemStack.CODEC.encodeStart(registries().createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), stack)
+                .result().orElse(null);
+        return t instanceof CompoundTag c ? c : new CompoundTag();
+    }
+
+    /** The stack saved by saveStack, or an empty stack. */
+    public static ItemStack loadStack(CompoundTag tag) {
+        if (tag == null || tag.isEmpty()) return ItemStack.EMPTY;
+        return ItemStack.CODEC.parse(registries().createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), tag)
+                .result().orElse(ItemStack.EMPTY);
+    }
+
+    // ---- UUIDs in tags ----
+
+    public static void putUUID(CompoundTag tag, String key, java.util.UUID id) {
+        tag.store(key, net.minecraft.core.UUIDUtil.CODEC, id);
+    }
+
+    @org.jetbrains.annotations.Nullable
+    public static java.util.UUID getUUID(CompoundTag tag, String key) {
+        return tag.read(key, net.minecraft.core.UUIDUtil.CODEC).orElse(null);
+    }
+
+    public static net.minecraft.nbt.Tag uuidTag(java.util.UUID id) {
+        return new net.minecraft.nbt.IntArrayTag(net.minecraft.core.UUIDUtil.uuidToIntArray(id));
+    }
+
+    @org.jetbrains.annotations.Nullable
+    public static java.util.UUID uuidOf(net.minecraft.nbt.Tag tag) {
+        return tag instanceof net.minecraft.nbt.IntArrayTag a && a.getAsIntArray().length == 4
+                ? net.minecraft.core.UUIDUtil.uuidFromIntArray(a.getAsIntArray()) : null;
+    }
+
+    /** An enchantment from the running server's registry (for building items outside a world). */
+    public static Holder<Enchantment> ench(ResourceKey<Enchantment> key) {
+        return registries().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(key);
+    }
 }

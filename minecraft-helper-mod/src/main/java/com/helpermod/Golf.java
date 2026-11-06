@@ -17,7 +17,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
@@ -124,14 +123,14 @@ final class Golf {
             Data d = new Data();
             if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLongOr("centre", 0L));
             ListTag list = nbt.getListOrEmpty("welcomed");
-            for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.NbtUtils.loadUUID(list.get(i)));
+            for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.Compat.uuidOf(list.get(i)));
             return d;
         }
 
                 public CompoundTag save(CompoundTag nbt) {
             if (centre != null) nbt.putLong("centre", centre.asLong());
             ListTag list = new ListTag();
-            for (UUID id : welcomed) list.add(net.minecraft.nbt.NbtUtils.createUUID(id));
+            for (UUID id : welcomed) list.add(net.minecraft.nbt.Compat.uuidTag(id));
             nbt.put("welcomed", list);
             return nbt;
         }
@@ -166,13 +165,12 @@ final class Golf {
 
     private static ItemStack tagged(Item item, int count, String kind, String name, ChatFormatting color, String lore) {
         ItemStack stack = new ItemStack(item, count);
-        stack.getOrCreateTag().putString(NBT, kind);
+        Compat.editTag(stack, t -> t.putString(NBT, kind));
         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         if (lore != null) {
-            CompoundTag display = stack.getOrCreateTagElement("display");
-            ListTag l = new ListTag();
-            l.add(net.minecraft.nbt.StringTag.valueOf(Component.Serializer.toJson(Component.literal(lore).withStyle(ChatFormatting.GRAY))));
-            display.put("Lore", l);
+            java.util.List<Component> l = new java.util.ArrayList<>();
+            l.add(Component.literal(lore).withStyle(ChatFormatting.GRAY));
+            Compat.lore(stack, l);
         }
         return stack;
     }
@@ -197,7 +195,7 @@ final class Golf {
     }
 
     private static String kindOf(ItemStack stack) {
-        CompoundTag nbt = stack.getTag();
+        CompoundTag nbt = Compat.tag(stack);
         return nbt != null && nbt.contains(NBT) ? nbt.getString(NBT) : null;
     }
 
@@ -439,22 +437,22 @@ final class Golf {
     // Playing
     // ---------------------------------------------------------------------------------------
 
-    static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
+    static InteractionResult onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
-        if (kind == null) return InteractionResultHolder.pass(stack);
-        if (w.isClientSide()) return kind.equals("cap") ? InteractionResultHolder.pass(stack) : InteractionResultHolder.success(stack);
-        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResultHolder.pass(stack);
+        if (kind == null) return InteractionResult.PASS;
+        if (w.isClientSide()) return kind.equals("cap") ? InteractionResult.PASS : InteractionResult.SUCCESS;
+        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
         if (kind.equals("ball") || kind.startsWith("deed:")) {
             player.sendOverlayMessage(Component.literal("Right-click the ground to use it.").withStyle(ChatFormatting.YELLOW));
-            return InteractionResultHolder.success(stack);
+            return InteractionResult.SUCCESS;
         }
         Club club = clubOf(stack);
         if (club != null) {
             swing(player, club);
-            return InteractionResultHolder.success(stack);
+            return InteractionResult.SUCCESS;
         }
-        return InteractionResultHolder.pass(stack);
+        return InteractionResult.PASS;
     }
 
     static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
@@ -495,7 +493,7 @@ final class Golf {
             player.getInventory().placeItemBackInInventory(balls(1), net.minecraft.util.Prediction.SERVER_ONLY);
         }
         ItemStack look = new ItemStack(Items.SNOWBALL);
-        look.getOrCreateTag().putLong("HelperGolfId", world.getRandom().nextLong()); // never merges
+        Compat.editTag(look, t -> t.putLong("HelperGolfId", world.getRandom().nextLong())); // never merges
         ItemEntity ball = new ItemEntity(world, at.getX() + 0.5, at.getY() + 0.05, at.getZ() + 0.5, look, 0, 0, 0);
         ball.setNeverPickUp();
         ball.setUnlimitedLifetime();

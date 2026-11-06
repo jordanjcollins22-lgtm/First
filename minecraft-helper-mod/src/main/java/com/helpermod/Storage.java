@@ -240,11 +240,11 @@ public final class Storage {
                 ListTag items = p.getListOrEmpty("items");
                 for (int k = 0; k < items.size(); k++) {
                     CompoundTag t = items.getCompoundOrEmpty(k);
-                    ItemStack stack = ItemStack.of(t.getCompound("item"));
+                    ItemStack stack = Compat.loadStack(t.getCompound("item"));
                     long count = t.getLongOr("count", 0L);
                     if (!stack.isEmpty() && count > 0) list.add(new Stored(stack.copyWithCount(1), count));
                 }
-                data.stores.put(p.getUUID("owner"), list);
+                data.stores.put(Compat.getUUID(p, "owner"), list);
             }
             return data;
         }
@@ -254,11 +254,11 @@ public final class Storage {
             stores.forEach((owner, list) -> {
                 if (list.isEmpty()) return;
                 CompoundTag p = new CompoundTag();
-                p.putUUID("owner", owner);
+                Compat.putUUID(p, "owner", owner);
                 ListTag items = new ListTag();
                 for (Stored s : list) {
                     CompoundTag t = new CompoundTag();
-                    t.put("item", s.template.save(new CompoundTag()));
+                    t.put("item", Compat.saveStack(s.template));
                     t.putLong("count", s.count);
                     items.add(t);
                 }
@@ -638,12 +638,11 @@ public final class Storage {
 
         private static void lore(ItemStack stack, Component... lines) {
             if (lines.length == 0) return;
-            CompoundTag display = stack.getOrCreateTagElement("display");
-            ListTag lore = new ListTag();
+            java.util.List<Component> lore = new java.util.ArrayList<>();
             for (Component t : lines) {
-                lore.add(StringTag.valueOf(Component.Serializer.toJson(t.copy().withStyle(s -> s.withItalic(false)))));
+                lore.add(t.copy().withStyle(s -> s.withItalic(false)));
             }
-            display.put("Lore", lore);
+            Compat.lore(stack, lore);
         }
     }
 

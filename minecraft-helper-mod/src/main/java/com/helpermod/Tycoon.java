@@ -135,7 +135,7 @@ final class Tycoon {
             ListTag players = nbt.getListOrEmpty("players");
             for (int i = 0; i < players.size(); i++) {
                 CompoundTag p = players.getCompoundOrEmpty(i);
-                UUID id = p.getUUID("id");
+                UUID id = Compat.getUUID(p, "id");
                 d.coins.put(id, p.getLongOr("coins", 0L));
                 d.earned.put(id, p.getLongOr("earned", 0L));
                 d.started.put(id, p.getBooleanOr("started", false));
@@ -146,7 +146,7 @@ final class Tycoon {
             ListTag list = nbt.getListOrEmpty("droppers");
             for (int i = 0; i < list.size(); i++) {
                 CompoundTag t = list.getCompoundOrEmpty(i);
-                d.droppers.put(t.getString("key"), new Dropper(t.getUUID("owner"), t.getInt("level")));
+                d.droppers.put(t.getString("key"), new Dropper(Compat.getUUID(t, "owner"), t.getInt("level")));
             }
             return d;
         }
@@ -159,7 +159,7 @@ final class Tycoon {
             ids.addAll(rebirths.keySet());
             for (UUID id : ids) {
                 CompoundTag p = new CompoundTag();
-                p.putUUID("id", id);
+                Compat.putUUID(p, "id", id);
                 p.putLong("coins", coins.getOrDefault(id, 0L));
                 p.putLong("earned", earned.getOrDefault(id, 0L));
                 p.putBoolean("started", started.getOrDefault(id, false));
@@ -173,7 +173,7 @@ final class Tycoon {
             droppers.forEach((key, dr) -> {
                 CompoundTag t = new CompoundTag();
                 t.putString("key", key);
-                t.putUUID("owner", dr.owner);
+                Compat.putUUID(t, "owner", dr.owner);
                 t.putInt("level", dr.level);
                 list.add(t);
             });
@@ -225,11 +225,11 @@ final class Tycoon {
     /** A Tycoon Dropper that starts at a set level (from loot boxes). Same name, so it works like any other. */
     static ItemStack dropperItem(int level) {
         ItemStack stack = dropperItem();
-        stack.getOrCreateTag().putInt(LEVEL_NBT, level);
+        Compat.editTag(stack, t -> t.putInt(LEVEL_NBT, level));
         ListTag lore = new ListTag();
         lore.add(net.minecraft.nbt.StringTag.valueOf(Component.Serializer.toJson(
                 Component.literal("Starts at level " + level).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW))));
-        stack.getOrCreateTagElement("display").put("Lore", lore);
+        Compat.lore(stack, lore);
         return stack;
     }
 
@@ -321,7 +321,7 @@ final class Tycoon {
         ItemStack stack = player.getItemInHand(hand);
         if (isDropperItem(stack)) {
             BlockPos pos = new BlockPlaceContext(player, hand, stack, hit).getClickedPos();
-            int level = stack.hasTag() ? stack.getTag().getInt(LEVEL_NBT) : 0;
+            int level = Compat.hasTag(stack) ? Compat.tag(stack).getIntOr(LEVEL_NBT, 0) : 0;
             PENDING.add(new Pending(w.dimension(), pos.immutable(), player.getUUID(), 0, level));
         }
         return InteractionResult.PASS;
@@ -453,11 +453,12 @@ final class Tycoon {
     private static void drop(ServerLevel world, BlockPos pos, Direction facing, Dropper d, String key) {
         Item look = d.level >= 8 ? Items.RAW_GOLD : d.level >= 4 ? Items.RAW_IRON : Items.RAW_COPPER;
         ItemStack stack = new ItemStack(look);
-        CompoundTag tag = stack.getOrCreateTagElement(ORE_NBT);
+        CompoundTag tag = new CompoundTag();
         tag.putLong("value", d.oreValue());
-        tag.putUUID("owner", d.owner);
+        Compat.putUUID(tag, "owner", d.owner);
         tag.putLong("id", world.getRandom().nextLong()); // never stacks with other ore
         tag.put("ups", new ListTag());
+        Compat.editTag(stack, t -> t.put(ORE_NBT, tag));
         Vec3 at = Vec3.atCenterOf(pos).add(facing.getStepX() * 0.7, facing.getStepY() * 0.7 - 0.15, facing.getStepZ() * 0.7);
         ItemEntity ore = new ItemEntity(world, at.x, at.y, at.z, stack,
                 facing.getStepX() * 0.1, 0, facing.getStepZ() * 0.1);
@@ -474,12 +475,13 @@ final class Tycoon {
         BlockPos under = BlockPos.containing(ore.getX(), ore.getY() - 0.1, ore.getZ());
         BlockState state = world.getBlockState(under);
         ItemStack stack = ore.getItem();
-        CompoundTag tag = stack.getTagElement(ORE_NBT);
-        if (tag == null) return true;
+        CompoundTag full = Compat.tag(stack);
+        if (full == null || !full.contains(ORE_NBT)) return true;
+        CompoundTag tag = full.getCompoundOrEmpty(ORE_NBT);
 
         if (state.is(Blocks.GLAZED_TERRACOTTA.black())) { // a Collector: cash in
-            UUID owner = tag.getUUID("owner");
-            long value = Math.max(1, Math.round(tag.getLong("value") * rebirthBonus(data.rebirths(owner))));
+            UUID owner = Compat.getUUID(tag, "owner");
+            long value = Math.max(1, Math.round(tag.getLongOr("value", 0L) * rebirthBonus(data.rebirths(owner))));
             data.add(owner, value);
             checkMilestones(world.getServer(), data, owner);
             world.sendParticles(ParticleTypes.HAPPY_VILLAGER, ore.getX(), ore.getY() + 0.3, ore.getZ(), 4, 0.2, 0.2, 0.2, 0);
@@ -496,7 +498,8 @@ final class Tycoon {
             if (!ups.contains(here) && ups.size() < 16) {
                 ups.add(here);
                 tag.put("ups", ups);
-                tag.putLong("value", Math.min(Long.MAX_VALUE / 8, tag.getLong("value") * mult));
+                tag.putLong("value", Math.min(Long.MAX_VALUE / 8, tag.getLongOr("value", 0L) * mult));
+                Compat.editTag(stack, t -> t.put(ORE_NBT, tag));
                 ore.setItem(stack.copy());
                 world.sendParticles(ParticleTypes.ELECTRIC_SPARK, ore.getX(), ore.getY() + 0.2, ore.getZ(), 6, 0.15, 0.15, 0.15, 0.05);
                 world.playSound(null, under, SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.BLOCKS, 0.4f, 1.2f);
@@ -520,7 +523,7 @@ final class Tycoon {
                             : stack.is(Items.RAW_COPPER) ? Items.COPPER_INGOT : stack.getItem();
                     if (ingot != stack.getItem()) {
                         next = new ItemStack(ingot);
-                        next.setTag(stack.getTag());
+                        next.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA));
                     }
                     world.sendParticles(ParticleTypes.FLAME, ore.getX(), ore.getY() + 0.2, ore.getZ(), 8, 0.15, 0.15, 0.15, 0.02);
                     world.playSound(null, under, SoundEvents.FURNACE_FIRE_CRACKLE, SoundSource.BLOCKS, 0.6f, 1.0f);
@@ -531,8 +534,13 @@ final class Tycoon {
                 } else {
                     world.sendParticles(ParticleTypes.SMOKE, ore.getX(), ore.getY() + 0.2, ore.getZ(), 3, 0.1, 0.1, 0.1, 0.01);
                 }
-                next.getOrCreateTagElement(ORE_NBT).putLong("value", Math.min(Long.MAX_VALUE / 8, value));
-                next.getOrCreateTagElement(ORE_NBT).put("ups", ups);
+                final long newValue = Math.min(Long.MAX_VALUE / 8, value);
+                Compat.editTag(next, t -> {
+                    CompoundTag o = t.getCompoundOrEmpty(ORE_NBT);
+                    o.putLong("value", newValue);
+                    o.put("ups", ups);
+                    t.put(ORE_NBT, o);
+                });
                 ore.setItem(next.copy());
             }
         }
@@ -890,7 +898,7 @@ final class Tycoon {
         fluids.add(fluid);
         CompoundTag data = new CompoundTag();
         data.put("StoredFluids", fluids);
-        stack.getOrCreateTag().put("BotariumData", data);
+        Compat.editTag(stack, t -> t.put("BotariumData", data));
         return stack;
     }
 

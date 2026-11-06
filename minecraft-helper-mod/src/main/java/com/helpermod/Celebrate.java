@@ -44,17 +44,12 @@ public final class Celebrate {
 
     private static ItemStack rocket(int palette, int shape) {
         ItemStack stack = new ItemStack(Items.FIREWORK_ROCKET);
-        CompoundTag fireworks = stack.getOrCreateTagElement("Fireworks");
-        fireworks.putByte("Flight", (byte) 2);
-        CompoundTag burst = new CompoundTag();
-        burst.putByte("Type", (byte) shape); // ball, big ball, star, creeper face or burst
-        burst.putIntArray("Colors", COLORS[palette]);
-        burst.putIntArray("FadeColors", new int[]{0xFFFFFF});
-        burst.putBoolean("Twinkle", true);
-        burst.putBoolean("Trail", true);
-        ListTag explosions = new ListTag();
-        explosions.add(burst);
-        fireworks.put("Explosions", explosions);
+        // ball, big ball, star, creeper face or burst
+        net.minecraft.world.item.component.FireworkExplosion burst = new net.minecraft.world.item.component.FireworkExplosion(
+                net.minecraft.world.item.component.FireworkExplosion.Shape.byId(shape),
+                it.unimi.dsi.fastutil.ints.IntList.of(COLORS[palette]), it.unimi.dsi.fastutil.ints.IntList.of(0xFFFFFF), true, true);
+        stack.set(net.minecraft.core.component.DataComponents.FIREWORKS,
+                new net.minecraft.world.item.component.Fireworks(2, java.util.List.of(burst)));
         return stack;
     }
 }

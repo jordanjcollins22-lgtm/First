@@ -76,7 +76,7 @@ public final class Devices {
         String name = "Monster Spawner";
         Identifier id = Identifier.tryParse(mob);
         if (id != null && !mob.isEmpty()) {
-            stack.getOrCreateTag().putString(SPAWNER_MOB_KEY, mob);
+            Compat.editTag(stack, t -> t.putString(SPAWNER_MOB_KEY, mob));
             var type = EntityType.byString(mob);
             if (type.isPresent()) name = type.get().getDescription().getString() + " Spawner";
         }
@@ -95,7 +95,7 @@ public final class Devices {
         }
         world.setBlockAndUpdate(pos, state);
         if (world.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
-            EntityType.byString(stack.getTag().getString(SPAWNER_MOB_KEY))
+            EntityType.byString(Compat.tag(stack).getStringOr(SPAWNER_MOB_KEY, ""))
                     .ifPresent(type -> spawner.setEntityId(type, world.getRandom()));
             spawner.setChanged();
             world.sendBlockUpdated(pos, state, state, 3);
@@ -174,7 +174,7 @@ public final class Devices {
             if (hand == InteractionHand.MAIN_HAND) Storage.open(player);
             return InteractionResult.SUCCESS;
         }
-        if (stack.is(Items.SPAWNER) && stack.hasTag() && stack.getTag().contains(SPAWNER_MOB_KEY)) {
+        if (stack.is(Items.SPAWNER) && Compat.hasTag(stack) && Compat.tag(stack).contains(SPAWNER_MOB_KEY)) {
             return placeSpawner(player, world, hand, stack, hit);
         }
         if (isHarvesterItem(stack)) {

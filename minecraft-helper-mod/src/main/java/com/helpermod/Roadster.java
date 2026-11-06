@@ -96,8 +96,8 @@ final class Roadster {
         nbt.putInt("Variant", (coat.getId() & 0xFF) | (marking.getId() & 0xFF) << 8);
         ItemStack armor = new ItemStack(Items.LEATHER_HORSE_ARMOR);
         ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(armor, paint);
-        nbt.put("ArmorItem", armor.save(new CompoundTag()));
-        if (saddle) nbt.put("SaddleItem", new ItemStack(Items.SADDLE).save(new CompoundTag()));
+        nbt.put("ArmorItem", Compat.saveStack(armor));
+        if (saddle) nbt.put("SaddleItem", new Compat.saveStack(ItemStack(Items.SADDLE)));
         horse.readAdditionalSaveData(nbt);
     }
 
@@ -169,7 +169,7 @@ final class Roadster {
         h.addAdditionalSaveData(nbt);
         int paint = DEFAULT_PAINT;
         if (nbt.contains("ArmorItem")) {
-            ItemStack armor = ItemStack.of(nbt.getCompound("ArmorItem"));
+            ItemStack armor = Compat.loadStack(nbt.getCompound("ArmorItem"));
             if (armor.getItem() instanceof DyeableLeatherItem d) paint = d.getColor(armor);
         }
         dress(h, coat, paint, false);

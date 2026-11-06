@@ -22,7 +22,6 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
@@ -329,12 +328,11 @@ final class BlackHole {
 
     private static ItemStack tagged(Item item, String kind, String name, ChatFormatting color, String... lore) {
         ItemStack stack = new ItemStack(item);
-        stack.getOrCreateTag().putString(NBT, kind);
+        Compat.editTag(stack, t -> t.putString(NBT, kind));
         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
-        CompoundTag display = stack.getOrCreateTagElement("display");
-        ListTag l = new ListTag();
-        for (String line : lore) l.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(line).withStyle(ChatFormatting.GRAY))));
-        display.put("Lore", l);
+        java.util.List<Component> l = new java.util.ArrayList<>();
+        for (String line : lore) l.add(Component.literal(line).withStyle(ChatFormatting.GRAY));
+        Compat.lore(stack, l);
         return stack;
     }
 
@@ -342,13 +340,13 @@ final class BlackHole {
         ItemStack s = tagged(Items.ECHO_SHARD, "singularity", "Singularity", ChatFormatting.DARK_PURPLE,
                 "A tiny black hole made of collapsed ore.", "Right-click to fall into the Black Hole.",
                 "Right-click again inside to go home.");
-        s.enchant(Enchantments.UNBREAKING, 1); // for the shine
-        s.getOrCreateTag().putInt("HideFlags", 1);
+        s.set(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true); // for the shine
         return s;
     }
 
+    @SuppressWarnings("unchecked")
     private static ItemStack enchanted(ItemStack s, Object... pairs) {
-        for (int i = 0; i < pairs.length; i += 2) s.enchant((Enchantment) pairs[i], (Integer) pairs[i + 1]);
+        for (int i = 0; i < pairs.length; i += 2) s.enchant(Compat.ench((net.minecraft.resources.ResourceKey<Enchantment>) pairs[i]), (Integer) pairs[i + 1]);
         return s;
     }
 
@@ -371,20 +369,20 @@ final class BlackHole {
     }
 
     private static String kindOf(ItemStack stack) {
-        CompoundTag nbt = stack.getTag();
-        return nbt != null && nbt.contains(NBT) ? nbt.getString(NBT) : null;
+        CompoundTag nbt = Compat.tag(stack);
+        return nbt != null && nbt.contains(NBT) ? nbt.getStringOr(NBT, "") : null;
     }
 
     // ---------------------------------------------------------------------------------------
     // Going in and out
     // ---------------------------------------------------------------------------------------
 
-    static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
+    static InteractionResult onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
-        if (kind == null || kind.startsWith("set:")) return InteractionResultHolder.pass(stack); // armor equips as normal
-        if (w.isClientSide()) return InteractionResultHolder.success(stack);
-        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResultHolder.pass(stack);
+        if (kind == null || kind.startsWith("set:")) return InteractionResult.PASS; // armor equips as normal
+        if (w.isClientSide()) return InteractionResult.SUCCESS;
+        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
         if (kind.startsWith("tome:")) {
             readTome(player, stack, kind);
         } else if (kind.equals("singularity")) {
@@ -393,7 +391,7 @@ final class BlackHole {
         } else {
             skill(player, kind);
         }
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 
     static void enter(ServerPlayer player) {
@@ -769,10 +767,10 @@ final class BlackHole {
         }
         ItemStack s = tagged(item, "set:" + a.id(), a.name() + " " + piece, a.color(),
                 "Part of the " + a.name() + " set.", "Wear all four pieces: " + a.bonus() + ".");
-        s.enchant(Enchantments.PROTECTION, 4);
-        s.enchant(Enchantments.UNBREAKING, 3);
-        if (slot == EquipmentSlot.FEET) s.enchant(Enchantments.FEATHER_FALLING, 4);
-        if (slot == EquipmentSlot.HEAD) s.enchant(Enchantments.RESPIRATION, 3);
+        s.enchant(Compat.ench(Enchantments.PROTECTION), 4);
+        s.enchant(Compat.ench(Enchantments.UNBREAKING), 3);
+        if (slot == EquipmentSlot.FEET) s.enchant(Compat.ench(Enchantments.FEATHER_FALLING), 4);
+        if (slot == EquipmentSlot.HEAD) s.enchant(Compat.ench(Enchantments.RESPIRATION), 3);
         return s;
     }
 

@@ -13,7 +13,6 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -80,8 +79,8 @@ final class Loot {
     static List<ItemStack> protectedDiamondSet() {
         List<ItemStack> list = new ArrayList<>();
         for (ItemStack s : diamondSet()) {
-            s.enchant(Enchantments.PROTECTION, 4);
-            s.enchant(Enchantments.UNBREAKING, 3);
+            s.enchant(Compat.ench(Enchantments.PROTECTION), 4);
+            s.enchant(Compat.ench(Enchantments.UNBREAKING), 3);
             list.add(s);
         }
         return list;
@@ -117,9 +116,9 @@ final class Loot {
         String[] names = {"Vaultguard Helm", "Vaultguard Chestplate", "Vaultguard Leggings", "Vaultguard Boots"};
         int i = 0;
         for (ItemStack s : netheriteSet()) {
-            s.enchant(Enchantments.PROTECTION, 4);
-            s.enchant(Enchantments.UNBREAKING, 3);
-            s.enchant(Enchantments.MENDING, 1);
+            s.enchant(Compat.ench(Enchantments.PROTECTION), 4);
+            s.enchant(Compat.ench(Enchantments.UNBREAKING), 3);
+            s.enchant(Compat.ench(Enchantments.MENDING), 1);
             list.add(named(s, names[i++], ChatFormatting.GOLD));
         }
         return list;
@@ -203,27 +202,27 @@ final class Loot {
     static ItemStack boxItem(String id) {
         Box b = box(id);
         ItemStack stack = new ItemStack(Items.CHEST);
-        stack.getOrCreateTag().putString(TAG, id);
+        Compat.editTag(stack, t -> t.putString(TAG, id));
         named(stack, b.name(), b.color());
         ListTag lore = new ListTag();
         String inside = id.equals("gear") ? "Weapons and armour" : id.equals("machine") ? "Tycoon machines and droppers" : "Gear and machines, better odds";
-        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(inside).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY))));
-        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal("Right-click to open").withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GREEN))));
-        stack.getOrCreateTagElement("display").put("Lore", lore);
+        lore.add(Component.literal(inside).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY));
+        lore.add(Component.literal("Right-click to open").withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GREEN));
+        Compat.lore(stack, lore);
         return stack;
     }
 
     static String boxOf(ItemStack stack) {
-        if (!stack.is(Items.CHEST) || !stack.hasTag()) return null;
-        String id = stack.getTag().getString(TAG);
+        if (!stack.is(Items.CHEST) || !Compat.hasTag(stack)) return null;
+        String id = Compat.tag(stack).getStringOr(TAG, "");
         return box(id) == null ? null : id;
     }
 
-    static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
+    static InteractionResult onUseItem(Player p, Level w, InteractionHand hand) {
         ItemStack stack = p.getItemInHand(hand);
-        if (boxOf(stack) == null) return InteractionResultHolder.pass(stack);
+        if (boxOf(stack) == null) return InteractionResult.PASS;
         if (!w.isClientSide() && p instanceof ServerPlayer player && !(p instanceof FakePlayer)) open(player, stack);
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 
     /** Clicking a block with a box opens it instead of placing a chest. */
