@@ -48,6 +48,14 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.PersistentState;
 import net.minecraft.world.World;
 
+import net.minecraft.block.entity.ChestBlockEntity;
+import net.minecraft.item.EnchantedBookItem;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.EnchantmentLevelEntry;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.random.Random;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -111,6 +119,12 @@ final class BlackHole {
     static final class Data extends PersistentState {
         private static final String ID = "helpermod_black_hole";
         boolean built;
+        /** The loot chests were added (worlds that fell in before 1.26.0 get them later). */
+        boolean cachesBuilt;
+        /** Magic level from reading Rift Tomes: stronger, faster weapon skills. */
+        final Map<UUID, Integer> arcane = new HashMap<>();
+        /** When each player last looted each Rift Cache ("uuid|pos" -> Black Hole world time). */
+        final Map<String, Long> looted = new HashMap<>();
         /** Which bosses each player has beaten. */
         final Map<UUID, Set<String>> beaten = new HashMap<>();
         /** When each boss can be fought again (Black Hole world time). */
@@ -125,6 +139,11 @@ final class BlackHole {
         private static Data fromNbt(NbtCompound nbt) {
             Data d = new Data();
             d.built = nbt.getBoolean("built");
+            d.cachesBuilt = nbt.getBoolean("cachesBuilt");
+            NbtCompound a = nbt.getCompound("arcane");
+            for (String k : a.getKeys()) d.arcane.put(UUID.fromString(k), a.getInt(k));
+            NbtCompound lo = nbt.getCompound("looted");
+            for (String k : lo.getKeys()) d.looted.put(k, lo.getLong(k));
             NbtCompound b = nbt.getCompound("beaten");
             for (String k : b.getKeys()) {
                 Set<String> set = new HashSet<>();
@@ -142,6 +161,13 @@ final class BlackHole {
         @Override
         public NbtCompound writeNbt(NbtCompound nbt) {
             nbt.putBoolean("built", built);
+            nbt.putBoolean("cachesBuilt", cachesBuilt);
+            NbtCompound a = new NbtCompound();
+            arcane.forEach((k, v) -> a.putInt(k.toString(), v));
+            nbt.put("arcane", a);
+            NbtCompound lo = new NbtCompound();
+            looted.forEach(lo::putLong);
+            nbt.put("looted", lo);
             NbtCompound b = new NbtCompound();
             for (Map.Entry<UUID, Set<String>> e : beaten.entrySet()) {
                 NbtList l = new NbtList();
@@ -356,10 +382,12 @@ final class BlackHole {
     static TypedActionResult<ItemStack> onUseItem(PlayerEntity p, World w, Hand hand) {
         ItemStack stack = p.getStackInHand(hand);
         String kind = kindOf(stack);
-        if (kind == null) return TypedActionResult.pass(stack);
+        if (kind == null || kind.startsWith("set:")) return TypedActionResult.pass(stack); // armor equips as normal
         if (w.isClient) return TypedActionResult.success(stack);
         if (!(p instanceof ServerPlayerEntity player) || p instanceof FakePlayer) return TypedActionResult.pass(stack);
-        if (kind.equals("singularity")) {
+        if (kind.startsWith("tome:")) {
+            readTome(player, stack, kind);
+        } else if (kind.equals("singularity")) {
             if (player.getServerWorld().getRegistryKey().equals(WORLD)) leave(player);
             else enter(player);
         } else {
@@ -380,6 +408,10 @@ final class BlackHole {
             build(hole);
             data.built = true;
         }
+        if (!data.cachesBuilt) {
+            buildCaches(hole);
+            data.cachesBuilt = true;
+        }
         NbtCompound home = new NbtCompound();
         home.putString("dim", player.getServerWorld().getRegistryKey().getValue().toString());
         home.putDouble("x", player.getX());
@@ -394,7 +426,8 @@ final class BlackHole {
         player.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOW_FALLING, 200, 0));
         Helper.say(player, "Welcome to the Black Hole. Four bosses wait at the end of the bridges: the Ashen Warden (east), "
                 + "Duskfang (west) and the Hollow Colossus (south). Beat all three and the Singularity Sovereign (north) wakes up. "
-                + "Stand on the lodestone in an arena to call its boss. Right-click your Singularity to go home.");
+                + "Stand on the lodestone in an arena to call its boss. The chests with soul lanterns are Rift Caches: loot just for you, "
+                + "refilled every 15 minutes. Right-click your Singularity to go home.");
     }
 
     static void leave(ServerPlayerEntity player) {
@@ -427,6 +460,9 @@ final class BlackHole {
         Helper.say(player, "Black Hole: pile up " + PILE + " or more Tycoon ore in one spot (let it drop into a pit, or run your "
                 + "conveyors in a loop with no collector). The pile spins in a circle and collapses into a Singularity. "
                 + "Right-click with it to fall in.");
+        int arcane = data.arcane.getOrDefault(player.getUuid(), 0);
+        player.sendMessage(Text.literal("  Magic level " + arcane + "/" + MAX_ARCANE + " (skills +" + (arcane * 10) + "% damage, -"
+                + (arcane * 5) + "% cooldown). Read Rift Tomes to level up.").formatted(Formatting.LIGHT_PURPLE), false);
         for (BossDef b : BOSSES) {
             String where = b.dx() > 0 ? "east" : b.dx() < 0 ? "west" : b.dz() > 0 ? "south" : "north";
             player.sendMessage(Text.literal((beaten.contains(b.id()) ? "  [beaten] " : "  ") + b.title() + " (" + where
@@ -513,6 +549,7 @@ final class BlackHole {
 
     static void tick(MinecraftServer server) {
         tickVortices();
+        if (server.getTicks() % 40 == 0) tickSetBonuses(server);
         FIGHTS.entrySet().removeIf(e -> tickFight(server, e.getValue()));
         if (server.getTicks() % 20 != 0) return;
         ServerWorld hole = server.getWorld(WORLD);
@@ -672,6 +709,11 @@ final class BlackHole {
         for (ServerPlayerEntity p : world.getPlayers()) {
             if (p.isSpectator() || p.getBlockPos().getSquaredDistance(altar) > 48 * 48) continue;
             p.getInventory().offerOrDrop(weapon(weapon));
+            Random rnd = world.getRandom();
+            p.getInventory().offerOrDrop(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)])); // one piece of its set each time
+            if (b.id().equals("sovereign")) p.getInventory().offerOrDrop(armor(b.id(), ARMOR_SLOTS[rnd.nextInt(4)]));
+            p.getInventory().offerOrDrop(tome(b.id().equals("sovereign") ? 3 : 1));
+            p.getInventory().offerOrDrop(book(rnd));
             if (b.id().equals("sovereign")) p.getInventory().offerOrDrop(new ItemStack(Items.NETHER_STAR));
             p.addExperience(b.id().equals("sovereign") ? 2000 : 500);
             coins.add(p.getUuid(), b.coins());
@@ -684,6 +726,187 @@ final class BlackHole {
             }
         }
         data.markDirty();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Armor sets, Rift Tomes (magic levels), enchanted books and the Rift Caches
+    // ---------------------------------------------------------------------------------------
+
+    static final int MAX_ARCANE = 10;
+    private static final EquipmentSlot[] ARMOR_SLOTS = {EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
+
+    private record ArmorSet(String id, String name, Formatting color, String bonus, StatusEffectInstance[] effects) {}
+
+    private static StatusEffectInstance fx(net.minecraft.entity.effect.StatusEffect e, int amp) {
+        return new StatusEffectInstance(e, 100, amp, true, false, true);
+    }
+
+    private static final ArmorSet[] SETS = {
+            new ArmorSet("ashen", "Cinderwarden", Formatting.GOLD, "Fire Resistance and Strength",
+                    new StatusEffectInstance[]{fx(StatusEffects.FIRE_RESISTANCE, 0), fx(StatusEffects.STRENGTH, 0)}),
+            new ArmorSet("dusk", "Moonless", Formatting.LIGHT_PURPLE, "Speed II and Night Vision",
+                    new StatusEffectInstance[]{fx(StatusEffects.SPEED, 1), fx(StatusEffects.NIGHT_VISION, 0)}),
+            new ArmorSet("colossus", "Hollow Bulwark", Formatting.DARK_AQUA, "Resistance and Haste II",
+                    new StatusEffectInstance[]{fx(StatusEffects.RESISTANCE, 0), fx(StatusEffects.HASTE, 1)}),
+            new ArmorSet("sovereign", "Event Horizon", Formatting.DARK_PURPLE, "Regeneration, Strength II and Slow Falling",
+                    new StatusEffectInstance[]{fx(StatusEffects.REGENERATION, 0), fx(StatusEffects.STRENGTH, 1), fx(StatusEffects.SLOW_FALLING, 0)}),
+    };
+
+    private static ArmorSet set(String id) {
+        for (ArmorSet a : SETS) if (a.id().equals(id)) return a;
+        return SETS[0];
+    }
+
+    /** One piece of a boss's armor set: netherite, well enchanted, and a bonus for wearing all four. */
+    static ItemStack armor(String setId, EquipmentSlot slot) {
+        ArmorSet a = set(setId);
+        Item item;
+        String piece;
+        switch (slot) {
+            case HEAD -> { item = Items.NETHERITE_HELMET; piece = "Helm"; }
+            case CHEST -> { item = Items.NETHERITE_CHESTPLATE; piece = "Chestplate"; }
+            case LEGS -> { item = Items.NETHERITE_LEGGINGS; piece = "Greaves"; }
+            default -> { item = Items.NETHERITE_BOOTS; piece = "Boots"; }
+        }
+        ItemStack s = tagged(item, "set:" + a.id(), a.name() + " " + piece, a.color(),
+                "Part of the " + a.name() + " set.", "Wear all four pieces: " + a.bonus() + ".");
+        s.addEnchantment(Enchantments.PROTECTION, 4);
+        s.addEnchantment(Enchantments.UNBREAKING, 3);
+        if (slot == EquipmentSlot.FEET) s.addEnchantment(Enchantments.FEATHER_FALLING, 4);
+        if (slot == EquipmentSlot.HEAD) s.addEnchantment(Enchantments.RESPIRATION, 3);
+        return s;
+    }
+
+    private static void tickSetBonuses(MinecraftServer server) {
+        for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
+            String worn = null;
+            int count = 0;
+            for (EquipmentSlot slot : ARMOR_SLOTS) {
+                String k = kindOf(p.getEquippedStack(slot));
+                if (k == null || !k.startsWith("set:")) break;
+                if (worn == null) worn = k;
+                if (!worn.equals(k)) break;
+                count++;
+            }
+            if (count < 4) continue;
+            for (StatusEffectInstance e : set(worn.substring(4)).effects()) p.addStatusEffect(new StatusEffectInstance(e));
+        }
+    }
+
+    /** A Rift Tome: read it to raise your magic level (stronger, faster weapon skills). */
+    static ItemStack tome(int count) {
+        ItemStack s = tagged(Items.ENCHANTED_BOOK, "tome:arcane", "Rift Tome", Formatting.AQUA,
+                "Black Hole magic, written in starlight.", "Right-click to read: +1 magic level (max " + MAX_ARCANE + ").",
+                "Each level: weapon skills +10% damage, -5% cooldown.");
+        s.setCount(count);
+        return s;
+    }
+
+    private static void readTome(ServerPlayerEntity player, ItemStack stack, String kind) {
+        Data data = Data.get(player.getServer());
+        int level = data.arcane.getOrDefault(player.getUuid(), 0);
+        if (level >= MAX_ARCANE) {
+            Helper.say(player, "Your magic is already at the top level (" + MAX_ARCANE + "). Keep this tome for a friend.");
+            return;
+        }
+        data.arcane.put(player.getUuid(), level + 1);
+        data.markDirty();
+        stack.decrement(1);
+        player.addExperienceLevels(5);
+        ServerWorld w = player.getServerWorld();
+        w.spawnParticles(ParticleTypes.ENCHANT, player.getX(), player.getY() + 1.5, player.getZ(), 60, 0.6, 0.8, 0.6, 1.0);
+        w.playSound(null, player.getBlockPos(), SoundEvents.BLOCK_ENCHANTMENT_TABLE_USE, SoundCategory.PLAYERS, 1f, 0.8f);
+        player.sendMessage(Text.literal("Magic level " + (level + 1) + "! Weapon skills now do +" + ((level + 1) * 10)
+                + "% damage with " + ((level + 1) * 5) + "% shorter cooldowns. (+5 XP levels for enchanting)").formatted(Formatting.AQUA), false);
+    }
+
+    /** A strong enchanted book: one of the best enchantments at its top level. */
+    static ItemStack book(Random rnd) {
+        Enchantment[] good = {Enchantments.SHARPNESS, Enchantments.PROTECTION, Enchantments.EFFICIENCY, Enchantments.UNBREAKING,
+                Enchantments.FORTUNE, Enchantments.LOOTING, Enchantments.POWER, Enchantments.FEATHER_FALLING,
+                Enchantments.MENDING, Enchantments.SWEEPING, Enchantments.FIRE_ASPECT, Enchantments.SILK_TOUCH,
+                Enchantments.INFINITY, Enchantments.DEPTH_STRIDER, Enchantments.SOUL_SPEED, Enchantments.SWIFT_SNEAK};
+        Enchantment e = good[rnd.nextInt(good.length)];
+        return EnchantedBookItem.forEnchantment(new EnchantmentLevelEntry(e, e.getMaxLevel()));
+    }
+
+    /** Diamond or netherite gear with a level-30 (treasure) enchant roll. */
+    private static ItemStack gear(Random rnd) {
+        Item[] items = {Items.DIAMOND_SWORD, Items.DIAMOND_PICKAXE, Items.DIAMOND_AXE, Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE,
+                Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS, Items.BOW, Items.CROSSBOW, Items.TRIDENT, Items.NETHERITE_SWORD,
+                Items.NETHERITE_PICKAXE, Items.NETHERITE_CHESTPLATE};
+        ItemStack s = new ItemStack(items[rnd.nextInt(items.length)]);
+        return EnchantmentHelper.enchant(rnd, s, 30, true);
+    }
+
+    /** What a Rift Cache gives: a handful of good things, sometimes armor from a boss set. */
+    private static List<ItemStack> loot(Random rnd) {
+        List<ItemStack> out = new ArrayList<>();
+        out.add(gear(rnd));
+        out.add(book(rnd));
+        if (rnd.nextFloat() < 0.5f) out.add(gear(rnd));
+        if (rnd.nextFloat() < 0.5f) out.add(book(rnd));
+        if (rnd.nextFloat() < 0.35f) out.add(tome(1));
+        if (rnd.nextFloat() < 0.25f) out.add(armor(SETS[rnd.nextInt(SETS.length)].id(), ARMOR_SLOTS[rnd.nextInt(4)]));
+        ItemStack[] extras = {new ItemStack(Items.DIAMOND, 3 + rnd.nextInt(6)), new ItemStack(Items.NETHERITE_SCRAP, 1 + rnd.nextInt(3)),
+                new ItemStack(Items.GOLDEN_APPLE, 2 + rnd.nextInt(3)), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE),
+                new ItemStack(Items.EXPERIENCE_BOTTLE, 16), new ItemStack(Items.TOTEM_OF_UNDYING), new ItemStack(Items.ENDER_PEARL, 8),
+                new ItemStack(Items.LAPIS_LAZULI, 32)};
+        out.add(extras[rnd.nextInt(extras.length)]);
+        out.add(extras[rnd.nextInt(extras.length)]);
+        return out;
+    }
+
+    /** Where the Rift Caches are: one on each bridge and two in each arena. */
+    private static List<BlockPos> cachePositions() {
+        List<BlockPos> out = new ArrayList<>();
+        for (BossDef b : BOSSES) {
+            int sx = Integer.signum(b.dx()), sz = Integer.signum(b.dz());
+            out.add(new BlockPos(sx * 28 + (sx == 0 ? 2 : 0), Y + 1, sz * 28 + (sz == 0 ? 2 : 0)));
+            int fx = b.dx() + sx * 9, fz = b.dz() + sz * 9; // far side of the arena
+            out.add(new BlockPos(fx + (sx == 0 ? 3 : 0), Y + 1, fz + (sz == 0 ? 3 : 0)));
+            out.add(new BlockPos(fx - (sx == 0 ? 3 : 0), Y + 1, fz - (sz == 0 ? 3 : 0)));
+        }
+        return out;
+    }
+
+    private static final long CACHE_COOLDOWN = 20 * 60 * 15; // each player can loot each cache every 15 minutes
+
+    private static void buildCaches(ServerWorld w) {
+        for (BlockPos p : cachePositions()) {
+            w.getChunk(p.getX() >> 4, p.getZ() >> 4);
+            if (w.getBlockState(p.down()).isAir()) w.setBlockState(p.down(), Blocks.POLISHED_BLACKSTONE.getDefaultState(), Block.NOTIFY_LISTENERS);
+            w.setBlockState(p, Blocks.CHEST.getDefaultState(), Block.NOTIFY_LISTENERS);
+            w.setBlockState(p.up(), Blocks.SOUL_LANTERN.getDefaultState(), Block.NOTIFY_LISTENERS);
+            if (w.getBlockEntity(p) instanceof ChestBlockEntity chest) chest.setCustomName(Text.literal("Rift Cache"));
+        }
+    }
+
+    /** Right-clicking a Rift Cache gives that player their own loot (everyone gets their own, nobody steals it). */
+    static ActionResult onUseBlock(PlayerEntity p, World w, Hand hand, BlockHitResult hit) {
+        if (w.isClient || !w.getRegistryKey().equals(WORLD)) return ActionResult.PASS;
+        BlockPos pos = hit.getBlockPos();
+        if (!w.getBlockState(pos).isOf(Blocks.CHEST) || !cachePositions().contains(pos)) return ActionResult.PASS;
+        if (!(p instanceof ServerPlayerEntity player) || p instanceof FakePlayer) return ActionResult.PASS;
+        if (hand != Hand.MAIN_HAND) return ActionResult.SUCCESS;
+        ServerWorld world = (ServerWorld) w;
+        Data data = Data.get(world.getServer());
+        String key = player.getUuidAsString() + "|" + pos.asLong();
+        long ready = data.looted.getOrDefault(key, 0L);
+        if (world.getTime() < ready) {
+            player.sendMessage(Text.literal("This Rift Cache is empty for you. It refills in "
+                    + Math.max(1, (ready - world.getTime()) / 1200) + " minutes.").formatted(Formatting.GRAY), true);
+            return ActionResult.SUCCESS;
+        }
+        data.looted.put(key, world.getTime() + CACHE_COOLDOWN);
+        data.markDirty();
+        List<ItemStack> items = loot(world.getRandom());
+        for (ItemStack s : items) player.getInventory().offerOrDrop(s);
+        world.playSound(null, pos, SoundEvents.BLOCK_CHEST_OPEN, SoundCategory.BLOCKS, 0.8f, 0.7f);
+        world.spawnParticles(ParticleTypes.REVERSE_PORTAL, pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5, 30, 0.3, 0.4, 0.3, 0.05);
+        player.sendMessage(Text.literal("Rift Cache: " + items.size() + " items! It refills for you in 15 minutes.")
+                .formatted(Formatting.LIGHT_PURPLE), true);
+        return ActionResult.SUCCESS;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -704,12 +927,14 @@ final class BlackHole {
             player.sendMessage(Text.literal("Skill ready in " + ((ready - now) / 20 + 1) + " s").formatted(Formatting.GRAY), true);
             return;
         }
+        int arcane = Data.get(world.getServer()).arcane.getOrDefault(player.getUuid(), 0);
+        float power = 1f + 0.1f * arcane; // +10% skill damage per magic level
         int cooldown;
         switch (kind) {
             case "ashfall" -> { // Ash Whirl
                 for (Entity e : world.getOtherEntities(player, player.getBoundingBox().expand(4.5, 1.5, 4.5), x -> target(x, player))) {
                     LivingEntity le = (LivingEntity) e;
-                    le.damage(player.getDamageSources().playerAttack(player), 12);
+                    le.damage(player.getDamageSources().playerAttack(player), 12 * power);
                     le.setOnFireFor(5);
                     Vec3d push = e.getPos().subtract(player.getPos()).multiply(1, 0, 1).normalize().multiply(0.8);
                     le.addVelocity(push.x, 0.3, push.z);
@@ -729,7 +954,7 @@ final class BlackHole {
                 Vec3d start = player.getPos();
                 Box path = new Box(start, start.add(look.multiply(8))).expand(1.2, 1.5, 1.2);
                 for (Entity e : world.getOtherEntities(player, path, x -> target(x, player))) {
-                    ((LivingEntity) e).damage(player.getDamageSources().playerAttack(player), 11);
+                    ((LivingEntity) e).damage(player.getDamageSources().playerAttack(player), 11 * power);
                 }
                 player.setVelocity(look.x * 2.4, 0.15, look.z * 2.4);
                 player.velocityModified = true;
@@ -747,7 +972,7 @@ final class BlackHole {
                     Vec3d to = player.getPos().subtract(e.getPos());
                     e.setVelocity(to.x * 0.25, 0.9, to.z * 0.25);
                     e.velocityModified = true;
-                    ((LivingEntity) e).damage(player.getDamageSources().playerAttack(player), 14);
+                    ((LivingEntity) e).damage(player.getDamageSources().playerAttack(player), 14 * power);
                 }
                 world.spawnParticles(ParticleTypes.REVERSE_PORTAL, player.getX(), player.getY() + 0.5, player.getZ(), 120, 4, 0.5, 4, 0.05);
                 world.spawnParticles(ParticleTypes.EXPLOSION, player.getX(), player.getY(), player.getZ(), 3, 1, 0, 1, 0);
@@ -778,7 +1003,7 @@ final class BlackHole {
                     world.spawnParticles(ParticleTypes.SQUID_INK, p.x, p.y, p.z, 1, 0.05, 0.05, 0.05, 0);
                 }
                 if (hit != null) {
-                    hit.damage(player.getDamageSources().indirectMagic(player, player), 16);
+                    hit.damage(player.getDamageSources().indirectMagic(player, player), 16 * power);
                     world.spawnParticles(ParticleTypes.SONIC_BOOM, hit.getX(), hit.getBodyY(0.5), hit.getZ(), 1, 0, 0, 0, 0);
                 }
                 world.playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ILLUSIONER_CAST_SPELL, SoundCategory.PLAYERS, 0.8f, 0.7f);
@@ -788,6 +1013,6 @@ final class BlackHole {
                 return;
             }
         }
-        COOLDOWNS.put(key, now + cooldown);
+        COOLDOWNS.put(key, now + Math.round(cooldown * (1 - 0.05f * arcane))); // -5% cooldown per magic level
     }
 }

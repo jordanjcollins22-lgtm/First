@@ -46,6 +46,7 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(TycoonSidebar::tick); // coin total + per second on the side
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> TycoonSidebar.onJoin(handler.player));
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(BlackHole::onUseItem);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(BlackHole::onUseBlock); // Rift Caches
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Golf::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Golf::onUseBlock);
         UseEntityCallback.EVENT.register(Golf::onUseEntity);
