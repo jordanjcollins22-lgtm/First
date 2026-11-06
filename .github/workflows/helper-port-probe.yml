@@ -1,0 +1,109 @@
+name: Helper port probe
+
+# Temporary: finds the newest Minecraft/Fabric versions, converts the 1.20.1 source to Mojang names,
+# and uploads decompiled sources of the newest Minecraft + Fabric API so the port can be written.
+on:
+  push:
+    branches: ["claude/helper-latest-mc"]
+    paths: [".github/workflows/helper-port-probe.yml"]
+  workflow_dispatch:
+
+jobs:
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      mc: ${{ steps.v.outputs.mc }}
+      loader: ${{ steps.v.outputs.loader }}
+      api: ${{ steps.v.outputs.api }}
+      loom: ${{ steps.v.outputs.loom }}
+    steps:
+      - id: v
+        run: |
+          set -e
+          curl -sS https://piston-meta.mojang.com/mc/game/version_manifest_v2.json -o manifest.json
+          mc=$(jq -r .latest.release manifest.json)
+          jq -r '.versions[:40][] | "\(.id) \(.type) \(.releaseTime)"' manifest.json > mc-versions.txt
+          loader=$(curl -sS https://meta.fabricmc.net/v2/versions/loader | jq -r '[.[]|select(.stable)][0].version')
+          curl -sS https://meta.fabricmc.net/v2/versions/game | jq -r '.[:30][]|"\(.version) stable=\(.stable)"' > fabric-games.txt
+          curl -sS https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml -o api.xml
+          api=$(grep -o "<version>[^<]*+${mc}</version>" api.xml | sed 's/<[^>]*>//g' | sort -V | tail -1)
+          curl -sS https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml -o loom.xml
+          grep -o '<version>[^<]*</version>' loom.xml | sed 's/<[^>]*>//g' | grep -v SNAPSHOT | sort -V | tail -15 > loom-versions.txt
+          loom=$(tail -1 loom-versions.txt)
+          { echo "mc=$mc"; echo "loader=$loader"; echo "api=$api"; echo "loom=$loom"; } | tee -a "$GITHUB_OUTPUT" > chosen.txt
+          cat chosen.txt mc-versions.txt fabric-games.txt loom-versions.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: versions
+          path: "*.txt"
+
+  migrate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: minecraft-helper-mod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew && ./gradlew migrateMappings --mappings "net.minecraft:mappings:1.20.1" --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mojmap-src
+          path: minecraft-helper-mod/remappedSrc
+
+  decomp:
+    needs: versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "25" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: current }
+      - name: Make a scratch project
+        run: |
+          mkdir p && cd p
+          cat > settings.gradle <<'G'
+          pluginManagement { repositories { maven { url = 'https://maven.fabricmc.net/' }; gradlePluginPortal(); mavenCentral() } }
+          rootProject.name = 'probe'
+          G
+          cat > build.gradle <<G
+          plugins { id 'net.fabricmc.fabric-loom' version '${{ needs.versions.outputs.loom }}' }
+          repositories { mavenCentral() }
+          dependencies {
+            minecraft "com.mojang:minecraft:${{ needs.versions.outputs.mc }}"
+            implementation "net.fabricmc:fabric-loader:${{ needs.versions.outputs.loader }}"
+            implementation "net.fabricmc.fabric-api:fabric-api:${{ needs.versions.outputs.api }}"
+          }
+          tasks.register('dumpSources') {
+            doLast {
+              def ids = configurations.runtimeClasspath.incoming.resolutionResult.allDependencies
+                .collect { it instanceof org.gradle.api.artifacts.result.ResolvedDependencyResult ? it.selected.id : null }
+                .findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier && it.group.startsWith('net.fabricmc') }
+              def res = dependencies.createArtifactResolutionQuery().forComponents(ids)
+                .withArtifacts(org.gradle.jvm.JvmLibrary, org.gradle.language.base.artifact.SourcesArtifact).execute()
+              res.resolvedComponents.each { c ->
+                c.getArtifacts(org.gradle.language.base.artifact.SourcesArtifact).each { a ->
+                  if (a instanceof org.gradle.api.artifacts.result.ResolvedArtifactResult) {
+                    copy { from a.file; into "\$rootDir/out/fabric" }
+                  }
+                }
+              }
+            }
+          }
+          G
+          cat build.gradle
+      - working-directory: p
+        run: gradle genSources dumpSources --no-daemon --stacktrace
+      - working-directory: p
+        run: |
+          mkdir -p out/mc
+          find / -xdev \( -name 'minecraft-*sources*.jar' -o -name 'minecraft-*-sources.jar' \) 2>/dev/null | tee found.txt
+          find / -xdev -name '*.jar' -path '*loom*' 2>/dev/null | grep -i -E 'minecraft' | head -40
+          for f in $(cat found.txt); do cp "$f" out/mc/; done
+          ls -la out/mc out/fabric
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mc-sources
+          path: p/out
