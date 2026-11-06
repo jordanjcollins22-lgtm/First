@@ -1,7 +1,7 @@
 name: Helper mod release
 
 # Pushing a tag like helper-v1.16.0 builds that commit and publishes the jar as a GitHub release.
-# The mod's built-in updater downloads the newest helper-v* release on the next game start.
+# The mod's built-in updater shows the newest helper-v* release in game (notes from release-notes/<ver>.md) and asks to update.
 on:
   push:
     tags: ["helper-v*"]
@@ -34,7 +34,14 @@ jobs:
         run: |
           jar="$(ls build/libs/*.jar | grep -v sources | head -n1)"
           gh release delete "$GITHUB_REF_NAME" --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          ver="${GITHUB_REF_NAME#helper-v}"
+          notes="release-notes/$ver.md"
+          if [ ! -f "$notes" ]; then
+            notes="$RUNNER_TEMP/notes.md"
+            printf '## What%ss new\n- See the pull request for Helper Buddies %s.\n' "'" "$ver" > "$notes"
+          fi
+          # These notes are what the in-game update screen shows (What's new / What to look for / screenshots).
           gh release create "$GITHUB_REF_NAME" "$jar" --repo "$GITHUB_REPOSITORY" \
-            --title "Helper Buddies ${GITHUB_REF_NAME#helper-v}" \
-            --notes "Built from ${GITHUB_SHA}. Installed automatically by the mod's updater on the next game start." \
+            --title "Helper Buddies $ver" \
+            --notes-file "$notes" \
             --latest

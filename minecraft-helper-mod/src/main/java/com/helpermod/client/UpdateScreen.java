@@ -1,0 +1,272 @@
+package com.helpermod.client;
+
+import com.helpermod.Updater;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.texture.NativeImage;
+import net.minecraft.client.texture.NativeImageBackedTexture;
+import net.minecraft.text.OrderedText;
+import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.Util;
+
+import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * The in-game "Helper Buddies X is available, update now?" screen.
+ *
+ * Shows the release notes of every version newer than yours (What's new / What to look for),
+ * with screenshots from the notes drawn right in the list. Yes downloads in the background; the
+ * new version goes live the next time Minecraft starts, because a running game can't reload a mod.
+ */
+public class UpdateScreen extends Screen {
+    private static final Pattern MD_IMAGE = Pattern.compile("!\\[([^\\]]*)\\]\\(\\s*([^)\\s]+)[^)]*\\)");
+    private static final Pattern HTML_IMAGE = Pattern.compile("<img[^>]*src=\"([^\"]+)\"[^>]*>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MD_LINK = Pattern.compile("\\[([^\\]]+)\\]\\([^)]*\\)");
+    private static final String RELEASES_PAGE = "https://github.com/jordanjcollins22-lgtm/First/releases";
+    private static final int MAX_IMAGE_HEIGHT = 140;
+
+    /** Screenshots, shared between openings of the screen so each downloads once. */
+    private static final Map<String, Shot> SHOTS = new ConcurrentHashMap<>();
+
+    private static final class Shot {
+        volatile Identifier id;
+        volatile int w, h;
+        volatile boolean failed;
+    }
+
+    /** One piece of the notes: a heading, a text paragraph, a screenshot or a gap. */
+    private record Block(Text text, String image, int gap) {}
+
+    private final Screen parent;
+    private final List<Block> blocks = new ArrayList<>();
+    private ButtonWidget yes, notNow, skip, page, done;
+    private double scroll;
+    private int contentHeight;
+
+    public UpdateScreen(Screen parent) {
+        super(Text.literal("Helper Buddies update"));
+        this.parent = parent;
+    }
+
+    @Override
+    protected void init() {
+        buildBlocks();
+        int bw = 150;
+        int cx = width / 2;
+        int row1 = height - 50, row2 = height - 26;
+        yes = addDrawableChild(ButtonWidget.builder(Text.literal("Yes, update").formatted(Formatting.GREEN), b -> Updater.downloadAsync())
+                .dimensions(cx - bw - 4, row1, bw, 20).build());
+        notNow = addDrawableChild(ButtonWidget.builder(Text.literal("Not now"), b -> {
+                    close();
+                    UpdateClient.remindInChat(MinecraftClient.getInstance());
+                })
+                .dimensions(cx + 4, row1, bw, 20).build());
+        skip = addDrawableChild(ButtonWidget.builder(Text.literal("Skip this version"), b -> {
+                    String v = Updater.available();
+                    if (v != null) Updater.skip(v);
+                    close();
+                })
+                .dimensions(cx - bw - 4, row2, bw, 20).build());
+        page = addDrawableChild(ButtonWidget.builder(Text.literal("Open release page"), b -> Util.getOperatingSystem().open(pageUrl()))
+                .dimensions(cx + 4, row2, bw, 20).build());
+        done = addDrawableChild(ButtonWidget.builder(Text.literal("Keep playing"), b -> close())
+                .dimensions(cx - bw - 4, row1, bw, 20).build());
+        updateButtons();
+    }
+
+    private String pageUrl() {
+        List<Updater.Release> list = Updater.newerReleases();
+        if (!list.isEmpty() && list.get(0).page() != null) return list.get(0).page();
+        return RELEASES_PAGE;
+    }
+
+    private void updateButtons() {
+        boolean ready = Updater.readyVersion() != null && Updater.readyVersion().equals(Updater.available());
+        boolean busy = Updater.downloading();
+        yes.visible = !ready;
+        yes.active = !busy;
+        yes.setMessage(busy ? Text.literal("Downloading...") : Updater.failed() != null
+                ? Text.literal("Try again").formatted(Formatting.GREEN) : Text.literal("Yes, update").formatted(Formatting.GREEN));
+        notNow.visible = !ready;
+        skip.visible = !ready && !busy;
+        done.visible = ready;
+    }
+
+    @Override
+    public void tick() {
+        updateButtons();
+    }
+
+    private int contentWidth() {
+        return Math.min(380, width - 40);
+    }
+
+    private void buildBlocks() {
+        blocks.clear();
+        List<Updater.Release> list = Updater.newerReleases();
+        if (list.isEmpty()) {
+            blocks.add(new Block(Text.literal("No notes for this update."), null, 0));
+            return;
+        }
+        for (Updater.Release r : list) {
+            blocks.add(new Block(Text.literal("Helper Buddies " + r.version()).formatted(Formatting.GOLD, Formatting.BOLD), null, 0));
+            boolean any = false;
+            for (String raw : r.notes().replace("\r", "").split("\n")) {
+                String line = raw.strip();
+                // Pull screenshots out of the line, in order.
+                List<String> images = new ArrayList<>();
+                Matcher m = MD_IMAGE.matcher(line);
+                while (m.find()) images.add(m.group(2));
+                line = m.replaceAll("");
+                Matcher h = HTML_IMAGE.matcher(line);
+                while (h.find()) images.add(h.group(1));
+                line = h.replaceAll("").replaceAll("<[^>]+>", "").strip();
+
+                if (line.startsWith("Built from ")) continue; // old automatic release text
+                if (!line.isEmpty()) {
+                    any = true;
+                    line = MD_LINK.matcher(line).replaceAll("$1").replace("**", "").replace("__", "").replace("`", "");
+                    if (line.startsWith("#")) {
+                        String head = line.replaceFirst("^#+\\s*", "");
+                        blocks.add(new Block(null, null, 4));
+                        blocks.add(new Block(Text.literal(head).formatted(Formatting.YELLOW, Formatting.BOLD), null, 0));
+                    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+                        blocks.add(new Block(Text.literal("• " + line.substring(2).strip()), null, 0));
+                    } else if (line.matches("^\\d+[.)]\\s.*")) {
+                        blocks.add(new Block(Text.literal(line), null, 0));
+                    } else {
+                        blocks.add(new Block(Text.literal(line).formatted(Formatting.GRAY), null, 0));
+                    }
+                } else if (images.isEmpty()) {
+                    blocks.add(new Block(null, null, 4));
+                }
+                for (String url : images) {
+                    any = true;
+                    blocks.add(new Block(null, url, 0));
+                    loadShot(url);
+                }
+            }
+            if (!any) blocks.add(new Block(Text.literal("No notes for this version.").formatted(Formatting.GRAY), null, 0));
+            blocks.add(new Block(null, null, 10));
+        }
+    }
+
+    private static void loadShot(String url) {
+        if (SHOTS.containsKey(url)) return;
+        Shot shot = new Shot();
+        SHOTS.put(url, shot);
+        Thread t = new Thread(() -> {
+            byte[] bytes = Updater.fetchBytes(url, 8 * 1024 * 1024);
+            if (bytes == null) {
+                shot.failed = true;
+                return;
+            }
+            try {
+                NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes)); // PNG screenshots
+                MinecraftClient client = MinecraftClient.getInstance();
+                client.execute(() -> {
+                    NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
+                    shot.w = img.getWidth();
+                    shot.h = img.getHeight();
+                    shot.id = client.getTextureManager().registerDynamicTexture("helpermod_update_shot", tex);
+                });
+            } catch (Exception e) {
+                shot.failed = true;
+            }
+        }, "helpermod-update-shot");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    @Override
+    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+        renderBackground(ctx);
+        TextRenderer tr = textRenderer;
+        int cw = contentWidth();
+        int left = (width - cw) / 2;
+        String v = Updater.available();
+        ctx.drawCenteredTextWithShadow(tr, Text.literal("Helper Buddies " + (v == null ? "" : v) + " is available!")
+                .formatted(Formatting.AQUA, Formatting.BOLD), width / 2, 8, 0xFFFFFF);
+
+        Text sub;
+        boolean ready = v != null && v.equals(Updater.readyVersion());
+        if (ready) {
+            sub = Text.literal("Downloaded! It goes live the next time you open Minecraft. Keep playing for now.").formatted(Formatting.GREEN);
+        } else if (Updater.downloading()) {
+            sub = Text.literal("Downloading in the background... you can keep playing.").formatted(Formatting.YELLOW);
+        } else if (Updater.failed() != null) {
+            sub = Text.literal(Updater.failed()).formatted(Formatting.RED);
+        } else {
+            sub = Text.literal("You have " + Updater.currentVersion() + ". Update now? A restart is needed: it goes live next time you open Minecraft.")
+                    .formatted(Formatting.WHITE);
+        }
+        int y = 22;
+        for (OrderedText line : tr.wrapLines(sub, cw)) {
+            ctx.drawCenteredTextWithShadow(tr, line, width / 2, y, 0xFFFFFF);
+            y += 10;
+        }
+        ctx.drawCenteredTextWithShadow(tr, Text.literal("On LAN, the host's copy runs the helpers, so the host is the one who must update.")
+                .formatted(Formatting.DARK_GRAY), width / 2, y, 0xFFFFFF);
+        y += 14;
+
+        int top = y, bottom = height - 56;
+        ctx.fill(left - 6, top - 4, left + cw + 6, bottom + 4, 0xAA000000);
+        ctx.enableScissor(left - 6, top - 2, left + cw + 6, bottom + 2);
+        int cy = top - (int) scroll;
+        for (Block b : blocks) {
+            if (b.gap() > 0) {
+                cy += b.gap();
+            } else if (b.text() != null) {
+                for (OrderedText line : tr.wrapLines(b.text(), cw)) {
+                    ctx.drawTextWithShadow(tr, line, left, cy, 0xFFFFFF);
+                    cy += 10;
+                }
+            } else if (b.image() != null) {
+                Shot s = SHOTS.get(b.image());
+                if (s != null && s.id != null && s.w > 0) {
+                    float scale = Math.min(1f, Math.min((float) cw / s.w, (float) MAX_IMAGE_HEIGHT / s.h));
+                    int dw = Math.max(1, (int) (s.w * scale)), dh = Math.max(1, (int) (s.h * scale));
+                    ctx.drawTexture(s.id, left + (cw - dw) / 2, cy + 2, dw, dh, 0, 0, s.w, s.h, s.w, s.h);
+                    cy += dh + 6;
+                } else {
+                    String msg = s != null && s.failed ? "(Screenshot: press Open release page to see it)" : "(Loading screenshot...)";
+                    ctx.drawTextWithShadow(tr, Text.literal(msg).formatted(Formatting.DARK_GRAY, Formatting.ITALIC), left, cy, 0xFFFFFF);
+                    cy += 12;
+                }
+            }
+        }
+        ctx.disableScissor();
+        contentHeight = cy + (int) scroll - top;
+        int maxScroll = Math.max(0, contentHeight - (bottom - top));
+        if (scroll > maxScroll) scroll = maxScroll;
+        if (maxScroll > 0) {
+            // simple scrollbar
+            int barH = Math.max(10, (bottom - top) * (bottom - top) / contentHeight);
+            int barY = top + (int) ((bottom - top - barH) * (scroll / maxScroll));
+            ctx.fill(left + cw + 3, barY, left + cw + 5, barY + barH, 0xFFAAAAAA);
+        }
+        super.render(ctx, mouseX, mouseY, delta);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+        scroll = Math.max(0, scroll - amount * 14);
+        return true;
+    }
+
+    @Override
+    public void close() {
+        MinecraftClient.getInstance().setScreen(parent);
+    }
+}
