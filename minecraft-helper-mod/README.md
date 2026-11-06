@@ -219,6 +219,7 @@ Build a little ore factory and spend what it earns.
 | `/helper tycoon upgrade` | Look at your Tycoon Dropper: it drops faster and its ore is worth more (up to level 10) |
 | `/helper tycoon rebirth` | Pay the price (10,000 coins, then 40k, 90k...) and your droppers go back to level 1, but every coin is worth +50% more for good. Coins above the price are kept, so a rich player can rebirth several times in a row. Add `confirm` to do it |
 | `/helper tycoon top` | The five biggest earners on the server |
+| `/helper tycoon odds` | The chances of each rarity in Gear, Machine and Mega Boxes |
 | `/helper tycoon give <player> <coins>` | For ops and quest rewards: pay a player coins |
 
 **Linked to your progress:** the shop has three tiers. Tier 2 (super upgraders, diamonds, golden apples...)
@@ -232,6 +233,18 @@ on the right side of the screen, only to you. The "+coins" pop-up in the middle 
 
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
+
+**Weapons, armour and loot boxes (1.32.0):** the tycoon shop now has pages (arrows in the bottom corners). It sells
+weapons and armour (iron to netherite, full armour sets give all 4 pieces, plus enchanted ones at tier 3) and three
+loot boxes. Right-click a box to open it: a **Gear Box** (500) gives a random weapon or armour, a **Machine Box** (400)
+gives a random machine or a Tycoon Dropper (rare ones start at level 5 or 10), and a **Mega Box** (20k, tier 3) has
+both with much better odds. Prizes are Common, Uncommon, Rare, Epic or Legendary. The two Legendary prizes,
+**Coinbreaker** (a maxed netherite sword) and **Vaultguard Armour**, only come from boxes, and everyone sees the
+chat message when someone gets one.
+
+**New machines (1.32.0):** light blue **Speed Belts** carry ore twice as fast. Orange **Polishers** add +10 to each ore
+(put them before upgraders so the +10 gets multiplied). Brown **Smelters** do x1.5 and turn raw ore into ingots. Pink
+**Lucky Upgraders** have a 1 in 8 chance of x20. Each works once per ore, like upgraders.
 
 **Star Roadster:** a flying sports car (it uses the horse model) for 250k coins, in the first row of the tycoon shop (no tier needed) and in the Fairway Pro Shop too. `/helper roadster` says where. Drive it like a
 horse. Hold W and look up to take off, look where you want to go (sprint to go faster), let go of W to hover,

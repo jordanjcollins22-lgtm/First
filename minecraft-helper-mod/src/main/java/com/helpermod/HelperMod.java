@@ -27,6 +27,8 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(HelperManager::tick);
         ServerEntityEvents.ENTITY_LOAD.register(HelperManager::onEntityLoad);
         UseEntityCallback.EVENT.register(HelperManager::onUseEntity);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Loot::onUseBlock); // loot boxes open, never get placed
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Loot::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
         ServerTickEvents.END_SERVER_TICK.register(Devices::tick);
         ServerTickEvents.END_SERVER_TICK.register(Planets::tick); // themed monsters on every planet
