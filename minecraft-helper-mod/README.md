@@ -69,8 +69,14 @@ you won't lose your gear.
 
 ### It tells you when something's wrong
 
-- A tool or weapon is about to break (it stops using it so you never lose it).
-- It can't mine something because its tools are worn out, or it needs a better one.
+- Tool alerts (2.0.1) show in chat **and** over your hotbar, with a bell sound, so you notice them:
+  - When you ask it to collect something it has no tool for (say diamonds with no iron pickaxe), it tells
+    you right away which tool it needs instead of walking off first. Same for `/helper fish` with no rod.
+  - A tool gets to about a tenth of its durability: "Heads up: my Iron Pickaxe is almost worn out".
+  - A tool or weapon is about to break (it stops using it so you never lose it).
+  - It can't mine something because its tools are worn out, or it needs a better one.
+  - It reminds you every 3 minutes (up to 5 times) while it's still waiting, and as soon as you put the
+    right tool in its inventory it says thanks and carries on with the job by itself.
 - Its pockets are full (it brings everything back and keeps going), or its inventory is so full of gear
   that it has no room at all.
 - Your inventory is full when it delivers (the rest is dropped at your feet).

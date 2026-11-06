@@ -403,6 +403,19 @@ public class Helper {
 
     void startJob(ServerPlayer player, Materials.Spec spec, int amount) {
         if (mob != null) clearBreaking(mob);
+        clearToolNeed();
+        SimpleContainer inv = HelperData.get(player.level().getServer()).getOrCreate(player.getUUID()).inventory;
+        BlockState needs = missingToolFor(inv, spec);
+        if (needs != null) { // nothing in its pockets can mine any of it: say so now, not after the walk
+            job = null;
+            mode = Mode.FOLLOW;
+            String tool = Mining.requiredToolName(needs);
+            needTool(player, "Helper needs " + tool,
+                    "I need " + tool + " to mine " + spec.display + ". Right-click me and put one in my inventory, "
+                            + "and I'll start as soon as I have it.",
+                    has -> missingToolFor(has, spec) == null, p -> startJob(p, spec, amount));
+            return;
+        }
         job = new Job(spec, amount);
         mode = Mode.COLLECT;
         say(player, "On it! Going to collect " + amount + " " + spec.display + ".");
@@ -418,14 +431,22 @@ public class Helper {
     void startFishing(ServerPlayer player, int amount) {
         if (mob != null) clearBreaking(mob);
         job = null;
+        clearToolNeed();
+        if (rodSlot(HelperData.get(player.level().getServer()).getOrCreate(player.getUUID()).inventory) < 0) {
+            fishWanted = 0;
+            mode = Mode.FOLLOW;
+            needTool(player, "Helper needs a fishing rod",
+                    "I need a fishing rod to fish. Right-click me and put one in my inventory, and I'll go as soon as I have it.",
+                    has -> rodSlot(has) >= 0, p -> startFishing(p, amount));
+            return;
+        }
         fishWanted = amount;
         fishCaught = 0;
         fishSpot = null;
         fishStand = null;
         fishTimer = 0;
         mode = Mode.FISH;
-        say(player, "Gone fishing! I'll catch " + amount + " things for you. Make sure I have a fishing rod "
-                + "(right-click me to give me one).");
+        say(player, "Gone fishing! I'll catch " + amount + " things for you.");
     }
 
     private static int rodSlot(SimpleContainer inv) {
@@ -467,8 +488,12 @@ public class Helper {
         SimpleContainer inv = entry.inventory;
         int slot = rodSlot(inv);
         if (slot < 0) {
-            say(player, "I need a fishing rod to fish. Right-click me and put one in my inventory, then ask me again.");
+            int left = Math.max(1, fishWanted - fishCaught);
+            fishWanted = 0;
             mode = Mode.FOLLOW;
+            needTool(player, "Helper needs a fishing rod",
+                    "I need a fishing rod to keep fishing. Right-click me and put one in my inventory, and I'll go back.",
+                    has -> rodSlot(has) >= 0, p -> startFishing(p, left));
             return;
         }
         if (fishCaught >= fishWanted || isFull(inv)) {
@@ -535,8 +560,12 @@ public class Helper {
         addWork(player, 2);
         rod.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
         inv.setChanged();
+        if (!rod.isEmpty() && rod.isDamageableItem()) warnIfLow(player, rod);
         if (rod.isEmpty() || rodSlot(inv) < 0) {
-            say(player, "My fishing rod is about to break, so I stopped. Give me a new one and ask me again.");
+            int left = Math.max(1, fishWanted - fishCaught);
+            needTool(player, "Helper's fishing rod is worn out",
+                    "My fishing rod is about to break, so I stopped. Give me a new one (or repair it) and I'll go back to fishing.",
+                    has -> rodSlot(has) >= 0, p -> startFishing(p, left));
             m.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
             mode = Mode.RETURN;
         }
@@ -602,6 +631,7 @@ public class Helper {
 
     void startFarming(ServerPlayer player, int radius) {
         if (mob != null) clearBreaking(mob);
+        clearToolNeed();
         job = null;
         fishWanted = 0;
         farmCentre = player.blockPosition();
@@ -712,6 +742,7 @@ public class Helper {
     }
 
     void stop(ServerPlayer player) {
+        clearToolNeed();
         if (mode == Mode.SEND) cancelSend(player, "Okay, I won't take it. Here it is back.");
         fishWanted = 0;
         farmCentre = null;
@@ -1018,6 +1049,7 @@ public class Helper {
             return;
         }
         missingTicks = 0;
+        tickToolNeed(player, entry.inventory);
         if (m.getFirstPassenger() == player) {
             tickRide(m, player);
             return;
@@ -1100,7 +1132,8 @@ public class Helper {
         }
         if (attackCooldown > 0) attackCooldown--;
         if (attackCooldown <= 0 && d <= Combat.REACH_SQ && m.hasLineOfSight(target)) {
-            attackCooldown = Combat.attack(m, target, entry.inventory, name -> say(player,
+            attackCooldown = Combat.attack(m, target, entry.inventory, name -> alert(player,
+                    "Helper's " + name + " is worn out",
                     "My " + name + " is about to break, so I've stopped using it. Give me a new one or repair it."));
             lastProgressTick = combatTicks;
             if (!target.isAlive()) {
@@ -2112,18 +2145,21 @@ public class Helper {
             for (int i = 0; i < inv.getContainerSize(); i++) {
                 ItemStack worn = inv.getItem(i);
                 if (!worn.isEmpty() && !Mining.isUsableTool(worn) && worn.isCorrectToolForDrops(state)) {
-                    finishJob(player, inv, "My " + worn.getHoverName().getString() + " is worn out (it would break). "
-                            + "Give me a new one or repair it, and I'll mine " + Mining.blockName(state.getBlock()) + ".");
+                    stopForTool(player, inv, state, "Helper's " + worn.getHoverName().getString() + " is worn out",
+                            "My " + worn.getHoverName().getString() + " is worn out (it would break). Give me a new one "
+                                    + "or repair it, and I'll carry on mining " + Mining.blockName(state.getBlock()) + ".");
                     return false;
                 }
             }
-            finishJob(player, inv, "I need " + Mining.requiredToolName(state) + " to mine "
-                    + Mining.blockName(state.getBlock()) + ". Right-click me and put one in my inventory.");
+            stopForTool(player, inv, state, "Helper needs " + Mining.requiredToolName(state),
+                    "I need " + Mining.requiredToolName(state) + " to mine " + Mining.blockName(state.getBlock())
+                            + ". Right-click me and put one in my inventory, and I'll carry on by myself.");
             return false;
         }
         if (tool.isEmpty() && !job.toldAboutHands && Mining.breakTicks(tool, state, world, p) > 20) {
             job.toldAboutHands = true;
-            say(player, "I'm doing this by hand. Put a tool in my inventory (right-click me) and I'll be faster.");
+            say(player, "I'm doing this by hand. Put " + Mining.requiredToolName(state)
+                    + " in my inventory (right-click me) and I'll be much faster.");
         }
         return true;
     }
@@ -2656,8 +2692,11 @@ public class Helper {
             tool.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
             inv.setChanged();
             if (!Mining.isUsableTool(tool)) {
-                say(player, "My " + tool.getHoverName().getString() + " is about to break, so I've stopped using it. "
-                        + "Give me a new one, or take it out and repair it.");
+                alert(player, "Helper's " + tool.getHoverName().getString() + " is worn out",
+                        "My " + tool.getHoverName().getString() + " is about to break, so I've stopped using it. "
+                                + "Give me a new one, or take it out and repair it.");
+            } else {
+                warnIfLow(player, tool);
             }
         }
         boolean wasTarget = j.breakingTarget;
@@ -2734,6 +2773,112 @@ public class Helper {
 
     private void finishJob(ServerPlayer player, SimpleContainer inv, String message) {
         say(player, message);
+        endJob(inv);
+    }
+
+    /** Stop the job because a tool is missing, tell the owner loudly, and pick the job back up once they give one. */
+    private void stopForTool(ServerPlayer player, SimpleContainer inv, BlockState state, String shortText, String message) {
+        Materials.Spec spec = job.spec;
+        int left = Math.max(1, job.wanted - job.collected);
+        needTool(player, shortText, message, has -> hasToolFor(has, state), p -> startJob(p, spec, left));
+        endJob(inv);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Tool alerts: say loudly when a tool is missing or nearly worn out, remind, and resume when given one.
+    // ---------------------------------------------------------------------------------------
+
+    static final int TOOL_REMIND_TICKS = 20 * 60 * 3; // remind every 3 minutes
+    static final int TOOL_MAX_REMINDERS = 5;
+    private String toolNeedShort, toolNeedMsg;
+    private java.util.function.Predicate<SimpleContainer> toolNeedHas;
+    private java.util.function.Consumer<ServerPlayer> toolNeedResume;
+    private int toolNeedTicks, toolNeedReminders;
+    /** The tool stack we last warned about being low, so each tool is only warned about once. */
+    private ItemStack lowWarned = ItemStack.EMPTY;
+
+    /** A chat message plus a line over the hotbar and a bell, so it isn't missed. */
+    static void alert(ServerPlayer player, String shortText, String message) {
+        say(player, message);
+        player.connection.send(new net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket(
+                Component.literal("[Helper] ").withStyle(ChatFormatting.GOLD)
+                        .append(Component.literal(shortText).withStyle(ChatFormatting.RED))));
+        Compat.notifySound(player, SoundEvents.NOTE_BLOCK_BELL, SoundSource.PLAYERS, 0.8f, 1.6f);
+    }
+
+    private void needTool(ServerPlayer player, String shortText, String message,
+                          java.util.function.Predicate<SimpleContainer> has, java.util.function.Consumer<ServerPlayer> resume) {
+        alert(player, shortText, message);
+        toolNeedShort = shortText;
+        toolNeedMsg = message;
+        toolNeedHas = has;
+        toolNeedResume = resume;
+        toolNeedTicks = 0;
+        toolNeedReminders = 0;
+    }
+
+    private void clearToolNeed() {
+        toolNeedHas = null;
+        toolNeedResume = null;
+        toolNeedMsg = toolNeedShort = null;
+    }
+
+    private void tickToolNeed(ServerPlayer player, SimpleContainer inv) {
+        if (toolNeedHas == null) return;
+        toolNeedTicks++;
+        boolean idle = mode == Mode.FOLLOW && (job == null || job.done);
+        if (toolNeedTicks % 20 == 0 && idle && toolNeedHas.test(inv)) {
+            java.util.function.Consumer<ServerPlayer> resume = toolNeedResume;
+            clearToolNeed();
+            say(player, "Thanks, that's just what I needed! Getting back to it.");
+            if (resume != null) resume.accept(player);
+            return;
+        }
+        if (toolNeedTicks >= TOOL_REMIND_TICKS) {
+            toolNeedTicks = 0;
+            if (++toolNeedReminders > TOOL_MAX_REMINDERS) {
+                say(player, "I'll stop reminding you about the tool now. Ask me again whenever you're ready.");
+                clearToolNeed();
+                return;
+            }
+            alert(player, toolNeedShort, "Reminder: " + toolNeedMsg);
+        }
+    }
+
+    /** Warn once per tool when it gets to about a tenth of its durability. */
+    private void warnIfLow(ServerPlayer player, ItemStack tool) {
+        if (tool == lowWarned || !tool.isDamageableItem()) return;
+        int left = tool.getMaxDamage() - tool.getDamageValue();
+        if (left > Math.max(3, tool.getMaxDamage() / 10)) return;
+        lowWarned = tool;
+        String name = tool.getHoverName().getString();
+        alert(player, "Helper's " + name + " is almost worn out",
+                "Heads up: my " + name + " is almost worn out (" + left + " uses left). Give me a spare or repair it soon, "
+                        + "or I'll have to stop.");
+    }
+
+    private static boolean hasToolFor(SimpleContainer inv, BlockState state) {
+        if (!state.requiresCorrectToolForDrops()) return true;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEmpty() && Mining.isUsableTool(s) && s.isCorrectToolForDrops(state)) return true;
+        }
+        return false;
+    }
+
+    /** A block of the spec the helper has no tool for, if it has no tool for any of them; otherwise null. */
+    private static BlockState missingToolFor(SimpleContainer inv, Materials.Spec spec) {
+        if (spec.blocks == null || spec.blocks.isEmpty()) return null;
+        BlockState first = null;
+        for (Block b : spec.blocks) {
+            BlockState st = b.defaultBlockState();
+            if (hasToolFor(inv, st)) return null;
+            if (first == null) first = st;
+        }
+        return first;
+    }
+
+    private void endJob(SimpleContainer inv) {
         if (mob != null) clearBreaking(mob);
         if (!summarize(inv, true).isEmpty()) {
             job.done = true;
