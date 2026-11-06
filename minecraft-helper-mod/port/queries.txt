@@ -1,6 +1,6 @@
 net.minecraft.util.ClassTreeIdRegistry
 net.minecraft.server.Services
-com.mojang.authlib.minecraft.MinecraftSessionService
+com.mojang.authlib.minecraft.SessionService
 com.mojang.authlib.yggdrasil.ProfileResult
 net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket
 net.minecraft.network.protocol.game.ClientboundUpdateAttributesPacket
