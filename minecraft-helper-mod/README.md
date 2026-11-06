@@ -178,6 +178,21 @@ mod see Ad Astra's plain sky there.
   on the planet. It doesn't need air and doesn't mind the cold or heat. It can dig through planet ground and
   mine planet ores, e.g. `/helper collect desh`, `/helper collect ostrum` or `/helper collect calorite`.
 
+## Mini map (2.1.0)
+
+A small map sits in the top-right corner while you play. It's drawn on your own PC from the chunks you have
+loaded, so it works in singleplayer, on LAN and on servers.
+
+- North is always up. You're the white square with a yellow pointer showing the way you face.
+- Your helper is a gold dot (other people's helpers are a duller gold), other players are blue and monsters are red.
+- Hills are shaded so you can see the shape of the land, and deeper water is darker.
+- Underground (no sky above you) it switches to cave mode and shows the floor around your height.
+- Your coordinates are shown under the map. It hides when you open a menu or press F1.
+
+`/minimap` turns it on or off. `/minimap size 64-192` changes how big it is, `/minimap zoom 1|2|4` sets how
+many blocks each map pixel covers, and `/minimap left` or `/minimap right` picks the corner. Your settings are
+saved in `config/helpermod-minimap.properties`.
+
 ## Talk to your helper
 
 Your helper understands plain chat. Start a message with "helper" (or "buddy"):

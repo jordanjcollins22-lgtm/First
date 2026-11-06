@@ -28,6 +28,25 @@ public final class UpdateClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         ClientTickEvents.END_CLIENT_TICK.register(UpdateClient::tick);
+        MiniMap.load();
+        ClientTickEvents.END_CLIENT_TICK.register(MiniMap::tick);
+        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementAfter(
+                net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.MISC_OVERLAYS,
+                net.minecraft.resources.Identifier.fromNamespaceAndPath("helpermod", "minimap"),
+                (ctx, tickCounter) -> MiniMap.render(ctx));
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> dispatcher.register(
+                ClientCommands.literal("minimap")
+                        .executes(ctx -> mapSet(ctx.getSource(), () -> MiniMap.enabled = !MiniMap.enabled))
+                        .then(ClientCommands.literal("on").executes(ctx -> mapSet(ctx.getSource(), () -> MiniMap.enabled = true)))
+                        .then(ClientCommands.literal("off").executes(ctx -> mapSet(ctx.getSource(), () -> MiniMap.enabled = false)))
+                        .then(ClientCommands.literal("left").executes(ctx -> mapSet(ctx.getSource(), () -> MiniMap.left = true)))
+                        .then(ClientCommands.literal("right").executes(ctx -> mapSet(ctx.getSource(), () -> MiniMap.left = false)))
+                        .then(ClientCommands.literal("size").then(ClientCommands.argument("pixels",
+                                com.mojang.brigadier.arguments.IntegerArgumentType.integer(64, 192)).executes(ctx -> mapSet(ctx.getSource(),
+                                () -> MiniMap.size = MiniMap.clampSize(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "pixels"))))))
+                        .then(ClientCommands.literal("zoom").then(ClientCommands.argument("blocks",
+                                com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 4)).executes(ctx -> mapSet(ctx.getSource(),
+                                () -> MiniMap.zoom = MiniMap.clampZoom(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "blocks"))))))));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inWorldTicks = 0);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
                 dispatcher.register(ClientCommands.literal("helperupdate").executes(ctx -> {
@@ -65,6 +84,15 @@ public final class UpdateClient implements ClientModInitializer {
         if (inWorldTicks < 100 || ClientCompat.screen(client) != null) return;
         promptedFor = v;
         ClientCompat.show(client, new UpdateScreen(null));
+    }
+
+    private static int mapSet(net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource src, Runnable change) {
+        change.run();
+        MiniMap.save();
+        src.sendFeedback(Component.literal("Mini map " + (MiniMap.enabled ? "on" : "off") + " (size " + MiniMap.size
+                + ", zoom " + MiniMap.zoom + ", " + (MiniMap.left ? "top left" : "top right")
+                + "). /minimap on|off|left|right|size 64-192|zoom 1-4").withStyle(ChatFormatting.AQUA));
+        return 1;
     }
 
     /** Chat line after "Not now", so the prompt is easy to find again. */
