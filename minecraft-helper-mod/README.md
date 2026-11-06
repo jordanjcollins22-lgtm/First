@@ -212,6 +212,14 @@ hand, a normal map that fills in as they explore and re-centres on them as they 
 Since 2.7.1 friends without the mod can type plain **`/minimap`** too (and `/minimap on` / `/minimap off`); it does the
 same. With the mod installed, `/minimap` is still the corner map's own command.
 
+## Shaders (2.8.0)
+
+Press **F6** to switch **Helper Shaders** on or off. They're built from Minecraft's own post-effect shaders, so no
+other mod is needed: richer colours, a soft glow around the sun, torches and lava, and gently darker corners.
+`/shaders vibrant` (the default), `/shaders sunset` (warm, golden) and `/shaders night` (cool and moody) change the
+look, and `/shaders off` turns them off. Your choice is saved in `config/helpermod-shaders.properties`. They only
+change your own screen, so each player picks for themselves (it needs the mod installed).
+
 ## Talk to your helper
 
 Your helper understands plain chat. Start a message with "helper" (or "buddy"):

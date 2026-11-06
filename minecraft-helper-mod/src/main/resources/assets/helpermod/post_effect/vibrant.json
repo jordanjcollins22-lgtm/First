@@ -1,0 +1,81 @@
+{
+  "targets": {
+    "swap": {}
+  },
+  "passes": [
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "helpermod:post/helper_look",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "minecraft:main"
+        }
+      ],
+      "output": "swap",
+      "uniforms": {
+        "HelperLook": [
+          {
+            "name": "Tint",
+            "type": "vec3",
+            "value": [
+              1.03,
+              1.01,
+              0.97
+            ]
+          },
+          {
+            "name": "Saturation",
+            "type": "float",
+            "value": 1.35
+          },
+          {
+            "name": "Contrast",
+            "type": "float",
+            "value": 1.12
+          },
+          {
+            "name": "Vignette",
+            "type": "float",
+            "value": 0.35
+          },
+          {
+            "name": "Glow",
+            "type": "float",
+            "value": 1.2
+          },
+          {
+            "name": "Lift",
+            "type": "float",
+            "value": 0.4
+          }
+        ]
+      }
+    },
+    {
+      "vertex_shader": "minecraft:core/screenquad",
+      "fragment_shader": "minecraft:post/blit",
+      "inputs": [
+        {
+          "sampler_name": "In",
+          "target": "swap"
+        }
+      ],
+      "uniforms": {
+        "BlitConfig": [
+          {
+            "name": "ColorModulate",
+            "type": "vec4",
+            "value": [
+              1.0,
+              1.0,
+              1.0,
+              1.0
+            ]
+          }
+        ]
+      },
+      "output": "minecraft:main"
+    }
+  ]
+}
