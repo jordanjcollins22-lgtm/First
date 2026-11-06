@@ -34,6 +34,9 @@ public class HelperMod implements ModInitializer {
         net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register(Furniture::onAttackEntity);
         ServerTickEvents.END_SERVER_TICK.register(Furniture::tick);
         ServerEntityEvents.ENTITY_LOAD.register(Furniture::onEntityLoad);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Rocket::onUseBlock); // space rockets
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Rocket::onUseItem);
+        ServerTickEvents.END_SERVER_TICK.register(Rocket::tick);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Loot::onUseBlock); // loot boxes open, never get placed
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Loot::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
@@ -101,6 +104,7 @@ public class HelperMod implements ModInitializer {
             TycoonSidebar.reset();
             Roadster.reset();
             Furniture.reset();
+            Rocket.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
