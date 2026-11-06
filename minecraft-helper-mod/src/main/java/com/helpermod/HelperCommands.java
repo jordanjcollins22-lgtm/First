@@ -117,6 +117,23 @@ public final class HelperCommands {
                 .then(literal("golf").executes(ctx -> { Golf.info(ctx.getSource().getPlayerOrThrow()); return 1; })
                         .then(literal("shop").executes(ctx -> { Golf.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("ball").executes(ctx -> { Golf.pickUp(ctx.getSource().getPlayerOrThrow()); return 1; })))
+                .then(literal("roadster")
+                        .then(literal("call").executes(ctx -> { Roadster.call(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("paint").then(net.minecraft.server.command.CommandManager.argument("colour",
+                                com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
+                            Roadster.paint(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "colour"));
+                            return 1;
+                        })))
+                        .then(literal("coat").then(net.minecraft.server.command.CommandManager.argument("coat",
+                                com.mojang.brigadier.arguments.StringArgumentType.word()).executes(ctx -> {
+                            Roadster.coat(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "coat"));
+                            return 1;
+                        })))
+                        .then(literal("name").then(net.minecraft.server.command.CommandManager.argument("name",
+                                com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
+                            Roadster.rename(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"));
+                            return 1;
+                        }))))
                 .then(literal("blackhole").executes(ctx -> { BlackHole.info(ctx.getSource().getPlayerOrThrow()); return 1; })
                         .then(literal("leave").executes(ctx -> { BlackHole.leaveCommand(ctx.getSource().getPlayerOrThrow()); return 1; })))
                 .then(literal("update").executes(ctx -> {
@@ -151,6 +168,7 @@ public final class HelperCommands {
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
                 "/helper golf  - Fairway golf planet: where's the club, your round, /helper golf shop, /helper golf ball (pick up your ball)",
+                "/helper roadster paint <colour>|coat <coat>|name <name>|call  - customise or call your Star Roadster (tycoon shop)",
                 "/helper blackhole  - how to make a Singularity and the Black Hole's bosses. /helper blackhole leave gets you out",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
