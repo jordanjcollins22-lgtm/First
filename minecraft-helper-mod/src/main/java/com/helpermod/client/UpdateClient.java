@@ -54,6 +54,22 @@ public final class UpdateClient implements ClientModInitializer {
                         .then(ClientCommands.literal("zoom").then(ClientCommands.argument("blocks",
                                 com.mojang.brigadier.arguments.IntegerArgumentType.integer(1, 4)).executes(ctx -> mapSet(ctx.getSource(),
                                 () -> MiniMap.zoom = MiniMap.clampZoom(com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "blocks"))))))));
+        // Helper Shaders: F6 or /shaders.
+        Shaders.load();
+        ClientTickEvents.END_CLIENT_TICK.register(Shaders::tick);
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> {
+            var root = ClientCommands.literal("shaders").executes(ctx -> {
+                ctx.getSource().sendFeedback(Component.literal(Shaders.command(null)).withStyle(ChatFormatting.AQUA));
+                return 1;
+            });
+            for (String opt : new String[]{"on", "off", "vibrant", "sunset", "night"}) {
+                root.then(ClientCommands.literal(opt).executes(ctx -> {
+                    ctx.getSource().sendFeedback(Component.literal(Shaders.command(opt)).withStyle(ChatFormatting.AQUA));
+                    return 1;
+                }));
+            }
+            dispatcher.register(root);
+        });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inWorldTicks = 0);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
                 dispatcher.register(ClientCommands.literal("helperupdate").executes(ctx -> {
