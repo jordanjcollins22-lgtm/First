@@ -856,6 +856,12 @@ final class Tycoon {
     private static List<Offer> offers() {
         List<Offer> list = new ArrayList<>();
         for (Offer o : OFFERS) if (o.action() != null || !o.item().get().isEmpty()) list.add(o);
+        // Then every other weapon and armour piece in the mod pack, cheapest first.
+        java.util.Set<Item> skip = ModGear.soldElsewhere();
+        for (ModGear.Gear g : ModGear.all()) {
+            if (skip.contains(g.item())) continue;
+            list.add(new Offer(g.tier(), g.price(), g.name(), () -> new ItemStack(g.item())));
+        }
         return list;
     }
 
@@ -944,7 +950,7 @@ final class Tycoon {
                     "Earn coins with Tycoon Droppers", "Tier " + tierName(tier)));
             if (page > 0) view.setStack(45, Storage.Menu.button(Items.ARROW, "Previous page", "Page " + page + " of " + pages(), ""));
             if (page < pages() - 1) view.setStack(53, Storage.Menu.button(Items.SPECTRAL_ARROW, "Next page",
-                    "Page " + (page + 2) + " of " + pages(), "More: weapons, armour, loot boxes"));
+                    "Page " + (page + 2) + " of " + pages(), page == 0 ? "More: weapons, armour, loot boxes" : "Every weapon and armour piece in the pack"));
             sendContentUpdates();
         }
 

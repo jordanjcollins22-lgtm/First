@@ -242,6 +242,13 @@ both with much better odds. Prizes are Common, Uncommon, Rare, Epic or Legendary
 **Coinbreaker** (a maxed netherite sword) and **Vaultguard Armour**, only come from boxes, and everyone sees the
 chat message when someone gets one.
 
+**Every weapon and armour piece in the pack (1.33.0):** the shop and the boxes aren't limited to vanilla gear. When
+the server starts, the mod finds every weapon and armour piece from every mod installed (swords, axes, bows,
+crossbows, shields, tridents, modded weapons that hit hard, and all armour). Each one gets a price from how strong it
+is (damage, or armour points and toughness, plus durability), and the shop sells them all, cheapest first, after the
+built-in offers. Stronger ones need tier 2 or 3. Half of Gear Box prizes and a third of Mega Box prizes are a random
+piece from the whole pack, of the rarity you rolled. `/helper tycoon odds` says how many were found.
+
 **New machines (1.32.0):** light blue **Speed Belts** carry ore twice as fast. Orange **Polishers** add +10 to each ore
 (put them before upgraders so the +10 gets multiplied). Brown **Smelters** do x1.5 and turn raw ore into ingots. Pink
 **Lucky Upgraders** have a 1 in 8 chance of x20. Each works once per ore, like upgraders.

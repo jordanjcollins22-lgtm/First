@@ -245,6 +245,16 @@ final class Loot {
         for (Prize pr : b.prizes()) if (pr.rarity() == rarity) pool.add(pr);
         if (pool.isEmpty()) pool.addAll(b.prizes());
         Prize prize = pool.get(random.nextInt(pool.size()));
+        // Gear can come from any mod in the pack: half the gear prizes in a Gear Box (a third in a Mega Box) are a
+        // random weapon or armour piece of the same rarity from the whole pack.
+        double modChance = b.id().equals("gear") ? 0.5 : b.id().equals("mega") ? 0.35 : 0;
+        if (modChance > 0 && random.nextDouble() < modChance) {
+            List<ModGear.Gear> mod = ModGear.ofRarity(rarity);
+            if (!mod.isEmpty()) {
+                ModGear.Gear g = mod.get(random.nextInt(mod.size()));
+                prize = new Prize(rarity, g.name(), () -> List.of(new ItemStack(g.item())));
+            }
+        }
         stack.decrement(1);
         giveAll(player, prize.items().get());
 
@@ -287,6 +297,10 @@ final class Loot {
 
     /** What /helper tycoon odds shows. */
     static void odds(ServerPlayerEntity player) {
+        List<ModGear.Gear> gear = ModGear.all();
+        long mods = gear.stream().map(g -> net.minecraft.registry.Registries.ITEM.getId(g.item()).getNamespace()).distinct().count();
+        player.sendMessage(Text.literal(gear.size() + " weapons and armour pieces from " + mods
+                + " mods are in the shop and the Gear and Mega Boxes.").formatted(Formatting.GRAY), false);
         for (Box b : BOXES) {
             StringBuilder sb = new StringBuilder(b.name() + ": ");
             for (int i = 0; i < 5; i++) {
