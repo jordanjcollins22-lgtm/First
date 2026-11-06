@@ -281,6 +281,22 @@ calls minions.
 | The Hollow Colossus | south bridge | Collapse Maul (skill: Collapse, pulls monsters in and slams them up) + 150k coins |
 | The Singularity Sovereign (after the other three) | north bridge | Starless Staff (skill: Starless Beam) + Nether Star + 1M coins |
 
+Every boss kill also gives a piece of that boss's **armor set** (netherite, Protection IV), a **Rift Tome**
+and a top-level enchanted book. Wear all four pieces of one set for a bonus:
+
+| Set | From | Full-set bonus |
+| --- | --- | --- |
+| Cinderwarden | Ashen Warden | Fire Resistance and Strength |
+| Moonless | Duskfang | Speed II and Night Vision |
+| Hollow Bulwark | Hollow Colossus | Resistance and Haste II |
+| Event Horizon | Singularity Sovereign | Regeneration, Strength II and Slow Falling |
+
+**Rift Tomes** raise your magic level (up to 10): each level makes weapon skills do 10% more damage with 5%
+shorter cooldowns, and gives 5 XP levels for enchanting. **Rift Caches** are the chests with soul lanterns on
+the bridges and in the arenas (12 in all). Each one gives every player their own loot every 15 minutes:
+enchanted diamond and netherite gear, top-level enchanted books, sometimes a Rift Tome or a set armor piece,
+plus diamonds, golden apples, totems and more.
+
 Right-click a weapon to use its skill (it has a cooldown). Bosses can be fought again 5 minutes later.
 If you fall off, you're put back on the hub. Right-click the Singularity again (or `/helper blackhole leave`)
 to go home. `/helper blackhole` shows which bosses you've beaten.
