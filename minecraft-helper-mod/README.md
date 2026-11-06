@@ -372,7 +372,9 @@ A dedicated server has nobody to ask, so it downloads by itself and installs on 
 `config/helpermod-updater.properties`: `auto_update=ask` (default), `always` (download without asking) or
 `false` (never check).
 
-**Release notes:** put them in `release-notes/<version>.md` before tagging. Use `## What's new` and
+**Publishing:** pushing a `claude/helper-*` branch whose version has a `release-notes/<version>.md` file publishes it as release `helper-v<version>` (only if it's newer than every published one). Pushing a `helper-v<version>` tag works too.
+
+**Release notes:** put them in `release-notes/<version>.md`. Use `## What's new` and
 `## What to look for` headings and `- ` bullets. Screenshots: `![caption](https://.../shot.png)` (PNG shows
 inside the game; other formats show a "see release page" note). Images in `release-notes/images/` can be
 linked with `https://raw.githubusercontent.com/jordanjcollins22-lgtm/First/<tag>/minecraft-helper-mod/release-notes/images/<file>.png`.
