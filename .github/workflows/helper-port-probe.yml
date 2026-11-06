@@ -69,7 +69,7 @@ jobs:
           CP=$(cat cp.txt)
           Q=minecraft-helper-mod/port/queries.txt
           [ -f $Q ] || exit 0
-          tr ':' '\n' < cp.txt | grep -E '\.jar$' > jars.txt
+          { tr ':' '\n' < cp.txt; find p/.gradle ~/.gradle/caches -name '*.jar' \( -path '*minecraft*' -o -name 'fabric-*' \) ; } | grep -E '\.jar$' | sort -u > jars.txt; grep -i minecraft jars.txt | head
           for j in $(cat jars.txt); do jar tf "$j" | grep '\.class$'; done | grep -v '\$[0-9]' | sed 's/\.class$//' | sort -u > classes.txt
           echo "jars: $(wc -l < jars.txt) classes: $(wc -l < classes.txt)"; head -3 classes.txt
           while IFS= read -r line; do
