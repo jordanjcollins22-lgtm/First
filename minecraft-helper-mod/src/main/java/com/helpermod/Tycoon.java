@@ -435,7 +435,7 @@ final class Tycoon {
             world.spawnParticles(ParticleTypes.HAPPY_VILLAGER, ore.getX(), ore.getY() + 0.3, ore.getZ(), 4, 0.2, 0.2, 0.2, 0);
             world.playSound(null, under, SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP, SoundCategory.BLOCKS, 0.3f, 1.6f);
             ServerPlayerEntity p = world.getServer().getPlayerManager().getPlayer(owner);
-            if (p != null) p.sendMessage(Text.literal("+" + value + " coins  (" + data.coins(owner) + ")").formatted(Formatting.GOLD), true);
+            TycoonSidebar.earned(world.getServer(), owner, value); // shown on the side panel, not in the middle of the screen
             ore.discard();
             return true;
         }
@@ -485,6 +485,7 @@ final class Tycoon {
                 "/helper tycoon fix  - look at a Tycoon Dropper that stopped working after you moved it",
                 "/helper tycoon rebirth  - start over for a permanent +50% on every coin",
                 "/helper tycoon top  - the richest tycoons on the server",
+                "/helper tycoon sidebar on|off  - show or hide your coin total and coins per second on the side",
                 "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5, red x10) boost it once each.",
                 "Yellow Lifters hop ore up one block so a line can climb. Milestones at 1k, 10k, 100k and 1M coins earned give free parts.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",

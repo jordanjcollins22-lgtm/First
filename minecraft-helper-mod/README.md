@@ -212,6 +212,10 @@ unlocks when you've been to the Nether, and tier 3 (mega upgraders, netherite, t
 End. Droppers can go past level 4 at tier 2 and past level 7 at tier 3. To pay coins for FTB quests, add a
 command reward to a quest: `/helper tycoon give {p} 500`.
 
+**Coin panel:** your coin total and how many coins per second you're making (averaged over 10 seconds) show
+on the right side of the screen, only to you. The "+coins" pop-up in the middle of the screen is gone.
+`/helper tycoon sidebar off` hides the panel, `on` brings it back.
+
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
