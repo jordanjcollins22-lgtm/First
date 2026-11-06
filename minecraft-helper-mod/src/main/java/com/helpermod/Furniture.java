@@ -118,8 +118,9 @@ final class Furniture {
         return new Builder(id, room, name, icon);
     }
 
-    static final String[] ROOMS = {"Kitchen", "Living room", "Dining room", "Bedroom", "Bathroom", "Other"};
-    private static final Item[] ROOM_ICONS = {Items.SMOKER, Items.BED.red(), Items.OAK_STAIRS, Items.BED.white(), Items.CAULDRON, Items.FLOWER_POT};
+    static final String[] ROOMS = {"Kitchen", "Living room", "Dining room", "Bedroom", "Bathroom", "Outdoor", "Other"};
+    private static final Item[] ROOM_ICONS = {Items.SMOKER, Items.BED.red(), Items.OAK_STAIRS, Items.BED.white(), Items.CAULDRON,
+            Items.CAMPFIRE, Items.FLOWER_POT};
 
     // Pixel coordinates (0-16 per block). The front faces the player who placed it; extra blocks go to their left.
     static final List<Piece> PIECES = List.of(
@@ -217,6 +218,43 @@ final class Furniture {
             b("towel_rack", "Bathroom", "Towel Rack (hang it on a wall)", Items.BANNER.white()).price(20)
                     .p(Role.METAL, 1, 12, 14, 2, 13, 16).p(Role.METAL, 14, 12, 14, 15, 13, 16).p(Role.METAL, 1, 12, 13.5, 15, 13, 14.5)
                     .p(Role.FABRIC, 2, 3, 13.8, 14, 12.5, 14.3).done(),
+            // Outdoor
+            b("picnic_table", "Outdoor", "Picnic Table (seats on both sides)", Items.OAK_TRAPDOOR).size(2, 1).seat(7).price(80)
+                    .p(Role.WOOD, 0, 11, 3, 32, 13, 13).p(Role.WOOD, 0, 6, 0, 32, 7.5, 2.5).p(Role.WOOD, 0, 6, 13.5, 32, 7.5, 16)
+                    .p(Role.LEGS, 3, 0, 1, 5, 11, 15).p(Role.LEGS, 27, 0, 1, 29, 11, 15).done(),
+            b("patio_umbrella", "Outdoor", "Patio Umbrella", Items.WOOL.yellow()).size(1, 2).price(60)
+                    .p(Role.GRAY, 5, 0, 5, 11, 1, 11).p(Role.METAL, 7.5, 1, 7.5, 8.5, 27, 8.5)
+                    .p(Role.FABRIC, -8, 25.5, -8, 24, 27, 24).p(Role.FABRIC, -3, 27, -3, 19, 28.5, 19).p(Role.FABRIC, 3, 28.5, 3, 13, 29.5, 13).done(),
+            b("sun_lounger", "Outdoor", "Sun Lounger", Items.WOOL.white()).seat(7).price(60)
+                    .p(Role.LEGS, 1, 0, 1, 3, 4, 3).p(Role.LEGS, 13, 0, 1, 15, 4, 3).p(Role.LEGS, 1, 0, 13, 3, 4, 15).p(Role.LEGS, 13, 0, 13, 15, 4, 15)
+                    .p(Role.WOOD, 1, 4, 0, 15, 6, 16).p(Role.FABRIC, 2, 6, 0.5, 14, 7, 11).p(Role.FABRIC, 2, 6, 11, 14, 16, 14).done(),
+            b("bbq_grill", "Outdoor", "BBQ Grill (light it up)", Items.BLAST_FURNACE).solid().use(Use.STOVE).price(120)
+                    .p(Role.METAL, 2, 0, 2, 4, 9, 4).p(Role.METAL, 12, 0, 2, 14, 9, 4).p(Role.METAL, 2, 0, 12, 4, 9, 14)
+                    .p(Role.METAL, 12, 0, 12, 14, 9, 14).p(Role.BLACK, 1, 9, 1, 15, 14, 15).p(Role.BURNER, 2, 14, 2, 14, 14.4, 13)
+                    .p(Role.BLACK, 1, 14, 13, 15, 22, 15).p(Role.WOOD, 15, 12, 4, 19, 13, 12).done(),
+            b("fire_pit", "Outdoor", "Fire Pit (light it)", Items.CAMPFIRE).use(Use.STOVE).price(70)
+                    .p(Role.GRAY, 1, 0, 1, 15, 4, 3).p(Role.GRAY, 1, 0, 13, 15, 4, 15).p(Role.GRAY, 1, 0, 3, 3, 4, 13)
+                    .p(Role.GRAY, 13, 0, 3, 15, 4, 13).p(Role.LEGS, 4, 0.5, 6, 12, 2.5, 8).p(Role.LEGS, 6, 0.5, 4, 8, 2.5, 12)
+                    .p(Role.BURNER, 5, 2.5, 5, 11, 4, 11).done(),
+            b("lamp_post", "Outdoor", "Garden Lamp Post (switch it on)", Items.LANTERN).size(1, 2).use(Use.LIGHT).price(60)
+                    .p(Role.BLACK, 5, 0, 5, 11, 2, 11).p(Role.BLACK, 7, 2, 7, 9, 26, 9).p(Role.LIGHT, 5, 26, 5, 11, 31, 11)
+                    .p(Role.BLACK, 4.5, 31, 4.5, 11.5, 32, 11.5).done(),
+            b("mailbox", "Outdoor", "Mailbox (storage)", Items.IRON_TRAPDOOR).use(Use.STORAGE).price(40)
+                    .p(Role.LEGS, 7, 0, 7, 9, 10, 9).p(Role.TOP, 4, 10, 3, 12, 16, 15).p(Role.BLACK, 4.5, 10.5, 2.5, 11.5, 15.5, 3)
+                    .p(Role.FABRIC, 12, 13, 10, 12.6, 19, 12).done(),
+            b("planter_box", "Outdoor", "Planter Box", Items.FLOWERING_AZALEA).size(2, 1).solid().price(40)
+                    .p(Role.WOOD, 0, 0, 2, 32, 8, 14).p(Role.POT, 1, 6, 3, 31, 7.5, 13).p(Role.PLANT, 2, 7.5, 4, 30, 13, 12).done(),
+            b("hot_tub", "Outdoor", "Hot Tub (click the tap end to fill it, the other end to sit)", Items.WATER_BUCKET).size(2, 1).seat(4)
+                    .use(Use.WATER).price(150)
+                    .p(Role.WOOD, 0, 0, 0, 32, 2, 16).p(Role.WOOD, 0, 2, 0, 32, 12, 2).p(Role.WOOD, 0, 2, 14, 32, 12, 16)
+                    .p(Role.WOOD, 0, 2, 2, 2, 12, 14).p(Role.WOOD, 30, 2, 2, 32, 12, 14).p(Role.WATER, 2, 2, 2, 30, 10, 14)
+                    .p(Role.TOP, 0, 12, 0, 32, 13, 2).p(Role.TOP, 0, 12, 14, 32, 13, 16).p(Role.METAL, 29, 12, 7, 31, 14, 9).done(),
+            b("fountain", "Outdoor", "Garden Fountain (switch it on)", Items.STONE_BRICK_WALL).solid().use(Use.WATER).price(100)
+                    .p(Role.GRAY, 0, 0, 0, 16, 5, 16).p(Role.WATER, 1, 3, 1, 15, 4.5, 15).p(Role.GRAY, 6, 5, 6, 10, 14, 10)
+                    .p(Role.GRAY, 3, 14, 3, 13, 15, 13).p(Role.WATER, 4, 15, 4, 12, 15.5, 12).done(),
+            b("patio_chair", "Outdoor", "Patio Chair", Items.BIRCH_STAIRS).seat(8).price(30)
+                    .p(Role.METAL, 2, 0, 2, 3, 8, 3).p(Role.METAL, 13, 0, 2, 14, 8, 3).p(Role.METAL, 2, 0, 13, 3, 8, 14)
+                    .p(Role.METAL, 13, 0, 13, 14, 8, 14).p(Role.WOOD, 2, 7, 2, 14, 8, 14).p(Role.WOOD, 2, 8, 13, 14, 18, 14).done(),
             // Other
             b("office_chair", "Other", "Office Chair", Items.WOOL.black()).seat(9).price(50)
                     .p(Role.METAL, 2, 0, 7, 14, 1, 9).p(Role.METAL, 7, 0, 2, 9, 1, 14).p(Role.METAL, 7, 1, 7, 9, 7, 9)
@@ -800,9 +838,18 @@ final class Furniture {
                 world.sendParticles(ParticleTypes.FALLING_WATER, p.pos.getX() + head[0] / 16, p.pos.getY() + 1.65,
                         p.pos.getZ() + head[1] / 16, 6, 0.15, 0.02, 0.15, 0);
                 if (ticks % 40 == 0) world.playSound(null, p.pos, SoundEvents.WEATHER_RAIN, SoundSource.BLOCKS, 0.25f, 1.6f);
-            } else if (piece.use() == Use.STOVE && ticks % 10 == 0) {
+            } else if (piece.use() == Use.STOVE && ticks % 10 == 0 && !"fire_pit".equals(p.type)) {
                 world.sendParticles(ParticleTypes.SMOKE, p.pos.getX() + 0.5, p.pos.getY() + 1.05, p.pos.getZ() + 0.5, 2, 0.25, 0, 0.25, 0.005);
-            } else if (piece.use() == Use.WATER && !"bathtub".equals(p.type)) {
+            } else if ("fire_pit".equals(p.type) && ticks % 5 == 0) { // flames as well as smoke
+                world.sendParticles(ParticleTypes.FLAME, p.pos.getX() + 0.5, p.pos.getY() + 0.3, p.pos.getZ() + 0.5, 2, 0.15, 0.05, 0.15, 0.01);
+                if (ticks % 40 == 0) world.playSound(null, p.pos, SoundEvents.CAMPFIRE_CRACKLE, SoundSource.BLOCKS, 0.6f, 1f);
+            } else if ("hot_tub".equals(p.type) && ticks % 4 == 0) { // bubbling
+                float[] mid = turn(16, 8, p.rot);
+                world.sendParticles(ParticleTypes.BUBBLE_POP, p.pos.getX() + mid[0] / 16, p.pos.getY() + 0.65,
+                        p.pos.getZ() + mid[1] / 16, 3, 0.5, 0, 0.3, 0);
+            } else if ("fountain".equals(p.type)) {
+                world.sendParticles(ParticleTypes.SPLASH, p.pos.getX() + 0.5, p.pos.getY() + 1.05, p.pos.getZ() + 0.5, 2, 0.2, 0.05, 0.2, 0);
+            } else if (piece.use() == Use.WATER && !"bathtub".equals(p.type) && !"hot_tub".equals(p.type)) {
                 float[] tap = turn(8, 11.5f, p.rot);
                 double ty = "kitchen_sink".equals(p.type) ? 1.2 : 1.05;
                 world.sendParticles(ParticleTypes.FALLING_WATER, p.pos.getX() + tap[0] / 16, p.pos.getY() + ty,

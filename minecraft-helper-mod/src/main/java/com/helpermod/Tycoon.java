@@ -800,7 +800,7 @@ final class Tycoon {
             new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
             new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
             new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
-            new Offer(1, 0, "Furniture Catalogue (31 pieces for every room)", () -> new ItemStack(Items.BED.red()), 0, p -> {
+            new Offer(1, 0, "Furniture Catalogue (every room, with tabs)", () -> new ItemStack(Items.BED.red()), 0, p -> {
                 p.level().getServer().execute(() -> Furniture.openCatalog(p));
                 return false;
             }),
@@ -865,6 +865,7 @@ final class Tycoon {
     private static List<Offer> offers() {
         List<Offer> list = new ArrayList<>();
         for (Offer o : OFFERS) if (o.action() != null || !o.item().get().isEmpty()) list.add(o);
+        addFurniture(list); // furniture for every room, right after the catalogue
         // Then every other weapon and armour piece in the mod pack, cheapest first.
         java.util.Set<Item> skip = ModGear.soldElsewhere();
         for (ModGear.Gear g : ModGear.all()) {
@@ -872,6 +873,16 @@ final class Tycoon {
             list.add(new Offer(g.tier(), g.price(), g.name(), () -> new ItemStack(g.item())));
         }
         return list;
+    }
+
+    /** Every furniture piece, room by room, so it can be bought straight from the shop. */
+    private static void addFurniture(List<Offer> list) {
+        for (String room : Furniture.ROOMS) {
+            for (Furniture.Piece piece : Furniture.PIECES) {
+                if (!piece.room().equals(room)) continue;
+                list.add(new Offer(1, piece.price(), room + ": " + piece.name(), () -> Furniture.item(piece, null)));
+            }
+        }
     }
 
     private static ItemStack adAstra(String id, int count) {

@@ -268,7 +268,8 @@ Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper le
 
 ## Furniture (1.34.0)
 
-`/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 31 pieces in six rooms.
+`/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 42 pieces in seven rooms.
+Since 2.3.0 every piece is also sold on its own in the **tycoon shop** ("Kitchen: Stove", "Outdoor: Hot Tub"...), right after the catalogue.
 
 | Room | Pieces |
 |---|---|
@@ -277,6 +278,7 @@ Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper le
 | Dining room | Dining Table, Dining Chair, Glass Cupboard (storage) |
 | Bedroom | Wardrobe, Bedside Table with Lamp, Dresser (all storage), Desk, Bed Headboard, Vanity Table with Mirror |
 | Bathroom | Toilet, Bathtub (water and a seat), Sink with Mirror, Shower (running water), Towel Rack |
+| Outdoor (2.3.0) | Picnic Table (seats), Patio Umbrella, Sun Lounger, BBQ Grill (lights up and smokes), Fire Pit (flames and crackling), Garden Lamp Post (real light), Mailbox (storage), Planter Box, Hot Tub (fills up and bubbles, sit in it), Garden Fountain, Patio Chair |
 | Other | Office Chair, Garden Bench, Big Potted Plant, Ceiling Light, Wall Clock |
 
 Pieces cost a few tycoon coins (free in creative). Right-click a block to place one; it faces you.
