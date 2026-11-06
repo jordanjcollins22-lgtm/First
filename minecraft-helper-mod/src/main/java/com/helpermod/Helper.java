@@ -1014,6 +1014,7 @@ public class Helper {
             tickRide(m, player);
             return;
         }
+        if (m.getStepHeight() != WALK_STEP) m.setStepHeight(WALK_STEP); // got off: back to its normal step
         if (m.hasNoGravity() && !m.hasPassengers()) m.setNoGravity(false); // got off a flying helper
         if (m.age % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
@@ -1174,6 +1175,9 @@ public class Helper {
         return path.contains("dragon") || path.contains("bird") || path.contains("bat") || path.contains("wyvern");
     }
 
+    /** How high a step it walks up without jumping: a mob's usual 0.6, or a full block while ridden (like a horse). */
+    private static final float WALK_STEP = 0.6f, RIDE_STEP = 1.0f;
+
     private void tickRide(MobEntity m, ServerPlayerEntity rider) {
         m.getNavigation().stop();
         combatTarget = null;
@@ -1213,6 +1217,12 @@ public class Helper {
             m.setVelocity(new Vec3d(v.x, Math.max(m.getVelocity().y, up), v.z));
             m.velocityModified = true;
             return;
+        }
+        // Like a horse: walk straight up 1-block steps, and hop over anything a little taller by itself.
+        if (m.getStepHeight() != RIDE_STEP) m.setStepHeight(RIDE_STEP);
+        if (!jump && moving && m.isOnGround() && m.horizontalCollision && !m.isTouchingWater()) {
+            m.setVelocity(m.getVelocity().x, 0.5, m.getVelocity().z);
+            m.velocityModified = true;
         }
         if (jump && m.isOnGround()) { // jump like a horse: a good hop, more while moving
             m.setVelocity(m.getVelocity().x + dx * 0.2, 0.6, m.getVelocity().z + dz * 0.2);
