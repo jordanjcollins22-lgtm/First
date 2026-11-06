@@ -1,7 +1,7 @@
 package com.helpermod.mixin;
 
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 @Mixin(LivingEntity.class)
 public interface LivingEntityAccessor {
     @Accessor("attackingPlayer")
-    void helpermod$setAttackingPlayer(PlayerEntity player);
+    void helpermod$setAttackingPlayer(Player player);
 
     /** Whether the player is holding jump (sent by their game even while riding). */
     @Accessor("jumping")

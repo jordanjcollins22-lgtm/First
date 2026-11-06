@@ -4,20 +4,19 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import net.minecraft.command.CommandSource;
-import net.minecraft.entity.EntityType;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.ItemStack;
 
-import static net.minecraft.server.command.CommandManager.argument;
-import static net.minecraft.server.command.CommandManager.literal;
+import static net.minecraft.commands.Commands.argument;
+import static net.minecraft.commands.Commands.literal;
 
 /** /helper summon | collect <material> [amount] | stop | deliver | status | look <mob|me> | dismiss */
 public final class HelperCommands {
@@ -26,7 +25,7 @@ public final class HelperCommands {
     private static final int DEFAULT_AMOUNT = 64;
     private static final int MAX_AMOUNT = 64 * 36;
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(literal("helper")
                 .executes(HelperCommands::help)
                 .then(literal("help").executes(HelperCommands::help))
@@ -35,22 +34,22 @@ public final class HelperCommands {
                         .then(argument("material", StringArgumentType.greedyString())
                                 .suggests((ctx, builder) -> {
                                     if (builder.getRemaining().contains(" ")) return builder.buildFuture();
-                                    return CommandSource.suggestMatching(Materials.SUGGESTIONS, builder);
+                                    return SharedSuggestionProvider.suggest(Materials.SUGGESTIONS, builder);
                                 })
                                 .executes(HelperCommands::collect)))
                 .then(literal("stop").executes(HelperCommands::stop))
                 .then(literal("deliver").executes(HelperCommands::deliver))
                 .then(literal("status").executes(HelperCommands::status))
-                .then(literal("unstick").executes(ctx -> { unstick(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                .then(literal("unstick").executes(ctx -> { unstick(ctx.getSource().getPlayerOrException()); return 1; }))
                 .then(literal("send")
                         .then(argument("player", StringArgumentType.word())
-                                .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
                                         ctx.getSource().getServer().getPlayerNames(), builder))
-                                .executes(ctx -> { send(ctx.getSource().getPlayerOrThrow(), StringArgumentType.getString(ctx, "player"), "hand"); return 1; })
+                                .executes(ctx -> { send(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "player"), "hand"); return 1; })
                                 .then(argument("what", StringArgumentType.word())
-                                        .suggests((ctx, builder) -> CommandSource.suggestMatching(List.of("hand", "haul"), builder))
+                                        .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(List.of("hand", "haul"), builder))
                                         .executes(ctx -> {
-                                            send(ctx.getSource().getPlayerOrThrow(), StringArgumentType.getString(ctx, "player"),
+                                            send(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "player"),
                                                     StringArgumentType.getString(ctx, "what"));
                                             return 1;
                                         }))))
@@ -58,18 +57,18 @@ public final class HelperCommands {
                         .then(literal("on").executes(ctx -> guard(ctx, true)))
                         .then(literal("off").executes(ctx -> guard(ctx, false))))
                 .then(literal("harvester").executes(ctx -> {
-                    Devices.craftHarvester(ctx.getSource().getPlayerOrThrow());
+                    Devices.craftHarvester(ctx.getSource().getPlayerOrException());
                     return 1;
                 }))
                 .then(literal("storage")
                         .executes(ctx -> {
-                            Storage.craft(ctx.getSource().getPlayerOrThrow());
+                            Storage.craft(ctx.getSource().getPlayerOrException());
                             return 1;
                         })
                         .then(literal("find")
                                 .then(argument("name", StringArgumentType.greedyString())
                                         .executes(ctx -> {
-                                            Storage.find(ctx.getSource().getPlayerOrThrow(),
+                                            Storage.find(ctx.getSource().getPlayerOrException(),
                                                     StringArgumentType.getString(ctx, "name"));
                                             return 1;
                                         }))))
@@ -79,13 +78,13 @@ public final class HelperCommands {
                                 .suggests((ctx, builder) -> {
                                     List<String> options = new ArrayList<>(Disguise.lookSuggestions());
                                     options.add(0, "me");
-                                    return CommandSource.suggestMatching(options, builder);
+                                    return SharedSuggestionProvider.suggest(options, builder);
                                 })
                                 .executes(HelperCommands::look)))
                 .then(literal("size")
                         .executes(HelperCommands::sizeHelp)
                         .then(argument("size", StringArgumentType.word())
-                                .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
                                         List.of("small", "normal", "big", "tiny", "giant", "0.5", "1.5"), builder))
                                 .executes(HelperCommands::size)))
                 .then(literal("fish")
@@ -98,79 +97,79 @@ public final class HelperCommands {
                                 .executes(ctx -> farm(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))))
                 .then(literal("ride").executes(HelperCommands::ride))
                 .then(literal("boss").executes(ctx -> {
-                    Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
+                    Bosses.tellWhere(ctx.getSource().getPlayerOrException());
                     return 1;
                 }))
-                .then(literal("furniture").executes(ctx -> { Furniture.openCatalog(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                .then(literal("furniture").executes(ctx -> { Furniture.openCatalog(ctx.getSource().getPlayerOrException()); return 1; }))
                 .then(literal("tycoon")
-                        .executes(ctx -> { Tycoon.info(ctx.getSource().getPlayerOrThrow()); return 1; })
-                        .then(literal("start").executes(ctx -> { Tycoon.start(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("upgrade").executes(ctx -> { Tycoon.upgrade(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("fix").executes(ctx -> { Tycoon.fix(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("top").executes(ctx -> { Tycoon.top(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("odds").executes(ctx -> { Loot.odds(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .executes(ctx -> { Tycoon.info(ctx.getSource().getPlayerOrException()); return 1; })
+                        .then(literal("start").executes(ctx -> { Tycoon.start(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("upgrade").executes(ctx -> { Tycoon.upgrade(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("fix").executes(ctx -> { Tycoon.fix(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("top").executes(ctx -> { Tycoon.top(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("odds").executes(ctx -> { Loot.odds(ctx.getSource().getPlayerOrException()); return 1; }))
                         .then(literal("sidebar")
-                                .then(literal("on").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrThrow(), true); return 1; }))
-                                .then(literal("off").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrThrow(), false); return 1; })))
+                                .then(literal("on").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrException(), true); return 1; }))
+                                .then(literal("off").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrException(), false); return 1; })))
                         .then(literal("rebirth")
-                                .executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrThrow(), false); return 1; })
-                                .then(literal("confirm").executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrThrow(), true); return 1; })))
-                        .then(literal("give").requires(src -> src.hasPermissionLevel(2))
-                                .then(argument("player", net.minecraft.command.argument.EntityArgumentType.player())
+                                .executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrException(), false); return 1; })
+                                .then(literal("confirm").executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrException(), true); return 1; })))
+                        .then(literal("give").requires(src -> src.hasPermission(2))
+                                .then(argument("player", net.minecraft.commands.arguments.EntityArgument.player())
                                         .then(argument("coins", com.mojang.brigadier.arguments.LongArgumentType.longArg(1))
                                                 .executes(ctx -> {
-                                                    Tycoon.give(net.minecraft.command.argument.EntityArgumentType.getPlayer(ctx, "player"),
+                                                    Tycoon.give(net.minecraft.commands.arguments.EntityArgument.getPlayer(ctx, "player"),
                                                             com.mojang.brigadier.arguments.LongArgumentType.getLong(ctx, "coins"));
                                                     return 1;
                                                 })))))
                 .then(literal("mine")
-                        .then(literal("marker").executes(ctx -> { MineMarker.give(ctx.getSource().getPlayerOrThrow()); return 1; })))
+                        .then(literal("marker").executes(ctx -> { MineMarker.give(ctx.getSource().getPlayerOrException()); return 1; })))
                 .then(literal("town").executes(ctx -> {
-                    Town.tellWhere(ctx.getSource().getPlayerOrThrow());
+                    Town.tellWhere(ctx.getSource().getPlayerOrException());
                     return 1;
                 }))
-                .then(literal("golf").executes(ctx -> { Golf.info(ctx.getSource().getPlayerOrThrow()); return 1; })
-                        .then(literal("shop").executes(ctx -> { Golf.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("ball").executes(ctx -> { Golf.pickUp(ctx.getSource().getPlayerOrThrow()); return 1; })))
-                .then(literal("roadster").executes(ctx -> { Roadster.info(ctx.getSource().getPlayerOrThrow()); return 1; })
-                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
-                        .then(literal("call").executes(ctx -> { Roadster.call(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                .then(literal("golf").executes(ctx -> { Golf.info(ctx.getSource().getPlayerOrException()); return 1; })
+                        .then(literal("shop").executes(ctx -> { Golf.openShop(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("ball").executes(ctx -> { Golf.pickUp(ctx.getSource().getPlayerOrException()); return 1; })))
+                .then(literal("roadster").executes(ctx -> { Roadster.info(ctx.getSource().getPlayerOrException()); return 1; })
+                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(literal("call").executes(ctx -> { Roadster.call(ctx.getSource().getPlayerOrException()); return 1; }))
                         .then(literal("waypoint")
-                                .then(literal("clear").executes(ctx -> { Roadster.clearWaypoint(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                                .then(literal("clear").executes(ctx -> { Roadster.clearWaypoint(ctx.getSource().getPlayerOrException()); return 1; }))
                                 .then(argument("x", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
                                         .then(argument("z", com.mojang.brigadier.arguments.DoubleArgumentType.doubleArg())
                                                 .executes(ctx -> {
-                                                    Roadster.setWaypoint(ctx.getSource().getPlayerOrThrow(),
+                                                    Roadster.setWaypoint(ctx.getSource().getPlayerOrException(),
                                                             com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "x"),
                                                             com.mojang.brigadier.arguments.DoubleArgumentType.getDouble(ctx, "z"));
                                                     return 1;
                                                 }))))
-                        .then(literal("paint").then(net.minecraft.server.command.CommandManager.argument("colour",
+                        .then(literal("paint").then(net.minecraft.commands.Commands.argument("colour",
                                 com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
-                            Roadster.paint(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "colour"));
+                            Roadster.paint(ctx.getSource().getPlayerOrException(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "colour"));
                             return 1;
                         })))
-                        .then(literal("coat").then(net.minecraft.server.command.CommandManager.argument("coat",
+                        .then(literal("coat").then(net.minecraft.commands.Commands.argument("coat",
                                 com.mojang.brigadier.arguments.StringArgumentType.word()).executes(ctx -> {
-                            Roadster.coat(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "coat"));
+                            Roadster.coat(ctx.getSource().getPlayerOrException(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "coat"));
                             return 1;
                         })))
-                        .then(literal("name").then(net.minecraft.server.command.CommandManager.argument("name",
+                        .then(literal("name").then(net.minecraft.commands.Commands.argument("name",
                                 com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
-                            Roadster.rename(ctx.getSource().getPlayerOrThrow(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"));
+                            Roadster.rename(ctx.getSource().getPlayerOrException(), com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name"));
                             return 1;
                         }))))
-                .then(literal("blackhole").executes(ctx -> { BlackHole.info(ctx.getSource().getPlayerOrThrow()); return 1; })
-                        .then(literal("leave").executes(ctx -> { BlackHole.leaveCommand(ctx.getSource().getPlayerOrThrow()); return 1; })))
+                .then(literal("blackhole").executes(ctx -> { BlackHole.info(ctx.getSource().getPlayerOrException()); return 1; })
+                        .then(literal("leave").executes(ctx -> { BlackHole.leaveCommand(ctx.getSource().getPlayerOrException()); return 1; })))
                 .then(literal("update").executes(ctx -> {
-                    ctx.getSource().sendFeedback(() -> Text.literal("Auto-update: " + Updater.status()).formatted(Formatting.AQUA), false);
+                    ctx.getSource().sendSuccess(() -> Component.literal("Auto-update: " + Updater.status()).withStyle(ChatFormatting.AQUA), false);
                     return 1;
                 }))
                 .then(literal("dismiss").executes(HelperCommands::dismiss)));
     }
 
-    private static int help(CommandContext<ServerCommandSource> ctx) {
+    private static int help(CommandContext<CommandSourceStack> ctx) {
         String[] lines = {
                 "/helper summon  - get your helper",
                 "/helper collect <material> [amount]  - e.g. /helper collect iron 32",
@@ -203,15 +202,15 @@ public final class HelperCommands {
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
         };
-        ctx.getSource().sendFeedback(() -> Text.literal("Helper commands:").formatted(Formatting.GOLD), false);
-        for (String line : lines) ctx.getSource().sendFeedback(() -> Text.literal(line), false);
+        ctx.getSource().sendSuccess(() -> Component.literal("Helper commands:").withStyle(ChatFormatting.GOLD), false);
+        for (String line : lines) ctx.getSource().sendSuccess(() -> Component.literal(line), false);
         return 1;
     }
 
-    private static HelperData.Entry ensureSummoned(ServerPlayerEntity player) {
+    private static HelperData.Entry ensureSummoned(ServerPlayer player) {
         HelperData data = HelperData.get(player.getServer());
-        HelperData.Entry entry = data.getOrCreate(player.getUuid());
-        Helper helper = HelperManager.helperFor(player.getUuid());
+        HelperData.Entry entry = data.getOrCreate(player.getUUID());
+        Helper helper = HelperManager.helperFor(player.getUUID());
         if (!entry.active || helper.findEntity(player.getServer(), entry) == null) {
             helper.spawnNear(player, entry);
         }
@@ -219,16 +218,16 @@ public final class HelperCommands {
     }
 
     /** Online player by name, ignoring case, or null. */
-    static ServerPlayerEntity onlinePlayer(net.minecraft.server.MinecraftServer server, String name) {
-        for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
+    static ServerPlayer onlinePlayer(net.minecraft.server.MinecraftServer server, String name) {
+        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p.getGameProfile().getName().equalsIgnoreCase(name)) return p;
         }
         return null;
     }
 
     /** /helper send <player> [hand|haul]: the helper walks the items over to another player. */
-    static void send(ServerPlayerEntity player, String targetName, String what) {
-        ServerPlayerEntity target = onlinePlayer(player.getServer(), targetName);
+    static void send(ServerPlayer player, String targetName, String what) {
+        ServerPlayer target = onlinePlayer(player.getServer(), targetName);
         if (target == null) {
             Helper.say(player, "I can't find a player called " + targetName + " online.");
             return;
@@ -238,14 +237,14 @@ public final class HelperCommands {
             return;
         }
         HelperData.Entry entry = ensureSummoned(player);
-        Helper helper = HelperManager.helperFor(player.getUuid());
+        Helper helper = HelperManager.helperFor(player.getUUID());
         List<ItemStack> items = new ArrayList<>();
         boolean haul = what.equalsIgnoreCase("haul") || what.equalsIgnoreCase("all") || what.equalsIgnoreCase("everything");
         if (haul) {
             var inv = entry.inventory;
-            for (int i = 0; i < inv.size(); i++) {
-                ItemStack s = inv.getStack(i);
-                if (s.isEmpty() || s.isDamageable()) continue; // keep its tools
+            for (int i = 0; i < inv.getContainerSize(); i++) {
+                ItemStack s = inv.getItem(i);
+                if (s.isEmpty() || s.isDamageableItem()) continue; // keep its tools
                 items.add(s.copy());
             }
             if (items.isEmpty()) {
@@ -253,13 +252,13 @@ public final class HelperCommands {
                 return;
             }
             if (!helper.send(player, target, items)) return;
-            for (int i = 0; i < inv.size(); i++) {
-                ItemStack s = inv.getStack(i);
-                if (!s.isEmpty() && !s.isDamageable()) inv.setStack(i, ItemStack.EMPTY);
+            for (int i = 0; i < inv.getContainerSize(); i++) {
+                ItemStack s = inv.getItem(i);
+                if (!s.isEmpty() && !s.isDamageableItem()) inv.setItem(i, ItemStack.EMPTY);
             }
-            inv.markDirty();
+            inv.setChanged();
         } else {
-            ItemStack hand = player.getMainHandStack();
+            ItemStack hand = player.getMainHandItem();
             if (hand.isEmpty()) {
                 Helper.say(player, "Hold the thing you want me to take to " + target.getName().getString()
                         + " in your hand, then ask again. (Or /helper send " + target.getName().getString() + " haul for what I'm carrying.)");
@@ -267,29 +266,29 @@ public final class HelperCommands {
             }
             items.add(hand.copy());
             if (!helper.send(player, target, items)) return;
-            player.getInventory().removeStack(player.getInventory().selectedSlot);
+            player.getInventory().removeItemNoUpdate(player.getInventory().selected);
         }
-        target.sendMessage(Text.literal(player.getName().getString() + "'s helper is bringing you something!").formatted(Formatting.GOLD), true);
+        target.displayClientMessage(Component.literal(player.getName().getString() + "'s helper is bringing you something!").withStyle(ChatFormatting.GOLD), true);
     }
 
     /** /helper unstick, or "helper, are you stuck?" when it is. */
-    static void unstick(ServerPlayerEntity player) {
+    static void unstick(ServerPlayer player) {
         HelperData.Entry entry = ensureSummoned(player);
-        HelperManager.helperFor(player.getUuid()).unstick(player, entry);
+        HelperManager.helperFor(player.getUUID()).unstick(player, entry);
         Helper.say(player, "Phew, thanks! I'm out and right next to you. I'll pick up where I left off.");
     }
 
-    private static int summon(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-        HelperData.Entry entry = HelperData.get(player.getServer()).getOrCreate(player.getUuid());
-        HelperManager.helperFor(player.getUuid()).spawnNear(player, entry);
+    private static int summon(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperData.Entry entry = HelperData.get(player.getServer()).getOrCreate(player.getUUID());
+        HelperManager.helperFor(player.getUUID()).spawnNear(player, entry);
         Helper.say(player, "Hi! Tell me what to get with /helper collect <material> [amount]. "
                 + "Right-click me to give me tools.");
         return 1;
     }
 
-    private static int collect(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int collect(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         String raw = StringArgumentType.getString(ctx, "material").trim();
         int amount = DEFAULT_AMOUNT;
         int space = raw.lastIndexOf(' ');
@@ -309,65 +308,65 @@ public final class HelperCommands {
             Helper.say(player, e.getMessage());
             return 0;
         }
-        String wrongDim = Materials.wrongDimension(player.getServer(), spec, player.getServerWorld());
+        String wrongDim = Materials.wrongDimension(player.getServer(), spec, player.serverLevel());
         if (wrongDim != null) {
             Helper.say(player, wrongDim);
             return 0;
         }
         ensureSummoned(player);
-        HelperManager.helperFor(player.getUuid()).startJob(player, spec, amount);
+        HelperManager.helperFor(player.getUUID()).startJob(player, spec, amount);
         return 1;
     }
 
-    private static int stop(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-        HelperManager.helperFor(player.getUuid()).stop(player);
+    private static int stop(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperManager.helperFor(player.getUUID()).stop(player);
         Helper.say(player, "Okay, stopping. I'll follow you.");
         return 1;
     }
 
-    private static int deliver(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int deliver(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         ensureSummoned(player);
-        HelperManager.helperFor(player.getUuid()).deliverNow();
+        HelperManager.helperFor(player.getUUID()).deliverNow();
         Helper.say(player, "Coming to you with what I've got.");
         return 1;
     }
 
-    private static int status(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+    private static int status(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out. Use /helper summon");
             return 0;
         }
-        Helper.say(player, HelperManager.helperFor(player.getUuid()).status(entry.inventory));
+        Helper.say(player, HelperManager.helperFor(player.getUUID()).status(entry.inventory));
         return 1;
     }
 
-    private static int guard(CommandContext<ServerCommandSource> ctx, boolean on) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int guard(CommandContext<CommandSourceStack> ctx, boolean on) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         HelperData data = HelperData.get(player.getServer());
-        data.getOrCreate(player.getUuid()).guard = on;
-        data.markDirty();
+        data.getOrCreate(player.getUUID()).guard = on;
+        data.setDirty();
         Helper.say(player, on
                 ? "I'll protect you! I fight monsters that come after you, and anything you attack."
                 : "Okay, no fighting. I'll stay out of trouble.");
         return 1;
     }
 
-    private static int lookHelp(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int lookHelp(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         Helper.say(player, "Pick a mob for me to look like, e.g. /helper look creeper. "
                 + "Use /helper look me to make me look like you again.");
         return 1;
     }
 
-    private static int look(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int look(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         String raw = StringArgumentType.getString(ctx, "mob").trim();
         HelperData data = HelperData.get(player.getServer());
-        HelperData.Entry entry = data.getOrCreate(player.getUuid());
+        HelperData.Entry entry = data.getOrCreate(player.getUUID());
         String lower = raw.toLowerCase(java.util.Locale.ROOT);
         String newLook;
         String reply;
@@ -381,27 +380,27 @@ public final class HelperCommands {
                         + "to see the ones I can be.");
                 return 0;
             }
-            newLook = Registries.ENTITY_TYPE.getId(type).toString();
-            String mobName = type.getName().getString();
+            newLook = BuiltInRegistries.ENTITY_TYPE.getKey(type).toString();
+            String mobName = type.getDescription().getString();
             String article = "AEIOUaeiou".indexOf(mobName.isEmpty() ? 'x' : mobName.charAt(0)) >= 0 ? "an " : "a ";
             reply = "Ta-da! I'm " + article + mobName + " now. I'll still follow you and help.";
         }
         entry.look = newLook;
-        data.markDirty();
-        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUuid());
+        data.setDirty();
+        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUUID());
         Helper.say(player, entry.active ? reply : reply + " You'll see it when you /helper summon me.");
         return 1;
     }
 
-    private static int sizeHelp(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int sizeHelp(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         Helper.say(player, "Pick a size: /helper size small, normal or big, or a number from "
                 + Size.MIN + " to " + Size.MAX + " (1 is normal).");
         return 1;
     }
 
-    private static int size(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int size(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         String raw = StringArgumentType.getString(ctx, "size").toLowerCase(java.util.Locale.ROOT);
         float size;
         switch (raw) {
@@ -425,10 +424,10 @@ public final class HelperCommands {
             return 0;
         }
         HelperData data = HelperData.get(player.getServer());
-        HelperData.Entry entry = data.getOrCreate(player.getUuid());
+        HelperData.Entry entry = data.getOrCreate(player.getUUID());
         entry.size = size;
-        data.markDirty();
-        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUuid());
+        data.setDirty();
+        if (entry.active) HelperManager.refreshDisguise(player.getServer(), player.getUUID());
         String reply;
         if (size == 1f) {
             reply = "Back to normal size!";
@@ -444,28 +443,28 @@ public final class HelperCommands {
         return 1;
     }
 
-    private static int fish(CommandContext<ServerCommandSource> ctx, int amount) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int fish(CommandContext<CommandSourceStack> ctx, int amount) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         ensureSummoned(player);
-        HelperManager.helperFor(player.getUuid()).startFishing(player, amount);
+        HelperManager.helperFor(player.getUUID()).startFishing(player, amount);
         return 1;
     }
 
-    private static int farm(CommandContext<ServerCommandSource> ctx, int radius) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+    private static int farm(CommandContext<CommandSourceStack> ctx, int radius) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
         ensureSummoned(player);
-        HelperManager.helperFor(player.getUuid()).startFarming(player, radius);
+        HelperManager.helperFor(player.getUUID()).startFarming(player, radius);
         return 1;
     }
 
-    private static int ride(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+    private static int ride(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out. Use /helper summon");
             return 0;
         }
-        if (!HelperManager.helperFor(player.getUuid()).ride(player, entry)) {
+        if (!HelperManager.helperFor(player.getUUID()).ride(player, entry)) {
             Helper.say(player, "I need to be close by for you to hop on. Use /helper stop and I'll come to you.");
             return 0;
         }
@@ -473,14 +472,14 @@ public final class HelperCommands {
         return 1;
     }
 
-    private static int dismiss(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {
-        ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+    private static int dismiss(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        ServerPlayer player = ctx.getSource().getPlayerOrException();
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
         if (entry == null || !entry.active) {
             Helper.say(player, "You don't have a helper out.");
             return 0;
         }
-        HelperManager.helperFor(player.getUuid()).dismiss(player.getServer(), entry);
+        HelperManager.helperFor(player.getUUID()).dismiss(player.getServer(), entry);
         String held = Helper.summarize(entry.inventory, false);
         Helper.say(player, "Bye for now!" + (held.isEmpty() ? "" : " I'll hold on to " + held
                 + " until you summon me again."));

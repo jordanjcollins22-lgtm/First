@@ -1,57 +1,56 @@
 package com.helpermod;
 
 import net.fabricmc.fabric.api.entity.FakePlayer;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.DoorBlock;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.SignBlockEntity;
-import net.minecraft.block.entity.SignText;
-import net.minecraft.block.enums.DoubleBlockHalf;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.passive.HorseEntity;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.DyeableItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.screen.GenericContainerScreenHandler;
-import net.minecraft.screen.ScreenHandlerType;
-import net.minecraft.screen.SimpleNamedScreenHandlerFactory;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Hand;
-import net.minecraft.util.TypedActionResult;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.village.VillagerProfession;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.PersistentState;
-import net.minecraft.world.World;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.DyeableLeatherItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.Vec3;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -109,28 +108,28 @@ final class Golf {
     // Saved state
     // ---------------------------------------------------------------------------------------
 
-    static final class Data extends PersistentState {
+    static final class Data extends SavedData {
         private static final String ID = "helpermod_golf";
         BlockPos centre;
         final Set<UUID> welcomed = new HashSet<>();
 
         static Data get(MinecraftServer server) {
-            return server.getOverworld().getPersistentStateManager().getOrCreate(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
         }
 
-        private static Data fromNbt(NbtCompound nbt) {
+        private static Data fromNbt(CompoundTag nbt) {
             Data d = new Data();
-            if (nbt.contains("centre")) d.centre = BlockPos.fromLong(nbt.getLong("centre"));
-            NbtList list = nbt.getList("welcomed", NbtElement.INT_ARRAY_TYPE);
-            for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.NbtHelper.toUuid(list.get(i)));
+            if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLong("centre"));
+            ListTag list = nbt.getList("welcomed", Tag.TAG_INT_ARRAY);
+            for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.NbtUtils.loadUUID(list.get(i)));
             return d;
         }
 
         @Override
-        public NbtCompound writeNbt(NbtCompound nbt) {
+        public CompoundTag save(CompoundTag nbt) {
             if (centre != null) nbt.putLong("centre", centre.asLong());
-            NbtList list = new NbtList();
-            for (UUID id : welcomed) list.add(net.minecraft.nbt.NbtHelper.fromUuid(id));
+            ListTag list = new ListTag();
+            for (UUID id : welcomed) list.add(net.minecraft.nbt.NbtUtils.createUUID(id));
             nbt.put("welcomed", list);
             return nbt;
         }
@@ -163,40 +162,40 @@ final class Golf {
             new Club("driver", "Driver", Items.DIAMOND_SHOVEL, 1.45, 0.42, "the long one, for tee shots"),
     };
 
-    private static ItemStack tagged(Item item, int count, String kind, String name, Formatting color, String lore) {
+    private static ItemStack tagged(Item item, int count, String kind, String name, ChatFormatting color, String lore) {
         ItemStack stack = new ItemStack(item, count);
-        stack.getOrCreateNbt().putString(NBT, kind);
-        stack.setCustomName(Text.literal(name).styled(s -> s.withItalic(false)).formatted(color));
+        stack.getOrCreateTag().putString(NBT, kind);
+        stack.setHoverName(Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(color));
         if (lore != null) {
-            NbtCompound display = stack.getOrCreateSubNbt("display");
-            NbtList l = new NbtList();
-            l.add(net.minecraft.nbt.NbtString.of(Text.Serializer.toJson(Text.literal(lore).formatted(Formatting.GRAY))));
+            CompoundTag display = stack.getOrCreateTagElement("display");
+            ListTag l = new ListTag();
+            l.add(net.minecraft.nbt.StringTag.valueOf(Component.Serializer.toJson(Component.literal(lore).withStyle(ChatFormatting.GRAY))));
             display.put("Lore", l);
         }
         return stack;
     }
 
     static ItemStack club(Club c) {
-        return tagged(c.item(), 1, "club:" + c.id(), c.name(), Formatting.GREEN, "Golf club: " + c.what());
+        return tagged(c.item(), 1, "club:" + c.id(), c.name(), ChatFormatting.GREEN, "Golf club: " + c.what());
     }
 
     static ItemStack balls(int n) {
-        return tagged(Items.SNOWBALL, n, "ball", "Golf Ball", Formatting.WHITE, "Right-click the ground to place it");
+        return tagged(Items.SNOWBALL, n, "ball", "Golf Ball", ChatFormatting.WHITE, "Right-click the ground to place it");
     }
 
     static ItemStack deed(String kind) {
         return tagged(Items.PAPER, 1, "deed:" + kind, kind.equals("villa") ? "Fairway Villa Deed" : "Fairway Cottage Deed",
-                Formatting.GOLD, "Right-click the ground to build your " + kind + " there");
+                ChatFormatting.GOLD, "Right-click the ground to build your " + kind + " there");
     }
 
     static ItemStack cap() {
-        ItemStack cap = tagged(Items.LEATHER_HELMET, 1, "cap", "Golf Cap", Formatting.WHITE, "Looking sharp on the green");
-        ((DyeableItem) Items.LEATHER_HELMET).setColor(cap, 0xF2F2F2);
+        ItemStack cap = tagged(Items.LEATHER_HELMET, 1, "cap", "Golf Cap", ChatFormatting.WHITE, "Looking sharp on the green");
+        ((DyeableLeatherItem) Items.LEATHER_HELMET).setColor(cap, 0xF2F2F2);
         return cap;
     }
 
     private static String kindOf(ItemStack stack) {
-        NbtCompound nbt = stack.getNbt();
+        CompoundTag nbt = stack.getTag();
         return nbt != null && nbt.contains(NBT) ? nbt.getString(NBT) : null;
     }
 
@@ -213,39 +212,39 @@ final class Golf {
 
     static void tick(MinecraftServer server) {
         tickBalls(server);
-        if (server.getTicks() % 40 != 0) return;
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+        if (server.getTickCount() % 40 != 0) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerWorld world = player.getServerWorld();
+            ServerLevel world = player.serverLevel();
             if (!Planets.keyOf(world).equals(PLANET)) continue;
             Data data = Data.get(server);
             if (data.centre == null) {
-                if (player.hasVehicle() || !player.isOnGround()) continue;
+                if (player.isPassenger() || !player.onGround()) continue;
                 BlockPos centre = build(world, player);
                 if (centre == null) continue;
                 data.centre = centre;
-                data.markDirty();
+                data.setDirty();
             }
-            if (TOLD.add(player.getUuid())) {
+            if (TOLD.add(player.getUUID())) {
                 Helper.say(player, "Welcome to Fairway! The Fairway Golf Club is " + where(player, data.centre)
                         + ". Talk to the Golf Pro in the clubhouse for clubs, balls, carts and houses.");
             }
-            if (data.welcomed.add(player.getUuid())) {
-                data.markDirty();
-                player.getInventory().offerOrDrop(club(CLUBS[0]));
-                player.getInventory().offerOrDrop(balls(3));
+            if (data.welcomed.add(player.getUUID())) {
+                data.setDirty();
+                player.getInventory().placeItemBackInInventory(club(CLUBS[0]));
+                player.getInventory().placeItemBackInInventory(balls(3));
                 Helper.say(player, "Here's a free Putter and 3 Golf Balls to get you started. Try the mini golf first!");
             }
         }
     }
 
-    private static BlockPos build(ServerWorld world, ServerPlayerEntity player) {
+    private static BlockPos build(ServerLevel world, ServerPlayer player) {
         // Put the club just south of the player, so the course doesn't land on top of them.
-        int cx = MathHelper.floor(player.getX());
-        int cz = MathHelper.floor(player.getZ()) + AREA_Z1 + 24;
+        int cx = Mth.floor(player.getX());
+        int cz = Mth.floor(player.getZ()) + AREA_Z1 + 24;
         world.getChunk(cx >> 4, cz >> 4);
-        int g = world.getTopY(Heightmap.Type.OCEAN_FLOOR_WG, cx, cz) - 1;
-        if (g < world.getBottomY() + 16 || g > world.getTopY() - 40) return null;
+        int g = world.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, cx, cz) - 1;
+        if (g < world.getMinBuildHeight() + 16 || g > world.getMaxBuildHeight() - 40) return null;
         g = Math.max(g, 52); // above the lakes
         BlockPos c = new BlockPos(cx, g, cz);
         flatten(world, c);
@@ -257,108 +256,108 @@ final class Golf {
         return c;
     }
 
-    private static void set(ServerWorld world, BlockPos pos, BlockState state) {
+    private static void set(ServerLevel world, BlockPos pos, BlockState state) {
         if (world.getBlockState(pos) == state) return;
-        world.setBlockState(pos, state, Block.NOTIFY_LISTENERS);
+        world.setBlock(pos, state, Block.UPDATE_CLIENTS);
     }
 
     private static BlockPos at(BlockPos c, int x, int y, int z) {
-        return c.add(x, y, z);
+        return c.offset(x, y, z);
     }
 
     /** Level the whole course: grass at ground level, dirt under it down to the land, clear air above. */
-    private static void flatten(ServerWorld world, BlockPos c) {
-        BlockState air = Blocks.AIR.getDefaultState(), dirt = Blocks.DIRT.getDefaultState(), grass = Blocks.GRASS_BLOCK.getDefaultState();
+    private static void flatten(ServerLevel world, BlockPos c) {
+        BlockState air = Blocks.AIR.defaultBlockState(), dirt = Blocks.DIRT.defaultBlockState(), grass = Blocks.GRASS_BLOCK.defaultBlockState();
         for (int x = AREA_X0; x <= AREA_X1; x++) {
             for (int z = AREA_Z0; z <= AREA_Z1; z++) {
                 BlockPos col = at(c, x, 0, z);
                 world.getChunk(col.getX() >> 4, col.getZ() >> 4);
                 for (int y = 1; y <= 22; y++) {
-                    BlockPos p = col.up(y);
+                    BlockPos p = col.above(y);
                     if (!world.getBlockState(p).isAir()) set(world, p, air);
                 }
                 set(world, col, grass);
                 for (int y = 1; y <= 30; y++) {
-                    BlockPos p = col.down(y);
+                    BlockPos p = col.below(y);
                     BlockState s = world.getBlockState(p);
-                    if (s.isSolidBlock(world, p) && y > 3) break;
+                    if (s.isRedstoneConductor(world, p) && y > 3) break;
                     set(world, p, dirt);
                 }
             }
         }
     }
 
-    private static void clubhouse(ServerWorld world, BlockPos c) {
+    private static void clubhouse(ServerLevel world, BlockPos c) {
         int hw = 6, hd = 4, h = 5;
         for (int x = -hw; x <= hw; x++) {
             for (int z = -hd; z <= hd; z++) {
                 boolean edge = Math.abs(x) == hw || Math.abs(z) == hd;
                 boolean corner = Math.abs(x) == hw && Math.abs(z) == hd;
-                set(world, at(c, x, 0, z), Blocks.BIRCH_PLANKS.getDefaultState());
+                set(world, at(c, x, 0, z), Blocks.BIRCH_PLANKS.defaultBlockState());
                 for (int y = 1; y < h; y++) {
                     BlockPos p = at(c, x, y, z);
-                    if (corner) set(world, p, Blocks.STRIPPED_BIRCH_LOG.getDefaultState());
-                    else if (edge) set(world, p, y == 2 && (x + z) % 2 == 0 ? Blocks.GLASS_PANE.getDefaultState() : Blocks.WHITE_CONCRETE.getDefaultState());
-                    else set(world, p, Blocks.AIR.getDefaultState());
+                    if (corner) set(world, p, Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
+                    else if (edge) set(world, p, y == 2 && (x + z) % 2 == 0 ? Blocks.GLASS_PANE.defaultBlockState() : Blocks.WHITE_CONCRETE.defaultBlockState());
+                    else set(world, p, Blocks.AIR.defaultBlockState());
                 }
-                set(world, at(c, x, h, z), Blocks.DARK_OAK_SLAB.getDefaultState());
+                set(world, at(c, x, h, z), Blocks.DARK_OAK_SLAB.defaultBlockState());
             }
         }
-        for (int[] l : new int[][]{{-3, 0}, {3, 0}}) set(world, at(c, l[0], h - 1, l[1]), Blocks.LANTERN.getDefaultState()
-                .with(net.minecraft.block.LanternBlock.HANGING, true));
+        for (int[] l : new int[][]{{-3, 0}, {3, 0}}) set(world, at(c, l[0], h - 1, l[1]), Blocks.LANTERN.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true));
         // Front door facing the course (east, towards the mini golf).
-        BlockState lower = Blocks.BIRCH_DOOR.getDefaultState().with(DoorBlock.FACING, Direction.WEST).with(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+        BlockState lower = Blocks.BIRCH_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.WEST).setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
         set(world, at(c, hw, 1, 0), lower);
-        set(world, at(c, hw, 2, 0), lower.with(DoorBlock.HALF, DoubleBlockHalf.UPPER));
-        BlockState lower2 = Blocks.BIRCH_DOOR.getDefaultState().with(DoorBlock.FACING, Direction.EAST).with(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+        set(world, at(c, hw, 2, 0), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        BlockState lower2 = Blocks.BIRCH_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST).setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
         set(world, at(c, -hw, 1, 0), lower2);
-        set(world, at(c, -hw, 2, 0), lower2.with(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        set(world, at(c, -hw, 2, 0), lower2.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
         // The pro shop counter and some club racks.
-        for (int z = -2; z <= 2; z++) set(world, at(c, -2, 1, z), Blocks.STRIPPED_BIRCH_LOG.getDefaultState());
-        set(world, at(c, -4, 1, -3), Blocks.BARREL.getDefaultState());
-        set(world, at(c, -4, 1, 3), Blocks.BARREL.getDefaultState());
+        for (int z = -2; z <= 2; z++) set(world, at(c, -2, 1, z), Blocks.STRIPPED_BIRCH_LOG.defaultBlockState());
+        set(world, at(c, -4, 1, -3), Blocks.BARREL.defaultBlockState());
+        set(world, at(c, -4, 1, 3), Blocks.BARREL.defaultBlockState());
         for (int x = 1; x <= 4; x++) {
-            set(world, at(c, x, 1, -3), Blocks.BIRCH_FENCE.getDefaultState());
-            set(world, at(c, x, 1, 3), Blocks.BIRCH_FENCE.getDefaultState());
+            set(world, at(c, x, 1, -3), Blocks.BIRCH_FENCE.defaultBlockState());
+            set(world, at(c, x, 1, 3), Blocks.BIRCH_FENCE.defaultBlockState());
         }
         sign(world, at(c, hw + 1, 1, 2), Direction.EAST, "Fairway", "Golf Club", "Pro shop inside", "Holes 1-9");
         pro(world, at(c, -4, 1, 0));
     }
 
-    private static void pro(ServerWorld world, BlockPos at) {
-        VillagerEntity v = EntityType.VILLAGER.create(world);
+    private static void pro(ServerLevel world, BlockPos at) {
+        Villager v = EntityType.VILLAGER.create(world);
         if (v == null) return;
-        v.refreshPositionAndAngles(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
-        v.initialize(world, world.getLocalDifficulty(at), SpawnReason.STRUCTURE, null, null);
-        v.setVillagerData(v.getVillagerData().withProfession(VillagerProfession.NITWIT));
-        v.setCustomName(Text.literal("Golf Pro").formatted(Formatting.GREEN));
+        v.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), MobSpawnType.STRUCTURE, null, null);
+        v.setVillagerData(v.getVillagerData().setProfession(VillagerProfession.NITWIT));
+        v.setCustomName(Component.literal("Golf Pro").withStyle(ChatFormatting.GREEN));
         v.setCustomNameVisible(true);
-        v.setPersistent();
-        v.setAiDisabled(true);
+        v.setPersistenceRequired();
+        v.setNoAi(true);
         v.setInvulnerable(true);
-        v.addCommandTag(PRO_TAG);
-        world.spawnEntity(v);
+        v.addTag(PRO_TAG);
+        world.addFreshEntity(v);
     }
 
-    private static void sign(ServerWorld world, BlockPos pos, Direction facing, String... lines) {
+    private static void sign(ServerLevel world, BlockPos pos, Direction facing, String... lines) {
         int rot = switch (facing) {
             case SOUTH -> 0;
             case WEST -> 4;
             case NORTH -> 8;
             default -> 12; // EAST
         };
-        set(world, pos, Blocks.BIRCH_SIGN.getDefaultState().with(net.minecraft.block.SignBlock.ROTATION, rot));
+        set(world, pos, Blocks.BIRCH_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.StandingSignBlock.ROTATION, rot));
         BlockEntity be = world.getBlockEntity(pos);
         if (be instanceof SignBlockEntity s) {
             SignText text = new SignText();
-            for (int i = 0; i < Math.min(4, lines.length); i++) text = text.withMessage(i, Text.literal(lines[i]));
+            for (int i = 0; i < Math.min(4, lines.length); i++) text = text.setMessage(i, Component.literal(lines[i]));
             s.setText(text, true);
-            s.markDirty();
-            world.updateListeners(pos, world.getBlockState(pos), world.getBlockState(pos), Block.NOTIFY_LISTENERS);
+            s.setChanged();
+            world.sendBlockUpdated(pos, world.getBlockState(pos), world.getBlockState(pos), Block.UPDATE_CLIENTS);
         }
     }
 
-    private static void disc(ServerWorld world, BlockPos c, int x0, int z0, int r, BlockState state) {
+    private static void disc(ServerLevel world, BlockPos c, int x0, int z0, int r, BlockState state) {
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
                 if (x * x + z * z <= r * r + r) set(world, at(c, x0 + x, 0, z0 + z), state);
@@ -367,10 +366,10 @@ final class Golf {
     }
 
     /** A full hole: tee box and sign, a fairway strip, hazards, then the green with its cup and flag. */
-    private static void hole(ServerWorld world, BlockPos c, Hole h) {
+    private static void hole(ServerLevel world, BlockPos c, Hole h) {
         int dx = h.cupX() - h.teeX(), dz = h.cupZ() - h.teeZ();
         int len = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
-        BlockState fairway = Blocks.MOSS_BLOCK.getDefaultState();
+        BlockState fairway = Blocks.MOSS_BLOCK.defaultBlockState();
         for (int s = 0; s <= len; s++) {
             double t = s / (double) Math.max(1, len);
             int fx = (int) Math.round(h.teeX() + dx * t), fz = (int) Math.round(h.teeZ() + dz * t);
@@ -378,54 +377,54 @@ final class Golf {
             for (int ox = -w; ox <= w; ox++) for (int oz = -w; oz <= w; oz++) set(world, at(c, fx + ox, 0, fz + oz), fairway);
         }
         for (Hazard z : h.hazards()) {
-            disc(world, c, z.x(), z.z(), z.r(), z.water() ? Blocks.WATER.getDefaultState() : Blocks.SAND.getDefaultState());
+            disc(world, c, z.x(), z.z(), z.r(), z.water() ? Blocks.WATER.defaultBlockState() : Blocks.SAND.defaultBlockState());
         }
-        disc(world, c, h.cupX(), h.cupZ(), 4, Blocks.GREEN_CONCRETE.getDefaultState());
-        for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++) set(world, at(c, h.teeX() + ox, 0, h.teeZ() + oz), Blocks.SMOOTH_STONE.getDefaultState());
+        disc(world, c, h.cupX(), h.cupZ(), 4, Blocks.GREEN_CONCRETE.defaultBlockState());
+        for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++) set(world, at(c, h.teeX() + ox, 0, h.teeZ() + oz), Blocks.SMOOTH_STONE.defaultBlockState());
         cup(world, c, h, true);
-        Direction back = Direction.getFacing(-dx, 0, -dz);
-        BlockPos signAt = at(c, h.teeX(), 1, h.teeZ()).offset(back, 2).offset(back.rotateYClockwise(), 2);
+        Direction back = Direction.getNearest(-dx, 0, -dz);
+        BlockPos signAt = at(c, h.teeX(), 1, h.teeZ()).relative(back, 2).relative(back.getClockWise(), 2);
         sign(world, signAt, back.getOpposite() == Direction.UP ? Direction.SOUTH : back,
                 "Hole " + h.number(), h.kind(), "Par " + h.par(), len + " blocks");
     }
 
     /** A mini golf lane: a walled carpet-green strip with a few obstacles. */
-    private static void miniLane(ServerWorld world, BlockPos c, Hole h) {
+    private static void miniLane(ServerLevel world, BlockPos c, Hole h) {
         int z0 = h.teeZ();
-        BlockState lane = Blocks.LIME_CONCRETE.getDefaultState(), wall = Blocks.STRIPPED_OAK_LOG.getDefaultState()
-                .with(net.minecraft.block.PillarBlock.AXIS, Direction.Axis.X);
+        BlockState lane = Blocks.LIME_CONCRETE.defaultBlockState(), wall = Blocks.STRIPPED_OAK_LOG.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.RotatedPillarBlock.AXIS, Direction.Axis.X);
         for (int x = MINI_X0 - 1; x <= MINI_X1 + 1; x++) {
             for (int z = -2; z <= 2; z++) {
                 boolean side = Math.abs(z) == 2 || x == MINI_X0 - 1 || x == MINI_X1 + 1;
-                set(world, at(c, x, 0, z0 + z), side ? Blocks.STRIPPED_OAK_LOG.getDefaultState() : lane);
+                set(world, at(c, x, 0, z0 + z), side ? Blocks.STRIPPED_OAK_LOG.defaultBlockState() : lane);
                 if (side) set(world, at(c, x, 1, z0 + z), wall);
             }
         }
         if (h.number() == 2) { // a post in the middle: go round it
-            set(world, at(c, 23, 1, z0), Blocks.STRIPPED_OAK_LOG.getDefaultState());
+            set(world, at(c, 23, 1, z0), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
         } else if (h.number() == 3) { // a zig-zag
-            set(world, at(c, 19, 1, z0 - 1), Blocks.STRIPPED_OAK_LOG.getDefaultState());
-            set(world, at(c, 19, 1, z0), Blocks.STRIPPED_OAK_LOG.getDefaultState());
-            set(world, at(c, 27, 1, z0 + 1), Blocks.STRIPPED_OAK_LOG.getDefaultState());
-            set(world, at(c, 27, 1, z0), Blocks.STRIPPED_OAK_LOG.getDefaultState());
+            set(world, at(c, 19, 1, z0 - 1), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+            set(world, at(c, 19, 1, z0), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+            set(world, at(c, 27, 1, z0 + 1), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
+            set(world, at(c, 27, 1, z0), Blocks.STRIPPED_OAK_LOG.defaultBlockState());
         }
-        set(world, at(c, h.teeX(), 0, h.teeZ()), Blocks.WHITE_CONCRETE.getDefaultState());
+        set(world, at(c, h.teeX(), 0, h.teeZ()), Blocks.WHITE_CONCRETE.defaultBlockState());
         cup(world, c, h, false);
         sign(world, at(c, MINI_X0 - 1, 2, z0), Direction.WEST, "Hole " + h.number(), "Mini golf", "Par " + h.par(), "");
     }
 
-    private static void cup(ServerWorld world, BlockPos c, Hole h, boolean flag) {
+    private static void cup(ServerLevel world, BlockPos c, Hole h, boolean flag) {
         BlockPos cup = at(c, h.cupX(), 0, h.cupZ());
-        set(world, cup, Blocks.AIR.getDefaultState());
-        set(world, cup.down(), Blocks.WHITE_CONCRETE.getDefaultState());
+        set(world, cup, Blocks.AIR.defaultBlockState());
+        set(world, cup.below(), Blocks.WHITE_CONCRETE.defaultBlockState());
         if (flag) {
-            BlockPos pole = cup.add(1, 0, 1);
-            for (int y = 1; y <= 3; y++) set(world, pole.up(y), Blocks.BIRCH_FENCE.getDefaultState());
-            set(world, pole.up(4), Blocks.RED_WOOL.getDefaultState());
+            BlockPos pole = cup.offset(1, 0, 1);
+            for (int y = 1; y <= 3; y++) set(world, pole.above(y), Blocks.BIRCH_FENCE.defaultBlockState());
+            set(world, pole.above(4), Blocks.RED_WOOL.defaultBlockState());
         }
     }
 
-    private static String where(ServerPlayerEntity player, BlockPos c) {
+    private static String where(ServerPlayer player, BlockPos c) {
         double dx = c.getX() + 0.5 - player.getX(), dz = c.getZ() + 0.5 - player.getZ();
         int dist = (int) Math.round(Math.sqrt(dx * dx + dz * dz));
         if (dist < 12) return "right here";
@@ -438,37 +437,37 @@ final class Golf {
     // Playing
     // ---------------------------------------------------------------------------------------
 
-    static TypedActionResult<ItemStack> onUseItem(PlayerEntity p, World w, Hand hand) {
-        ItemStack stack = p.getStackInHand(hand);
+    static InteractionResultHolder<ItemStack> onUseItem(Player p, Level w, InteractionHand hand) {
+        ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
-        if (kind == null) return TypedActionResult.pass(stack);
-        if (w.isClient) return kind.equals("cap") ? TypedActionResult.pass(stack) : TypedActionResult.success(stack);
-        if (!(p instanceof ServerPlayerEntity player) || p instanceof FakePlayer) return TypedActionResult.pass(stack);
+        if (kind == null) return InteractionResultHolder.pass(stack);
+        if (w.isClientSide) return kind.equals("cap") ? InteractionResultHolder.pass(stack) : InteractionResultHolder.success(stack);
+        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResultHolder.pass(stack);
         if (kind.equals("ball") || kind.startsWith("deed:")) {
-            player.sendMessage(Text.literal("Right-click the ground to use it.").formatted(Formatting.YELLOW), true);
-            return TypedActionResult.success(stack);
+            player.displayClientMessage(Component.literal("Right-click the ground to use it.").withStyle(ChatFormatting.YELLOW), true);
+            return InteractionResultHolder.success(stack);
         }
         Club club = clubOf(stack);
         if (club != null) {
             swing(player, club);
-            return TypedActionResult.success(stack);
+            return InteractionResultHolder.success(stack);
         }
-        return TypedActionResult.pass(stack);
+        return InteractionResultHolder.pass(stack);
     }
 
-    static ActionResult onUseBlock(PlayerEntity p, World w, Hand hand, BlockHitResult hit) {
-        ItemStack stack = p.getStackInHand(hand);
+    static InteractionResult onUseBlock(Player p, Level w, InteractionHand hand, BlockHitResult hit) {
+        ItemStack stack = p.getItemInHand(hand);
         String kind = kindOf(stack);
-        if (kind == null || kind.equals("cap")) return ActionResult.PASS;
-        if (w.isClient) return ActionResult.SUCCESS;
-        if (!(p instanceof ServerPlayerEntity player) || p instanceof FakePlayer) return ActionResult.PASS;
-        BlockPos top = hit.getBlockPos().up();
+        if (kind == null || kind.equals("cap")) return InteractionResult.PASS;
+        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (!(p instanceof ServerPlayer player) || p instanceof FakePlayer) return InteractionResult.PASS;
+        BlockPos top = hit.getBlockPos().above();
         if (kind.equals("ball")) {
-            placeBall(player, (ServerWorld) w, top);
-            if (!player.isCreative()) stack.decrement(1);
+            placeBall(player, (ServerLevel) w, top);
+            if (!player.isCreative()) stack.shrink(1);
         } else if (kind.startsWith("deed:")) {
-            if (House.build((ServerWorld) w, top, player.getHorizontalFacing(), kind.substring(5).equals("villa"))) {
-                if (!player.isCreative()) stack.decrement(1);
+            if (House.build((ServerLevel) w, top, player.getDirection(), kind.substring(5).equals("villa"))) {
+                if (!player.isCreative()) stack.shrink(1);
                 Helper.say(player, "Your " + kind.substring(5) + " is built! Make yourself at home.");
             } else {
                 Helper.say(player, "There isn't enough open space here for that. Try a flat, clear spot.");
@@ -477,83 +476,83 @@ final class Golf {
             Club club = clubOf(stack);
             if (club != null) swing(player, club);
         }
-        return ActionResult.SUCCESS;
+        return InteractionResult.SUCCESS;
     }
 
-    static ActionResult onUseEntity(PlayerEntity p, World w, Hand hand, Entity entity, EntityHitResult hit) {
-        if (!entity.getCommandTags().contains(PRO_TAG)) return ActionResult.PASS;
-        if (w.isClient) return ActionResult.SUCCESS;
-        if (hand == Hand.MAIN_HAND && p instanceof ServerPlayerEntity player) openShop(player);
-        return ActionResult.SUCCESS;
+    static InteractionResult onUseEntity(Player p, Level w, InteractionHand hand, Entity entity, EntityHitResult hit) {
+        if (!entity.getTags().contains(PRO_TAG)) return InteractionResult.PASS;
+        if (w.isClientSide) return InteractionResult.SUCCESS;
+        if (hand == InteractionHand.MAIN_HAND && p instanceof ServerPlayer player) openShop(player);
+        return InteractionResult.SUCCESS;
     }
 
-    private static void placeBall(ServerPlayerEntity player, ServerWorld world, BlockPos at) {
+    private static void placeBall(ServerPlayer player, ServerLevel world, BlockPos at) {
         ItemEntity old = ball(player);
         if (old != null) {
             old.discard();
-            player.getInventory().offerOrDrop(balls(1));
+            player.getInventory().placeItemBackInInventory(balls(1));
         }
         ItemStack look = new ItemStack(Items.SNOWBALL);
-        look.getOrCreateNbt().putLong("HelperGolfId", world.getRandom().nextLong()); // never merges
+        look.getOrCreateTag().putLong("HelperGolfId", world.getRandom().nextLong()); // never merges
         ItemEntity ball = new ItemEntity(world, at.getX() + 0.5, at.getY() + 0.05, at.getZ() + 0.5, look, 0, 0, 0);
-        ball.setPickupDelayInfinite();
-        ball.setNeverDespawn();
-        ball.addCommandTag(BALL_TAG);
-        world.spawnEntity(ball);
-        Round r = ROUNDS.computeIfAbsent(player.getUuid(), k -> new Round());
-        r.ball = ball.getUuid();
+        ball.setNeverPickUp();
+        ball.setUnlimitedLifetime();
+        ball.addTag(BALL_TAG);
+        world.addFreshEntity(ball);
+        Round r = ROUNDS.computeIfAbsent(player.getUUID(), k -> new Round());
+        r.ball = ball.getUUID();
         r.strokes = 0;
-        player.sendMessage(Text.literal("Ball placed. Stand next to it and right-click with a club to hit it the way you look. Sneak for a softer shot.")
-                .formatted(Formatting.GREEN), true);
+        player.displayClientMessage(Component.literal("Ball placed. Stand next to it and right-click with a club to hit it the way you look. Sneak for a softer shot.")
+                .withStyle(ChatFormatting.GREEN), true);
     }
 
-    private static ItemEntity ball(ServerPlayerEntity player) {
-        Round r = ROUNDS.get(player.getUuid());
+    private static ItemEntity ball(ServerPlayer player) {
+        Round r = ROUNDS.get(player.getUUID());
         if (r == null || r.ball == null) return null;
-        Entity e = player.getServerWorld().getEntity(r.ball);
+        Entity e = player.serverLevel().getEntity(r.ball);
         return e instanceof ItemEntity ie && ie.isAlive() ? ie : null;
     }
 
-    private static void swing(ServerPlayerEntity player, Club club) {
+    private static void swing(ServerPlayer player, Club club) {
         ItemEntity ball = ball(player);
         if (ball == null) {
-            player.sendMessage(Text.literal("Place a Golf Ball first (right-click the ground with one).").formatted(Formatting.YELLOW), true);
+            player.displayClientMessage(Component.literal("Place a Golf Ball first (right-click the ground with one).").withStyle(ChatFormatting.YELLOW), true);
             return;
         }
-        if (ball.squaredDistanceTo(player) > 3.5 * 3.5) {
-            player.sendMessage(Text.literal("Get closer to your ball (it's " + (int) Math.sqrt(ball.squaredDistanceTo(player)) + " blocks away).")
-                    .formatted(Formatting.YELLOW), true);
+        if (ball.distanceToSqr(player) > 3.5 * 3.5) {
+            player.displayClientMessage(Component.literal("Get closer to your ball (it's " + (int) Math.sqrt(ball.distanceToSqr(player)) + " blocks away).")
+                    .withStyle(ChatFormatting.YELLOW), true);
             return;
         }
-        if (ball.getVelocity().horizontalLengthSquared() > 0.003) {
-            player.sendMessage(Text.literal("Wait for the ball to stop.").formatted(Formatting.YELLOW), true);
+        if (ball.getDeltaMovement().horizontalDistanceSqr() > 0.003) {
+            player.displayClientMessage(Component.literal("Wait for the ball to stop.").withStyle(ChatFormatting.YELLOW), true);
             return;
         }
-        double yaw = Math.toRadians(player.getYaw());
-        double soft = player.isSneaking() ? 0.5 : 1.0;
+        double yaw = Math.toRadians(player.getYRot());
+        double soft = player.isShiftKeyDown() ? 0.5 : 1.0;
         double h = club.power() * soft, v = club.lift() * soft;
-        ball.setVelocity(-Math.sin(yaw) * h, v + 0.05, Math.cos(yaw) * h);
-        ball.velocityModified = true;
-        Round r = ROUNDS.get(player.getUuid());
+        ball.setDeltaMovement(-Math.sin(yaw) * h, v + 0.05, Math.cos(yaw) * h);
+        ball.hurtMarked = true;
+        Round r = ROUNDS.get(player.getUUID());
         r.strokes++;
-        ServerWorld world = player.getServerWorld();
-        world.playSound(null, ball.getBlockPos(), club.id().equals("putter") ? SoundEvents.BLOCK_WOOD_HIT : SoundEvents.ENTITY_PLAYER_ATTACK_STRONG,
-                SoundCategory.PLAYERS, 0.8f, 1.6f);
-        world.spawnParticles(ParticleTypes.CRIT, ball.getX(), ball.getY() + 0.1, ball.getZ(), 6, 0.1, 0.1, 0.1, 0.1);
-        player.swingHand(Hand.MAIN_HAND, true);
-        player.sendMessage(Text.literal(club.name() + " - stroke " + r.strokes).formatted(Formatting.AQUA), true);
+        ServerLevel world = player.serverLevel();
+        world.playSound(null, ball.blockPosition(), club.id().equals("putter") ? SoundEvents.WOOD_HIT : SoundEvents.PLAYER_ATTACK_STRONG,
+                SoundSource.PLAYERS, 0.8f, 1.6f);
+        world.sendParticles(ParticleTypes.CRIT, ball.getX(), ball.getY() + 0.1, ball.getZ(), 6, 0.1, 0.1, 0.1, 0.1);
+        player.swing(InteractionHand.MAIN_HAND, true);
+        player.displayClientMessage(Component.literal(club.name() + " - stroke " + r.strokes).withStyle(ChatFormatting.AQUA), true);
     }
 
     /** Pick your ball back up: /helper golf ball */
-    static void pickUp(ServerPlayerEntity player) {
+    static void pickUp(ServerPlayer player) {
         ItemEntity ball = ball(player);
         if (ball == null) {
             Helper.say(player, "You don't have a ball in play.");
             return;
         }
         ball.discard();
-        ROUNDS.remove(player.getUuid());
-        player.getInventory().offerOrDrop(balls(1));
+        ROUNDS.remove(player.getUUID());
+        player.getInventory().placeItemBackInInventory(balls(1));
         Helper.say(player, "Ball picked up.");
     }
 
@@ -562,7 +561,7 @@ final class Golf {
         Data data = Data.get(server);
         for (var it = ROUNDS.entrySet().iterator(); it.hasNext(); ) {
             var e = it.next();
-            ServerPlayerEntity player = server.getPlayerManager().getPlayer(e.getKey());
+            ServerPlayer player = server.getPlayerList().getPlayer(e.getKey());
             Round r = e.getValue();
             if (player == null || r.ball == null) continue;
             ItemEntity ball = ball(player);
@@ -570,17 +569,17 @@ final class Golf {
                 it.remove();
                 continue;
             }
-            if (ball.isTouchingWater()) {
+            if (ball.isInWater()) {
                 ball.discard();
                 it.remove();
-                player.getInventory().offerOrDrop(balls(1));
+                player.getInventory().placeItemBackInInventory(balls(1));
                 Helper.say(player, "Splash! Your ball went in the water. Here it is back; place it again and add a stroke.");
                 continue;
             }
-            if (data.centre == null || !Planets.keyOf(ball.getWorld()).equals(PLANET)) continue;
-            BlockPos bp = ball.getBlockPos();
+            if (data.centre == null || !Planets.keyOf(ball.level()).equals(PLANET)) continue;
+            BlockPos bp = ball.blockPosition();
             for (Hole h : HOLES) {
-                BlockPos cup = data.centre.add(h.cupX(), 0, h.cupZ());
+                BlockPos cup = data.centre.offset(h.cupX(), 0, h.cupZ());
                 if (!bp.equals(cup)) continue;
                 ball.discard();
                 it.remove();
@@ -590,7 +589,7 @@ final class Golf {
         }
     }
 
-    private static void sunk(ServerPlayerEntity player, Hole h, int strokes) {
+    private static void sunk(ServerPlayer player, Hole h, int strokes) {
         int diff = strokes - h.par();
         String name;
         long coins;
@@ -601,16 +600,16 @@ final class Golf {
         else if (diff == 1) { name = "Bogey."; coins = 200; }
         else { name = "Finished."; coins = 50; }
         Tycoon.Data td = Tycoon.Data.get(player.getServer());
-        td.add(player.getUuid(), coins);
-        player.getInventory().offerOrDrop(balls(1));
-        ServerWorld world = player.getServerWorld();
-        world.playSound(null, player.getBlockPos(), strokes == 1 ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.ENTITY_PLAYER_LEVELUP,
-                SoundCategory.PLAYERS, 0.8f, 1.2f);
-        Text msg = Text.literal("[Golf] ").formatted(Formatting.GREEN).append(Text.literal(player.getName().getString() + " sank hole "
+        td.add(player.getUUID(), coins);
+        player.getInventory().placeItemBackInInventory(balls(1));
+        ServerLevel world = player.serverLevel();
+        world.playSound(null, player.blockPosition(), strokes == 1 ? SoundEvents.UI_TOAST_CHALLENGE_COMPLETE : SoundEvents.PLAYER_LEVELUP,
+                SoundSource.PLAYERS, 0.8f, 1.2f);
+        Component msg = Component.literal("[Golf] ").withStyle(ChatFormatting.GREEN).append(Component.literal(player.getName().getString() + " sank hole "
                 + h.number() + " (" + h.kind().toLowerCase(java.util.Locale.ROOT) + ", par " + h.par() + ") in " + strokes
-                + (strokes == 1 ? " stroke. " : " strokes. ") + name + " +" + coins + " coins").formatted(Formatting.WHITE));
-        for (ServerPlayerEntity p : player.getServer().getPlayerManager().getPlayerList()) {
-            if (p == player || p.getWorld() == player.getWorld()) p.sendMessage(msg, false);
+                + (strokes == 1 ? " stroke. " : " strokes. ") + name + " +" + coins + " coins").withStyle(ChatFormatting.WHITE));
+        for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
+            if (p == player || p.level() == player.level()) p.displayClientMessage(msg, false);
         }
     }
 
@@ -619,9 +618,9 @@ final class Golf {
     // ---------------------------------------------------------------------------------------
 
     /** /helper golf */
-    static void info(ServerPlayerEntity player) {
+    static void info(ServerPlayer player) {
         Data data = Data.get(player.getServer());
-        if (!Planets.keyOf(player.getServerWorld()).equals(PLANET)) {
+        if (!Planets.keyOf(player.serverLevel()).equals(PLANET)) {
             Helper.say(player, "The golf course is on Fairway, a grassy planet. Fly there with a tier 1 Ad Astra rocket "
                     + "(the same one that reaches the Moon).");
         } else if (data.centre == null) {
@@ -637,11 +636,11 @@ final class Golf {
                 "Holes 1-3 are mini golf, 4-5 short (par 3), 6-7 middle (par 4), 8-9 long (par 5).",
                 "/helper golf shop (on Fairway) or talk to the Golf Pro.  /helper golf ball picks your ball back up.",
         };
-        for (String line : how) player.sendMessage(Text.literal(line).formatted(Formatting.GRAY), false);
+        for (String line : how) player.displayClientMessage(Component.literal(line).withStyle(ChatFormatting.GRAY), false);
     }
 
     private record Offer(long price, String what, java.util.function.Supplier<ItemStack> item,
-                         java.util.function.Predicate<ServerPlayerEntity> action) {}
+                         java.util.function.Predicate<ServerPlayer> action) {}
 
     private static final Offer[] OFFERS = {
             new Offer(200, "Putter", () -> club(CLUBS[0]), null),
@@ -659,103 +658,103 @@ final class Golf {
 
     private static ItemStack named(Item item, String name) {
         ItemStack s = new ItemStack(item);
-        s.setCustomName(Text.literal(name));
+        s.setHoverName(Component.literal(name));
         return s;
     }
 
     /** A golf cart: a fast, tame, saddled white horse that's yours. */
-    private static boolean cart(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
-        HorseEntity horse = EntityType.HORSE.create(world);
+    private static boolean cart(ServerPlayer player) {
+        ServerLevel world = player.serverLevel();
+        Horse horse = EntityType.HORSE.create(world);
         if (horse == null) return false;
-        Vec3d at = player.getPos().add(player.getRotationVector().multiply(2).multiply(1, 0, 1));
-        horse.refreshPositionAndAngles(at.x, player.getY(), at.z, player.getYaw(), 0);
-        horse.setTame(true);
-        horse.setOwnerUuid(player.getUuid());
-        horse.saddle(SoundCategory.NEUTRAL);
-        var speed = horse.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
+        horse.moveTo(at.x, player.getY(), at.z, player.getYRot(), 0);
+        horse.setTamed(true);
+        horse.setOwnerUUID(player.getUUID());
+        horse.equipSaddle(SoundSource.NEUTRAL);
+        var speed = horse.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(0.36);
-        var jump = horse.getAttributeInstance(EntityAttributes.HORSE_JUMP_STRENGTH);
+        var jump = horse.getAttribute(Attributes.JUMP_STRENGTH);
         if (jump != null) jump.setBaseValue(0.6);
-        var hp = horse.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH);
+        var hp = horse.getAttribute(Attributes.MAX_HEALTH);
         if (hp != null) hp.setBaseValue(30);
         horse.setHealth(30);
-        horse.setCustomName(Text.literal(player.getName().getString() + "'s Golf Cart").formatted(Formatting.WHITE));
-        horse.setPersistent();
-        world.spawnEntity(horse);
+        horse.setCustomName(Component.literal(player.getName().getString() + "'s Golf Cart").withStyle(ChatFormatting.WHITE));
+        horse.setPersistenceRequired();
+        world.addFreshEntity(horse);
         Helper.say(player, "Your golf cart is parked next to you. Hop on!");
         return true;
     }
 
-    static void openShop(ServerPlayerEntity player) {
-        if (!Planets.keyOf(player.getServerWorld()).equals(PLANET)) {
+    static void openShop(ServerPlayer player) {
+        if (!Planets.keyOf(player.serverLevel()).equals(PLANET)) {
             Helper.say(player, "The golf shop is in the Fairway Golf Club, on the planet Fairway.");
             return;
         }
-        player.openHandledScreen(new SimpleNamedScreenHandlerFactory(
-                (syncId, inv, p) -> new Shop(syncId, inv, player, new SimpleInventory(27)),
-                Text.literal("Fairway Pro Shop")));
+        player.openMenu(new SimpleMenuProvider(
+                (syncId, inv, p) -> new Shop(syncId, inv, player, new SimpleContainer(27)),
+                Component.literal("Fairway Pro Shop")));
     }
 
-    static final class Shop extends GenericContainerScreenHandler {
-        private final ServerPlayerEntity player;
-        private final SimpleInventory view;
+    static final class Shop extends ChestMenu {
+        private final ServerPlayer player;
+        private final SimpleContainer view;
 
-        private Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player, SimpleInventory view) {
-            super(ScreenHandlerType.GENERIC_9X3, syncId, inv, view, 3);
+        private Shop(int syncId, Inventory inv, ServerPlayer player, SimpleContainer view) {
+            super(MenuType.GENERIC_9x3, syncId, inv, view, 3);
             this.player = player;
             this.view = view;
             refresh();
         }
 
         private void refresh() {
-            for (int i = 0; i < 27; i++) view.setStack(i, ItemStack.EMPTY);
+            for (int i = 0; i < 27; i++) view.setItem(i, ItemStack.EMPTY);
             for (int i = 0; i < OFFERS.length; i++) {
                 Offer o = OFFERS[i];
                 ItemStack shown = o.item().get();
                 ItemStack b = Storage.Menu.button(shown.getItem(), o.what(), "Costs " + o.price() + " tycoon coins", "Click to buy");
                 b.setCount(Math.max(1, shown.getCount()));
-                view.setStack(i, b);
+                view.setItem(i, b);
             }
-            view.setStack(26, Storage.Menu.button(Items.GOLD_INGOT, Tycoon.Data.get(player.getServer()).coins(player.getUuid()) + " coins",
+            view.setItem(26, Storage.Menu.button(Items.GOLD_INGOT, Tycoon.Data.get(player.getServer()).coins(player.getUUID()) + " coins",
                     "Earn coins with the tycoon", "or by sinking putts"));
-            sendContentUpdates();
+            broadcastChanges();
         }
 
         @Override
-        public void onSlotClick(int slotIndex, int button, SlotActionType action, PlayerEntity p) {
+        public void clicked(int slotIndex, int button, ClickType action, Player p) {
             if (slotIndex < 0 || slotIndex >= 27) {
-                if (action != SlotActionType.QUICK_MOVE) super.onSlotClick(slotIndex, button, action, p);
+                if (action != ClickType.QUICK_MOVE) super.clicked(slotIndex, button, action, p);
                 return;
             }
-            if (action == SlotActionType.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
+            if (action == ClickType.PICKUP && slotIndex < OFFERS.length) buy(OFFERS[slotIndex]);
             refresh();
         }
 
         private void buy(Offer o) {
             Tycoon.Data data = Tycoon.Data.get(player.getServer());
-            if (data.coins(player.getUuid()) < o.price()) {
-                player.sendMessage(Text.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUuid()) + ").")
-                        .formatted(Formatting.RED), true);
+            if (data.coins(player.getUUID()) < o.price()) {
+                player.displayClientMessage(Component.literal("You need " + o.price() + " coins (you have " + data.coins(player.getUUID()) + ").")
+                        .withStyle(ChatFormatting.RED), true);
                 return;
             }
             if (o.action() != null) {
                 if (!o.action().test(player)) return;
             } else {
-                player.getInventory().offerOrDrop(o.item().get());
+                player.getInventory().placeItemBackInInventory(o.item().get());
             }
-            data.add(player.getUuid(), -o.price());
-            player.playSound(SoundEvents.ENTITY_VILLAGER_YES, SoundCategory.PLAYERS, 0.6f, 1.2f);
-            player.sendMessage(Text.literal("Bought " + o.what() + ".").formatted(Formatting.GREEN), true);
+            data.add(player.getUUID(), -o.price());
+            player.playNotifySound(SoundEvents.VILLAGER_YES, SoundSource.PLAYERS, 0.6f, 1.2f);
+            player.displayClientMessage(Component.literal("Bought " + o.what() + ".").withStyle(ChatFormatting.GREEN), true);
         }
 
         @Override
-        public ItemStack quickMove(PlayerEntity p, int slot) {
+        public ItemStack quickMoveStack(Player p, int slot) {
             return ItemStack.EMPTY;
         }
 
         @Override
-        public boolean canUse(PlayerEntity p) {
+        public boolean stillValid(Player p) {
             return true;
         }
     }
@@ -768,68 +767,68 @@ final class Golf {
         private House() {}
 
         /** Builds a cottage (7x7) or villa (11x9) with its door facing the player. False if there's no room. */
-        static boolean build(ServerWorld world, BlockPos floorAbove, Direction playerFacing, boolean villa) {
+        static boolean build(ServerLevel world, BlockPos floorAbove, Direction playerFacing, boolean villa) {
             int w = villa ? 11 : 7, d = villa ? 9 : 7, h = villa ? 5 : 4;
             Direction front = playerFacing.getOpposite(); // the door faces back at the player
-            Direction right = front.rotateYClockwise();
+            Direction right = front.getClockWise();
             // The house goes in front of the player: its front wall is 1 block ahead of where they clicked.
-            BlockPos origin = floorAbove.down().offset(playerFacing, d).offset(right, -(w / 2));
+            BlockPos origin = floorAbove.below().relative(playerFacing, d).relative(right, -(w / 2));
             // origin = back-left corner at floor level; the front wall is towards the player.
             for (int a = 0; a < w; a++) {
                 for (int b = 0; b < d; b++) {
                     for (int y = 1; y <= h + 1; y++) {
-                        BlockPos p = origin.offset(right, a).offset(front, b).up(y);
+                        BlockPos p = origin.relative(right, a).relative(front, b).above(y);
                         BlockState s = world.getBlockState(p);
-                        if (!s.isAir() && !s.isReplaceable()) return false;
+                        if (!s.isAir() && !s.canBeReplaced()) return false;
                     }
                 }
             }
-            BlockState planks = Blocks.BIRCH_PLANKS.getDefaultState(), log = Blocks.STRIPPED_BIRCH_LOG.getDefaultState();
+            BlockState planks = Blocks.BIRCH_PLANKS.defaultBlockState(), log = Blocks.STRIPPED_BIRCH_LOG.defaultBlockState();
             for (int a = 0; a < w; a++) {
                 for (int b = 0; b < d; b++) {
-                    BlockPos base = origin.offset(right, a).offset(front, b);
+                    BlockPos base = origin.relative(right, a).relative(front, b);
                     boolean edgeA = a == 0 || a == w - 1, edgeB = b == 0 || b == d - 1;
-                    world.setBlockState(base, Blocks.SPRUCE_PLANKS.getDefaultState());
+                    world.setBlockAndUpdate(base, Blocks.SPRUCE_PLANKS.defaultBlockState());
                     for (int y = 1; y <= h; y++) {
-                        BlockPos p = base.up(y);
-                        if (edgeA && edgeB) world.setBlockState(p, log);
-                        else if (edgeA || edgeB) world.setBlockState(p, y == 2 && (a + b) % 3 == 1 ? Blocks.GLASS_PANE.getDefaultState() : planks);
-                        else world.setBlockState(p, Blocks.AIR.getDefaultState());
+                        BlockPos p = base.above(y);
+                        if (edgeA && edgeB) world.setBlockAndUpdate(p, log);
+                        else if (edgeA || edgeB) world.setBlockAndUpdate(p, y == 2 && (a + b) % 3 == 1 ? Blocks.GLASS_PANE.defaultBlockState() : planks);
+                        else world.setBlockAndUpdate(p, Blocks.AIR.defaultBlockState());
                     }
-                    world.setBlockState(base.up(h + 1), Blocks.DARK_OAK_SLAB.getDefaultState());
+                    world.setBlockAndUpdate(base.above(h + 1), Blocks.DARK_OAK_SLAB.defaultBlockState());
                 }
             }
             // Door in the middle of the front wall.
-            BlockPos door = origin.offset(right, w / 2).offset(front, d - 1).up();
-            BlockState lower = Blocks.BIRCH_DOOR.getDefaultState().with(DoorBlock.FACING, front).with(DoorBlock.HALF, DoubleBlockHalf.LOWER);
-            world.setBlockState(door, lower);
-            world.setBlockState(door.up(), lower.with(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+            BlockPos door = origin.relative(right, w / 2).relative(front, d - 1).above();
+            BlockState lower = Blocks.BIRCH_DOOR.defaultBlockState().setValue(DoorBlock.FACING, front).setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+            world.setBlockAndUpdate(door, lower);
+            world.setBlockAndUpdate(door.above(), lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
             // Inside: bed(s), chest, crafting table, furnace, lights.
-            BlockPos backLeft = origin.offset(right, 1).offset(front, 1).up();
+            BlockPos backLeft = origin.relative(right, 1).relative(front, 1).above();
             bed(world, backLeft, front);
-            if (villa) bed(world, backLeft.offset(right, 2), front);
-            BlockPos backRight = origin.offset(right, w - 2).offset(front, 1).up();
-            world.setBlockState(backRight, Blocks.CHEST.getDefaultState());
-            world.setBlockState(backRight.offset(front), Blocks.CRAFTING_TABLE.getDefaultState());
-            world.setBlockState(backRight.offset(front, 2), Blocks.FURNACE.getDefaultState());
+            if (villa) bed(world, backLeft.relative(right, 2), front);
+            BlockPos backRight = origin.relative(right, w - 2).relative(front, 1).above();
+            world.setBlockAndUpdate(backRight, Blocks.CHEST.defaultBlockState());
+            world.setBlockAndUpdate(backRight.relative(front), Blocks.CRAFTING_TABLE.defaultBlockState());
+            world.setBlockAndUpdate(backRight.relative(front, 2), Blocks.FURNACE.defaultBlockState());
             if (villa) {
-                world.setBlockState(backRight.offset(right.getOpposite()), Blocks.CHEST.getDefaultState());
-                world.setBlockState(backRight.offset(front, 3), Blocks.SMOKER.getDefaultState());
-                world.setBlockState(origin.offset(right, w / 2).offset(front, d / 2).up(), Blocks.LIGHT_GRAY_CARPET.getDefaultState());
+                world.setBlockAndUpdate(backRight.relative(right.getOpposite()), Blocks.CHEST.defaultBlockState());
+                world.setBlockAndUpdate(backRight.relative(front, 3), Blocks.SMOKER.defaultBlockState());
+                world.setBlockAndUpdate(origin.relative(right, w / 2).relative(front, d / 2).above(), Blocks.LIGHT_GRAY_CARPET.defaultBlockState());
             }
-            world.setBlockState(origin.offset(right, w / 2).offset(front, d / 2).up(h), Blocks.LANTERN.getDefaultState()
-                    .with(net.minecraft.block.LanternBlock.HANGING, true));
-            world.playSound(null, door, SoundEvents.BLOCK_WOOD_PLACE, SoundCategory.BLOCKS, 1f, 1f);
+            world.setBlockAndUpdate(origin.relative(right, w / 2).relative(front, d / 2).above(h), Blocks.LANTERN.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.LanternBlock.HANGING, true));
+            world.playSound(null, door, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 1f, 1f);
             return true;
         }
 
-        private static void bed(ServerWorld world, BlockPos foot, Direction front) {
+        private static void bed(ServerLevel world, BlockPos foot, Direction front) {
             // Head against the back wall: the head is one block further back than the foot.
             Direction head = front.getOpposite();
-            BlockPos footPos = foot.offset(front);
-            BlockState bed = Blocks.WHITE_BED.getDefaultState().with(net.minecraft.block.BedBlock.FACING, head);
-            world.setBlockState(footPos, bed.with(net.minecraft.block.BedBlock.PART, net.minecraft.block.enums.BedPart.FOOT));
-            world.setBlockState(footPos.offset(head), bed.with(net.minecraft.block.BedBlock.PART, net.minecraft.block.enums.BedPart.HEAD));
+            BlockPos footPos = foot.relative(front);
+            BlockState bed = Blocks.WHITE_BED.defaultBlockState().setValue(net.minecraft.world.level.block.BedBlock.FACING, head);
+            world.setBlockAndUpdate(footPos, bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
+            world.setBlockAndUpdate(footPos.relative(head), bed.setValue(net.minecraft.world.level.block.BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
         }
     }
 }

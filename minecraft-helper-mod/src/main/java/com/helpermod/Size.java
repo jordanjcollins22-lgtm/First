@@ -4,15 +4,15 @@ import com.helpermod.mixin.PassiveEntityAccessor;
 import com.helpermod.mixin.PiglinEntityAccessor;
 import com.helpermod.mixin.ZombieEntityAccessor;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.data.DataTracker;
-import net.minecraft.entity.data.TrackedData;
-import net.minecraft.entity.mob.PiglinEntity;
-import net.minecraft.entity.mob.ZombieEntity;
-import net.minecraft.entity.passive.PassiveEntity;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.World;
+import net.minecraft.world.entity.AgeableMob;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.piglin.Piglin;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Method;
@@ -62,18 +62,18 @@ public final class Size {
         }
     }
 
-    private static final Map<EntityType<?>, Optional<TrackedData<Boolean>>> BABY_FLAGS = new ConcurrentHashMap<>();
+    private static final Map<EntityType<?>, Optional<EntityDataAccessor<Boolean>>> BABY_FLAGS = new ConcurrentHashMap<>();
 
     /** The baby flag for a mob type, or null if that mob has no baby version. */
     @Nullable
-    public static TrackedData<Boolean> babyFlag(EntityType<?> type, World world) {
+    public static EntityDataAccessor<Boolean> babyFlag(EntityType<?> type, Level world) {
         return BABY_FLAGS.computeIfAbsent(type, t -> {
             Entity sample = null;
             try {
                 sample = t.create(world);
-                if (sample instanceof ZombieEntity) return Optional.of(ZombieEntityAccessor.helpermod$getBaby());
-                if (sample instanceof PiglinEntity) return Optional.of(PiglinEntityAccessor.helpermod$getBaby());
-                if (sample instanceof PassiveEntity) return Optional.of(PassiveEntityAccessor.helpermod$getBaby());
+                if (sample instanceof Zombie) return Optional.of(ZombieEntityAccessor.helpermod$getBaby());
+                if (sample instanceof Piglin) return Optional.of(PiglinEntityAccessor.helpermod$getBaby());
+                if (sample instanceof AgeableMob) return Optional.of(PassiveEntityAccessor.helpermod$getBaby());
                 return Optional.empty();
             } catch (RuntimeException e) {
                 return Optional.empty();
@@ -85,10 +85,10 @@ public final class Size {
 
     /** Without Pehkui, a small helper with a mob look is shown as that mob's baby. */
     @Nullable
-    public static DataTracker.SerializedEntry<Boolean> babyEntry(Entity helper, @Nullable EntityType<?> look) {
+    public static SynchedEntityData.DataValue<Boolean> babyEntry(Entity helper, @Nullable EntityType<?> look) {
         if (look == null || hasPehkui() || sizeOf(helper) >= 1f) return null;
-        TrackedData<Boolean> flag = babyFlag(look, helper.getWorld());
-        return flag == null ? null : DataTracker.SerializedEntry.of(flag, true);
+        EntityDataAccessor<Boolean> flag = babyFlag(look, helper.level());
+        return flag == null ? null : SynchedEntityData.DataValue.create(flag, true);
     }
 
     public static String describe(float size) {

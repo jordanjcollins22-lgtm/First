@@ -7,10 +7,9 @@ import com.google.gson.JsonParser;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -132,12 +131,12 @@ public final class Updater {
     }
 
     /** Tell a player on a dedicated server that a new version is waiting for a restart. */
-    public static void onJoin(ServerPlayerEntity player) {
+    public static void onJoin(ServerPlayer player) {
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.SERVER) return; // players' PCs get UpdateScreen
         String v = readyVersion;
         if (v == null) return;
-        player.sendMessage(Text.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
-                .formatted(Formatting.AQUA), false);
+        player.displayClientMessage(Component.literal("Helper Buddies " + v + " has been downloaded. It goes live when the server restarts.")
+                .withStyle(ChatFormatting.AQUA), false);
     }
 
     private static String mode() {

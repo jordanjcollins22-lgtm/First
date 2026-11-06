@@ -1,20 +1,19 @@
 package com.helpermod;
 
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.message.MessageType;
-import net.minecraft.network.message.SignedMessage;
-import net.minecraft.registry.RegistryKey;
+import net.minecraft.network.chat.ChatType;
+import net.minecraft.network.chat.PlayerChatMessage;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.world.World;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -40,7 +39,7 @@ final class Mind {
     private static final Pattern WAKE_END = Pattern.compile("[\\s,]+(my\\s+)?(helper|buddy)[\\s?!.]*$", Pattern.CASE_INSENSITIVE);
 
     /** Who the helper is answering right now; while set, its replies go to everyone so others see the conversation. */
-    private static ServerPlayerEntity talkingTo;
+    private static ServerPlayer talkingTo;
     /** Last chat line handled per player, so a message seen twice (event and fallback) is answered once. */
     private static final Map<UUID, String> LAST_CHAT = new HashMap<>();
     private static final Map<UUID, Long> LAST_CHAT_AT = new HashMap<>();
@@ -51,7 +50,7 @@ final class Mind {
     private static final class Memory {
         long night = -1;
         boolean rain;
-        RegistryKey<World> dim;
+        ResourceKey<Level> dim;
         long hurtAt, fedAt, chatterAt;
         int chats;
     }
@@ -71,15 +70,15 @@ final class Mind {
     // Chat
     // ---------------------------------------------------------------------------------------
 
-    static void onChat(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
-        heard(player, message.getSignedContent());
+    static void onChat(PlayerChatMessage message, ServerPlayer player, ChatType.Bound params) {
+        heard(player, message.signedContent());
     }
 
     /**
      * Every chat line a player sends. Called from the Fabric chat event and, as a fallback for chat mods
      * that replace the normal chat broadcast, straight from the chat packet (see ChatPacketMixin).
      */
-    static void heard(ServerPlayerEntity player, String text) {
+    static void heard(ServerPlayer player, String text) {
         if (player == null || text == null || text.startsWith("/")) return;
         String ask;
         Matcher wake = WAKE.matcher(text);
@@ -92,10 +91,10 @@ final class Mind {
         if (server == null) return;
         long now = System.currentTimeMillis();
         synchronized (LAST_CHAT) {
-            Long at = LAST_CHAT_AT.get(player.getUuid());
-            if (text.equals(LAST_CHAT.get(player.getUuid())) && at != null && now - at < 1500) return; // already handled
-            LAST_CHAT.put(player.getUuid(), text);
-            LAST_CHAT_AT.put(player.getUuid(), now);
+            Long at = LAST_CHAT_AT.get(player.getUUID());
+            if (text.equals(LAST_CHAT.get(player.getUUID())) && at != null && now - at < 1500) return; // already handled
+            LAST_CHAT.put(player.getUUID(), text);
+            LAST_CHAT_AT.put(player.getUUID(), now);
         }
         synchronized (PENDING) {
             PENDING.add(new Object[]{player, clean, 3});
@@ -116,7 +115,7 @@ final class Mind {
             }
         }
         for (Object[] p : ready) {
-            ServerPlayerEntity player = (ServerPlayerEntity) p[0];
+            ServerPlayer player = (ServerPlayer) p[0];
             if (player.isRemoved()) continue;
             talkingTo = player;
             try {
@@ -131,19 +130,19 @@ final class Mind {
     }
 
     /** While answering chat, the helper speaks so everyone can see it (others saw the question too). */
-    static boolean sayToAll(ServerPlayerEntity player, net.minecraft.text.Text text, String message) {
+    static boolean sayToAll(ServerPlayer player, net.minecraft.network.chat.Component text, String message) {
         if (talkingTo == null || talkingTo != player || player.getServer() == null) return false;
-        net.minecraft.text.Text named = net.minecraft.text.Text.literal("[" + player.getName().getString() + "'s Helper] ")
-                .formatted(net.minecraft.util.Formatting.GOLD)
-                .append(net.minecraft.text.Text.literal(message).formatted(net.minecraft.util.Formatting.WHITE));
-        for (ServerPlayerEntity p : player.getServer().getPlayerManager().getPlayerList()) {
-            p.sendMessage(p == player ? text : named, false);
+        net.minecraft.network.chat.Component named = net.minecraft.network.chat.Component.literal("[" + player.getName().getString() + "'s Helper] ")
+                .withStyle(net.minecraft.ChatFormatting.GOLD)
+                .append(net.minecraft.network.chat.Component.literal(message).withStyle(net.minecraft.ChatFormatting.WHITE));
+        for (ServerPlayer p : player.getServer().getPlayerList().getPlayers()) {
+            p.displayClientMessage(p == player ? text : named, false);
         }
         return true;
     }
 
-    private static void run(ServerPlayerEntity player, String command) {
-        player.getServer().getCommandManager().executeWithPrefix(player.getCommandSource(), command);
+    private static void run(ServerPlayer player, String command) {
+        player.getServer().getCommands().performPrefixedCommand(player.createCommandSourceStack(), command);
     }
 
     private static int number(String ask, int fallback) {
@@ -156,8 +155,8 @@ final class Mind {
         return false;
     }
 
-    private static void answer(ServerPlayerEntity player, String ask) {
-        Memory mem = MEMORY.computeIfAbsent(player.getUuid(), k -> new Memory());
+    private static void answer(ServerPlayer player, String ask) {
+        Memory mem = MEMORY.computeIfAbsent(player.getUUID(), k -> new Memory());
         mem.chats++;
         if (ask.isEmpty()) {
             Helper.say(player, pick(player, "Yes? I'm right here.", "What's up?", "Need something?"));
@@ -204,7 +203,7 @@ final class Mind {
             run(player, "helper summon");
         } else if (has(ask, "how are you", "how is it going", "how's it going", "hows it going", "how you doing",
                 "how are you doing", "you ok", "you good", "feeling", "what's up", "whats up")) {
-            HelperData.Entry e = HelperData.get(player.getServer()).get(player.getUuid());
+            HelperData.Entry e = HelperData.get(player.getServer()).get(player.getUUID());
             int level = e == null ? 1 : HelperData.levelFor(e.work);
             Helper.say(player, level >= 5
                     ? "Never better. Level " + level + " and still learning. Thanks for asking, " + player.getName().getString() + "."
@@ -227,8 +226,8 @@ final class Mind {
      * Basic questions about the helper itself: are you stuck, where are you, are you ok, are you full,
      * how far along are you. Answered from what it's really doing. True if the question was one of these.
      */
-    private static boolean askAboutSelf(ServerPlayerEntity player, String ask) {
-        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+    private static boolean askAboutSelf(ServerPlayer player, String ask) {
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUUID());
         if (has(ask, "unstick", "get unstuck")) {
             HelperCommands.unstick(player);
             return true;
@@ -246,8 +245,8 @@ final class Mind {
             Helper.say(player, "I'm not out right now! /helper summon and I'll be right there.");
             return true;
         }
-        Helper helper = HelperManager.helperFor(player.getUuid());
-        SimpleInventory inv = entry.inventory;
+        Helper helper = HelperManager.helperFor(player.getUUID());
+        SimpleContainer inv = entry.inventory;
         if (has(ask, "stuck", "trapped", "are you lost", "you lost")) {
             if (helper.looksStuck(player)) {
                 HelperCommands.unstick(player);
@@ -269,7 +268,7 @@ final class Mind {
         } else if (has(ask, "hungry")) {
             Helper.say(player, "Helpers don't eat, but thanks for asking! Are YOU hungry? Keep some food on you.");
         } else if (has(ask, "tired", "sleepy")) {
-            Helper.say(player, "Never tired! " + (player.getWorld().isNight() ? "It is night though, maybe you should sleep." : "Let's keep going."));
+            Helper.say(player, "Never tired! " + (player.level().isNight() ? "It is night though, maybe you should sleep." : "Let's keep going."));
         } else if (has(ask, "are you happy", "do you like me")) {
             Helper.say(player, pick(player, "Of course! You're the best boss.", "Very happy. I love a good job.", "Yes! Thanks for keeping me busy."));
         } else { // are you ok / hurt / health / alive
@@ -279,7 +278,7 @@ final class Mind {
         return true;
     }
 
-    private static String pick(ServerPlayerEntity player, String... lines) {
+    private static String pick(ServerPlayer player, String... lines) {
         return lines[player.getRandom().nextInt(lines.length)];
     }
 
@@ -289,17 +288,17 @@ final class Mind {
 
     static void tick(MinecraftServer server) {
         runPending();
-        if (server.getTicks() % 20 != 7) return;
+        if (server.getTickCount() % 20 != 7) return;
         HelperData data = HelperData.get(server);
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            HelperData.Entry entry = data.get(player.getUuid());
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            HelperData.Entry entry = data.get(player.getUUID());
             if (entry == null || !entry.active) continue;
-            Helper helper = HelperManager.helperFor(player.getUuid());
-            MobEntity mob = helper.mobEntity();
-            if (mob == null || !mob.isAlive() || mob.getWorld() != player.getWorld()) continue;
-            Memory mem = MEMORY.computeIfAbsent(player.getUuid(), k -> new Memory());
-            ServerWorld world = player.getServerWorld();
-            long now = world.getTime();
+            Helper helper = HelperManager.helperFor(player.getUUID());
+            Mob mob = helper.mobEntity();
+            if (mob == null || !mob.isAlive() || mob.level() != player.level()) continue;
+            Memory mem = MEMORY.computeIfAbsent(player.getUUID(), k -> new Memory());
+            ServerLevel world = player.serverLevel();
+            long now = world.getGameTime();
 
             notice(player, world, mem, now);
             care(player, entry.inventory, mem, now);
@@ -307,22 +306,22 @@ final class Mind {
         }
     }
 
-    private static void notice(ServerPlayerEntity player, ServerWorld world, Memory mem, long now) {
-        if (mem.dim != world.getRegistryKey()) {
+    private static void notice(ServerPlayer player, ServerLevel world, Memory mem, long now) {
+        if (mem.dim != world.dimension()) {
             boolean first = mem.dim == null;
-            mem.dim = world.getRegistryKey();
+            mem.dim = world.dimension();
             if (!first) {
-                String where = world.getRegistryKey().getValue().toString();
-                if (world.getRegistryKey() == World.NETHER) Helper.say(player, "Phew, it's hot in here. Watch out for the lava, I'll watch your back.");
-                else if (world.getRegistryKey() == World.END) Helper.say(player, "The End... Don't look the Endermen in the eye. I'll stay close.");
-                else if (world.getRegistryKey() == World.OVERWORLD) Helper.say(player, "Home sweet home.");
+                String where = world.dimension().location().toString();
+                if (world.dimension() == Level.NETHER) Helper.say(player, "Phew, it's hot in here. Watch out for the lava, I'll watch your back.");
+                else if (world.dimension() == Level.END) Helper.say(player, "The End... Don't look the Endermen in the eye. I'll stay close.");
+                else if (world.dimension() == Level.OVERWORLD) Helper.say(player, "Home sweet home.");
                 else if (Planets.isSpace(world)) { /* Planets already greets you on arrival */ }
                 else Helper.say(player, "Ooh, somewhere new (" + where + "). Let's look around.");
             }
         }
-        if (world.getDimension().hasSkyLight() && world.getRegistryKey() == World.OVERWORLD) {
-            long day = world.getTimeOfDay() / 24000L;
-            long time = world.getTimeOfDay() % 24000L;
+        if (world.dimensionType().hasSkyLight() && world.dimension() == Level.OVERWORLD) {
+            long day = world.getDayTime() / 24000L;
+            long time = world.getDayTime() % 24000L;
             if (time >= 12800 && time < 13600 && mem.night != day) {
                 mem.night = day;
                 Helper.say(player, "The sun's going down. Monsters will be out soon, so stay close to me.");
@@ -346,31 +345,31 @@ final class Mind {
     }
 
     /** Hand the owner food it's carrying when they're hungry. */
-    private static void care(ServerPlayerEntity player, SimpleInventory inv, Memory mem, long now) {
-        if (player.getHungerManager().getFoodLevel() > 12 || now - mem.fedAt < 600) return;
-        for (int i = 0; i < inv.size(); i++) {
-            ItemStack s = inv.getStack(i);
-            if (!s.isFood() || s.isOf(Items.ROTTEN_FLESH) || s.isOf(Items.SPIDER_EYE) || s.isOf(Items.POISONOUS_POTATO)
-                    || s.isOf(Items.PUFFERFISH) || s.isOf(Items.CHORUS_FRUIT) || s.isOf(Items.SUSPICIOUS_STEW)) continue;
+    private static void care(ServerPlayer player, SimpleContainer inv, Memory mem, long now) {
+        if (player.getFoodData().getFoodLevel() > 12 || now - mem.fedAt < 600) return;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEdible() || s.is(Items.ROTTEN_FLESH) || s.is(Items.SPIDER_EYE) || s.is(Items.POISONOUS_POTATO)
+                    || s.is(Items.PUFFERFISH) || s.is(Items.CHORUS_FRUIT) || s.is(Items.SUSPICIOUS_STEW)) continue;
             ItemStack give = s.split(Math.min(s.getCount(), 4));
-            inv.markDirty();
-            player.getInventory().offerOrDrop(give);
+            inv.setChanged();
+            player.getInventory().placeItemBackInInventory(give);
             mem.fedAt = now;
-            Helper.say(player, "You look hungry. Here, have some " + give.getName().getString() + ".");
+            Helper.say(player, "You look hungry. Here, have some " + give.getHoverName().getString() + ".");
             return;
         }
     }
 
     /** While following, pick up things lying around nearby (not ore on a tycoon line, not things you just dropped). */
-    private static void tidyUp(MobEntity mob, SimpleInventory inv, ServerWorld world) {
-        for (ItemEntity item : world.getEntitiesByClass(ItemEntity.class, mob.getBoundingBox().expand(3.5), e -> e.isAlive()
-                && !e.cannotPickup() && e.getItemAge() > 100 && !e.getCommandTags().contains("helpermod_ore"))) {
-            ItemStack rest = inv.addStack(item.getStack().copy());
-            if (rest.getCount() == item.getStack().getCount()) continue; // no room
+    private static void tidyUp(Mob mob, SimpleContainer inv, ServerLevel world) {
+        for (ItemEntity item : world.getEntitiesOfClass(ItemEntity.class, mob.getBoundingBox().inflate(3.5), e -> e.isAlive()
+                && !e.hasPickUpDelay() && e.getAge() > 100 && !e.getTags().contains("helpermod_ore"))) {
+            ItemStack rest = inv.addItem(item.getItem().copy());
+            if (rest.getCount() == item.getItem().getCount()) continue; // no room
             if (rest.isEmpty()) item.discard();
-            else item.setStack(rest);
-            inv.markDirty();
-            world.playSound(null, mob.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.NEUTRAL, 0.3f, 1.4f);
+            else item.setItem(rest);
+            inv.setChanged();
+            world.playSound(null, mob.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.NEUTRAL, 0.3f, 1.4f);
         }
     }
 }

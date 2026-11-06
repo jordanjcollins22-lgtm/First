@@ -1,22 +1,21 @@
 package com.helpermod;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.LeavesBlock;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.registry.tag.TagKey;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,7 +34,7 @@ import java.util.Set;
 public final class Materials {
     private Materials() {}
 
-    public static final TagKey<Block> C_ORES = TagKey.of(RegistryKeys.BLOCK, new Identifier("c", "ores"));
+    public static final TagKey<Block> C_ORES = TagKey.create(Registries.BLOCK, new ResourceLocation("c", "ores"));
 
     /** Terrain a helper may dig through on its way to a target. */
     private static final List<TagKey<Block>> TERRAIN_TAGS = List.of(
@@ -80,12 +79,12 @@ public final class Materials {
     // ---------------------------------------------------------------------------------------
 
     private static boolean isNaturalLeaves(BlockState state) {
-        if (!state.isIn(BlockTags.LEAVES)) return false;
-        return !state.contains(LeavesBlock.PERSISTENT) || !state.get(LeavesBlock.PERSISTENT);
+        if (!state.is(BlockTags.LEAVES)) return false;
+        return !state.hasProperty(LeavesBlock.PERSISTENT) || !state.getValue(LeavesBlock.PERSISTENT);
     }
 
     private static boolean isOreLike(Block block) {
-        String path = Registries.BLOCK.getId(block).getPath();
+        String path = BuiltInRegistries.BLOCK.getKey(block).getPath();
         return path.endsWith("_ore") || path.startsWith("ore_") || path.contains("_ore_");
     }
 
@@ -94,7 +93,7 @@ public final class Materials {
 
     /** Planet ground from Ad Astra (moon stone, mars sand, venus stone, permafrost...), so the helper can mine in space. */
     private static boolean isSpaceGround(Block block) {
-        Identifier id = Registries.BLOCK.getId(block);
+        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(block);
         if (!id.getNamespace().equals("ad_astra")) return false;
         String path = id.getPath();
         for (String word : BUILD_WORDS) if (path.contains(word)) return false;
@@ -107,18 +106,18 @@ public final class Materials {
         if (state.hasBlockEntity()) return false;
         Block block = state.getBlock();
         if (TERRAIN_BLOCKS.contains(block) || isOreLike(block) || isNaturalLeaves(state) || isSpaceGround(block)) return true;
-        for (TagKey<Block> tag : TERRAIN_TAGS) if (state.isIn(tag)) return true;
+        for (TagKey<Block> tag : TERRAIN_TAGS) if (state.is(tag)) return true;
         return false;
     }
 
     /** Anything a helper may gather: terrain plus trees, plants, ice and similar. */
     public static boolean isGatherable(BlockState state) {
-        if (state.isOf(Blocks.SPAWNER)) return true; // helpers carefully dig spawners out (see Devices)
+        if (state.is(Blocks.SPAWNER)) return true; // helpers carefully dig spawners out (see Devices)
         if (state.hasBlockEntity()) return false;
-        if (state.isIn(BlockTags.LEAVES)) return isNaturalLeaves(state);
+        if (state.is(BlockTags.LEAVES)) return isNaturalLeaves(state);
         if (isTerrain(state)) return true;
         if (GATHER_BLOCKS.contains(state.getBlock())) return true;
-        for (TagKey<Block> tag : GATHER_TAGS) if (state.isIn(tag)) return true;
+        for (TagKey<Block> tag : GATHER_TAGS) if (state.is(tag)) return true;
         return false;
     }
 
@@ -130,8 +129,8 @@ public final class Materials {
 
     /** A rough "did a player probably place this" check, used for blocks that aren't known terrain. */
     public static boolean looksPlayerMade(BlockState state) {
-        if (state.isIn(BlockTags.PLANKS) || state.isIn(BlockTags.WOOL) || state.isIn(BlockTags.LOGS)) return true;
-        String path = Registries.BLOCK.getId(state.getBlock()).getPath();
+        if (state.is(BlockTags.PLANKS) || state.is(BlockTags.WOOL) || state.is(BlockTags.LOGS)) return true;
+        String path = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
         for (String word : BUILD_WORDS) if (path.contains(word)) return true;
         return false;
     }
@@ -141,22 +140,22 @@ public final class Materials {
     // are covered as long as they use the normal ore feature.
     // ---------------------------------------------------------------------------------------
 
-    private static Map<Block, Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>>> oreDimensions;
+    private static Map<Block, Set<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>>> oreDimensions;
 
     private static void ensureOreDimensions(MinecraftServer server) {
         if (oreDimensions != null) return;
-        Map<Block, Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>>> map = new HashMap<>();
-        for (ServerWorld world : server.getWorlds()) {
+        Map<Block, Set<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>>> map = new HashMap<>();
+        for (ServerLevel world : server.getAllLevels()) {
             try {
-                var biomes = world.getChunkManager().getChunkGenerator().getBiomeSource().getBiomes();
+                var biomes = world.getChunkSource().getGenerator().getBiomeSource().possibleBiomes();
                 for (var biome : biomes) {
-                    for (var step : biome.value().getGenerationSettings().getFeatures()) {
+                    for (var step : biome.value().getGenerationSettings().features()) {
                         for (var placed : step) {
-                            placed.value().getDecoratedFeatures().forEach(feature -> {
-                                if (feature.config() instanceof net.minecraft.world.gen.feature.OreFeatureConfig ore) {
-                                    for (var target : ore.targets) {
+                            placed.value().getFeatures().forEach(feature -> {
+                                if (feature.config() instanceof net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration ore) {
+                                    for (var target : ore.targetStates) {
                                         map.computeIfAbsent(target.state.getBlock(), k -> new HashSet<>())
-                                                .add(world.getRegistryKey());
+                                                .add(world.dimension());
                                     }
                                 }
                             });
@@ -164,7 +163,7 @@ public final class Materials {
                     }
                 }
             } catch (Throwable t) {
-                HelperMod.LOG.warn("Helper Buddies couldn't read ore generation for {}", world.getRegistryKey(), t);
+                HelperMod.LOG.warn("Helper Buddies couldn't read ore generation for {}", world.dimension(), t);
             }
         }
         oreDimensions = map;
@@ -174,24 +173,24 @@ public final class Materials {
      * If what's being collected is an ore that only generates in other dimensions, returns a message
      * saying where to find it. Null when it's fine (or we can't tell).
      */
-    public static String wrongDimension(MinecraftServer server, Spec spec, ServerWorld here) {
+    public static String wrongDimension(MinecraftServer server, Spec spec, ServerLevel here) {
         ensureOreDimensions(server);
-        Set<net.minecraft.registry.RegistryKey<net.minecraft.world.World>> dims = new HashSet<>();
+        Set<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>> dims = new HashSet<>();
         for (Block block : spec.blocks) dims.addAll(oreDimensions.getOrDefault(block, Set.of()));
-        if (dims.isEmpty() || dims.contains(here.getRegistryKey())) return null;
+        if (dims.isEmpty() || dims.contains(here.dimension())) return null;
         List<String> names = new ArrayList<>();
         for (var dim : dims) names.add(dimensionName(dim));
         names.sort(null);
-        return spec.display + " doesn't generate in " + dimensionName(here.getRegistryKey())
+        return spec.display + " doesn't generate in " + dimensionName(here.dimension())
                 + ". You can find it in " + String.join(" or ", names)
                 + ". Take me there and ask again.";
     }
 
-    public static String dimensionName(net.minecraft.registry.RegistryKey<net.minecraft.world.World> key) {
-        Identifier id = key.getValue();
-        if (id.equals(net.minecraft.world.World.OVERWORLD.getValue())) return "the Overworld";
-        if (id.equals(net.minecraft.world.World.NETHER.getValue())) return "the Nether";
-        if (id.equals(net.minecraft.world.World.END.getValue())) return "the End";
+    public static String dimensionName(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> key) {
+        ResourceLocation id = key.location();
+        if (id.equals(net.minecraft.world.level.Level.OVERWORLD.location())) return "the Overworld";
+        if (id.equals(net.minecraft.world.level.Level.NETHER.location())) return "the Nether";
+        if (id.equals(net.minecraft.world.level.Level.END.location())) return "the End";
         String[] words = id.getPath().split("_");
         StringBuilder sb = new StringBuilder("the");
         for (String w : words) if (!w.isEmpty()) sb.append(' ').append(Character.toUpperCase(w.charAt(0))).append(w.substring(1));
@@ -217,19 +216,19 @@ public final class Materials {
         long start = System.currentTimeMillis();
         Map<Item, Set<Block>> byDrop = new HashMap<>();
         Map<Block, Set<Item>> byBlock = new HashMap<>();
-        ServerWorld world = server.getOverworld();
+        ServerLevel world = server.overworld();
         ItemStack[] tools = {
                 new ItemStack(Items.NETHERITE_PICKAXE), new ItemStack(Items.NETHERITE_AXE),
                 new ItemStack(Items.NETHERITE_SHOVEL), new ItemStack(Items.NETHERITE_HOE), ItemStack.EMPTY};
-        for (Block block : Registries.BLOCK) {
-            BlockState state = block.getDefaultState();
+        for (Block block : BuiltInRegistries.BLOCK) {
+            BlockState state = block.defaultBlockState();
             if (!isGatherable(state)) continue;
             Set<Item> drops = new HashSet<>();
             for (ItemStack tool : tools) {
-                if (state.isToolRequired() && (tool.isEmpty() || !tool.isSuitableFor(state))) continue;
+                if (state.requiresCorrectToolForDrops() && (tool.isEmpty() || !tool.isCorrectToolForDrops(state))) continue;
                 try {
                     for (int roll = 0; roll < 3; roll++) {
-                        for (ItemStack drop : Block.getDroppedStacks(state, world, BlockPos.ORIGIN, null, null, tool)) {
+                        for (ItemStack drop : Block.getDrops(state, world, BlockPos.ZERO, null, null, tool)) {
                             if (!drop.isEmpty()) drops.add(drop.getItem());
                         }
                     }
@@ -298,13 +297,13 @@ public final class Materials {
     }
 
     private static Spec resolveTag(String id, String input) throws ResolveException {
-        Identifier tagId = Identifier.tryParse(id.contains(":") ? id : "minecraft:" + id);
+        ResourceLocation tagId = ResourceLocation.tryParse(id.contains(":") ? id : "minecraft:" + id);
         if (tagId == null) throw new ResolveException("\"" + input + "\" isn't a valid tag.");
-        TagKey<Block> tag = TagKey.of(RegistryKeys.BLOCK, tagId);
+        TagKey<Block> tag = TagKey.create(Registries.BLOCK, tagId);
         Set<Block> blocks = new LinkedHashSet<>();
-        for (Block block : Registries.BLOCK) {
-            BlockState state = block.getDefaultState();
-            if (state.isIn(tag) && isGatherable(state)) blocks.add(block);
+        for (Block block : BuiltInRegistries.BLOCK) {
+            BlockState state = block.defaultBlockState();
+            if (state.is(tag) && isGatherable(state)) blocks.add(block);
         }
         if (blocks.isEmpty()) throw new ResolveException("There are no natural blocks in the tag #" + tagId + ".");
         String display = tagId.getPath().replace('_', ' ');
@@ -329,27 +328,27 @@ public final class Materials {
 
     private static Item lookupItem(String s) {
         if (s.contains(":")) {
-            Identifier id = Identifier.tryParse(s);
-            if (id == null || !Registries.ITEM.containsId(id)) return null;
-            return Registries.ITEM.get(id);
+            ResourceLocation id = ResourceLocation.tryParse(s);
+            if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return null;
+            return BuiltInRegistries.ITEM.get(id);
         }
-        Identifier vanilla = Identifier.tryParse("minecraft:" + s);
-        if (vanilla != null && Registries.ITEM.containsId(vanilla)) return Registries.ITEM.get(vanilla);
+        ResourceLocation vanilla = ResourceLocation.tryParse("minecraft:" + s);
+        if (vanilla != null && BuiltInRegistries.ITEM.containsKey(vanilla)) return BuiltInRegistries.ITEM.get(vanilla);
         // Modded item with the same name, e.g. "raw_tin".
-        for (Identifier id : Registries.ITEM.getIds()) {
-            if (id.getPath().equals(s)) return Registries.ITEM.get(id);
+        for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
+            if (id.getPath().equals(s)) return BuiltInRegistries.ITEM.get(id);
         }
         return null;
     }
 
     private static Spec resolveItem(Item item) throws ResolveException {
-        String name = item.getName().getString();
+        String name = item.getDescription().getString();
         Set<Block> blocks = new LinkedHashSet<>();
         Set<Item> count = new HashSet<>();
         boolean preferSilk = false;
 
         if (item instanceof BlockItem blockItem && blockItem.getBlock() != Blocks.AIR
-                && isGatherable(blockItem.getBlock().getDefaultState())) {
+                && isGatherable(blockItem.getBlock().defaultBlockState())) {
             Block block = blockItem.getBlock();
             blocks.add(block);
             Set<Item> drops = dropsByBlock.getOrDefault(block, Set.of());

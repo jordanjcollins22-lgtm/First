@@ -1,27 +1,26 @@
 package com.helpermod;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.passive.HorseColor;
-import net.minecraft.entity.passive.HorseEntity;
-import net.minecraft.entity.passive.HorseMarking;
-import net.minecraft.item.DyeableItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.particle.ParticleTypes;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
-import net.minecraft.util.DyeColor;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.entity.animal.horse.Markings;
+import net.minecraft.world.entity.animal.horse.Variant;
+import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.item.DyeableLeatherItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -45,13 +44,13 @@ final class Roadster {
     /** The red horse-armor button the shops show for it. */
     static ItemStack shopIcon() {
         ItemStack s = new ItemStack(Items.LEATHER_HORSE_ARMOR);
-        ((DyeableItem) Items.LEATHER_HORSE_ARMOR).setColor(s, DEFAULT_PAINT);
-        s.setCustomName(Text.literal("Star Roadster").formatted(Formatting.RED));
+        ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(s, DEFAULT_PAINT);
+        s.setHoverName(Component.literal("Star Roadster").withStyle(ChatFormatting.RED));
         return s;
     }
 
     /** /helper roadster on its own: where to buy one and how to drive it. */
-    static void info(ServerPlayerEntity player) {
+    static void info(ServerPlayer player) {
         Helper.say(player, "The Star Roadster is a flying sports car for " + String.format("%,d", PRICE) + " coins. Buy it in "
                 + "/helper tycoon shop (top row, next to the Saddle) or the Fairway Pro Shop (/helper golf shop). "
                 + "Hold W and look up to fly. /helper roadster paint <colour>, coat <coat>, name <name>, call.");
@@ -62,52 +61,52 @@ final class Roadster {
     // ---------------------------------------------------------------------------------------
 
     /** Bought in the tycoon shop: park a new roadster next to the player. */
-    static boolean spawn(ServerPlayerEntity player) {
-        ServerWorld world = player.getServerWorld();
-        HorseEntity horse = EntityType.HORSE.create(world);
+    static boolean spawn(ServerPlayer player) {
+        ServerLevel world = player.serverLevel();
+        Horse horse = EntityType.HORSE.create(world);
         if (horse == null) return false;
-        Vec3d at = player.getPos().add(player.getRotationVector().multiply(2).multiply(1, 0, 1));
-        horse.refreshPositionAndAngles(at.x, player.getY(), at.z, player.getYaw(), 0);
-        horse.setTame(true);
-        horse.setOwnerUuid(player.getUuid());
-        horse.addCommandTag(TAG);
-        var speed = horse.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
+        horse.moveTo(at.x, player.getY(), at.z, player.getYRot(), 0);
+        horse.setTamed(true);
+        horse.setOwnerUUID(player.getUUID());
+        horse.addTag(TAG);
+        var speed = horse.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(0.42);
-        var jump = horse.getAttributeInstance(EntityAttributes.HORSE_JUMP_STRENGTH);
+        var jump = horse.getAttribute(Attributes.JUMP_STRENGTH);
         if (jump != null) jump.setBaseValue(0.9);
-        var hp = horse.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH);
+        var hp = horse.getAttribute(Attributes.MAX_HEALTH);
         if (hp != null) hp.setBaseValue(40);
         horse.setHealth(40);
-        horse.setCustomName(Text.literal(player.getName().getString() + "'s Star Roadster").formatted(Formatting.RED));
-        horse.setPersistent();
-        world.spawnEntity(horse);
-        dress(horse, HorseColor.WHITE, DEFAULT_PAINT, true);
-        world.spawnParticles(ParticleTypes.FIREWORK, horse.getX(), horse.getY() + 1, horse.getZ(), 30, 0.6, 0.6, 0.6, 0.1);
+        horse.setCustomName(Component.literal(player.getName().getString() + "'s Star Roadster").withStyle(ChatFormatting.RED));
+        horse.setPersistenceRequired();
+        world.addFreshEntity(horse);
+        dress(horse, Variant.WHITE, DEFAULT_PAINT, true);
+        world.sendParticles(ParticleTypes.FIREWORK, horse.getX(), horse.getY() + 1, horse.getZ(), 30, 0.6, 0.6, 0.6, 0.1);
         Helper.say(player, "Your Star Roadster is parked next to you! Hop on and drive. Hold W and look up to take off, "
                 + "let go of W to hover, look down to land. /helper roadster paint <colour> to repaint it.");
         return true;
     }
 
     /** Saddle, coat and painted armor, set through the horse's own save data so it always sticks. */
-    private static void dress(HorseEntity horse, HorseColor coat, int paint, boolean saddle) {
-        NbtCompound nbt = new NbtCompound();
-        horse.writeCustomDataToNbt(nbt);
-        HorseMarking marking = HorseMarking.byIndex((nbt.getInt("Variant") >> 8) & 0xFF);
+    private static void dress(Horse horse, Variant coat, int paint, boolean saddle) {
+        CompoundTag nbt = new CompoundTag();
+        horse.addAdditionalSaveData(nbt);
+        Markings marking = Markings.byId((nbt.getInt("Variant") >> 8) & 0xFF);
         nbt.putInt("Variant", (coat.getId() & 0xFF) | (marking.getId() & 0xFF) << 8);
         ItemStack armor = new ItemStack(Items.LEATHER_HORSE_ARMOR);
-        ((DyeableItem) Items.LEATHER_HORSE_ARMOR).setColor(armor, paint);
-        nbt.put("ArmorItem", armor.writeNbt(new NbtCompound()));
-        if (saddle) nbt.put("SaddleItem", new ItemStack(Items.SADDLE).writeNbt(new NbtCompound()));
-        horse.readCustomDataFromNbt(nbt);
+        ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(armor, paint);
+        nbt.put("ArmorItem", armor.save(new CompoundTag()));
+        if (saddle) nbt.put("SaddleItem", new ItemStack(Items.SADDLE).save(new CompoundTag()));
+        horse.readAdditionalSaveData(nbt);
     }
 
-    private static HorseEntity mine(ServerPlayerEntity player) {
-        if (player.getVehicle() instanceof HorseEntity h && h.getCommandTags().contains(TAG)) return h;
-        Box around = player.getBoundingBox().expand(32);
-        List<HorseEntity> list = player.getServerWorld().getEntitiesByClass(HorseEntity.class, around,
-                h -> h.getCommandTags().contains(TAG) && player.getUuid().equals(h.getOwnerUuid()));
-        HorseEntity best = null;
-        for (HorseEntity h : list) if (best == null || h.squaredDistanceTo(player) < best.squaredDistanceTo(player)) best = h;
+    private static Horse mine(ServerPlayer player) {
+        if (player.getVehicle() instanceof Horse h && h.getTags().contains(TAG)) return h;
+        AABB around = player.getBoundingBox().inflate(32);
+        List<Horse> list = player.serverLevel().getEntitiesOfClass(Horse.class, around,
+                h -> h.getTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID()));
+        Horse best = null;
+        for (Horse h : list) if (best == null || h.distanceToSqr(player) < best.distanceToSqr(player)) best = h;
         return best;
     }
 
@@ -130,12 +129,12 @@ final class Roadster {
         }
         DyeColor dye = DyeColor.byName(t, null);
         if (dye == null) return -1;
-        float[] c = dye.getColorComponents();
+        float[] c = dye.getTextureDiffuseColors();
         return ((int) (c[0] * 255) << 16) | ((int) (c[1] * 255) << 8) | (int) (c[2] * 255);
     }
 
-    static void paint(ServerPlayerEntity player, String colour) {
-        HorseEntity h = mine(player);
+    static void paint(ServerPlayer player, String colour) {
+        Horse h = mine(player);
         if (h == null) {
             Helper.say(player, "I can't see your Star Roadster nearby. Buy one in /helper tycoon shop, or stand next to it.");
             return;
@@ -146,52 +145,52 @@ final class Roadster {
                     + "hot_pink, or a hex code like #ff8800.");
             return;
         }
-        NbtCompound nbt = new NbtCompound();
-        h.writeCustomDataToNbt(nbt);
-        dress(h, HorseColor.byId(nbt.getInt("Variant") & 0xFF), rgb, false);
-        ((ServerWorld) h.getWorld()).spawnParticles(ParticleTypes.HAPPY_VILLAGER, h.getX(), h.getY() + 1, h.getZ(), 20, 0.6, 0.6, 0.6, 0);
+        CompoundTag nbt = new CompoundTag();
+        h.addAdditionalSaveData(nbt);
+        dress(h, Variant.byId(nbt.getInt("Variant") & 0xFF), rgb, false);
+        ((ServerLevel) h.level()).sendParticles(ParticleTypes.HAPPY_VILLAGER, h.getX(), h.getY() + 1, h.getZ(), 20, 0.6, 0.6, 0.6, 0);
         Helper.say(player, "Fresh paint! Your Star Roadster is now " + colour + ".");
     }
 
-    static void coat(ServerPlayerEntity player, String name) {
-        HorseEntity h = mine(player);
+    static void coat(ServerPlayer player, String name) {
+        Horse h = mine(player);
         if (h == null) {
             Helper.say(player, "I can't see your Star Roadster nearby.");
             return;
         }
-        HorseColor coat = null;
-        for (HorseColor c : HorseColor.values()) if (c.asString().equalsIgnoreCase(name.trim())) coat = c;
+        Variant coat = null;
+        for (Variant c : Variant.values()) if (c.getSerializedName().equalsIgnoreCase(name.trim())) coat = c;
         if (coat == null) {
             Helper.say(player, "Coats: white, creamy, chestnut, brown, black, gray, dark_brown.");
             return;
         }
-        NbtCompound nbt = new NbtCompound();
-        h.writeCustomDataToNbt(nbt);
+        CompoundTag nbt = new CompoundTag();
+        h.addAdditionalSaveData(nbt);
         int paint = DEFAULT_PAINT;
         if (nbt.contains("ArmorItem")) {
-            ItemStack armor = ItemStack.fromNbt(nbt.getCompound("ArmorItem"));
-            if (armor.getItem() instanceof DyeableItem d) paint = d.getColor(armor);
+            ItemStack armor = ItemStack.of(nbt.getCompound("ArmorItem"));
+            if (armor.getItem() instanceof DyeableLeatherItem d) paint = d.getColor(armor);
         }
         dress(h, coat, paint, false);
-        Helper.say(player, "Your Star Roadster's body is " + coat.asString() + " now.");
+        Helper.say(player, "Your Star Roadster's body is " + coat.getSerializedName() + " now.");
     }
 
-    static void rename(ServerPlayerEntity player, String name) {
-        HorseEntity h = mine(player);
+    static void rename(ServerPlayer player, String name) {
+        Horse h = mine(player);
         if (h == null) {
             Helper.say(player, "I can't see your Star Roadster nearby.");
             return;
         }
-        h.setCustomName(Text.literal(name.length() > 32 ? name.substring(0, 32) : name).formatted(Formatting.RED));
+        h.setCustomName(Component.literal(name.length() > 32 ? name.substring(0, 32) : name).withStyle(ChatFormatting.RED));
         Helper.say(player, "Your roadster is called " + name + " now.");
     }
 
     /** /helper roadster call: bring it to you (same world). */
-    static void call(ServerPlayerEntity player) {
-        HorseEntity found = null;
-        for (ServerWorld w : player.getServer().getWorlds()) {
-            for (Entity e : w.iterateEntities()) {
-                if (e instanceof HorseEntity h && h.getCommandTags().contains(TAG) && player.getUuid().equals(h.getOwnerUuid())) {
+    static void call(ServerPlayer player) {
+        Horse found = null;
+        for (ServerLevel w : player.getServer().getAllLevels()) {
+            for (Entity e : w.getAllEntities()) {
+                if (e instanceof Horse h && h.getTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID())) {
                     found = h;
                     break;
                 }
@@ -202,11 +201,11 @@ final class Roadster {
             Helper.say(player, "Your Star Roadster isn't loaded anywhere. If it's far away, go back to where you parked it.");
             return;
         }
-        if (found.getWorld() != player.getWorld()) {
+        if (found.level() != player.level()) {
             Helper.say(player, "Your Star Roadster is parked in another world. Go back there to drive it.");
             return;
         }
-        found.requestTeleport(player.getX() + 1.5, player.getY(), player.getZ());
+        found.teleportTo(player.getX() + 1.5, player.getY(), player.getZ());
         Helper.say(player, "Here's your Star Roadster!");
     }
 
@@ -215,15 +214,15 @@ final class Roadster {
     // ---------------------------------------------------------------------------------------
 
     static void tick(MinecraftServer server) {
-        for (ServerPlayerEntity rider : server.getPlayerManager().getPlayerList()) {
-            if (!(rider.getVehicle() instanceof HorseEntity h) || !h.getCommandTags().contains(TAG)) continue;
+        for (ServerPlayer rider : server.getPlayerList().getPlayers()) {
+            if (!(rider.getVehicle() instanceof Horse h) || !h.getTags().contains(TAG)) continue;
             fly(rider, h);
         }
         // A parked roadster drops back to the ground.
-        if (server.getTicks() % 20 == 0) {
-            for (ServerWorld w : server.getWorlds()) {
-                for (Entity e : w.iterateEntities()) {
-                    if (e instanceof HorseEntity h && h.hasNoGravity() && h.getCommandTags().contains(TAG) && !h.hasPassengers()) {
+        if (server.getTickCount() % 20 == 0) {
+            for (ServerLevel w : server.getAllLevels()) {
+                for (Entity e : w.getAllEntities()) {
+                    if (e instanceof Horse h && h.isNoGravity() && h.getTags().contains(TAG) && !h.isVehicle()) {
                         land(h);
                     }
                 }
@@ -236,57 +235,57 @@ final class Roadster {
      * While it's in the air the saddle comes off (it goes back on when it lands): with no saddle the rider
      * is a passenger and the server moves the roadster, so the flying and the autopilot actually happen.
      */
-    private static void takeOff(HorseEntity h) {
+    private static void takeOff(Horse h) {
         h.setNoGravity(true);
-        if (h.isSaddled()) h.getStackReference(400).set(ItemStack.EMPTY);
+        if (h.isSaddled()) h.getSlot(400).set(ItemStack.EMPTY);
         h.getNavigation().stop();
     }
 
-    private static void land(HorseEntity h) {
+    private static void land(Horse h) {
         h.setNoGravity(false);
-        if (!h.isSaddled()) h.getStackReference(400).set(new ItemStack(Items.SADDLE));
+        if (!h.isSaddled()) h.getSlot(400).set(new ItemStack(Items.SADDLE));
     }
 
-    private static void fly(ServerPlayerEntity rider, HorseEntity h) {
-        if (h.hasNoGravity()) {
+    private static void fly(ServerPlayer rider, Horse h) {
+        if (h.isNoGravity()) {
             h.getNavigation().stop(); // its own legs stay out of it while flying
-            if (h.isSaddled()) h.getStackReference(400).set(ItemStack.EMPTY); // e.g. after a restart mid-flight
+            if (h.isSaddled()) h.getSlot(400).set(ItemStack.EMPTY); // e.g. after a restart mid-flight
         }
-        ServerWorld world = rider.getServerWorld();
+        ServerLevel world = rider.serverLevel();
         if (autopilot(rider, h, world)) return;
-        float forward = rider.forwardSpeed;
-        Vec3d look = rider.getRotationVec(1f);
-        boolean airborne = h.hasNoGravity();
+        float forward = rider.zza;
+        Vec3 look = rider.getViewVector(1f);
+        boolean airborne = h.isNoGravity();
         if (!airborne) {
-            if (forward > 0 && rider.getPitch() < -25 || WAYPOINTS.containsKey(rider.getUuid())) { // lift off
+            if (forward > 0 && rider.getXRot() < -25 || WAYPOINTS.containsKey(rider.getUUID())) { // lift off
                 takeOff(h);
-                h.setVelocity(h.getVelocity().add(0, 0.5, 0));
-                h.velocityModified = true;
-                world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.NEUTRAL, 1f, 0.6f);
+                h.setDeltaMovement(h.getDeltaMovement().add(0, 0.5, 0));
+                h.hurtMarked = true;
+                world.playSound(null, h.blockPosition(), SoundEvents.FIREWORK_ROCKET_LAUNCH, SoundSource.NEUTRAL, 1f, 0.6f);
             }
             return;
         }
         h.fallDistance = 0;
         rider.fallDistance = 0;
-        if (h.isOnGround() && (rider.getPitch() > 10 || forward <= 0)) { // touched down: drive again
+        if (h.onGround() && (rider.getXRot() > 10 || forward <= 0)) { // touched down: drive again
             land(h);
             return;
         }
-        h.setYaw(rider.getYaw());
-        h.setBodyYaw(rider.getYaw());
-        h.setHeadYaw(rider.getYaw());
+        h.setYRot(rider.getYRot());
+        h.setYBodyRot(rider.getYRot());
+        h.setYHeadRot(rider.getYRot());
         double speed = rider.isSprinting() ? 1.3 : 0.85;
-        Vec3d v = forward > 0 ? look.multiply(speed)
-                : h.getVelocity().multiply(0.6, 0, 0.6); // no W: slow to a hover
-        h.setVelocity(h.getVelocity().multiply(0.4).add(v.multiply(0.6)));
-        h.velocityModified = true;
+        Vec3 v = forward > 0 ? look.scale(speed)
+                : h.getDeltaMovement().multiply(0.6, 0, 0.6); // no W: slow to a hover
+        h.setDeltaMovement(h.getDeltaMovement().scale(0.4).add(v.scale(0.6)));
+        h.hurtMarked = true;
         // Rocket smoke and flames out the back.
-        Vec3d back = h.getPos().subtract(Vec3d.fromPolar(0, h.getYaw()).multiply(1.4)).add(0, 0.7, 0);
-        world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
-        world.spawnParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
-        if (forward > 0) world.spawnParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
-        if (world.getTime() % 30 == 0) {
-            world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_BLAZE_BURN, SoundCategory.NEUTRAL, 0.5f, 0.6f);
+        Vec3 back = h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(1.4)).add(0, 0.7, 0);
+        world.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
+        world.sendParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
+        if (forward > 0) world.sendParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
+        if (world.getGameTime() % 30 == 0) {
+            world.playSound(null, h.blockPosition(), SoundEvents.BLAZE_BURN, SoundSource.NEUTRAL, 0.5f, 0.6f);
         }
     }
 
@@ -297,12 +296,12 @@ final class Roadster {
     private enum Phase { CLIMB, CRUISE, LAND }
 
     private static final class Waypoint {
-        final net.minecraft.registry.RegistryKey<net.minecraft.world.World> world;
+        final net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> world;
         final double x, z;
         Phase phase = Phase.CLIMB;
         int ticks;
 
-        Waypoint(net.minecraft.registry.RegistryKey<net.minecraft.world.World> world, double x, double z) {
+        Waypoint(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> world, double x, double z) {
             this.world = world;
             this.x = x;
             this.z = z;
@@ -319,17 +318,17 @@ final class Roadster {
     }
 
     /** /helper roadster waypoint <x> <z> (or "here" to come back to where you're standing). */
-    static void setWaypoint(ServerPlayerEntity player, double x, double z) {
-        WAYPOINTS.put(player.getUuid(), new Waypoint(player.getWorld().getRegistryKey(), x, z));
-        boolean riding = player.getVehicle() instanceof HorseEntity h && h.getCommandTags().contains(TAG);
+    static void setWaypoint(ServerPlayer player, double x, double z) {
+        WAYPOINTS.put(player.getUUID(), new Waypoint(player.level().dimension(), x, z));
+        boolean riding = player.getVehicle() instanceof Horse h && h.getTags().contains(TAG);
         int dist = (int) Math.sqrt(sq(x - player.getX()) + sq(z - player.getZ()));
         Helper.say(player, "Waypoint set at " + (int) Math.floor(x) + ", " + (int) Math.floor(z) + " (" + dist + " blocks away). "
                 + (riding ? "Autopilot on: sit back, I'll fly you there and land. Press S to take over."
                 : "Hop in your Star Roadster and the autopilot takes you there. /helper roadster waypoint clear cancels it."));
     }
 
-    static void clearWaypoint(ServerPlayerEntity player) {
-        Helper.say(player, WAYPOINTS.remove(player.getUuid()) != null ? "Waypoint cleared. You're driving."
+    static void clearWaypoint(ServerPlayer player) {
+        Helper.say(player, WAYPOINTS.remove(player.getUUID()) != null ? "Waypoint cleared. You're driving."
                 : "You don't have a roadster waypoint set.");
     }
 
@@ -338,17 +337,17 @@ final class Roadster {
     }
 
     /** Flies the roadster to the rider's waypoint. True while the autopilot is in control. */
-    private static boolean autopilot(ServerPlayerEntity rider, HorseEntity h, ServerWorld world) {
-        Waypoint wp = WAYPOINTS.get(rider.getUuid());
+    private static boolean autopilot(ServerPlayer rider, Horse h, ServerLevel world) {
+        Waypoint wp = WAYPOINTS.get(rider.getUUID());
         if (wp == null) return false;
-        if (wp.world != world.getRegistryKey()) {
+        if (wp.world != world.dimension()) {
             if (wp.ticks++ == 0) Helper.say(rider, "That waypoint is in another dimension, so the autopilot can't get there. Cleared it.");
-            WAYPOINTS.remove(rider.getUuid());
+            WAYPOINTS.remove(rider.getUUID());
             return false;
         }
-        if (rider.forwardSpeed < 0) { // S: the rider takes over
-            WAYPOINTS.remove(rider.getUuid());
-            rider.sendMessage(Text.literal("Autopilot off. You're driving.").formatted(Formatting.YELLOW), true);
+        if (rider.zza < 0) { // S: the rider takes over
+            WAYPOINTS.remove(rider.getUUID());
+            rider.displayClientMessage(Component.literal("Autopilot off. You're driving.").withStyle(ChatFormatting.YELLOW), true);
             return false;
         }
         wp.ticks++;
@@ -356,64 +355,64 @@ final class Roadster {
         rider.fallDistance = 0;
         double dx = wp.x - h.getX(), dz = wp.z - h.getZ();
         double flat = Math.sqrt(dx * dx + dz * dz);
-        if (!h.hasNoGravity()) {
+        if (!h.isNoGravity()) {
             takeOff(h);
-            world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.NEUTRAL, 1f, 0.6f);
+            world.playSound(null, h.blockPosition(), SoundEvents.FIREWORK_ROCKET_LAUNCH, SoundSource.NEUTRAL, 1f, 0.6f);
             if (wp.phase == Phase.LAND) wp.phase = Phase.CLIMB;
         }
         // How high to fly: well above the ground here and a little ahead (only chunks that are already loaded).
         double nx = flat > 0.01 ? dx / flat : 0, nz = flat > 0.01 ? dz / flat : 0;
         int ground = groundY(world, h.getX(), h.getZ());
         for (int k = 8; k <= 32; k += 8) ground = Math.max(ground, groundY(world, h.getX() + nx * k, h.getZ() + nz * k));
-        double cruise = Math.min(world.getTopY() - 8, Math.max(MIN_CRUISE_Y, ground + 25));
-        Vec3d v;
+        double cruise = Math.min(world.getMaxBuildHeight() - 8, Math.max(MIN_CRUISE_Y, ground + 25));
+        Vec3 v;
         if (wp.phase != Phase.LAND && flat < 3) wp.phase = Phase.LAND;
         switch (wp.phase) {
             case CLIMB -> {
-                v = new Vec3d(nx * 0.2, 0.7, nz * 0.2);
+                v = new Vec3(nx * 0.2, 0.7, nz * 0.2);
                 if (h.getY() >= cruise - 2 || flat < 40 && h.getY() >= ground + 12) wp.phase = Phase.CRUISE;
             }
             case CRUISE -> {
                 double speed = Math.min(CRUISE_SPEED, Math.max(0.3, flat / 12)); // slow down coming in
                 double up = h.getY() < cruise - 3 && flat > 40 ? 0.4 : h.getY() < ground + 6 ? 0.5 : 0;
-                v = new Vec3d(nx * speed, up, nz * speed);
+                v = new Vec3(nx * speed, up, nz * speed);
             }
             default -> { // LAND: straight down, gently, over the waypoint
                 double above = h.getY() - groundY(world, h.getX(), h.getZ());
-                v = new Vec3d(dx * 0.1, above > 10 ? -0.6 : -0.25, dz * 0.1);
-                if (h.isOnGround() || above < 0.2) {
+                v = new Vec3(dx * 0.1, above > 10 ? -0.6 : -0.25, dz * 0.1);
+                if (h.onGround() || above < 0.2) {
                     land(h);
-                    h.setVelocity(Vec3d.ZERO);
-                    h.velocityModified = true;
-                    WAYPOINTS.remove(rider.getUuid());
-                    world.spawnParticles(ParticleTypes.CLOUD, h.getX(), h.getY(), h.getZ(), 20, 0.8, 0.1, 0.8, 0.02);
-                    world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.NEUTRAL, 0.6f, 1.4f);
+                    h.setDeltaMovement(Vec3.ZERO);
+                    h.hurtMarked = true;
+                    WAYPOINTS.remove(rider.getUUID());
+                    world.sendParticles(ParticleTypes.CLOUD, h.getX(), h.getY(), h.getZ(), 20, 0.8, 0.1, 0.8, 0.02);
+                    world.playSound(null, h.blockPosition(), SoundEvents.PLAYER_LEVELUP, SoundSource.NEUTRAL, 0.6f, 1.4f);
                     Helper.say(rider, "Touchdown! We've landed at your waypoint (" + (int) Math.floor(wp.x) + ", " + (int) Math.floor(wp.z) + ").");
                     return true;
                 }
             }
         }
-        h.setVelocity(h.getVelocity().multiply(0.3).add(v.multiply(0.7)));
-        h.velocityModified = true;
-        if (flat > 0.5) h.setYaw((float) (Math.toDegrees(Math.atan2(-nx, nz))));
-        h.setBodyYaw(h.getYaw());
+        h.setDeltaMovement(h.getDeltaMovement().scale(0.3).add(v.scale(0.7)));
+        h.hurtMarked = true;
+        if (flat > 0.5) h.setYRot((float) (Math.toDegrees(Math.atan2(-nx, nz))));
+        h.setYBodyRot(h.getYRot());
         // Smoke and flames out the back, same as when you fly it yourself.
-        Vec3d back = h.getPos().subtract(Vec3d.fromPolar(0, h.getYaw()).multiply(1.4)).add(0, 0.7, 0);
-        world.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
-        world.spawnParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
-        if (wp.phase != Phase.LAND) world.spawnParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
+        Vec3 back = h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(1.4)).add(0, 0.7, 0);
+        world.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
+        world.sendParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
+        if (wp.phase != Phase.LAND) world.sendParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
         if (wp.ticks % 20 == 0) {
             String what = wp.phase == Phase.CLIMB ? "Taking off" : wp.phase == Phase.CRUISE ? "Autopilot" : "Landing";
-            rider.sendMessage(Text.literal(what + ": " + (int) flat + " blocks to go (S to take over)").formatted(Formatting.AQUA), true);
+            rider.displayClientMessage(Component.literal(what + ": " + (int) flat + " blocks to go (S to take over)").withStyle(ChatFormatting.AQUA), true);
         }
-        if (world.getTime() % 30 == 0) world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_BLAZE_BURN, SoundCategory.NEUTRAL, 0.5f, 0.6f);
+        if (world.getGameTime() % 30 == 0) world.playSound(null, h.blockPosition(), SoundEvents.BLAZE_BURN, SoundSource.NEUTRAL, 0.5f, 0.6f);
         return true;
     }
 
     /** Top of the ground (ignoring leaves) at x, z; the world bottom when that chunk isn't loaded yet. */
-    private static int groundY(ServerWorld world, double x, double z) {
+    private static int groundY(ServerLevel world, double x, double z) {
         int bx = (int) Math.floor(x), bz = (int) Math.floor(z);
-        if (!world.isChunkLoaded(bx >> 4, bz >> 4)) return world.getBottomY();
-        return world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, bx, bz);
+        if (!world.hasChunk(bx >> 4, bz >> 4)) return world.getMinBuildHeight();
+        return world.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, bx, bz);
     }
 }

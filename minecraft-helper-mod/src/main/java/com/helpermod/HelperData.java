@@ -1,13 +1,12 @@
 package com.helpermod;
 
-import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.PersistentState;
-
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.saveddata.SavedData;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +16,7 @@ import java.util.UUID;
  * The inventory lives here (not on the entity) so items are never lost if the helper is
  * unloaded, killed in creative, or re-summoned somewhere else.
  */
-public class HelperData extends PersistentState {
+public class HelperData extends SavedData {
     /** Room for 6 rows. A new helper can use 3 rows of pockets; every level unlocks 3 more slots. */
     public static final int INVENTORY_SIZE = 54;
     public static final int MAX_LEVEL = 10;
@@ -34,11 +33,11 @@ public class HelperData extends PersistentState {
         public int level = 1;
         /** The helper's mine: a spiral staircase it digs once and reuses every time it goes underground. */
         public String mineDim;
-        public net.minecraft.util.math.BlockPos mineOrigin;
+        public net.minecraft.core.BlockPos mineOrigin;
         /** How many steps of the staircase are already dug. */
         public int mineDepth;
         /** Where the owner placed a Mine Marker, if they did. While it stands, the mine always starts there. */
-        public net.minecraft.util.math.BlockPos mineMarker;
+        public net.minecraft.core.BlockPos mineMarker;
         /** Which mob the helper looks like, e.g. "minecraft:creeper". Null means it looks like its owner. */
         public String look;
         /** XP the helper picked up (from ores it mined and mobs it fought), handed over on delivery. */
@@ -47,7 +46,7 @@ public class HelperData extends PersistentState {
         public float size = 1f;
 
         Entry() {
-            inventory.addListener(inv -> markDirty());
+            inventory.addListener(inv -> setDirty());
         }
     }
 
@@ -72,7 +71,7 @@ public class HelperData extends PersistentState {
     }
 
     /** The helper's inventory: only the unlocked pockets can hold anything. */
-    public static final class Pockets extends SimpleInventory {
+    public static final class Pockets extends SimpleContainer {
         public int unlocked = 27;
 
         Pockets() {
@@ -80,25 +79,25 @@ public class HelperData extends PersistentState {
         }
 
         @Override
-        public boolean isValid(int slot, ItemStack stack) {
+        public boolean canPlaceItem(int slot, ItemStack stack) {
             return slot < unlocked;
         }
 
         @Override
-        public ItemStack addStack(ItemStack stack) {
+        public ItemStack addItem(ItemStack stack) {
             ItemStack rest = stack.copy();
             for (int i = 0; i < unlocked && !rest.isEmpty(); i++) { // top up matching stacks first
-                ItemStack here = getStack(i);
-                if (here.isEmpty() || !ItemStack.canCombine(here, rest)) continue;
-                int move = Math.min(rest.getCount(), Math.min(here.getMaxCount(), getMaxCountPerStack()) - here.getCount());
+                ItemStack here = getItem(i);
+                if (here.isEmpty() || !ItemStack.isSameItemSameTags(here, rest)) continue;
+                int move = Math.min(rest.getCount(), Math.min(here.getMaxStackSize(), getMaxStackSize()) - here.getCount());
                 if (move <= 0) continue;
-                here.increment(move);
-                rest.decrement(move);
-                markDirty();
+                here.grow(move);
+                rest.shrink(move);
+                setChanged();
             }
             for (int i = 0; i < unlocked && !rest.isEmpty(); i++) {
-                if (!getStack(i).isEmpty()) continue;
-                setStack(i, rest.copy());
+                if (!getItem(i).isEmpty()) continue;
+                setItem(i, rest.copy());
                 rest.setCount(0);
             }
             return rest.isEmpty() ? ItemStack.EMPTY : rest;
@@ -106,8 +105,8 @@ public class HelperData extends PersistentState {
     }
 
     public static HelperData get(MinecraftServer server) {
-        return server.getOverworld().getPersistentStateManager()
-                .getOrCreate(HelperData::fromNbt, HelperData::new, ID);
+        return server.overworld().getDataStorage()
+                .computeIfAbsent(HelperData::fromNbt, HelperData::new, ID);
     }
 
     public Entry get(UUID owner) {
@@ -116,7 +115,7 @@ public class HelperData extends PersistentState {
 
     public Entry getOrCreate(UUID owner) {
         return entries.computeIfAbsent(owner, k -> {
-            markDirty();
+            setDirty();
             return new Entry();
         });
     }
@@ -125,25 +124,25 @@ public class HelperData extends PersistentState {
         return entries;
     }
 
-    private static HelperData fromNbt(NbtCompound nbt) {
+    private static HelperData fromNbt(CompoundTag nbt) {
         HelperData data = new HelperData();
-        NbtList list = nbt.getList("helpers", NbtElement.COMPOUND_TYPE);
+        ListTag list = nbt.getList("helpers", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
-            NbtCompound tag = list.getCompound(i);
+            CompoundTag tag = list.getCompound(i);
             Entry entry = data.new Entry();
-            UUID owner = tag.getUuid("owner");
-            if (tag.containsUuid("entity")) entry.entity = tag.getUuid("entity");
+            UUID owner = tag.getUUID("owner");
+            if (tag.hasUUID("entity")) entry.entity = tag.getUUID("entity");
             entry.active = tag.getBoolean("active");
             entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
             entry.work = tag.getInt("work"); // before the items, so every unlocked pocket is there to fill
             entry.level = levelFor(entry.work);
             entry.inventory.unlocked = pocketsFor(entry.level);
-            entry.inventory.readNbtList(tag.getList("items", NbtElement.COMPOUND_TYPE));
+            entry.inventory.fromTag(tag.getList("items", Tag.TAG_COMPOUND));
             if (tag.contains("mineDim")) {
                 entry.mineDim = tag.getString("mineDim");
-                entry.mineOrigin = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineOrigin"));
+                entry.mineOrigin = net.minecraft.core.BlockPos.of(tag.getLong("mineOrigin"));
                 entry.mineDepth = tag.getInt("mineDepth");
-                if (tag.contains("mineMarker")) entry.mineMarker = net.minecraft.util.math.BlockPos.fromLong(tag.getLong("mineMarker"));
+                if (tag.contains("mineMarker")) entry.mineMarker = net.minecraft.core.BlockPos.of(tag.getLong("mineMarker"));
             }
             if (tag.contains("look")) entry.look = tag.getString("look");
             entry.xp = tag.getInt("xp");
@@ -154,15 +153,15 @@ public class HelperData extends PersistentState {
     }
 
     @Override
-    public NbtCompound writeNbt(NbtCompound nbt) {
-        NbtList list = new NbtList();
+    public CompoundTag save(CompoundTag nbt) {
+        ListTag list = new ListTag();
         entries.forEach((owner, entry) -> {
-            NbtCompound tag = new NbtCompound();
-            tag.putUuid("owner", owner);
-            if (entry.entity != null) tag.putUuid("entity", entry.entity);
+            CompoundTag tag = new CompoundTag();
+            tag.putUUID("owner", owner);
+            if (entry.entity != null) tag.putUUID("entity", entry.entity);
             tag.putBoolean("active", entry.active);
             tag.putBoolean("guard", entry.guard);
-            tag.put("items", entry.inventory.toNbtList());
+            tag.put("items", entry.inventory.createTag());
             if (entry.mineDim != null && entry.mineOrigin != null) {
                 tag.putString("mineDim", entry.mineDim);
                 tag.putLong("mineOrigin", entry.mineOrigin.asLong());

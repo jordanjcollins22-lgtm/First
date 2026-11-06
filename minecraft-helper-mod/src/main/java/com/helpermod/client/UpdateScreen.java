@@ -1,19 +1,7 @@
 package com.helpermod.client;
 
 import com.helpermod.Updater;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.text.OrderedText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-
+import com.mojang.blaze3d.platform.NativeImage;
 import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +9,17 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
 
 /**
  * The in-game "Helper Buddies X is available, update now?" screen.
@@ -40,18 +39,18 @@ public class UpdateScreen extends Screen {
     private static final Map<String, Shot> SHOTS = new ConcurrentHashMap<>();
 
     private static final class Shot {
-        volatile Identifier id;
+        volatile ResourceLocation id;
         volatile int w, h;
         volatile boolean failed;
     }
 
     /** One piece of the notes: a heading, a text paragraph, a screenshot or a gap. */
-    private record Block(Text text, String image, int gap) {}
+    private record Block(Component text, String image, int gap) {}
 
     private final Screen parent;
     private final boolean preview; // /helperupdate preview: this version's own notes, no download
     private final List<Block> blocks = new ArrayList<>();
-    private ButtonWidget yes, notNow, skip, page, done;
+    private Button yes, notNow, skip, page, done;
     private double scroll;
     private int contentHeight;
 
@@ -60,7 +59,7 @@ public class UpdateScreen extends Screen {
     }
 
     public UpdateScreen(Screen parent, boolean preview) {
-        super(Text.literal("Helper Buddies update"));
+        super(Component.literal("Helper Buddies update"));
         this.parent = parent;
         this.preview = preview;
     }
@@ -85,23 +84,23 @@ public class UpdateScreen extends Screen {
         int bw = 150;
         int cx = width / 2;
         int row1 = height - 50, row2 = height - 26;
-        yes = addDrawableChild(ButtonWidget.builder(Text.literal("Yes, update").formatted(Formatting.GREEN), b -> Updater.downloadAsync())
-                .dimensions(cx - bw - 4, row1, bw, 20).build());
-        notNow = addDrawableChild(ButtonWidget.builder(Text.literal("Not now"), b -> {
-                    close();
-                    UpdateClient.remindInChat(MinecraftClient.getInstance());
+        yes = addRenderableWidget(Button.builder(Component.literal("Yes, update").withStyle(ChatFormatting.GREEN), b -> Updater.downloadAsync())
+                .bounds(cx - bw - 4, row1, bw, 20).build());
+        notNow = addRenderableWidget(Button.builder(Component.literal("Not now"), b -> {
+                    onClose();
+                    UpdateClient.remindInChat(Minecraft.getInstance());
                 })
-                .dimensions(cx + 4, row1, bw, 20).build());
-        skip = addDrawableChild(ButtonWidget.builder(Text.literal("Skip this version"), b -> {
+                .bounds(cx + 4, row1, bw, 20).build());
+        skip = addRenderableWidget(Button.builder(Component.literal("Skip this version"), b -> {
                     String v = Updater.available();
                     if (v != null) Updater.skip(v);
-                    close();
+                    onClose();
                 })
-                .dimensions(cx - bw - 4, row2, bw, 20).build());
-        page = addDrawableChild(ButtonWidget.builder(Text.literal("Open release page"), b -> Util.getOperatingSystem().open(pageUrl()))
-                .dimensions(cx + 4, row2, bw, 20).build());
-        done = addDrawableChild(ButtonWidget.builder(Text.literal("Keep playing"), b -> close())
-                .dimensions(cx - bw - 4, row1, bw, 20).build());
+                .bounds(cx - bw - 4, row2, bw, 20).build());
+        page = addRenderableWidget(Button.builder(Component.literal("Open release page"), b -> Util.getPlatform().openUri(pageUrl()))
+                .bounds(cx + 4, row2, bw, 20).build());
+        done = addRenderableWidget(Button.builder(Component.literal("Keep playing"), b -> onClose())
+                .bounds(cx - bw - 4, row1, bw, 20).build());
         updateButtons();
     }
 
@@ -115,15 +114,15 @@ public class UpdateScreen extends Screen {
         if (preview) {
             yes.visible = notNow.visible = skip.visible = false;
             done.visible = true;
-            done.setMessage(Text.literal("Close preview"));
+            done.setMessage(Component.literal("Close preview"));
             return;
         }
         boolean ready = Updater.readyVersion() != null && Updater.readyVersion().equals(Updater.available());
         boolean busy = Updater.downloading();
         yes.visible = !ready;
         yes.active = !busy;
-        yes.setMessage(busy ? Text.literal("Downloading...") : Updater.failed() != null
-                ? Text.literal("Try again").formatted(Formatting.GREEN) : Text.literal("Yes, update").formatted(Formatting.GREEN));
+        yes.setMessage(busy ? Component.literal("Downloading...") : Updater.failed() != null
+                ? Component.literal("Try again").withStyle(ChatFormatting.GREEN) : Component.literal("Yes, update").withStyle(ChatFormatting.GREEN));
         notNow.visible = !ready;
         skip.visible = !ready && !busy;
         done.visible = ready;
@@ -142,11 +141,11 @@ public class UpdateScreen extends Screen {
         blocks.clear();
         List<Updater.Release> list = releases();
         if (list.isEmpty()) {
-            blocks.add(new Block(Text.literal("No notes for this update."), null, 0));
+            blocks.add(new Block(Component.literal("No notes for this update."), null, 0));
             return;
         }
         for (Updater.Release r : list) {
-            blocks.add(new Block(Text.literal("Helper Buddies " + r.version()).formatted(Formatting.GOLD, Formatting.BOLD), null, 0));
+            blocks.add(new Block(Component.literal("Helper Buddies " + r.version()).withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD), null, 0));
             boolean any = false;
             for (String raw : r.notes().replace("\r", "").split("\n")) {
                 String line = raw.strip();
@@ -166,13 +165,13 @@ public class UpdateScreen extends Screen {
                     if (line.startsWith("#")) {
                         String head = line.replaceFirst("^#+\\s*", "");
                         blocks.add(new Block(null, null, 4));
-                        blocks.add(new Block(Text.literal(head).formatted(Formatting.YELLOW, Formatting.BOLD), null, 0));
+                        blocks.add(new Block(Component.literal(head).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD), null, 0));
                     } else if (line.startsWith("- ") || line.startsWith("* ")) {
-                        blocks.add(new Block(Text.literal("• " + line.substring(2).strip()), null, 0));
+                        blocks.add(new Block(Component.literal("• " + line.substring(2).strip()), null, 0));
                     } else if (line.matches("^\\d+[.)]\\s.*")) {
-                        blocks.add(new Block(Text.literal(line), null, 0));
+                        blocks.add(new Block(Component.literal(line), null, 0));
                     } else {
-                        blocks.add(new Block(Text.literal(line).formatted(Formatting.GRAY), null, 0));
+                        blocks.add(new Block(Component.literal(line).withStyle(ChatFormatting.GRAY), null, 0));
                     }
                 } else if (images.isEmpty()) {
                     blocks.add(new Block(null, null, 4));
@@ -183,7 +182,7 @@ public class UpdateScreen extends Screen {
                     loadShot(url);
                 }
             }
-            if (!any) blocks.add(new Block(Text.literal("No notes for this version.").formatted(Formatting.GRAY), null, 0));
+            if (!any) blocks.add(new Block(Component.literal("No notes for this version.").withStyle(ChatFormatting.GRAY), null, 0));
             blocks.add(new Block(null, null, 10));
         }
     }
@@ -200,12 +199,12 @@ public class UpdateScreen extends Screen {
             }
             try {
                 NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes)); // PNG screenshots
-                MinecraftClient client = MinecraftClient.getInstance();
+                Minecraft client = Minecraft.getInstance();
                 client.execute(() -> {
-                    NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
+                    DynamicTexture tex = new DynamicTexture(img);
                     shot.w = img.getWidth();
                     shot.h = img.getHeight();
-                    shot.id = client.getTextureManager().registerDynamicTexture("helpermod_update_shot", tex);
+                    shot.id = client.getTextureManager().register("helpermod_update_shot", tex);
                 });
             } catch (Exception e) {
                 shot.failed = true;
@@ -216,37 +215,37 @@ public class UpdateScreen extends Screen {
     }
 
     @Override
-    public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
         renderBackground(ctx);
-        TextRenderer tr = textRenderer;
+        Font tr = font;
         int cw = contentWidth();
         int left = (width - cw) / 2;
         String v = shownVersion();
-        ctx.drawCenteredTextWithShadow(tr, Text.literal((preview ? "Preview: " : "") + "Helper Buddies " + (v == null ? "" : v) + " is available!")
-                .formatted(Formatting.AQUA, Formatting.BOLD), width / 2, 8, 0xFFFFFF);
+        ctx.drawCenteredString(tr, Component.literal((preview ? "Preview: " : "") + "Helper Buddies " + (v == null ? "" : v) + " is available!")
+                .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD), width / 2, 8, 0xFFFFFF);
 
-        Text sub;
+        Component sub;
         boolean ready = !preview && v != null && v.equals(Updater.readyVersion());
         if (preview) {
-            sub = Text.literal("This is how the update screen looks when this version comes out. Nothing downloads from here.")
-                    .formatted(Formatting.YELLOW);
+            sub = Component.literal("This is how the update screen looks when this version comes out. Nothing downloads from here.")
+                    .withStyle(ChatFormatting.YELLOW);
         } else if (ready) {
-            sub = Text.literal("Downloaded! It goes live the next time you open Minecraft. Keep playing for now.").formatted(Formatting.GREEN);
+            sub = Component.literal("Downloaded! It goes live the next time you open Minecraft. Keep playing for now.").withStyle(ChatFormatting.GREEN);
         } else if (Updater.downloading()) {
-            sub = Text.literal("Downloading in the background... you can keep playing.").formatted(Formatting.YELLOW);
+            sub = Component.literal("Downloading in the background... you can keep playing.").withStyle(ChatFormatting.YELLOW);
         } else if (Updater.failed() != null) {
-            sub = Text.literal(Updater.failed()).formatted(Formatting.RED);
+            sub = Component.literal(Updater.failed()).withStyle(ChatFormatting.RED);
         } else {
-            sub = Text.literal("You have " + Updater.currentVersion() + ". Update now? A restart is needed: it goes live next time you open Minecraft.")
-                    .formatted(Formatting.WHITE);
+            sub = Component.literal("You have " + Updater.currentVersion() + ". Update now? A restart is needed: it goes live next time you open Minecraft.")
+                    .withStyle(ChatFormatting.WHITE);
         }
         int y = 22;
-        for (OrderedText line : tr.wrapLines(sub, cw)) {
-            ctx.drawCenteredTextWithShadow(tr, line, width / 2, y, 0xFFFFFF);
+        for (FormattedCharSequence line : tr.split(sub, cw)) {
+            ctx.drawCenteredString(tr, line, width / 2, y, 0xFFFFFF);
             y += 10;
         }
-        ctx.drawCenteredTextWithShadow(tr, Text.literal("On LAN, the host's copy runs the helpers, so the host is the one who must update.")
-                .formatted(Formatting.DARK_GRAY), width / 2, y, 0xFFFFFF);
+        ctx.drawCenteredString(tr, Component.literal("On LAN, the host's copy runs the helpers, so the host is the one who must update.")
+                .withStyle(ChatFormatting.DARK_GRAY), width / 2, y, 0xFFFFFF);
         y += 14;
 
         int top = y, bottom = height - 56;
@@ -257,8 +256,8 @@ public class UpdateScreen extends Screen {
             if (b.gap() > 0) {
                 cy += b.gap();
             } else if (b.text() != null) {
-                for (OrderedText line : tr.wrapLines(b.text(), cw)) {
-                    ctx.drawTextWithShadow(tr, line, left, cy, 0xFFFFFF);
+                for (FormattedCharSequence line : tr.split(b.text(), cw)) {
+                    ctx.drawString(tr, line, left, cy, 0xFFFFFF);
                     cy += 10;
                 }
             } else if (b.image() != null) {
@@ -266,11 +265,11 @@ public class UpdateScreen extends Screen {
                 if (s != null && s.id != null && s.w > 0) {
                     float scale = Math.min(1f, Math.min((float) cw / s.w, (float) MAX_IMAGE_HEIGHT / s.h));
                     int dw = Math.max(1, (int) (s.w * scale)), dh = Math.max(1, (int) (s.h * scale));
-                    ctx.drawTexture(s.id, left + (cw - dw) / 2, cy + 2, dw, dh, 0, 0, s.w, s.h, s.w, s.h);
+                    ctx.blit(s.id, left + (cw - dw) / 2, cy + 2, dw, dh, 0, 0, s.w, s.h, s.w, s.h);
                     cy += dh + 6;
                 } else {
                     String msg = s != null && s.failed ? "(Screenshot: press Open release page to see it)" : "(Loading screenshot...)";
-                    ctx.drawTextWithShadow(tr, Text.literal(msg).formatted(Formatting.DARK_GRAY, Formatting.ITALIC), left, cy, 0xFFFFFF);
+                    ctx.drawString(tr, Component.literal(msg).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), left, cy, 0xFFFFFF);
                     cy += 12;
                 }
             }
@@ -295,7 +294,7 @@ public class UpdateScreen extends Screen {
     }
 
     @Override
-    public void close() {
-        MinecraftClient.getInstance().setScreen(parent);
+    public void onClose() {
+        Minecraft.getInstance().setScreen(parent);
     }
 }

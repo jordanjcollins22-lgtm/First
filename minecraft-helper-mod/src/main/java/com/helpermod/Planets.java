@@ -1,24 +1,23 @@
 package com.helpermod;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.registry.Registries;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.Difficulty;
-import net.minecraft.world.Heightmap;
-import net.minecraft.world.World;
-
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.AABB;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -120,26 +119,26 @@ final class Planets {
                     "minecraft:calcite", "minecraft:purpur_pillar")));
 
     /** The planet a world is (by its name, e.g. ad_astra:moon or helpermod:europa), or null for Earth, orbits and the rest. */
-    static Theme themeOf(World world) {
-        Identifier id = world.getRegistryKey().getValue();
+    static Theme themeOf(Level world) {
+        ResourceLocation id = world.dimension().location();
         if (!id.getNamespace().equals("ad_astra") && !id.getNamespace().equals(HelperMod.MOD_ID)) return null;
         return THEMES.get(id.getPath());
     }
 
-    static String keyOf(World world) {
-        return world.getRegistryKey().getValue().toString();
+    static String keyOf(Level world) {
+        return world.dimension().location().toString();
     }
 
     /** Ad Astra planets and orbits (any world from Ad Astra or this mod's planet pack). */
-    static boolean isSpace(World world) {
-        String ns = world.getRegistryKey().getValue().getNamespace();
+    static boolean isSpace(Level world) {
+        String ns = world.dimension().location().getNamespace();
         return ns.equals("ad_astra") || ns.equals(HelperMod.MOD_ID);
     }
 
     static EntityType<?> type(String ids) {
         for (String s : ids.split("\\|")) {
-            Identifier id = Identifier.tryParse(s);
-            if (id != null && Registries.ENTITY_TYPE.containsId(id)) return Registries.ENTITY_TYPE.get(id);
+            ResourceLocation id = ResourceLocation.tryParse(s);
+            if (id != null && BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return BuiltInRegistries.ENTITY_TYPE.get(id);
         }
         return null;
     }
@@ -148,13 +147,13 @@ final class Planets {
         List<ItemStack> out = new ArrayList<>();
         for (Reward reward : theme.rewards()) {
             for (String s : reward.ids()) {
-                Identifier id = Identifier.tryParse(s);
-                if (id == null || !Registries.ITEM.containsId(id)) continue;
-                Item item = Registries.ITEM.get(id);
+                ResourceLocation id = ResourceLocation.tryParse(s);
+                if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) continue;
+                Item item = BuiltInRegistries.ITEM.get(id);
                 if (item == Items.AIR) continue;
                 int left = reward.count();
                 while (left > 0) {
-                    int n = Math.min(left, item.getMaxCount());
+                    int n = Math.min(left, item.getMaxStackSize());
                     out.add(new ItemStack(item, n));
                     left -= n;
                 }
@@ -172,20 +171,20 @@ final class Planets {
 
     /** Every 10 seconds, top up each planet player's surroundings with that planet's monsters. */
     static void tick(MinecraftServer server) {
-        if (server.getTicks() % 200 != 0) return;
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+        if (server.getTickCount() % 200 != 0) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (player.isSpectator()) continue;
-            ServerWorld world = player.getServerWorld();
+            ServerLevel world = player.serverLevel();
             Theme theme = themeOf(world);
             if (theme == null || world.getDifficulty() == Difficulty.PEACEFUL) continue;
-            Box around = player.getBoundingBox().expand(64);
-            int near = world.getEntitiesByClass(MobEntity.class, around, e -> e.getCommandTags().contains(MOB_TAG)).size();
+            AABB around = player.getBoundingBox().inflate(64);
+            int near = world.getEntitiesOfClass(Mob.class, around, e -> e.getTags().contains(MOB_TAG)).size();
             if (near >= NEARBY_CAP) continue;
             spawnOne(world, player, theme, world.getRandom());
         }
     }
 
-    private static void spawnOne(ServerWorld world, ServerPlayerEntity player, Theme theme, Random random) {
+    private static void spawnOne(ServerLevel world, ServerPlayer player, Theme theme, RandomSource random) {
         List<EntityType<?>> options = new ArrayList<>();
         for (String id : theme.mobs()) {
             EntityType<?> t = type(id);
@@ -198,16 +197,16 @@ final class Planets {
             double dist = 24 + random.nextDouble() * 24;
             int x = (int) Math.floor(player.getX() + Math.cos(angle) * dist);
             int z = (int) Math.floor(player.getZ() + Math.sin(angle) * dist);
-            if (!world.isChunkLoaded(x >> 4, z >> 4)) continue;
-            int y = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z);
-            if (world.getFluidState(new BlockPos(x, y - 1, z)).isIn(net.minecraft.registry.tag.FluidTags.WATER)) {
-                y = world.getTopY(Heightmap.Type.OCEAN_FLOOR, x, z); // an ocean planet: spawn on the sea floor
+            if (!world.hasChunk(x >> 4, z >> 4)) continue;
+            int y = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+            if (world.getFluidState(new BlockPos(x, y - 1, z)).is(net.minecraft.tags.FluidTags.WATER)) {
+                y = world.getHeight(Heightmap.Types.OCEAN_FLOOR, x, z); // an ocean planet: spawn on the sea floor
             }
             BlockPos pos = new BlockPos(x, y, z);
-            if (y <= world.getBottomY() + 1 || !world.getBlockState(pos.down()).isSolidBlock(world, pos.down())) continue;
-            if (!world.isSpaceEmpty(type.createSimpleBoundingBox(x + 0.5, y, z + 0.5))) continue;
-            Entity e = type.spawn(world, pos, SpawnReason.NATURAL);
-            if (e != null) e.addCommandTag(MOB_TAG);
+            if (y <= world.getMinBuildHeight() + 1 || !world.getBlockState(pos.below()).isRedstoneConductor(world, pos.below())) continue;
+            if (!world.noCollision(type.getAABB(x + 0.5, y, z + 0.5))) continue;
+            Entity e = type.spawn(world, pos, MobSpawnType.NATURAL);
+            if (e != null) e.addTag(MOB_TAG);
             return;
         }
     }
