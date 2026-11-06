@@ -224,6 +224,7 @@ public final class HelperCommands {
                 "/helper storage auto on|off  - when its pockets fill up, it sends the haul to storage and keeps working",
                 "/helper ride  - ride your helper (or right-click it holding a saddle). Sneak to get off",
                 "/helper boss  - where's this planet's boss arena? (Ad Astra planets)",
+                "/helper planet [name|home]  - fly to a planet. In survival, buy a Space Rocket in /helper tycoon shop and right-click it",
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
                 "/helper farm [radius]  - harvest and replant ripe crops around you (16 blocks unless you say)",
                 "/helper tycoon  - dropper tycoon: earn coins, /helper tycoon start for a free kit, /helper tycoon shop to spend",

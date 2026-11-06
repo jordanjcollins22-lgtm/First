@@ -621,8 +621,8 @@ final class Golf {
     static void info(ServerPlayer player) {
         Data data = Data.get(player.level().getServer());
         if (!Planets.keyOf(player.level()).equals(PLANET)) {
-            Helper.say(player, "The golf course is on Fairway, a grassy planet. Fly there with a tier 1 Ad Astra rocket "
-                    + "(the same one that reaches the Moon).");
+            Helper.say(player, "The golf course is on Fairway, a grassy planet. Fly there with a Tier 1 Space Rocket "
+                    + "from /helper tycoon shop, or /helper planet fairway.");
         } else if (data.centre == null) {
             Helper.say(player, "The Fairway Golf Club gets built near you as soon as you're standing on the ground.");
         } else {

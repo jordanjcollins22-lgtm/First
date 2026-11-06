@@ -47,7 +47,7 @@ final class Space {
     static void list(ServerPlayer player) {
         StringBuilder sb = new StringBuilder("Planets you can fly to: ");
         for (int i = 0; i < PLANETS.size(); i++) sb.append(i == 0 ? "" : ", ").append(display(PLANETS.get(i)));
-        Helper.say(player, sb + ". Use /helper planet <name>, and /helper planet home to come back.");
+        Helper.say(player, sb + ". Use /helper planet <name>, and /helper planet home to come back. Or buy a Space Rocket in the tycoon shop and right-click it.");
     }
 
     static void go(ServerPlayer player, String planet) {

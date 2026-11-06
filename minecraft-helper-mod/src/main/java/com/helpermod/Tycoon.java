@@ -823,6 +823,11 @@ final class Tycoon {
                 p.level().getServer().execute(() -> Furniture.openCatalog(p));
                 return false;
             }),
+            // Space Rockets: fly to the planets (never used up)
+            new Offer(1, Rocket.PRICE[1], Rocket.shopName(1), () -> Rocket.item(1)),
+            new Offer(2, Rocket.PRICE[2], Rocket.shopName(2), () -> Rocket.item(2)),
+            new Offer(3, Rocket.PRICE[3], Rocket.shopName(3), () -> Rocket.item(3)),
+            new Offer(3, Rocket.PRICE[4], Rocket.shopName(4), () -> Rocket.item(4)),
             // New machines
             new Offer(1, 60, "4 Speed Belts (carry ore twice as fast)", () -> machine("speed", 4)),
             new Offer(1, 300, "Polisher (+10 to each ore)", () -> machine("polisher", 1)),
@@ -871,16 +876,9 @@ final class Tycoon {
             new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
             new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
             new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
-            // Ad Astra rockets, fully fueled (only shown when Ad Astra is installed)
-            new Offer(1, 50_000, "Tier 1 Rocket, full of cryo fuel (Moon, Fairway)", () -> rocket(1)),
-            new Offer(2, 150_000, "Tier 2 Rocket, full of cryo fuel (Mars)", () -> rocket(2)),
-            new Offer(3, 400_000, "Tier 3 Rocket, full of cryo fuel (Venus, Mercury, Bikini Bottom, Ceres)", () -> rocket(3)),
-            new Offer(3, 1_000_000, "Tier 4 Rocket, full of cryo fuel (every planet: Glacio, Europa, Io, Titan, Pluto)", () -> rocket(4)),
-            new Offer(1, 5_000, "Launch Pad", () -> adAstra("launch_pad", 1)),
-            new Offer(1, 20_000, "4 Cryo Fuel buckets (refills)", () -> adAstra("cryo_fuel_bucket", 4)),
     };
 
-    /** Offers that can be sold here (rockets need Ad Astra). */
+    /** Every offer, then furniture and the rest of the gear. */
     private static List<Offer> offers() {
         List<Offer> list = new ArrayList<>();
         for (Offer o : OFFERS) if (o.action() != null || !o.item().get().isEmpty()) list.add(o);
@@ -902,31 +900,6 @@ final class Tycoon {
                 list.add(new Offer(1, piece.price(), room + ": " + piece.name(), () -> Furniture.item(piece, null)));
             }
         }
-    }
-
-    private static ItemStack adAstra(String id, int count) {
-        Identifier key = Identifier.fromNamespaceAndPath("ad_astra", id);
-        if (!net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(key)) return ItemStack.EMPTY;
-        return new ItemStack(net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(key), count);
-    }
-
-    /**
-     * An Ad Astra rocket with a full tank (3 buckets) of cryo fuel, the best fuel: it only burns 1 bucket a launch,
-     * so that's 3 launches. Ad Astra keeps an item's fuel in Botarium's NBT: BotariumData.StoredFluids[{Fluid, Amount}],
-     * Amount in Fabric droplets (81 per millibucket).
-     */
-    static ItemStack rocket(int tier) {
-        ItemStack stack = adAstra("tier_" + tier + "_rocket", 1);
-        if (stack.isEmpty()) return stack;
-        CompoundTag fluid = new CompoundTag();
-        fluid.putString("Fluid", "ad_astra:cryo_fuel");
-        fluid.putLong("Amount", 3000L * 81L);
-        ListTag fluids = new ListTag();
-        fluids.add(fluid);
-        CompoundTag data = new CompoundTag();
-        data.put("StoredFluids", fluids);
-        Compat.editTag(stack, t -> t.put("BotariumData", data));
-        return stack;
     }
 
     private static String lockReason(Offer o) {

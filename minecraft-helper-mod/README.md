@@ -372,10 +372,16 @@ and `/helper roadster call` brings it to you.
 Sit in your roadster and it takes off by itself, climbs above the ground (at least to Y 120), flies there and lands on
 the spot, then the waypoint is gone. The action bar counts down the distance. Press S at any time to take over.
 
-**Rockets (with Ad Astra):** the shop sells Ad Astra rockets that are ready to fly, each with a full tank of
-cryo fuel (3 buckets, enough for 3 launches): Tier 1 (50k), Tier 2 (150k, needs tier 2), Tier 3 (400k) and
-Tier 4 (1M, the max rocket, reaches every planet; both need tier 3). It also sells Launch Pads (5k) and 4 cryo
-fuel buckets for refills (20k). Place the rocket on a launch pad, get in and press space. The shop now has 6 rows.
+**Space Rockets (2.6.0):** the shop sells the mod's own Space Rockets (page 1, after the Furniture Catalogue), so
+you can reach the planets in survival with no other mods. Hold one and right-click: pick a planet (or Home), a 3-2-1
+countdown runs, you blast off in flames and smoke and land on the planet with Slow Falling. A rocket is never used up.
+
+| Rocket | Coins | Shop tier | Flies to |
+|---|---|---|---|
+| Tier 1 | 50,000 | 1 | Fairway, Ceres |
+| Tier 2 | 150,000 | 2 (visit the Nether) | + Europa, Io |
+| Tier 3 | 400,000 | 3 (reach the End) | + Titan, Bikini Bottom |
+| Tier 4 | 1,000,000 | 3 | + Pluto (every planet) |
 
 **Milestones:** earning 1,000, 10,000, 100,000 and 1,000,000 coins in total gives free parts (conveyors and a
 lifter, a new dropper, super upgraders, then mega and star upgraders) and tells the whole server.
