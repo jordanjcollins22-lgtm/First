@@ -129,7 +129,7 @@ final class Shaders {
     // The F6 key, read straight from the window so it needs no key binding API
     // ---------------------------------------------------------------------------------------
 
-    private static Method handle;
+    private static Method handle, getKey;
 
     private static boolean keyDown(Minecraft client) {
         try {
@@ -141,8 +141,9 @@ final class Shaders {
                 }
                 if (handle == null) return false;
             }
+            if (getKey == null) getKey = Class.forName("org.lwjgl.glfw.GLFW").getMethod("glfwGetKey", long.class, int.class);
             long h = (long) handle.invoke(window);
-            return org.lwjgl.glfw.GLFW.glfwGetKey(h, KEY) == org.lwjgl.glfw.GLFW.GLFW_PRESS;
+            return (int) getKey.invoke(null, h, KEY) == 1; // GLFW_PRESS
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             return false;
         }
