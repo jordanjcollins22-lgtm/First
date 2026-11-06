@@ -54,7 +54,7 @@ jobs:
           mkdir p && cd p
           echo "pluginManagement { repositories { maven { url = 'https://maven.fabricmc.net/' }; gradlePluginPortal() } }" > settings.gradle
           cat > build.gradle <<'G'
-          plugins { id 'net.fabricmc.fabric-loom' version '1.20.0-alpha.19' }
+          plugins { id 'net.fabricmc.fabric-loom' version '1.19.3' }
           dependencies {
             minecraft "com.mojang:minecraft:26.3"
             implementation "net.fabricmc:fabric-loader:0.20.1"
@@ -70,7 +70,7 @@ jobs:
           Q=minecraft-helper-mod/port/queries.txt
           [ -f $Q ] || exit 0
           tr ':' '\n' < cp.txt | grep -E 'minecraft-merged|fabric-' > jars.txt
-          for j in $(cat jars.txt); do unzip -Z1 "$j" '*.class' 2>/dev/null; done | grep -v '\$[0-9]' | sed 's/\.class$//' | sort -u > classes.txt
+          for j in $(cat jars.txt); do jar tf "$j" | grep '\.class$'; done | grep -v '\$[0-9]' | sed 's/\.class$//' | sort -u > classes.txt
           while IFS= read -r line; do
             [ -z "$line" ] && continue
             case "$line" in

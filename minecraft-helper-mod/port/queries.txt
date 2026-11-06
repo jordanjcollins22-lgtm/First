@@ -1,21 +1,24 @@
 find /Identifier$
-find ResourceLocation
-find PermissionSource|Permission[A-Z]
-net.minecraft.world.entity.Entity
-net.minecraft.world.entity.LivingEntity
-net.minecraft.world.entity.Mob
-net.minecraft.server.level.ServerPlayer
-net.minecraft.world.entity.player.Player
-net.minecraft.server.level.ServerLevel
-net.minecraft.world.level.Level
-net.minecraft.commands.CommandSourceStack
-net.minecraft.world.item.ItemStack
-net.minecraft.nbt.CompoundTag
-net.minecraft.world.level.storage.ValueInput
-net.minecraft.world.level.storage.ValueOutput
-net.minecraft.world.level.saveddata.SavedData
+find EntitySpawnReason|MobSpawnType
+find TicketType
+find /permissions/
+find DyedItemColor|DataComponents$
+find /ArmorMaterial|/ToolMaterial|/Weapon$|/Tool$
+find saveddata/
+find InteractionResult
+find /ChestMenu$|/AnvilMenu$|/MenuType$
+find fabric/api/command
+find fabric/api/event/lifecycle/v1/Server
+find fabric/api/event/player
+find fabric/api/message
+find fabric/api/resource
+find fabric/api/networking/v1/ServerPlay|PayloadTypeRegistry
+find /TeleportTransition|/Relative$
+find /ChunkMap|/ServerEntity$
+find /ItemStackTemplate
 net.minecraft.world.level.saveddata.SavedDataType
-net.minecraft.world.entity.ai.attributes.Attributes
-net.minecraft.network.chat.Component
-net.minecraft.world.entity.Display
-net.minecraft.world.entity.Display$BlockDisplay
+net.minecraft.world.level.storage.DimensionDataStorage
+net.minecraft.server.level.TicketType
+net.minecraft.world.entity.Display$ItemDisplay
+net.minecraft.world.entity.Interaction
+net.minecraft.core.component.DataComponents
