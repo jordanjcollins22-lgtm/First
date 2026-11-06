@@ -47,7 +47,25 @@ public final class MiniMapLink {
     private static final Map<UUID, Integer> JOIN_CHECK = new HashMap<>();
 
     static void register() {
-        PayloadTypeRegistry.playS2C().register(Hello.TYPE, Hello.CODEC);
+        // The server-to-client play registry, found by name: it's playS2C() in older Fabric API and renamed in newer.
+        for (var m : PayloadTypeRegistry.class.getMethods()) {
+            String n = m.getName().toLowerCase(java.util.Locale.ROOT);
+            if (!java.lang.reflect.Modifier.isStatic(m.getModifiers()) || m.getParameterCount() != 0
+                    || !PayloadTypeRegistry.class.isAssignableFrom(m.getReturnType())) continue;
+            if (!(n.contains("play") && (n.contains("s2c") || n.contains("clientbound")))) continue;
+            try {
+                PayloadTypeRegistry<?> reg = (PayloadTypeRegistry<?>) m.invoke(null);
+                for (var r : reg.getClass().getMethods()) {
+                    if (r.getName().equals("register") && r.getParameterCount() == 2) {
+                        r.invoke(reg, Hello.TYPE, Hello.CODEC);
+                        return;
+                    }
+                }
+            } catch (ReflectiveOperationException e) {
+                HelperMod.LOG.warn("Couldn't register the mini map hello payload", e);
+            }
+        }
+        HelperMod.LOG.warn("No play payload registry found; everyone will be offered the follow-me map");
     }
 
     /** True when this player's own game has the mod's client part (so it draws the corner map itself). */
