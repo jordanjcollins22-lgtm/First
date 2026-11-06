@@ -108,6 +108,7 @@ public final class HelperCommands {
                         .then(literal("upgrade").executes(ctx -> { Tycoon.upgrade(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("fix").executes(ctx -> { Tycoon.fix(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("top").executes(ctx -> { Tycoon.top(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                        .then(literal("odds").executes(ctx -> { Loot.odds(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("sidebar")
                                 .then(literal("on").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrThrow(), true); return 1; }))
                                 .then(literal("off").executes(ctx -> { TycoonSidebar.set(ctx.getSource().getPlayerOrThrow(), false); return 1; })))

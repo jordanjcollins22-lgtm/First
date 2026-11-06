@@ -95,8 +95,19 @@ final class Tycoon {
 
         /** Register a Tycoon Dropper. If its owner picked one up earlier, it gets that one's level back. */
         Dropper register(World world, BlockPos pos, UUID owner) {
+            return register(world, pos, owner, 0);
+        }
+
+        /** level > 0: a pre-levelled dropper from a loot box, which doesn't use up the spare level. */
+        Dropper register(World world, BlockPos pos, UUID owner, int boxLevel) {
             Dropper existing = droppers.get(key(world, pos));
             if (existing != null) return existing;
+            if (boxLevel > 0) {
+                Dropper d = new Dropper(owner, Math.min(MAX_LEVEL, boxLevel));
+                droppers.put(key(world, pos), d);
+                markDirty();
+                return d;
+            }
             Integer level = spare.remove(owner);
             Dropper d = new Dropper(owner, level == null ? 1 : level);
             droppers.put(key(world, pos), d);
@@ -209,6 +220,33 @@ final class Tycoon {
         return named(Items.DROPPER, 1, DROPPER_NAME, Formatting.GOLD);
     }
 
+    private static final String LEVEL_NBT = "HelperDropperLevel";
+
+    /** A Tycoon Dropper that starts at a set level (from loot boxes). Same name, so it works like any other. */
+    static ItemStack dropperItem(int level) {
+        ItemStack stack = dropperItem();
+        stack.getOrCreateNbt().putInt(LEVEL_NBT, level);
+        NbtList lore = new NbtList();
+        lore.add(net.minecraft.nbt.NbtString.of(Text.Serializer.toJson(
+                Text.literal("Starts at level " + level).styled(s -> s.withItalic(false)).formatted(Formatting.YELLOW))));
+        stack.getOrCreateSubNbt("display").put("Lore", lore);
+        return stack;
+    }
+
+    /** Tycoon machines by name, for the shop, milestones and Machine Boxes. */
+    static ItemStack machine(String kind, int count) {
+        return switch (kind) {
+            case "upgrader" -> named(Items.LIME_GLAZED_TERRACOTTA, count, "Upgrader x2", Formatting.GREEN);
+            case "super" -> named(Items.CYAN_GLAZED_TERRACOTTA, count, "Super Upgrader x3", Formatting.AQUA);
+            case "mega" -> named(Items.PURPLE_GLAZED_TERRACOTTA, count, "Mega Upgrader x5", Formatting.LIGHT_PURPLE);
+            case "speed" -> named(Items.LIGHT_BLUE_GLAZED_TERRACOTTA, count, "Speed Belt", Formatting.BLUE);
+            case "polisher" -> named(Items.ORANGE_GLAZED_TERRACOTTA, count, "Polisher +10", Formatting.GOLD);
+            case "smelter" -> named(Items.BROWN_GLAZED_TERRACOTTA, count, "Smelter x1.5", Formatting.RED);
+            case "lucky" -> named(Items.PINK_GLAZED_TERRACOTTA, count, "Lucky Upgrader", Formatting.LIGHT_PURPLE);
+            default -> ItemStack.EMPTY;
+        };
+    }
+
     static boolean isDropperItem(ItemStack stack) {
         return stack.isOf(Items.DROPPER) && stack.hasCustomName() && stack.getName().getString().equals(DROPPER_NAME);
     }
@@ -235,8 +273,19 @@ final class Tycoon {
         return state.isOf(Blocks.YELLOW_GLAZED_TERRACOTTA);
     }
 
+    private static boolean isSpeedBelt(BlockState state) {
+        return state.isOf(Blocks.LIGHT_BLUE_GLAZED_TERRACOTTA);
+    }
+
+    /** Machines that change ore once each: Polisher (+10), Smelter (x1.5), Lucky Upgrader (1 in 8 for x20). */
+    private static boolean isSpecial(BlockState state) {
+        return state.isOf(Blocks.ORANGE_GLAZED_TERRACOTTA) || state.isOf(Blocks.BROWN_GLAZED_TERRACOTTA)
+                || state.isOf(Blocks.PINK_GLAZED_TERRACOTTA);
+    }
+
     private static boolean isBelt(BlockState state) {
-        return state.isOf(Blocks.MAGENTA_GLAZED_TERRACOTTA) || isLifter(state) || multiplier(state) > 1;
+        return state.isOf(Blocks.MAGENTA_GLAZED_TERRACOTTA) || isLifter(state) || isSpeedBelt(state) || isSpecial(state)
+                || multiplier(state) > 1;
     }
 
     static ItemStack lifter() {
@@ -256,7 +305,7 @@ final class Tycoon {
     // Placing a Tycoon Dropper
     // ---------------------------------------------------------------------------------------
 
-    private record Pending(RegistryKey<World> world, BlockPos pos, UUID player, int ticks) {}
+    private record Pending(RegistryKey<World> world, BlockPos pos, UUID player, int ticks, int level) {}
 
     private static final List<Pending> PENDING = new ArrayList<>();
     /** Ore entities alive right now, and the dropper each came from. Not saved: old ore is cleared on load. */
@@ -272,7 +321,8 @@ final class Tycoon {
         ItemStack stack = player.getStackInHand(hand);
         if (isDropperItem(stack)) {
             BlockPos pos = new ItemPlacementContext(player, hand, stack, hit).getBlockPos();
-            PENDING.add(new Pending(w.getRegistryKey(), pos.toImmutable(), player.getUuid(), 0));
+            int level = stack.hasNbt() ? stack.getNbt().getInt(LEVEL_NBT) : 0;
+            PENDING.add(new Pending(w.getRegistryKey(), pos.toImmutable(), player.getUuid(), 0, level));
         }
         return ActionResult.PASS;
     }
@@ -334,7 +384,7 @@ final class Tycoon {
             Pending pd = PENDING.get(i);
             ServerWorld world = server.getWorld(pd.world());
             if (world != null && world.getBlockState(pd.pos()).isOf(Blocks.DROPPER)) {
-                Dropper placed = data.register(world, pd.pos(), pd.player());
+                Dropper placed = data.register(world, pd.pos(), pd.player(), pd.level());
                 ServerPlayerEntity player = server.getPlayerManager().getPlayer(pd.player());
                 if (player != null) Helper.say(player, "Tycoon Dropper placed" + (placed.level > 1 ? " (level " + placed.level + ")" : "")
                         + "! It drops ore out of its front. Lead conveyors from there to a Collector to earn coins.");
@@ -342,7 +392,7 @@ final class Tycoon {
             } else if (pd.ticks() > 5) {
                 PENDING.remove(i);
             } else {
-                PENDING.set(i, new Pending(pd.world(), pd.pos(), pd.player(), pd.ticks() + 1));
+                PENDING.set(i, new Pending(pd.world(), pd.pos(), pd.player(), pd.ticks() + 1, pd.level()));
             }
         }
 
@@ -452,13 +502,48 @@ final class Tycoon {
                 world.playSound(null, under, SoundEvents.BLOCK_AMETHYST_BLOCK_CHIME, SoundCategory.BLOCKS, 0.4f, 1.2f);
             }
         }
+        if (isSpecial(state)) {
+            NbtList ups = tag.getList("ups", NbtElement.LONG_TYPE);
+            net.minecraft.nbt.NbtLong here = net.minecraft.nbt.NbtLong.of(under.asLong());
+            if (!ups.contains(here) && ups.size() < 16) {
+                ups.add(here);
+                tag.put("ups", ups);
+                long value = tag.getLong("value");
+                ItemStack next = stack;
+                if (state.isOf(Blocks.ORANGE_GLAZED_TERRACOTTA)) {
+                    value += 10;
+                    world.spawnParticles(ParticleTypes.WAX_ON, ore.getX(), ore.getY() + 0.2, ore.getZ(), 6, 0.15, 0.15, 0.15, 0.05);
+                    world.playSound(null, under, SoundEvents.ITEM_HONEYCOMB_WAX_ON, SoundCategory.BLOCKS, 0.4f, 1.3f);
+                } else if (state.isOf(Blocks.BROWN_GLAZED_TERRACOTTA)) {
+                    value = value + (value + 1) / 2; // x1.5, rounded up
+                    Item ingot = stack.isOf(Items.RAW_GOLD) ? Items.GOLD_INGOT : stack.isOf(Items.RAW_IRON) ? Items.IRON_INGOT
+                            : stack.isOf(Items.RAW_COPPER) ? Items.COPPER_INGOT : stack.getItem();
+                    if (ingot != stack.getItem()) {
+                        next = new ItemStack(ingot);
+                        next.setNbt(stack.getNbt());
+                    }
+                    world.spawnParticles(ParticleTypes.FLAME, ore.getX(), ore.getY() + 0.2, ore.getZ(), 8, 0.15, 0.15, 0.15, 0.02);
+                    world.playSound(null, under, SoundEvents.BLOCK_FURNACE_FIRE_CRACKLE, SoundCategory.BLOCKS, 0.6f, 1.0f);
+                } else if (world.getRandom().nextInt(8) == 0) { // Lucky Upgrader
+                    value *= 20;
+                    world.spawnParticles(ParticleTypes.TOTEM_OF_UNDYING, ore.getX(), ore.getY() + 0.3, ore.getZ(), 20, 0.2, 0.3, 0.2, 0.2);
+                    world.playSound(null, under, SoundEvents.ENTITY_PLAYER_LEVELUP, SoundCategory.BLOCKS, 0.5f, 1.6f);
+                } else {
+                    world.spawnParticles(ParticleTypes.SMOKE, ore.getX(), ore.getY() + 0.2, ore.getZ(), 3, 0.1, 0.1, 0.1, 0.01);
+                }
+                next.getOrCreateSubNbt(ORE_NBT).putLong("value", Math.min(Long.MAX_VALUE / 8, value));
+                next.getOrCreateSubNbt(ORE_NBT).put("ups", ups);
+                ore.setStack(next.copy());
+            }
+        }
         if (isBelt(state)) {
             // The arrow on the block points away from whoever placed it.
             Direction dir = state.get(GlazedTerracottaBlock.FACING).getOpposite();
             Vec3d v = ore.getVelocity();
             double cx = under.getX() + 0.5, cz = under.getZ() + 0.5;
-            double vx = dir.getOffsetX() != 0 ? dir.getOffsetX() * BELT_SPEED : (cx - ore.getX()) * 0.2;
-            double vz = dir.getOffsetZ() != 0 ? dir.getOffsetZ() * BELT_SPEED : (cz - ore.getZ()) * 0.2;
+            double speed = isSpeedBelt(state) ? BELT_SPEED * 2.2 : BELT_SPEED;
+            double vx = dir.getOffsetX() != 0 ? dir.getOffsetX() * speed : (cx - ore.getX()) * 0.2;
+            double vz = dir.getOffsetZ() != 0 ? dir.getOffsetZ() * speed : (cz - ore.getZ()) * 0.2;
             double vy = v.y;
             if (isLifter(state) && ore.isOnGround()) vy = 0.42; // hop up a block
             ore.setVelocity(vx, vy, vz);
@@ -488,6 +573,9 @@ final class Tycoon {
                 "/helper tycoon sidebar on|off  - show or hide your coin total and coins per second on the side",
                 "Conveyors carry ore the way their arrow points. Upgraders (lime x2, cyan x3, purple x5, red x10) boost it once each.",
                 "Yellow Lifters hop ore up one block so a line can climb. Milestones at 1k, 10k, 100k and 1M coins earned give free parts.",
+                "New machines: light blue Speed Belts carry ore twice as fast, orange Polishers add +10, brown Smelters x1.5 and turn ore",
+                "into ingots, pink Lucky Upgraders have a 1 in 8 chance of x20. Put Polishers before upgraders so the +10 gets multiplied too.",
+                "Loot boxes (Gear, Machine, Mega) are in the shop. Right-click one to open it. /helper tycoon odds shows the chances.",
                 "Black Collectors turn ore into coins. A redstone signal pauses a dropper.",
         };
         for (String line : how) player.sendMessage(Text.literal(line).formatted(Formatting.GRAY), false);
@@ -707,6 +795,33 @@ final class Tycoon {
             new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
             new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
             new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
+            // New machines
+            new Offer(1, 60, "4 Speed Belts (carry ore twice as fast)", () -> machine("speed", 4)),
+            new Offer(1, 300, "Polisher (+10 to each ore)", () -> machine("polisher", 1)),
+            new Offer(2, 1500, "Smelter (x1.5, turns ore into ingots)", () -> machine("smelter", 1)),
+            new Offer(2, 2000, "Lucky Upgrader (1 in 8 chance of x20)", () -> machine("lucky", 1)),
+            // Loot boxes
+            new Offer(1, 400, "Machine Box (random tycoon machine or dropper)", () -> Loot.boxItem("machine")),
+            new Offer(1, 500, "Gear Box (random weapon or armour)", () -> Loot.boxItem("gear")),
+            new Offer(3, 20_000, "Mega Box (gear or machines, much better odds)", () -> Loot.boxItem("mega")),
+            // Weapons and armour
+            new Offer(1, 100, "Iron Sword", () -> new ItemStack(Items.IRON_SWORD)),
+            new Offer(1, 120, "Iron Axe", () -> new ItemStack(Items.IRON_AXE)),
+            new Offer(1, 150, "Bow and 32 Arrows", () -> new ItemStack(Items.BOW), 0, p -> Loot.giveAll(p, Loot.bowKit())),
+            new Offer(1, 80, "Shield", () -> new ItemStack(Items.SHIELD)),
+            new Offer(1, 400, "Iron Armour Set (4 pieces)", () -> new ItemStack(Items.IRON_CHESTPLATE), 0, p -> Loot.giveAll(p, Loot.ironSet())),
+            new Offer(2, 600, "Diamond Sword", () -> new ItemStack(Items.DIAMOND_SWORD)),
+            new Offer(2, 350, "Crossbow", () -> new ItemStack(Items.CROSSBOW)),
+            new Offer(2, 2500, "Diamond Armour Set (4 pieces)", () -> new ItemStack(Items.DIAMOND_CHESTPLATE), 0, p -> Loot.giveAll(p, Loot.diamondSet())),
+            new Offer(2, 3000, "Power V Bow (Infinity, Flame)", Loot::powerBow),
+            new Offer(3, 8000, "Sharpness V Diamond Sword", Loot::sharpDiamondSword),
+            new Offer(3, 12_000, "Protection IV Diamond Armour Set", () -> Loot.protectedDiamondSet().get(1), 0,
+                    p -> Loot.giveAll(p, Loot.protectedDiamondSet())),
+            new Offer(3, 30_000, "Trident (Loyalty III)", () -> Loot.enchanted(Items.TRIDENT,
+                    net.minecraft.enchantment.Enchantments.LOYALTY, 3, net.minecraft.enchantment.Enchantments.IMPALING, 3)),
+            new Offer(3, 60_000, "Netherite Sword", () -> new ItemStack(Items.NETHERITE_SWORD)),
+            new Offer(3, 200_000, "Netherite Armour Set (4 pieces)", () -> new ItemStack(Items.NETHERITE_CHESTPLATE), 0,
+                    p -> Loot.giveAll(p, Loot.netheriteSet())),
             new Offer(1, Roadster.PRICE, "Star Roadster (a flying sports car you can repaint)",
                     Roadster::shopIcon, 0, Roadster::spawn),
             new Offer(2, 800, "Super Upgrader (x3)", () -> named(Items.CYAN_GLAZED_TERRACOTTA, 1, "Super Upgrader x3", Formatting.AQUA)),
@@ -786,6 +901,17 @@ final class Tycoon {
         private static final int SIZE = 54;
         private final SimpleInventory view;
         private final List<Offer> list;
+        private static final int PER_PAGE = 45;
+        private int page;
+
+        private int pages() {
+            return Math.max(1, (list.size() + PER_PAGE - 1) / PER_PAGE);
+        }
+
+        private Offer offerAt(int slot) {
+            int i = page * PER_PAGE + slot;
+            return slot < PER_PAGE && i < list.size() ? list.get(i) : null;
+        }
 
         Shop(int syncId, PlayerInventory inv, ServerPlayerEntity player) {
             this(syncId, inv, player, new SimpleInventory(SIZE));
@@ -803,8 +929,9 @@ final class Tycoon {
             Data data = Data.get(player.getServer());
             int tier = tier(player);
             for (int i = 0; i < SIZE; i++) view.setStack(i, ItemStack.EMPTY);
-            for (int i = 0; i < list.size() && i < SIZE - 1; i++) {
-                Offer o = list.get(i);
+            for (int i = 0; i < PER_PAGE; i++) {
+                Offer o = offerAt(i);
+                if (o == null) break;
                 ItemStack shown = o.item().get();
                 boolean open = tier >= o.tier() && data.rebirths(player.getUuid()) >= o.rebirths();
                 ItemStack button = Storage.Menu.button(open ? shown.getItem() : Items.BARRIER, o.what(),
@@ -813,8 +940,11 @@ final class Tycoon {
                 button.setCount(Math.max(1, shown.getCount()));
                 view.setStack(i, button);
             }
-            view.setStack(SIZE - 1, Storage.Menu.button(Items.GOLD_INGOT, data.coins(player.getUuid()) + " coins",
+            view.setStack(49, Storage.Menu.button(Items.GOLD_INGOT, data.coins(player.getUuid()) + " coins",
                     "Earn coins with Tycoon Droppers", "Tier " + tierName(tier)));
+            if (page > 0) view.setStack(45, Storage.Menu.button(Items.ARROW, "Previous page", "Page " + page + " of " + pages(), ""));
+            if (page < pages() - 1) view.setStack(53, Storage.Menu.button(Items.SPECTRAL_ARROW, "Next page",
+                    "Page " + (page + 2) + " of " + pages(), "More: weapons, armour, loot boxes"));
             sendContentUpdates();
         }
 
@@ -824,7 +954,12 @@ final class Tycoon {
                 if (action != SlotActionType.QUICK_MOVE) super.onSlotClick(slotIndex, button, action, p);
                 return;
             }
-            if (action == SlotActionType.PICKUP && slotIndex < list.size() && slotIndex < SIZE - 1) buy(list.get(slotIndex));
+            if (action == SlotActionType.PICKUP) {
+                Offer o = offerAt(slotIndex);
+                if (o != null) buy(o);
+                else if (slotIndex == 45 && page > 0) page--;
+                else if (slotIndex == 53 && page < pages() - 1) page++;
+            }
             refresh();
         }
 
