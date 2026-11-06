@@ -1,0 +1,35 @@
+{
+ "attributes": {
+  "minecraft:visual/sky_color": "#b06a20",
+  "minecraft:visual/fog_color": "#b06a20",
+  "minecraft:visual/water_fog_color": "#050533"
+ },
+ "carvers": [
+  "minecraft:cave",
+  "minecraft:cave_extra_underground",
+  "minecraft:canyon"
+ ],
+ "downfall": 0.0,
+ "effects": {
+  "water_color": "#3f76e4"
+ },
+ "features": [
+  [],
+  [],
+  [],
+  [],
+  [],
+  [],
+  [
+   "helpermod:titan_deepslate_coal_ore",
+   "helpermod:titan_deepslate_ostrum_ore",
+   "helpermod:titan_deepslate_diamond_ore"
+  ],
+  [],
+  [],
+  [],
+  []
+ ],
+ "has_precipitation": false,
+ "temperature": -0.5
+}

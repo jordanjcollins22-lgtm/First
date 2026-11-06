@@ -96,6 +96,13 @@ public final class HelperCommands {
                         .then(argument("radius", com.mojang.brigadier.arguments.IntegerArgumentType.integer(4, 48))
                                 .executes(ctx -> farm(ctx, com.mojang.brigadier.arguments.IntegerArgumentType.getInteger(ctx, "radius")))))
                 .then(literal("ride").executes(HelperCommands::ride))
+                .then(literal("planet")
+                        .executes(ctx -> { Space.list(ctx.getSource().getPlayerOrException()); return 1; })
+                        .then(literal("home").executes(ctx -> { Space.home(ctx.getSource().getPlayerOrException()); return 1; }))
+                        .then(argument("name", com.mojang.brigadier.arguments.StringArgumentType.word())
+                                .suggests((ctx, b) -> net.minecraft.commands.SharedSuggestionProvider.suggest(Space.PLANETS, b))
+                                .executes(ctx -> { Space.go(ctx.getSource().getPlayerOrException(),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, "name")); return 1; })))
                 .then(literal("boss").executes(ctx -> {
                     Bosses.tellWhere(ctx.getSource().getPlayerOrException());
                     return 1;

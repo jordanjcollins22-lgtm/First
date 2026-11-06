@@ -67,6 +67,15 @@ public class HelperMod implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
         if (System.getenv("HELPERMOD_SMOKETEST") != null) { // CI: start a server, check it boots, stop
             ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+                for (String planet : Space.PLANETS) {
+                    var w = server.getLevel(Space.key(planet));
+                    if (w == null) { LOG.error("HELPERMOD SMOKETEST planet missing: " + planet); server.halt(false); return; }
+                    w.getChunk(0, 0);
+                    LOG.info("HELPERMOD SMOKETEST planet " + planet + " ground at "
+                            + w.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0)
+                            + " top block " + w.getBlockState(new net.minecraft.core.BlockPos(0,
+                            w.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0) - 1, 0)));
+                }
                 LOG.info("HELPERMOD SMOKETEST OK");
                 server.halt(false);
             });

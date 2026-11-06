@@ -24,8 +24,7 @@ import java.util.Map;
 
 /**
  * What lives on each planet: themed monsters that roam the surface, the planet's boss, and what the
- * boss drops. Works on Ad Astra's planets (Moon, Mars, Venus, Mercury, Glacio) and the ones this mod
- * adds (Europa, Io, Titan, Ceres, Pluto). Mobs that aren't installed are skipped, so it never breaks
+ * boss drops. Works on the planets this mod adds (Europa, Io, Titan, Ceres, Pluto, Bikini Bottom and Fairway). Mobs that aren't installed are skipped, so it never breaks
  * if the modpack changes.
  */
 final class Planets {
@@ -44,72 +43,39 @@ final class Planets {
         return new Reward(ids, count);
     }
 
-    private static final Reward FUEL = r(2, "ad_astra:fuel_bucket", "minecraft:lava_bucket");
+    private static final Reward FUEL = r(2, "minecraft:lava_bucket");
 
     static final Map<String, Theme> THEMES = Map.ofEntries(
-            Map.entry("moon", new Theme("the Moon",
-                    new String[]{"ad_astra:star_crawler", "ad_astra:corrupted_lunarian", "minecraft:silverfish",
-                            "minecraft:endermite", "minecraft:skeleton"},
-                    new Boss("minecraft:ravager", "Crater King", 300, 14, null,
-                            "Desh to build a tier 2 rocket for Mars"),
-                    new Reward[]{r(16, "ad_astra:desh_ingot", "minecraft:iron_ingot"), r(4, "ad_astra:desh_plate", "minecraft:iron_block"), FUEL},
-                    "minecraft:polished_blackstone_bricks", "minecraft:chiseled_polished_blackstone")),
-            Map.entry("mars", new Theme("Mars",
-                    new String[]{"ad_astra:martian_raptor", "ad_astra:pygro", "ad_astra:pygro_brute",
-                            "minecraft:husk", "minecraft:spider"},
-                    new Boss("ad_astra:pygro_brute|minecraft:piglin_brute", "Red Warlord", 320, 16, "minecraft:netherite_axe",
-                            "Ostrum to build a tier 3 rocket for Mercury, Venus and Ceres"),
-                    new Reward[]{r(16, "ad_astra:ostrum_ingot", "minecraft:gold_ingot"), r(4, "ad_astra:ostrum_plate", "minecraft:gold_block"), FUEL},
-                    "minecraft:red_nether_bricks", "minecraft:red_sandstone")),
-            Map.entry("mercury", new Theme("Mercury",
-                    new String[]{"minecraft:magma_cube", "minecraft:blaze", "minecraft:husk"},
-                    new Boss("minecraft:wither_skeleton", "Sun Knight", 340, 18, "minecraft:netherite_sword",
-                            "Calorite to build a tier 4 rocket"),
-                    new Reward[]{r(12, "ad_astra:calorite_ingot", "minecraft:diamond"), FUEL},
-                    "minecraft:nether_bricks", "minecraft:magma_block")),
-            Map.entry("venus", new Theme("Venus",
-                    new String[]{"ad_astra:sulfur_creeper", "minecraft:blaze", "minecraft:magma_cube",
-                            "minecraft:wither_skeleton"},
-                    new Boss("minecraft:blaze", "Sulfur Lord", 300, 12, null,
-                            "Calorite to build a tier 4 rocket for Glacio, Titan and Pluto"),
-                    new Reward[]{r(16, "ad_astra:calorite_ingot", "minecraft:diamond"), r(4, "ad_astra:calorite_plate", "minecraft:diamond_block"), FUEL},
-                    "minecraft:polished_blackstone_bricks", "minecraft:gilded_blackstone")),
-            Map.entry("glacio", new Theme("Glacio",
-                    new String[]{"minecraft:stray", "minecraft:skeleton", "minecraft:spider", "minecraft:zombie"},
-                    new Boss("minecraft:stray", "Frost Lord", 320, 14, "minecraft:netherite_sword",
-                            "Rare gear for the outer planets"),
-                    new Reward[]{r(2, "minecraft:netherite_ingot"), r(16, "minecraft:diamond"), r(4, "ad_astra:fuel_bucket", "minecraft:lava_bucket")},
-                    "minecraft:packed_ice", "minecraft:blue_ice")),
             Map.entry("europa", new Theme("Europa",
                     new String[]{"minecraft:stray", "minecraft:drowned", "minecraft:silverfish", "minecraft:polar_bear"},
                     new Boss("minecraft:iron_golem", "Ice Colossus", 360, 20, null,
-                            "Calorite for a tier 4 rocket to reach Titan and Pluto"),
-                    new Reward[]{r(16, "ad_astra:calorite_ingot", "minecraft:diamond"), r(1, "minecraft:trident"), FUEL},
+                            "Diamonds and gold for the trip to Titan and Pluto"),
+                    new Reward[]{r(16, "minecraft:diamond"), r(1, "minecraft:trident"), FUEL},
                     "minecraft:packed_ice", "minecraft:blue_ice")),
             Map.entry("io", new Theme("Io",
-                    new String[]{"ad_astra:sulfur_creeper", "minecraft:blaze", "minecraft:magma_cube"},
+                    new String[]{"minecraft:blaze", "minecraft:magma_cube"},
                     new Boss("minecraft:magma_cube", "Molten Heart", 300, 10, null,
-                            "Calorite for a tier 4 rocket to reach Titan and Pluto"),
-                    new Reward[]{r(16, "ad_astra:calorite_ingot", "minecraft:diamond"), r(8, "minecraft:gold_block"), FUEL},
+                            "Diamonds and gold for the trip to Titan and Pluto"),
+                    new Reward[]{r(16, "minecraft:diamond"), r(8, "minecraft:gold_block"), FUEL},
                     "minecraft:blackstone", "minecraft:magma_block")),
             Map.entry("ceres", new Theme("Ceres",
                     new String[]{"minecraft:silverfish", "minecraft:endermite", "minecraft:zombie", "minecraft:skeleton"},
                     new Boss("minecraft:evoker", "Ceres Sorcerer", 260, 8, null,
-                            "Calorite for a tier 4 rocket"),
-                    new Reward[]{r(12, "ad_astra:calorite_ingot", "minecraft:diamond"), r(1, "minecraft:totem_of_undying"), FUEL},
+                            "Diamonds and a totem of undying"),
+                    new Reward[]{r(12, "minecraft:diamond"), r(1, "minecraft:totem_of_undying"), FUEL},
                     "minecraft:deepslate_bricks", "minecraft:chiseled_deepslate")),
             Map.entry("titan", new Theme("Titan",
                     new String[]{"minecraft:husk", "minecraft:cave_spider", "minecraft:witch", "minecraft:creeper"},
                     new Boss("minecraft:zoglin", "Haze Beast", 360, 16, null,
                             "Rare gear and fuel for the trip to Pluto"),
-                    new Reward[]{r(2, "minecraft:netherite_ingot"), r(16, "ad_astra:ostrum_ingot", "minecraft:emerald"), r(4, "ad_astra:fuel_bucket", "minecraft:lava_bucket")},
+                    new Reward[]{r(2, "minecraft:netherite_ingot"), r(16, "minecraft:emerald"), r(4, "minecraft:lava_bucket")},
                     "minecraft:red_sandstone", "minecraft:orange_glazed_terracotta")),
             Map.entry("bikini_bottom", new Theme("Bikini Bottom",
                     new String[]{"minecraft:drowned", "minecraft:guardian", "minecraft:pufferfish", "minecraft:drowned"},
                     new Boss("minecraft:drowned", "King of the Deep", 340, 16, "minecraft:trident",
                             "Treasure from the deep and fuel for the trip home"),
                     new Reward[]{r(1, "minecraft:heart_of_the_sea"), r(8, "minecraft:nautilus_shell"), r(1, "minecraft:trident"),
-                            r(12, "ad_astra:calorite_ingot", "minecraft:diamond"), FUEL},
+                            r(12, "minecraft:diamond"), FUEL},
                     "minecraft:prismarine_bricks", "minecraft:sea_lantern")),
             Map.entry("pluto", new Theme("Pluto",
                     new String[]{"minecraft:stray", "minecraft:enderman", "minecraft:phantom", "minecraft:skeleton"},
