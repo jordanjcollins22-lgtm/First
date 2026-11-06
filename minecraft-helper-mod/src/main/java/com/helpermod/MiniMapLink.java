@@ -70,7 +70,11 @@ public final class MiniMapLink {
 
     /** True when this player's own game has the mod's client part (so it draws the corner map itself). */
     static boolean hasClientMap(ServerPlayer player) {
-        return ServerPlayNetworking.canSend(player, Hello.TYPE);
+        try {
+            return ServerPlayNetworking.canSend(player, Hello.TYPE);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     static void onJoin(ServerPlayer player) {
