@@ -62,6 +62,9 @@ public class HelperMod implements ModInitializer {
         UseEntityCallback.EVENT.register(Golf::onUseEntity);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Disguise.prepare(handler.player));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Updater.onJoin(handler.player));
+        MiniMapLink.register(); // who has the corner mini map; a follow-me map for those who don't
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> MiniMapLink.onJoin(handler.player));
+        ServerTickEvents.END_SERVER_TICK.register(MiniMapLink::tick);
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
         ServerLifecycleEvents.SERVER_STARTING.register(Compat::serverStarting);
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);

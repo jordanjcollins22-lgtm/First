@@ -29,6 +29,9 @@ public final class UpdateClient implements ClientModInitializer {
     public void onInitializeClient() {
         ClientTickEvents.END_CLIENT_TICK.register(UpdateClient::tick);
         MiniMap.load();
+        // Tells the server this PC draws the corner mini map, so it doesn't offer the fallback map.
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
+                com.helpermod.MiniMapLink.Hello.TYPE, (payload, context) -> {});
         ClientTickEvents.END_CLIENT_TICK.register(MiniMap::tick);
         net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.attachElementAfter(
                 net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.MISC_OVERLAYS,

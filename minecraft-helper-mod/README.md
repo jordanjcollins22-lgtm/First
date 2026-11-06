@@ -204,6 +204,12 @@ loaded, so it works in singleplayer, on LAN and on servers.
 many blocks each map pixel covers, and `/minimap left` or `/minimap right` picks the corner. Your settings are
 saved in `config/helpermod-minimap.properties`.
 
+**Friends on LAN or a server (2.4.1):** the corner map is drawn by the mod on each player's own PC, so a friend
+only sees it if they have Helper Buddies 2.1.0 or newer installed too. Anyone without it gets a chat message when they
+join with a **[Get a mini map]** link, or can type `/helper minimap`: that puts a **Helper Mini Map** in their off
+hand, a normal map that fills in as they explore and re-centres on them as they walk, so it works with no mod at all.
+`/helper minimap` again takes it back.
+
 ## Talk to your helper
 
 Your helper understands plain chat. Start a message with "helper" (or "buddy"):

@@ -88,6 +88,10 @@ public final class HelperCommands {
                 .then(literal("fetch")
                         .then(argument("item", StringArgumentType.greedyString())
                                 .executes(ctx -> fetch(ctx, StringArgumentType.getString(ctx, "item")))))
+                .then(literal("minimap").executes(ctx -> {
+                    MiniMapLink.toggle(ctx.getSource().getPlayerOrException());
+                    return 1;
+                }))
                 .then(literal("look")
                         .executes(HelperCommands::lookHelp)
                         .then(argument("mob", StringArgumentType.greedyString())
