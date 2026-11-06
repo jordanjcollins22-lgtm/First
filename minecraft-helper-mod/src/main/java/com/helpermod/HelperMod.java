@@ -27,6 +27,12 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(HelperManager::tick);
         ServerEntityEvents.ENTITY_LOAD.register(HelperManager::onEntityLoad);
         UseEntityCallback.EVENT.register(HelperManager::onUseEntity);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Furniture::onUseBlock); // furniture pieces
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Furniture::onUseItem);
+        net.fabricmc.fabric.api.event.player.UseEntityCallback.EVENT.register(Furniture::onUseEntity);
+        net.fabricmc.fabric.api.event.player.AttackEntityCallback.EVENT.register(Furniture::onAttackEntity);
+        ServerTickEvents.END_SERVER_TICK.register(Furniture::tick);
+        ServerEntityEvents.ENTITY_LOAD.register(Furniture::onEntityLoad);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Loot::onUseBlock); // loot boxes open, never get placed
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Loot::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Devices::onUseBlock);
@@ -73,6 +79,7 @@ public class HelperMod implements ModInitializer {
             BlackHole.reset();
             TycoonSidebar.reset();
             Roadster.reset();
+            Furniture.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background

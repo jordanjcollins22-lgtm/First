@@ -234,6 +234,28 @@ on the right side of the screen, only to you. The "+coins" pop-up in the middle 
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
+## Furniture (1.34.0)
+
+`/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 31 pieces in six rooms.
+
+| Room | Pieces |
+|---|---|
+| Kitchen | Counter (storage), Kitchen Sink (tap, fills bottles), Stove (burners light up and smoke), Fridge (storage), Wall Cabinet (storage) |
+| Living room | Sofa (2 seats), Armchair, Coffee Table, TV (switch it on), TV Stand (storage), Floor Lamp (real light), Tall Bookshelf (storage) |
+| Dining room | Dining Table, Dining Chair, Glass Cupboard (storage) |
+| Bedroom | Wardrobe, Bedside Table with Lamp, Dresser (all storage), Desk, Bed Headboard, Vanity Table with Mirror |
+| Bathroom | Toilet, Bathtub (water and a seat), Sink with Mirror, Shower (running water), Towel Rack |
+| Other | Office Chair, Garden Bench, Big Potted Plant, Ceiling Light, Wall Clock |
+
+Pieces cost a few tycoon coins (free in creative). Right-click a block to place one; it faces you.
+**Customize** any piece by right-clicking it while holding: **planks** (the wood), a **log** (legs and frame), **wool or a
+dye** (the fabric), or **any other full block**, modded ones too (the top: counters, tables, the shower wall...). It never
+uses the item up. **Sneak + empty hand** turns it. **Empty hand** uses it: sit on chairs, sofas, toilets and benches,
+open storage (27 slots), switch lights, the TV, taps, the stove and the shower. **Punch** it to pick it up; it keeps its
+materials and drops whatever was stored in it.
+
+Furniture is made of vanilla block displays, so friends without the mod see it too.
+
 **Weapons, armour and loot boxes (1.32.0):** the tycoon shop now has pages (arrows in the bottom corners). It sells
 weapons and armour (iron to netherite, full armour sets give all 4 pieces, plus enchanted ones at tier 3) and three
 loot boxes. Right-click a box to open it: a **Gear Box** (500) gives a random weapon or armour, a **Machine Box** (400)

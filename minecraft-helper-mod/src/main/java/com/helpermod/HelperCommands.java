@@ -101,6 +101,7 @@ public final class HelperCommands {
                     Bosses.tellWhere(ctx.getSource().getPlayerOrThrow());
                     return 1;
                 }))
+                .then(literal("furniture").executes(ctx -> { Furniture.openCatalog(ctx.getSource().getPlayerOrThrow()); return 1; }))
                 .then(literal("tycoon")
                         .executes(ctx -> { Tycoon.info(ctx.getSource().getPlayerOrThrow()); return 1; })
                         .then(literal("start").executes(ctx -> { Tycoon.start(ctx.getSource().getPlayerOrThrow()); return 1; }))
@@ -193,6 +194,7 @@ public final class HelperCommands {
                 "/helper fish [amount]  - go fishing at the nearest water (give it a fishing rod first)",
                 "/helper farm [radius]  - harvest and replant ripe crops around you (16 blocks unless you say)",
                 "/helper tycoon  - dropper tycoon: earn coins, /helper tycoon start for a free kit, /helper tycoon shop to spend",
+                "/helper furniture  - the furniture catalogue: kitchen, living room, dining room, bedroom, bathroom and more",
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
                 "/helper golf  - Fairway golf planet: where's the club, your round, /helper golf shop, /helper golf ball (pick up your ball)",
