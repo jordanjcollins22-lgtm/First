@@ -2,7 +2,7 @@ package com.helpermod.client;
 
 import com.helpermod.Updater;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -30,14 +30,14 @@ public final class UpdateClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(UpdateClient::tick);
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> inWorldTicks = 0);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
-                dispatcher.register(ClientCommandManager.literal("helperupdate").executes(ctx -> {
+                dispatcher.register(ClientCommands.literal("helperupdate").executes(ctx -> {
                     if (Updater.available() == null) {
                         ctx.getSource().sendFeedback(Component.literal("Helper Buddies: " + Updater.status()).withStyle(ChatFormatting.AQUA));
                     } else {
                         openNextTick = true;
                     }
                     return 1;
-                }).then(ClientCommandManager.literal("preview").executes(ctx -> {
+                }).then(ClientCommands.literal("preview").executes(ctx -> {
                     previewNextTick = true; // see this version's update screen without a release
                     return 1;
                 }))));
@@ -49,30 +49,30 @@ public final class UpdateClient implements ClientModInitializer {
             return;
         }
         inWorldTicks++;
-        if (previewNextTick && client.screen == null) {
+        if (previewNextTick && ClientCompat.screen(client) == null) {
             previewNextTick = false;
-            client.setScreen(new UpdateScreen(null, true));
+            ClientCompat.show(client, new UpdateScreen(null, true));
             return;
         }
-        if (openNextTick && client.screen == null) {
+        if (openNextTick && ClientCompat.screen(client) == null) {
             openNextTick = false;
-            client.setScreen(new UpdateScreen(null));
+            ClientCompat.show(client, new UpdateScreen(null));
             return;
         }
         String v = Updater.available();
         if (v == null || v.equals(promptedFor) || v.equals(Updater.readyVersion()) || Updater.skipped(v)) return;
         // Wait ~5 seconds after joining, and only pop up when the player isn't in another menu.
-        if (inWorldTicks < 100 || client.screen != null) return;
+        if (inWorldTicks < 100 || ClientCompat.screen(client) != null) return;
         promptedFor = v;
-        client.setScreen(new UpdateScreen(null));
+        ClientCompat.show(client, new UpdateScreen(null));
     }
 
     /** Chat line after "Not now", so the prompt is easy to find again. */
     static void remindInChat(Minecraft client) {
         if (client.player == null || Updater.available() == null) return;
         Component link = Component.literal("[Show update]").withStyle(s -> s.withColor(ChatFormatting.GREEN).withUnderlined(true)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/helperupdate"))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("See what's new and update"))));
+                .withClickEvent(new ClickEvent.RunCommand("/helperupdate"))
+                .withHoverEvent(new HoverEvent.ShowText(Component.literal("See what's new and update"))));
         client.player.sendSystemMessage(Component.literal("Helper Buddies " + Updater.available() + " is available. ")
                 .withStyle(ChatFormatting.AQUA).append(link));
     }

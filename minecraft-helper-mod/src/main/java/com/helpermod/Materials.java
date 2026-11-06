@@ -152,11 +152,8 @@ public final class Materials {
                     for (var step : biome.value().getGenerationSettings().features()) {
                         for (var placed : step) {
                             placed.value().getFeatures().forEach(feature -> {
-                                if (feature.config() instanceof net.minecraft.world.level.levelgen.feature.configurations.OreConfiguration ore) {
-                                    for (var target : ore.targetStates) {
-                                        map.computeIfAbsent(target.state.getBlock(), k -> new HashSet<>())
-                                                .add(world.dimension());
-                                    }
+                                for (Block b : oreTargets(feature.value())) {
+                                    map.computeIfAbsent(b, k -> new HashSet<>()).add(world.dimension());
                                 }
                             });
                         }
@@ -167,6 +164,35 @@ public final class Materials {
             }
         }
         oreDimensions = map;
+    }
+
+    /** The blocks an ore feature places, read by reflection so it works whatever the ore feature's shape is. */
+    private static List<Block> oreTargets(Object feature) {
+        List<Block> out = new ArrayList<>();
+        if (feature == null || !feature.getClass().getSimpleName().contains("Ore")) return out;
+        try {
+            Object conf = feature;
+            for (var m : feature.getClass().getMethods()) { // older shapes keep the targets in a config object
+                if (m.getParameterCount() == 0 && m.getName().equals("config")) conf = m.invoke(feature);
+            }
+            for (Object holder : new Object[]{conf, feature}) {
+                if (holder == null || !holder.getClass().isRecord() && holder != conf) continue;
+                for (var f : holder.getClass().getDeclaredFields()) {
+                    if (!List.class.isAssignableFrom(f.getType())) continue;
+                    f.setAccessible(true);
+                    for (Object target : (List<?>) f.get(holder)) {
+                        for (var tf : target.getClass().getDeclaredFields()) {
+                            if (!BlockState.class.isAssignableFrom(tf.getType())) continue;
+                            tf.setAccessible(true);
+                            out.add(((BlockState) tf.get(target)).getBlock());
+                        }
+                    }
+                }
+                if (!out.isEmpty()) break;
+            }
+        } catch (Throwable ignored) {
+        }
+        return out;
     }
 
     /**

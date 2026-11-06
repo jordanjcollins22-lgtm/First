@@ -1,18 +1,5 @@
-find OreConfiguration
-find levelgen.placement.PlacedFeature$
-find levelgen.feature.ConfiguredFeature$
-net.minecraft.world.level.levelgen.placement.PlacedFeature
-net.minecraft.world.level.levelgen.feature.ConfiguredFeature
-net.minecraft.client.Minecraft
-net.minecraft.client.gui.screens.Screen
-net.minecraft.client.gui.GuiGraphicsExtractor
-net.minecraft.client.renderer.texture.DynamicTexture
-net.minecraft.client.renderer.texture.TextureManager
-net.minecraft.util.Util$OS
-net.minecraft.network.chat.ClickEvent
-net.minecraft.network.chat.ClickEvent$RunCommand
-net.minecraft.network.chat.HoverEvent
-net.minecraft.network.chat.HoverEvent$ShowText
-find fabric.api.client.command.v2
-net.fabricmc.fabric.api.client.command.v2.ClientCommands
-find levelgen.feature.configurations
+net.minecraft.client.gui.Gui
+net.minecraft.client.renderer.RenderPipelines
+net.minecraft.util.Util
+find levelgen.feature.Ore
+net.minecraft.client.gui.components.events.GuiEventListener

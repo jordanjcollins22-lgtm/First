@@ -13,7 +13,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.texture.DynamicTexture;
@@ -97,7 +97,7 @@ public class UpdateScreen extends Screen {
                     onClose();
                 })
                 .bounds(cx - bw - 4, row2, bw, 20).build());
-        page = addRenderableWidget(Button.builder(Component.literal("Open release page"), b -> Util.getPlatform().openUri(pageUrl()))
+        page = addRenderableWidget(Button.builder(Component.literal("Open release page"), b -> ClientCompat.openUri(pageUrl()))
                 .bounds(cx + 4, row2, bw, 20).build());
         done = addRenderableWidget(Button.builder(Component.literal("Keep playing"), b -> onClose())
                 .bounds(cx - bw - 4, row1, bw, 20).build());
@@ -201,10 +201,11 @@ public class UpdateScreen extends Screen {
                 NativeImage img = NativeImage.read(new ByteArrayInputStream(bytes)); // PNG screenshots
                 Minecraft client = Minecraft.getInstance();
                 client.execute(() -> {
-                    DynamicTexture tex = new DynamicTexture(img);
+                    DynamicTexture tex = new DynamicTexture(() -> "helpermod_update_shot", img);
                     shot.w = img.getWidth();
                     shot.h = img.getHeight();
-                    shot.id = client.getTextureManager().register("helpermod_update_shot", tex);
+                    shot.id = net.minecraft.resources.Identifier.fromNamespaceAndPath("helpermod", "update_shot_" + Integer.toHexString(url.hashCode()));
+                    client.getTextureManager().register(shot.id, tex);
                 });
             } catch (Exception e) {
                 shot.failed = true;
@@ -215,13 +216,12 @@ public class UpdateScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics ctx, int mouseX, int mouseY, float delta) {
-        renderBackground(ctx);
+    public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         Font tr = font;
         int cw = contentWidth();
         int left = (width - cw) / 2;
         String v = shownVersion();
-        ctx.drawCenteredString(tr, Component.literal((preview ? "Preview: " : "") + "Helper Buddies " + (v == null ? "" : v) + " is available!")
+        ctx.centeredText(tr, Component.literal((preview ? "Preview: " : "") + "Helper Buddies " + (v == null ? "" : v) + " is available!")
                 .withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD), width / 2, 8, 0xFFFFFF);
 
         Component sub;
@@ -241,10 +241,10 @@ public class UpdateScreen extends Screen {
         }
         int y = 22;
         for (FormattedCharSequence line : tr.split(sub, cw)) {
-            ctx.drawCenteredString(tr, line, width / 2, y, 0xFFFFFF);
+            ctx.centeredText(tr, line, width / 2, y, 0xFFFFFF);
             y += 10;
         }
-        ctx.drawCenteredString(tr, Component.literal("On LAN, the host's copy runs the helpers, so the host is the one who must update.")
+        ctx.centeredText(tr, Component.literal("On LAN, the host's copy runs the helpers, so the host is the one who must update.")
                 .withStyle(ChatFormatting.DARK_GRAY), width / 2, y, 0xFFFFFF);
         y += 14;
 
@@ -257,7 +257,7 @@ public class UpdateScreen extends Screen {
                 cy += b.gap();
             } else if (b.text() != null) {
                 for (FormattedCharSequence line : tr.split(b.text(), cw)) {
-                    ctx.drawString(tr, line, left, cy, 0xFFFFFF);
+                    ctx.text(tr, line, left, cy, 0xFFFFFF);
                     cy += 10;
                 }
             } else if (b.image() != null) {
@@ -265,11 +265,11 @@ public class UpdateScreen extends Screen {
                 if (s != null && s.id != null && s.w > 0) {
                     float scale = Math.min(1f, Math.min((float) cw / s.w, (float) MAX_IMAGE_HEIGHT / s.h));
                     int dw = Math.max(1, (int) (s.w * scale)), dh = Math.max(1, (int) (s.h * scale));
-                    ctx.blit(s.id, left + (cw - dw) / 2, cy + 2, dw, dh, 0, 0, s.w, s.h, s.w, s.h);
+                    ctx.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, s.id, left + (cw - dw) / 2, cy + 2, 0f, 0f, dw, dh, s.w, s.h, s.w, s.h);
                     cy += dh + 6;
                 } else {
                     String msg = s != null && s.failed ? "(Screenshot: press Open release page to see it)" : "(Loading screenshot...)";
-                    ctx.drawString(tr, Component.literal(msg).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), left, cy, 0xFFFFFF);
+                    ctx.text(tr, Component.literal(msg).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC), left, cy, 0xFFFFFF);
                     cy += 12;
                 }
             }
@@ -284,17 +284,17 @@ public class UpdateScreen extends Screen {
             int barY = top + (int) ((bottom - top - barH) * (scroll / maxScroll));
             ctx.fill(left + cw + 3, barY, left + cw + 5, barY + barH, 0xFFAAAAAA);
         }
-        super.render(ctx, mouseX, mouseY, delta);
+        super.extractRenderState(ctx, mouseX, mouseY, delta);
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double amount) {
         scroll = Math.max(0, scroll - amount * 14);
         return true;
     }
 
     @Override
     public void onClose() {
-        Minecraft.getInstance().setScreen(parent);
+        ClientCompat.show(Minecraft.getInstance(), parent);
     }
 }
