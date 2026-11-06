@@ -43,6 +43,8 @@ public class HelperMod implements ModInitializer {
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Tycoon::onUseBlock); // Reef Town on the Bikini Bottom planet
         ServerTickEvents.END_SERVER_TICK.register(Golf::tick); // Fairway golf planet
         ServerTickEvents.END_SERVER_TICK.register(BlackHole::tick); // ore piles -> Singularity -> the Black Hole
+        ServerTickEvents.END_SERVER_TICK.register(TycoonSidebar::tick); // coin total + per second on the side
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> TycoonSidebar.onJoin(handler.player));
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(BlackHole::onUseItem);
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Golf::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Golf::onUseBlock);
@@ -64,6 +66,7 @@ public class HelperMod implements ModInitializer {
             MineMarker.reset();
             Golf.reset();
             BlackHole.reset();
+            TycoonSidebar.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
