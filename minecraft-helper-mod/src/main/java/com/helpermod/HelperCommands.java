@@ -26,6 +26,13 @@ public final class HelperCommands {
     private static final int MAX_AMOUNT = 64 * 36;
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        // /minimap for everyone. Players with the mod never reach this: their own game runs its /minimap (the corner
+        // map settings) first. Everyone else gets the follow-me map, whatever they type after it.
+        dispatcher.register(literal("minimap")
+                .executes(ctx -> { MiniMapLink.toggle(ctx.getSource().getPlayerOrException()); return 1; })
+                .then(argument("settings", StringArgumentType.greedyString())
+                        .executes(ctx -> { MiniMapLink.serverMinimap(ctx.getSource().getPlayerOrException(),
+                                StringArgumentType.getString(ctx, "settings")); return 1; })));
         dispatcher.register(literal("helper")
                 .executes(HelperCommands::help)
                 .then(literal("help").executes(HelperCommands::help))
