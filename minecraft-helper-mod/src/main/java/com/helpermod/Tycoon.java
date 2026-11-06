@@ -795,6 +795,10 @@ final class Tycoon {
             new Offer(1, 15, "32 Torches", () -> new ItemStack(Items.TORCH, 32)),
             new Offer(1, 80, "8 Iron Ingots", () -> new ItemStack(Items.IRON_INGOT, 8)),
             new Offer(1, 60, "Saddle", () -> new ItemStack(Items.SADDLE)),
+            new Offer(1, 0, "Furniture Catalogue (31 pieces for every room)", () -> new ItemStack(Items.RED_BED), 0, p -> {
+                p.getServer().execute(() -> Furniture.openCatalog(p));
+                return false;
+            }),
             // New machines
             new Offer(1, 60, "4 Speed Belts (carry ore twice as fast)", () -> machine("speed", 4)),
             new Offer(1, 300, "Polisher (+10 to each ore)", () -> machine("polisher", 1)),
