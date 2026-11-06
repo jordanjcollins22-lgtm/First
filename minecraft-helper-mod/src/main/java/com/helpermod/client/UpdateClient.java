@@ -23,6 +23,7 @@ public final class UpdateClient implements ClientModInitializer {
     private static String promptedFor;   // version we already popped up for this session
     private static int inWorldTicks;
     private static boolean openNextTick; // /helperupdate: chat closes after the command, so open a tick later
+    private static boolean previewNextTick;
 
     @Override
     public void onInitializeClient() {
@@ -36,7 +37,10 @@ public final class UpdateClient implements ClientModInitializer {
                         openNextTick = true;
                     }
                     return 1;
-                })));
+                }).then(ClientCommandManager.literal("preview").executes(ctx -> {
+                    previewNextTick = true; // see this version's update screen without a release
+                    return 1;
+                }))));
     }
 
     private static void tick(MinecraftClient client) {
@@ -45,6 +49,11 @@ public final class UpdateClient implements ClientModInitializer {
             return;
         }
         inWorldTicks++;
+        if (previewNextTick && client.currentScreen == null) {
+            previewNextTick = false;
+            client.setScreen(new UpdateScreen(null, true));
+            return;
+        }
         if (openNextTick && client.currentScreen == null) {
             openNextTick = false;
             client.setScreen(new UpdateScreen(null));

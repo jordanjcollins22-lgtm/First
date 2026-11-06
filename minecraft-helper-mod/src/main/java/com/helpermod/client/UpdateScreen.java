@@ -49,14 +49,34 @@ public class UpdateScreen extends Screen {
     private record Block(Text text, String image, int gap) {}
 
     private final Screen parent;
+    private final boolean preview; // /helperupdate preview: this version's own notes, no download
     private final List<Block> blocks = new ArrayList<>();
     private ButtonWidget yes, notNow, skip, page, done;
     private double scroll;
     private int contentHeight;
 
     public UpdateScreen(Screen parent) {
+        this(parent, false);
+    }
+
+    public UpdateScreen(Screen parent, boolean preview) {
         super(Text.literal("Helper Buddies update"));
         this.parent = parent;
+        this.preview = preview;
+    }
+
+    private String shownVersion() {
+        return preview ? Updater.currentVersion() : Updater.available();
+    }
+
+    private List<Updater.Release> releases() {
+        if (!preview) return Updater.newerReleases();
+        String notes = "";
+        try (var in = UpdateScreen.class.getResourceAsStream("/helpermod-release-notes.md")) {
+            if (in != null) notes = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+        }
+        return List.of(new Updater.Release(Updater.currentVersion(), notes, null));
     }
 
     @Override
@@ -92,6 +112,12 @@ public class UpdateScreen extends Screen {
     }
 
     private void updateButtons() {
+        if (preview) {
+            yes.visible = notNow.visible = skip.visible = false;
+            done.visible = true;
+            done.setMessage(Text.literal("Close preview"));
+            return;
+        }
         boolean ready = Updater.readyVersion() != null && Updater.readyVersion().equals(Updater.available());
         boolean busy = Updater.downloading();
         yes.visible = !ready;
@@ -114,7 +140,7 @@ public class UpdateScreen extends Screen {
 
     private void buildBlocks() {
         blocks.clear();
-        List<Updater.Release> list = Updater.newerReleases();
+        List<Updater.Release> list = releases();
         if (list.isEmpty()) {
             blocks.add(new Block(Text.literal("No notes for this update."), null, 0));
             return;
@@ -195,13 +221,16 @@ public class UpdateScreen extends Screen {
         TextRenderer tr = textRenderer;
         int cw = contentWidth();
         int left = (width - cw) / 2;
-        String v = Updater.available();
-        ctx.drawCenteredTextWithShadow(tr, Text.literal("Helper Buddies " + (v == null ? "" : v) + " is available!")
+        String v = shownVersion();
+        ctx.drawCenteredTextWithShadow(tr, Text.literal((preview ? "Preview: " : "") + "Helper Buddies " + (v == null ? "" : v) + " is available!")
                 .formatted(Formatting.AQUA, Formatting.BOLD), width / 2, 8, 0xFFFFFF);
 
         Text sub;
-        boolean ready = v != null && v.equals(Updater.readyVersion());
-        if (ready) {
+        boolean ready = !preview && v != null && v.equals(Updater.readyVersion());
+        if (preview) {
+            sub = Text.literal("This is how the update screen looks when this version comes out. Nothing downloads from here.")
+                    .formatted(Formatting.YELLOW);
+        } else if (ready) {
             sub = Text.literal("Downloaded! It goes live the next time you open Minecraft. Keep playing for now.").formatted(Formatting.GREEN);
         } else if (Updater.downloading()) {
             sub = Text.literal("Downloading in the background... you can keep playing.").formatted(Formatting.YELLOW);

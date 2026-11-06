@@ -53,6 +53,7 @@ ask for. It works out the best way to get it:
 | `/helper farm [radius]` | Look after the crops around you (16 blocks unless you say): harvest ripe wheat, carrots, potatoes, beetroot, nether wart and modded crops, plant them again, and bring you the harvest. `/helper stop` ends it |
 | `/helper update` | Says whether a newer version of the mod has been downloaded (see "Updates" below) |
 | `/helperupdate` | Shows the update screen again (what's new, Yes/No) |
+| `/helperupdate preview` | Shows how this version's own update screen looks (no download) |
 | `/helper golf` | Fairway golf: where's the club, how to play. `/helper golf shop` opens the Pro Shop, `/helper golf ball` picks your ball up |
 | `/helper blackhole` | How to make a Singularity, and the Black Hole's bosses. `/helper blackhole leave` gets you out |
 | `/helper town` | Where's Reef Town, the undersea town on the Bikini Bottom planet? |
