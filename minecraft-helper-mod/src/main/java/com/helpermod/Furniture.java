@@ -624,7 +624,8 @@ final class Furniture {
         int rot = switch (front) { case EAST -> 1; case SOUTH -> 2; case WEST -> 3; default -> 0; };
         for (BlockPos rel : cells(piece, rot)) {
             BlockPos cell = pos.offset(rel);
-            if (!world.getBlockState(cell).canBeReplaced() || !world.getEntitiesOfClass(Entity.class, new AABB(cell),
+            // deflate: each piece's click box pokes 0.01 into the blocks around it, which used to block the next piece
+            if (!world.getBlockState(cell).canBeReplaced() || !world.getEntitiesOfClass(Entity.class, new AABB(cell).deflate(0.1),
                     e -> e.entityTags().contains(PART_TAG) && e.getType() == EntityTypes.INTERACTION).isEmpty()) {
                 player.sendOverlayMessage(Component.literal("There isn't room for the " + piece.name() + " there.").withStyle(ChatFormatting.RED));
                 return InteractionResult.SUCCESS;
@@ -707,6 +708,16 @@ final class Furniture {
         Piece piece = placed == null ? null : piece(placed.type);
         if (piece == null) return InteractionResult.SUCCESS;
         ItemStack held = player.getMainHandItem();
+
+        // Holding another piece: put it right next to this one, on the side you clicked (or on top).
+        if (furnitureOf(held) != null) {
+            net.minecraft.world.phys.Vec3 rel = hit.getLocation().subtract(entity.position());
+            double dx = rel.x, dy = rel.y - entity.getBbHeight() / 2, dz = rel.z;
+            Direction side = Math.abs(dy) >= Math.abs(dx) && Math.abs(dy) >= Math.abs(dz) ? (dy > 0 ? Direction.UP : Direction.DOWN)
+                    : Math.abs(dx) >= Math.abs(dz) ? (dx > 0 ? Direction.EAST : Direction.WEST) : (dz > 0 ? Direction.SOUTH : Direction.NORTH);
+            BlockPos next = entity.blockPosition().relative(side);
+            return onUseBlock(player, w, hand, new BlockHitResult(hit.getLocation(), side, next, false));
+        }
 
         if (piece.use() == Use.STOVE && cookedOf(held) != null) {
             cook(world, player, placed, piece, held);
