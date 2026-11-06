@@ -428,31 +428,6 @@ final class Furniture {
         return BuiltInRegistries.BLOCK.getValue(key).defaultBlockState();
     }
 
-    private static BlockState stateFor(Role role, Placed p) {
-        return switch (role) {
-            case WOOD -> state(p.wood, Blocks.OAK_PLANKS.defaultBlockState());
-            case LEGS -> state(p.legs.isEmpty() ? stripped(p.wood) : p.legs, Blocks.STRIPPED_OAK_LOG.defaultBlockState());
-            case FABRIC -> state(p.fabric, Blocks.WOOL.red().defaultBlockState());
-            case TOP -> state(p.top, Blocks.SMOOTH_QUARTZ.defaultBlockState());
-            case WHITE -> Blocks.CONCRETE.white().defaultBlockState();
-            case BLACK -> Blocks.CONCRETE.black().defaultBlockState();
-            case GRAY -> Blocks.CONCRETE.lightGray().defaultBlockState();
-            case METAL -> Blocks.IRON_BLOCK.defaultBlockState();
-            case GLASS -> Blocks.STAINED_GLASS.lightBlue().defaultBlockState();
-            case WATER -> p.on ? Blocks.STAINED_GLASS.blue().defaultBlockState() : null;
-            case SCREEN -> p.on ? Blocks.CONCRETE.lightBlue().defaultBlockState() : Blocks.CONCRETE.gray().defaultBlockState();
-            case LIGHT -> p.on ? Blocks.GLOWSTONE.defaultBlockState() : Blocks.STAINED_GLASS.white().defaultBlockState();
-            case BURNER -> p.on ? Blocks.MAGMA_BLOCK.defaultBlockState() : Blocks.CONCRETE.gray().defaultBlockState();
-            case BOOKS -> Blocks.BOOKSHELF.defaultBlockState();
-            case PLANT -> Blocks.FLOWERING_AZALEA_LEAVES.defaultBlockState();
-            case POT -> Blocks.TERRACOTTA.defaultBlockState();
-        };
-    }
-
-    private static boolean glows(Role role, Placed p) {
-        return p.on && (role == Role.SCREEN || role == Role.LIGHT || role == Role.BURNER);
-    }
-
     /** Turn a point in the piece's own pixels (front facing north) by rot quarter turns clockwise, about the first block's centre. */
     private static float[] turn(float x, float z, int rot) {
         for (int i = 0; i < rot; i++) {
@@ -501,33 +476,9 @@ final class Furniture {
         if (piece == null) return;
         String tag = PART_TAG + ":" + id;
         BlockPos o = p.pos;
-        for (Part part : piece.parts()) {
-            BlockState st = stateFor(part.role(), p);
-            if (st == null) continue;
-            float[] a = turn(part.x1(), part.z1(), p.rot), c = turn(part.x2(), part.z2(), p.rot);
-            float x1 = Math.min(a[0], c[0]), x2 = Math.max(a[0], c[0]), z1 = Math.min(a[1], c[1]), z2 = Math.max(a[1], c[1]);
-            CompoundTag nbt = new CompoundTag();
-            nbt.putString("id", "minecraft:block_display");
-            CompoundTag bs = new CompoundTag();
-            bs.putString("Name", BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString());
-            nbt.put("block_state", bs);
-            CompoundTag tf = new CompoundTag();
-            tf.put("translation", floats(x1 / 16f, part.y1() / 16f, z1 / 16f));
-            tf.put("scale", floats((x2 - x1) / 16f, (part.y2() - part.y1()) / 16f, (z2 - z1) / 16f));
-            tf.put("left_rotation", floats(0, 0, 0, 1));
-            tf.put("right_rotation", floats(0, 0, 0, 1));
-            nbt.put("transformation", tf);
-            nbt.putFloat("width", 3);
-            nbt.putFloat("height", 3);
-            if (glows(part.role(), p)) {
-                CompoundTag light = new CompoundTag();
-                light.putInt("block", 15);
-                light.putInt("sky", 15);
-                nbt.put("brightness", light);
-            }
-            nbt.put("Tags", tags(PART_TAG, tag));
-            spawn(world, nbt, o.getX(), o.getY(), o.getZ(), 0);
-        }
+        // The piece itself: its 3D model (resource pack) on an item display, tinted with its materials.
+        spawnModel(world, tag, p, piece, false);
+        if (p.on && hasGlow(piece)) spawnModel(world, tag, p, piece, true); // screens, bulbs and burners, lit up
         for (BlockPos rel : cells(piece, p.rot)) {
             BlockPos cell = o.offset(rel);
             CompoundTag nbt = new CompoundTag();
@@ -550,6 +501,85 @@ final class Furniture {
                 world.setBlockAndUpdate(lightAt, Blocks.AIR.defaultBlockState());
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // 3D models: assets/helpermod/items/furniture/<id>.json (made by tools/furniture_models.py)
+    // ---------------------------------------------------------------------------------------
+
+    private static boolean hasGlow(Piece piece) {
+        for (Part part : piece.parts()) if (part.role() == Role.SCREEN || part.role() == Role.LIGHT || part.role() == Role.BURNER) return true;
+        return false;
+    }
+
+    private static void spawnModel(ServerLevel world, String tag, Placed p, Piece piece, boolean glow) {
+        ItemStack look = new ItemStack(Items.STICK);
+        look.set(net.minecraft.core.component.DataComponents.ITEM_MODEL,
+                Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "furniture/" + piece.id() + (glow ? "_glow" : "")));
+        look.set(net.minecraft.core.component.DataComponents.CUSTOM_MODEL_DATA, new net.minecraft.world.item.component.CustomModelData(
+                List.of(), List.of(p.on), List.of(), List.of(tint(Role.WOOD, p), tint(Role.LEGS, p), tint(Role.FABRIC, p), tint(Role.TOP, p))));
+        CompoundTag nbt = new CompoundTag();
+        nbt.putString("id", "minecraft:item_display");
+        nbt.put("item", Compat.saveStack(look));
+        nbt.putString("item_display", "none");
+        // The model is drawn at half size around the first block's centre; scale it back up and turn it to face the player.
+        double angle = -Math.PI / 2 * p.rot;
+        CompoundTag tf = new CompoundTag();
+        tf.put("translation", floats(0, 0, 0));
+        tf.put("left_rotation", floats(0, (float) Math.sin(angle / 2), 0, (float) Math.cos(angle / 2)));
+        tf.put("scale", floats(2, 2, 2));
+        tf.put("right_rotation", floats(0, 0, 0, 1));
+        nbt.put("transformation", tf);
+        nbt.putFloat("width", 3);
+        nbt.putFloat("height", 3);
+        nbt.putFloat("view_range", 1.5f);
+        if (glow) {
+            CompoundTag light = new CompoundTag();
+            light.putInt("block", 15);
+            light.putInt("sky", 15);
+            nbt.put("brightness", light);
+        }
+        nbt.put("Tags", tags(PART_TAG, tag));
+        spawn(world, nbt, p.pos.getX() + 0.5, p.pos.getY() + 0.5, p.pos.getZ() + 0.5, 0);
+    }
+
+    /** Real wood colours (the map colours are too dull), by the wood's name. */
+    private static final String[][] WOODS = {
+            {"pale_oak", "E6DCD8"}, {"dark_oak", "553A1F"}, {"oak", "B8945F"}, {"spruce", "7A5A34"}, {"birch", "D8C58C"},
+            {"jungle", "B4825C"}, {"acacia", "B8613A"}, {"mangrove", "773934"}, {"cherry", "E3B4AE"}, {"bamboo", "C9B25A"},
+            {"crimson", "7E3A56"}, {"warped", "3A8E8C"}};
+
+    private static int tint(Role role, Placed p) {
+        String id = switch (role) {
+            case WOOD -> p.wood;
+            case LEGS -> p.legs.isEmpty() ? stripped(p.wood) : p.legs;
+            case FABRIC -> p.fabric;
+            default -> p.top;
+        };
+        Identifier key = Identifier.tryParse(id);
+        String path = key == null ? "" : key.getPath();
+        if (path.endsWith("_wool") || path.endsWith("_carpet")) {
+            DyeColor dye = DyeColor.byName(path.substring(0, path.lastIndexOf('_')), null);
+            if (dye != null) return 0xFF000000 | dye.getTextureDiffuseColor();
+        }
+        if (role != Role.TOP || path.contains("planks") || path.contains("log") || path.contains("wood") || path.contains("stem")) {
+            for (String[] w : WOODS) {
+                if (path.contains(w[0])) {
+                    int c = Integer.parseInt(w[1], 16);
+                    boolean bark = (path.endsWith("_log") || path.endsWith("_wood") || path.endsWith("_stem")) && !path.startsWith("stripped_");
+                    return 0xFF000000 | (bark ? shade(c, 0.6f) : c);
+                }
+            }
+        }
+        BlockState st = state(id, Blocks.SMOOTH_QUARTZ.defaultBlockState());
+        int c = st.getMapColor(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).col;
+        return 0xFF000000 | (c == 0 ? 0xF0F0F0 : c);
+    }
+
+    private static int shade(int rgb, float f) {
+        int r = Math.min(255, Math.round(((rgb >> 16) & 255) * f)), g = Math.min(255, Math.round(((rgb >> 8) & 255) * f)),
+                b = Math.min(255, Math.round((rgb & 255) * f));
+        return (r << 16) | (g << 8) | b;
     }
 
     private static void clearEntities(ServerLevel world, UUID id, Placed p) {
@@ -1169,6 +1199,17 @@ final class Furniture {
 
     /** Seats left over from before a restart. */
     static void onEntityLoad(Entity entity, ServerLevel world) {
+        // Furniture placed before 2.7.0 is made of block displays: swap it for the 3D model once.
+        if (entity.getType() == EntityTypes.BLOCK_DISPLAY && entity.entityTags().contains(PART_TAG)) {
+            UUID id = idOf(entity);
+            world.getServer().execute(() -> {
+                entity.discard();
+                Data data = Data.get(world.getServer());
+                Placed placed = id == null ? null : data.placed.get(id);
+                if (placed != null && UPGRADED.add(id)) rebuild(world, id, placed);
+            });
+            return;
+        }
         if (entity.entityTags().contains(SEAT_TAG) && !entity.isVehicle()) world.getServer().execute(() -> {
             if (!entity.isVehicle()) entity.discard();
         });
@@ -1263,7 +1304,10 @@ final class Furniture {
         }
     }
 
+    private static final java.util.Set<UUID> UPGRADED = new java.util.HashSet<>();
+
     static void reset() {
+        UPGRADED.clear();
         ticks = 0;
     }
 }
