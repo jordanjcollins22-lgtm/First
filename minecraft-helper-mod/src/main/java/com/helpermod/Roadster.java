@@ -224,14 +224,34 @@ final class Roadster {
             for (ServerWorld w : server.getWorlds()) {
                 for (Entity e : w.iterateEntities()) {
                     if (e instanceof HorseEntity h && h.hasNoGravity() && h.getCommandTags().contains(TAG) && !h.hasPassengers()) {
-                        h.setNoGravity(false);
+                        land(h);
                     }
                 }
             }
         }
     }
 
+    /**
+     * A ridden, saddled horse is steered by the rider's own game, not the server, so the server can't fly it.
+     * While it's in the air the saddle comes off (it goes back on when it lands): with no saddle the rider
+     * is a passenger and the server moves the roadster, so the flying and the autopilot actually happen.
+     */
+    private static void takeOff(HorseEntity h) {
+        h.setNoGravity(true);
+        if (h.isSaddled()) h.getStackReference(400).set(ItemStack.EMPTY);
+        h.getNavigation().stop();
+    }
+
+    private static void land(HorseEntity h) {
+        h.setNoGravity(false);
+        if (!h.isSaddled()) h.getStackReference(400).set(new ItemStack(Items.SADDLE));
+    }
+
     private static void fly(ServerPlayerEntity rider, HorseEntity h) {
+        if (h.hasNoGravity()) {
+            h.getNavigation().stop(); // its own legs stay out of it while flying
+            if (h.isSaddled()) h.getStackReference(400).set(ItemStack.EMPTY); // e.g. after a restart mid-flight
+        }
         ServerWorld world = rider.getServerWorld();
         if (autopilot(rider, h, world)) return;
         float forward = rider.forwardSpeed;
@@ -239,7 +259,7 @@ final class Roadster {
         boolean airborne = h.hasNoGravity();
         if (!airborne) {
             if (forward > 0 && rider.getPitch() < -25 || WAYPOINTS.containsKey(rider.getUuid())) { // lift off
-                h.setNoGravity(true);
+                takeOff(h);
                 h.setVelocity(h.getVelocity().add(0, 0.5, 0));
                 h.velocityModified = true;
                 world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.NEUTRAL, 1f, 0.6f);
@@ -248,10 +268,13 @@ final class Roadster {
         }
         h.fallDistance = 0;
         rider.fallDistance = 0;
-        if (h.isOnGround() && rider.getPitch() > 10) { // touched down looking down: drive again
-            h.setNoGravity(false);
+        if (h.isOnGround() && (rider.getPitch() > 10 || forward <= 0)) { // touched down: drive again
+            land(h);
             return;
         }
+        h.setYaw(rider.getYaw());
+        h.setBodyYaw(rider.getYaw());
+        h.setHeadYaw(rider.getYaw());
         double speed = rider.isSprinting() ? 1.3 : 0.85;
         Vec3d v = forward > 0 ? look.multiply(speed)
                 : h.getVelocity().multiply(0.6, 0, 0.6); // no W: slow to a hover
@@ -334,7 +357,7 @@ final class Roadster {
         double dx = wp.x - h.getX(), dz = wp.z - h.getZ();
         double flat = Math.sqrt(dx * dx + dz * dz);
         if (!h.hasNoGravity()) {
-            h.setNoGravity(true);
+            takeOff(h);
             world.playSound(null, h.getBlockPos(), SoundEvents.ENTITY_FIREWORK_ROCKET_LAUNCH, SoundCategory.NEUTRAL, 1f, 0.6f);
             if (wp.phase == Phase.LAND) wp.phase = Phase.CLIMB;
         }
@@ -359,7 +382,7 @@ final class Roadster {
                 double above = h.getY() - groundY(world, h.getX(), h.getZ());
                 v = new Vec3d(dx * 0.1, above > 10 ? -0.6 : -0.25, dz * 0.1);
                 if (h.isOnGround() || above < 0.2) {
-                    h.setNoGravity(false);
+                    land(h);
                     h.setVelocity(Vec3d.ZERO);
                     h.velocityModified = true;
                     WAYPOINTS.remove(rider.getUuid());
