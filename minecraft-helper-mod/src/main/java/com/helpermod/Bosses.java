@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.Vec3;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -79,12 +80,13 @@ final class Bosses {
     /** Where each planet's arena is, and when its boss can be fought again. Saved with the world. */
     static final class Data extends SavedData {
         private static final String ID = "helpermod_bosses";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         final Map<String, BlockPos> arenas = new HashMap<>();
         final Map<String, Long> rematchAt = new HashMap<>();
         final Map<String, Integer> wins = new HashMap<>();
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         private static Data fromNbt(CompoundTag nbt) {
@@ -100,8 +102,7 @@ final class Bosses {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag list = new ListTag();
             arenas.forEach((key, pos) -> {
                 CompoundTag t = new CompoundTag();

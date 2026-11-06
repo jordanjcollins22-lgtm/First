@@ -39,6 +39,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.entity.BarrelBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -196,10 +197,11 @@ public final class Storage {
     /** Everyone's storage, saved with the world. */
     public static final class Data extends SavedData {
         private static final String ID = "helpermod_storage";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         private final Map<UUID, List<Stored>> stores = new HashMap<>();
 
         public static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         List<Stored> of(UUID player) {
@@ -247,8 +249,7 @@ public final class Storage {
             return data;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag players = new ListTag();
             stores.forEach((owner, list) -> {
                 if (list.isEmpty()) return;

@@ -51,6 +51,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -116,6 +117,7 @@ final class BlackHole {
 
     static final class Data extends SavedData {
         private static final String ID = "helpermod_black_hole";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         boolean built;
         /** The loot chests were added (worlds that fell in before 1.26.0 get them later). */
         boolean cachesBuilt;
@@ -131,7 +133,7 @@ final class BlackHole {
         final Map<UUID, CompoundTag> home = new HashMap<>();
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         private static Data fromNbt(CompoundTag nbt) {
@@ -156,8 +158,7 @@ final class BlackHole {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             nbt.putBoolean("built", built);
             nbt.putBoolean("cachesBuilt", cachesBuilt);
             CompoundTag a = new CompoundTag();

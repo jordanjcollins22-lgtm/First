@@ -1,0 +1,44 @@
+package com.helpermod;
+
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
+
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+/** Small bridges for things Minecraft 26 does differently from 1.20.1, so the rest of the code stays readable. */
+public final class Compat {
+    private Compat() {}
+
+    /** Saved data stored as one compound tag, like 1.20.1's SavedData#save/load. Keep the result in a static field. */
+    public static <T extends SavedData> SavedDataType<T> dataType(String id, Supplier<T> create,
+                                                                  Function<CompoundTag, T> load, Function<T, CompoundTag> save) {
+        String path = id.startsWith(HelperMod.MOD_ID + "_") ? id.substring(HelperMod.MOD_ID.length() + 1) : id;
+        return new SavedDataType<>(Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, path), create,
+                CompoundTag.CODEC.xmap(load, save), null);
+    }
+
+    /** An enchantment from the world's registry (enchantments are data-driven now). */
+    public static Holder<Enchantment> ench(Level level, ResourceKey<Enchantment> key) {
+        return level.registryAccess().lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(key);
+    }
+
+    public static Holder<Enchantment> ench(Entity entity, ResourceKey<Enchantment> key) {
+        return ench(entity.level(), key);
+    }
+
+    /** The level of an enchantment on a stack, 0 when absent. */
+    public static int enchLevel(Level level, ResourceKey<Enchantment> key, ItemStack stack) {
+        return EnchantmentHelper.getItemEnchantmentLevel(ench(level, key), stack);
+    }
+}

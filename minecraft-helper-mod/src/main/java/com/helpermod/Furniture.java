@@ -48,6 +48,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LightBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -269,10 +270,11 @@ final class Furniture {
 
     static final class Data extends SavedData {
         private static final String ID = "helpermod_furniture";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         final Map<UUID, Placed> placed = new LinkedHashMap<>();
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         private static Data fromNbt(CompoundTag nbt) {
@@ -299,8 +301,7 @@ final class Furniture {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag list = new ListTag();
             for (Map.Entry<UUID, Placed> e : placed.entrySet()) {
                 Placed p = e.getValue();

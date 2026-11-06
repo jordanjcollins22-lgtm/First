@@ -39,6 +39,7 @@ import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.GlazedTerracottaBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -76,6 +77,7 @@ final class Tycoon {
 
     static final class Data extends SavedData {
         private static final String ID = "helpermod_tycoon";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         final Map<UUID, Long> coins = new HashMap<>();
         final Map<UUID, Long> earned = new HashMap<>();
         final Map<UUID, Boolean> started = new HashMap<>();
@@ -89,7 +91,7 @@ final class Tycoon {
         final Map<String, Dropper> droppers = new LinkedHashMap<>();
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         /** Register a Tycoon Dropper. If its owner picked one up earlier, it gets that one's level back. */
@@ -149,8 +151,7 @@ final class Tycoon {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag players = new ListTag();
             java.util.Set<UUID> ids = new java.util.HashSet<>(coins.keySet());
             ids.addAll(started.keySet());

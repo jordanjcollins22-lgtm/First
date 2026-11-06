@@ -7,6 +7,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +22,7 @@ public class HelperData extends SavedData {
     public static final int INVENTORY_SIZE = 54;
     public static final int MAX_LEVEL = 10;
     private static final String ID = "helpermod_helpers";
+    private static final SavedDataType<HelperData> TYPE = Compat.dataType(ID, HelperData::new, HelperData::fromNbt, d -> d.save(new CompoundTag()));
 
     public final class Entry {
         public UUID entity;
@@ -106,7 +108,7 @@ public class HelperData extends SavedData {
 
     public static HelperData get(MinecraftServer server) {
         return server.overworld().getDataStorage()
-                .computeIfAbsent(HelperData::fromNbt, HelperData::new, ID);
+                .computeIfAbsent(TYPE);
     }
 
     public Entry get(UUID owner) {
@@ -152,8 +154,7 @@ public class HelperData extends SavedData {
         return data;
     }
 
-    @Override
-    public CompoundTag save(CompoundTag nbt) {
+        public CompoundTag save(CompoundTag nbt) {
         ListTag list = new ListTag();
         entries.forEach((owner, entry) -> {
             CompoundTag tag = new CompoundTag();

@@ -13,6 +13,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.scores.Objective;
 import net.minecraft.world.scores.Scoreboard;
 import net.minecraft.world.scores.criteria.ObjectiveCriteria;
@@ -36,10 +37,11 @@ final class TycoonSidebar {
 
     static final class Data extends SavedData {
         private static final String ID = "helpermod_tycoon_sidebar";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         final Set<UUID> hidden = new HashSet<>();
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         private static Data fromNbt(CompoundTag nbt) {
@@ -49,8 +51,7 @@ final class TycoonSidebar {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag l = new ListTag();
             for (UUID id : hidden) l.add(NbtUtils.createUUID(id));
             nbt.put("hidden", l);

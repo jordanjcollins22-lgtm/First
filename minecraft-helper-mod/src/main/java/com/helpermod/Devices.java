@@ -39,6 +39,7 @@ import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -242,11 +243,12 @@ public final class Devices {
     /** Where the harvesters are, and how much XP each is holding. Saved with the world. */
     public static final class HarvesterData extends SavedData {
         private static final String ID = "helpermod_harvesters";
+        private static final SavedDataType<HarvesterData> TYPE = Compat.dataType(ID, HarvesterData::new, HarvesterData::fromNbt, d -> d.save(new CompoundTag()));
         private final Map<String, int[]> harvesters = new LinkedHashMap<>();
 
         public static HarvesterData get(MinecraftServer server) {
             return server.overworld().getDataStorage()
-                    .computeIfAbsent(HarvesterData::fromNbt, HarvesterData::new, ID);
+                    .computeIfAbsent(TYPE);
         }
 
         private static String key(Level world, BlockPos pos) {
@@ -302,8 +304,7 @@ public final class Devices {
             return data;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             ListTag list = new ListTag();
             harvesters.forEach((key, xp) -> {
                 CompoundTag tag = new CompoundTag();

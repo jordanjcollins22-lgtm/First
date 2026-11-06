@@ -22,6 +22,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -61,10 +62,11 @@ final class Town {
     /** Where the town is. Saved with the world. */
     static final class Data extends SavedData {
         private static final String ID = "helpermod_reef_town";
+        private static final SavedDataType<Data> TYPE = Compat.dataType(ID, Data::new, Data::fromNbt, d -> d.save(new CompoundTag()));
         BlockPos centre;
 
         static Data get(MinecraftServer server) {
-            return server.overworld().getDataStorage().computeIfAbsent(Data::fromNbt, Data::new, ID);
+            return server.overworld().getDataStorage().computeIfAbsent(TYPE);
         }
 
         private static Data fromNbt(CompoundTag nbt) {
@@ -73,8 +75,7 @@ final class Town {
             return d;
         }
 
-        @Override
-        public CompoundTag save(CompoundTag nbt) {
+                public CompoundTag save(CompoundTag nbt) {
             if (centre != null) nbt.putLong("centre", centre.asLong());
             return nbt;
         }
