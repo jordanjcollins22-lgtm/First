@@ -55,6 +55,7 @@ public class HelperMod implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> Updater.onJoin(handler.player));
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
+        ServerLifecycleEvents.SERVER_STOPPING.register(HelperManager::saveParcels);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             HelperManager.reset();
             Materials.reset();

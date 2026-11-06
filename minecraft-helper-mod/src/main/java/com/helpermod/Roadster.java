@@ -36,6 +36,23 @@ final class Roadster {
 
     static final String TAG = "helpermod_roadster";
     private static final int DEFAULT_PAINT = 0xCC1111; // cherry red
+    /** Coins, in both the tycoon shop (first row) and the Fairway Pro Shop. */
+    static final long PRICE = 250_000;
+
+    /** The red horse-armor button the shops show for it. */
+    static ItemStack shopIcon() {
+        ItemStack s = new ItemStack(Items.LEATHER_HORSE_ARMOR);
+        ((DyeableItem) Items.LEATHER_HORSE_ARMOR).setColor(s, DEFAULT_PAINT);
+        s.setCustomName(Text.literal("Star Roadster").formatted(Formatting.RED));
+        return s;
+    }
+
+    /** /helper roadster on its own: where to buy one and how to drive it. */
+    static void info(ServerPlayerEntity player) {
+        Helper.say(player, "The Star Roadster is a flying sports car for " + String.format("%,d", PRICE) + " coins. Buy it in "
+                + "/helper tycoon shop (top row, next to the Saddle) or the Fairway Pro Shop (/helper golf shop). "
+                + "Hold W and look up to fly. /helper roadster paint <colour>, coat <coat>, name <name>, call.");
+    }
 
     // ---------------------------------------------------------------------------------------
     // Getting one

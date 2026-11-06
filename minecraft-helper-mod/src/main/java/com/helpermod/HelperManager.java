@@ -34,6 +34,11 @@ public final class HelperManager {
         PENDING_DISCARD.clear();
     }
 
+    /** Server stopping: any delivery still on its way goes into the sender's Helper Storage. */
+    public static void saveParcels(MinecraftServer server) {
+        for (Helper h : HELPERS.values()) h.saveParcel(server);
+    }
+
     public static Helper helperFor(UUID owner) {
         return HELPERS.computeIfAbsent(owner, Helper::new);
     }

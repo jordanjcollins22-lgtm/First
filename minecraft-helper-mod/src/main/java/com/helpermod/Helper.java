@@ -81,7 +81,7 @@ public class Helper {
     private static final ChunkTicketType<ChunkPos> KEEP_LOADED_TICKET =
             ChunkTicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
 
-    enum Mode { FOLLOW, COLLECT, RETURN, FISH, FARM }
+    enum Mode { FOLLOW, COLLECT, RETURN, FISH, FARM, SEND }
 
     enum MineState { NONE, DESCEND, WORK }
 
@@ -123,6 +123,11 @@ public class Helper {
     private int ignoreClearTicks;
     private int stuckTicks;
     private Vec3d lastPos = Vec3d.ZERO;
+    /** Items it's taking to another player (/helper send), who they're for, and how long it's been going. */
+    private final List<ItemStack> parcel = new ArrayList<>();
+    private UUID sendTo;
+    private String sendToName = "";
+    private int sendTicks;
     Mode mode = Mode.FOLLOW;
     Job job;
 
@@ -345,6 +350,9 @@ public class Helper {
     }
 
     void dismiss(MinecraftServer server, HelperData.Entry entry) {
+        ServerPlayerEntity ownerPlayer = server.getPlayerManager().getPlayer(owner);
+        if (ownerPlayer != null) cancelSend(ownerPlayer, "I'll hold off on that delivery. Here it is back.");
+        else saveParcel(server);
         MobEntity m = findEntity(server, entry);
         if (m != null) {
             clearBreaking(m);
@@ -696,6 +704,7 @@ public class Helper {
     }
 
     void stop(ServerPlayerEntity player) {
+        if (mode == Mode.SEND) cancelSend(player, "Okay, I won't take it. Here it is back.");
         fishWanted = 0;
         farmCentre = null;
         if (mob != null && job != null && mob.getWorld() instanceof ServerWorld w) {
@@ -715,6 +724,212 @@ public class Helper {
         mode = Mode.RETURN;
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Courier: take things to another player (/helper send <player>)
+    // ---------------------------------------------------------------------------------------
+
+    /** Hand the helper some items to walk over to another player. False (items untouched) if it can't. */
+    boolean send(ServerPlayerEntity player, ServerPlayerEntity target, List<ItemStack> items) {
+        if (mode == Mode.SEND) {
+            say(player, "I'm already taking " + parcelText() + " to " + sendToName + ". One delivery at a time!");
+            return false;
+        }
+        if (mode != Mode.FOLLOW) stop(player);
+        parcel.clear();
+        for (ItemStack s : items) if (!s.isEmpty()) parcel.add(s);
+        if (parcel.isEmpty()) return false;
+        sendTo = target.getUuid();
+        sendToName = target.getName().getString();
+        sendTicks = 0;
+        returnTicks = 0;
+        mode = Mode.SEND;
+        say(player, "On it! Taking " + parcelText() + " to " + sendToName + ".");
+        return true;
+    }
+
+    private String parcelText() {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (ItemStack s : parcel) counts.merge(s.getName().getString(), s.getCount(), Integer::sum);
+        StringBuilder sb = new StringBuilder();
+        counts.forEach((name, count) -> {
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(count).append(' ').append(name);
+        });
+        return sb.length() == 0 ? "nothing" : sb.toString();
+    }
+
+    /** Give the parcel back to its owner (or drop it at their feet) and go back to following. */
+    private void cancelSend(ServerPlayerEntity player, String why) {
+        if (mode == Mode.SEND) mode = Mode.FOLLOW;
+        sendTo = null;
+        if (parcel.isEmpty()) return;
+        for (ItemStack s : parcel) player.getInventory().offerOrDrop(s);
+        parcel.clear();
+        say(player, why);
+    }
+
+    /** The server is stopping mid-delivery: keep the items safe in the owner's Helper Storage. */
+    void saveParcel(MinecraftServer server) {
+        if (parcel.isEmpty()) return;
+        Storage.Data store = Storage.Data.get(server);
+        for (ItemStack s : parcel) store.add(owner, s);
+        store.markDirty();
+        parcel.clear();
+        if (mode == Mode.SEND) mode = Mode.FOLLOW;
+    }
+
+    private void tickSend(MobEntity m, ServerPlayerEntity player) {
+        ServerPlayerEntity target = sendTo == null ? null : player.getServer().getPlayerManager().getPlayer(sendTo);
+        if (target == null) {
+            cancelSend(player, sendToName + " isn't online any more, so here's your stuff back.");
+            return;
+        }
+        if (++sendTicks > 20 * 120) {
+            cancelSend(player, "I couldn't reach " + sendToName + " in two minutes. Here's your stuff back.");
+            return;
+        }
+        ServerWorld world = (ServerWorld) m.getWorld();
+        if (target.getWorld() != world) {
+            // A different dimension: zip through and hand it over straight away.
+            handOver(m, player, target, true);
+            return;
+        }
+        double d = m.squaredDistanceTo(target);
+        if (d <= 3 * 3) {
+            handOver(m, player, target, false);
+            return;
+        }
+        if (d > 48 * 48) { // too far to walk: hop most of the way, then walk up to them
+            hopNear(m, target);
+            return;
+        }
+        if (--repathCooldown <= 0) {
+            m.getNavigation().startMovingTo(target, SPEED);
+            repathCooldown = 10;
+        }
+        if (isStuck(m, 80)) hopNear(m, target);
+    }
+
+    private void hopNear(MobEntity m, ServerPlayerEntity target) {
+        ServerWorld world = (ServerWorld) m.getWorld();
+        Vec3d spot = findSpotNear(world, target.getBlockPos());
+        world.spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+        m.getNavigation().stop();
+        m.requestTeleport(spot.x, spot.y, spot.z);
+        world.playSound(null, BlockPos.ofFloored(spot), SoundEvents.ENTITY_ENDERMAN_TELEPORT, SoundCategory.NEUTRAL, 0.4f, 1.4f);
+        stuckTicks = 0;
+    }
+
+    private void handOver(MobEntity m, ServerPlayerEntity player, ServerPlayerEntity target, boolean otherWorld) {
+        String what = parcelText();
+        boolean dropped = false;
+        for (ItemStack s : parcel) {
+            ItemStack give = s.copy();
+            target.getInventory().insertStack(give);
+            if (!give.isEmpty()) {
+                target.dropItem(give, false, false);
+                dropped = true;
+            }
+        }
+        parcel.clear();
+        sendTo = null;
+        mode = Mode.FOLLOW;
+        m.getNavigation().stop();
+        target.playSound(SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS, 0.6f, 1.2f);
+        if (otherWorld) {
+            ((ServerWorld) target.getWorld()).spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL,
+                    target.getX(), target.getY() + 1, target.getZ(), 30, 0.5, 0.5, 0.5, 0.2);
+        } else {
+            danceTicks = Celebrate.DANCE_TICKS / 2;
+            Celebrate.fireworks((ServerWorld) m.getWorld(), m.getPos());
+        }
+        target.sendMessage(Text.literal("[" + player.getName().getString() + "'s Helper] ").formatted(Formatting.GOLD)
+                .append(Text.literal(player.getName().getString() + " sent you " + what + "."
+                        + (dropped ? " Your inventory is full, so some of it is at your feet." : "")).formatted(Formatting.WHITE)), false);
+        say(player, "Delivered " + what + " to " + target.getName().getString() + "!"
+                + (otherWorld ? " (They're in another dimension, so I zipped it over.)" : " Heading back to you now."));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Answering questions about itself ("helper, are you stuck?")
+    // ---------------------------------------------------------------------------------------
+
+    /** Does it look stuck: not moving while it's trying to get somewhere? */
+    boolean looksStuck(ServerPlayerEntity player) {
+        MobEntity m = mob;
+        if (m == null || !m.isAlive()) return true;
+        if (m.getWorld() != player.getWorld() && mode == Mode.FOLLOW) return true;
+        if (stuckTicks > 30) return true;
+        return mode == Mode.FOLLOW && m.squaredDistanceTo(player) > 10 * 10 && m.getNavigation().isIdle();
+    }
+
+    /** Pop over to the owner, cancelling the trip it was stuck on (the job itself keeps going). */
+    void unstick(ServerPlayerEntity player, HelperData.Entry entry) {
+        MobEntity m = mob;
+        if (m == null || !m.isAlive() || m.getWorld() != player.getWorld()) {
+            spawnNear(player, entry);
+            return;
+        }
+        clearBreaking(m);
+        if (job != null) {
+            job.resetSearch();
+            job.travelFailures = 0;
+        }
+        teleportNear(m, player);
+        ((ServerWorld) m.getWorld()).spawnParticles(net.minecraft.particle.ParticleTypes.PORTAL,
+                m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.5, 0.3, 0.2);
+    }
+
+    /** Where it is, in words: distance, direction and height from the owner. */
+    String whereText(ServerPlayerEntity player) {
+        MobEntity m = mob;
+        if (m == null || !m.isAlive()) return "I'm not out in the world right now. /helper summon brings me to you.";
+        if (m.getWorld() != player.getWorld()) {
+            return "I'm in a different dimension (" + m.getWorld().getRegistryKey().getValue().getPath() + "). I'll come over in a moment.";
+        }
+        BlockPos at = m.getBlockPos();
+        double dx = m.getX() - player.getX(), dz = m.getZ() - player.getZ(), dy = m.getY() - player.getY();
+        int dist = (int) Math.round(Math.sqrt(dx * dx + dz * dz + dy * dy));
+        if (dist <= 4) return "Right next to you! (" + at.getX() + ", " + at.getY() + ", " + at.getZ() + ")";
+        String dir;
+        double angle = Math.toDegrees(Math.atan2(dz, dx)); // 0 = east, 90 = south
+        String[] names = {"east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"};
+        dir = names[(int) Math.round(((angle % 360) + 360) % 360 / 45) % 8];
+        String height = dy < -6 ? ", " + (int) -dy + " blocks below you" : dy > 6 ? ", " + (int) dy + " blocks above you" : "";
+        return "I'm " + dist + " blocks " + dir + " of you" + height + ", at " + at.getX() + ", " + at.getY() + ", " + at.getZ() + ".";
+    }
+
+    /** Health and what it's carrying, for "are you ok" / "are you full". */
+    String healthText() {
+        MobEntity m = mob;
+        if (m == null || !m.isAlive()) return "I'm not out right now.";
+        int hp = (int) Math.ceil(m.getHealth()), max = (int) Math.ceil(m.getMaxHealth());
+        return hp >= max ? "Full health (" + hp + "/" + max + ")" : hp <= max / 3 ? "Ouch, I'm hurt: " + hp + "/" + max + " health"
+                : hp + "/" + max + " health";
+    }
+
+    String pocketsText(SimpleInventory inv) {
+        int room = inv instanceof HelperData.Pockets p ? p.unlocked : inv.size();
+        int used = 0;
+        for (int i = 0; i < room; i++) if (!inv.getStack(i).isEmpty()) used++;
+        String items = summarize(inv, false);
+        return (used >= room ? "I'm full! " : "") + used + " of my " + room + " pockets are used. Carrying: "
+                + (items.isEmpty() ? "nothing" : items) + ".";
+    }
+
+    /** How far along the current job is, for "are you done yet" / "how long". */
+    String progressText() {
+        if (mode == Mode.SEND) return "Still on my way to " + sendToName + " with " + parcelText() + ".";
+        if (job != null && (mode == Mode.COLLECT || mode == Mode.RETURN)) {
+            int left = Math.max(0, job.wanted - job.collected);
+            return job.done || left == 0 ? "That job's done! I'm bringing it all back."
+                    : job.collected + " of " + job.wanted + " " + job.spec.display + " so far, " + left + " to go.";
+        }
+        if (mode == Mode.FISH) return fishCaught + " of " + fishWanted + " fish caught so far.";
+        if (mode == Mode.FARM) return farmHarvested + " crops harvested so far. Say \"helper stop\" when you've got enough.";
+        return "I'm not on a job right now, just following you. Give me one, like \"helper, get 20 iron\".";
+    }
+
     String status(SimpleInventory inv) {
         String doing;
         if (mode == Mode.COLLECT && job != null) {
@@ -725,6 +940,8 @@ public class Helper {
                     : "Bringing you my haul";
         } else if (mode == Mode.FISH) {
             doing = "Fishing: " + fishCaught + "/" + fishWanted + " caught";
+        } else if (mode == Mode.SEND) {
+            doing = "Taking " + parcelText() + " to " + sendToName;
         } else if (mode == Mode.FARM) {
             doing = "Farming the crops around " + farmCentre.getX() + ", " + farmCentre.getZ() + " (" + farmHarvested + " harvested)";
         } else {
@@ -814,6 +1031,7 @@ public class Helper {
             }
             case FISH -> tickFish(m, player, entry);
             case FARM -> tickFarm(m, player, entry);
+            case SEND -> tickSend(m, player);
         }
     }
 

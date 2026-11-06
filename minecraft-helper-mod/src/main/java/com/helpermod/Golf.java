@@ -651,6 +651,7 @@ final class Golf {
             new Offer(100, "4 Golf Balls", () -> balls(4), null),
             new Offer(300, "Golf Cap", Golf::cap, null),
             new Offer(5000, "Golf Cart (a speedy ride)", () -> named(Items.SADDLE, "Golf Cart"), Golf::cart),
+            new Offer(Roadster.PRICE, "Star Roadster (a flying sports car you can repaint)", Roadster::shopIcon, Roadster::spawn),
             new Offer(20000, "Cottage Deed (builds a cottage)", () -> deed("cottage"), null),
             new Offer(100000, "Villa Deed (builds a big villa)", () -> deed("villa"), null),
             new Offer(50, "16 Cookies (clubhouse snack)", () -> new ItemStack(Items.COOKIE, 16), null),
