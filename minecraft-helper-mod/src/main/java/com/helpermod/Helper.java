@@ -102,6 +102,10 @@ public class Helper {
     private int branchFrom = -1;
     private int stairTicks;
     private int returnTicks;
+    /** Set by /helper deliver: bring the haul to the player even when there's a Helper Storage nearby. */
+    private boolean toPlayer;
+    private BlockPos storagePos;
+    private long storageScanAt;
     private int missingTicks;
     private boolean toldFlight;
     private String lastPlanet = "";
@@ -707,6 +711,7 @@ public class Helper {
 
     void deliverNow() {
         if (mob != null) clearBreaking(mob);
+        toPlayer = true;
         mode = Mode.RETURN;
     }
 
@@ -1039,17 +1044,37 @@ public class Helper {
             }
             return;
         }
+        // A Helper Storage nearby? Put the haul in there instead of in the player's pockets.
+        BlockPos store = toPlayer ? null : nearbyStorage(m, (ServerWorld) m.getWorld());
+        if (store != null) {
+            double ds = m.squaredDistanceTo(Vec3d.ofCenter(store));
+            if (ds > 3.2 * 3.2) {
+                if (--repathCooldown <= 0) {
+                    m.getNavigation().startMovingTo(store.getX() + 0.5, store.getY(), store.getZ() + 0.5, SPEED);
+                    repathCooldown = 10;
+                }
+                if (++returnTicks > 600 || isStuck(m, 100)) { // can't get there: hop next to it
+                    returnTicks = 0;
+                    BlockPos stand = standNear((ServerWorld) m.getWorld(), store);
+                    if (stand != null) m.requestTeleport(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5);
+                    else storagePos = null;
+                }
+                return;
+            }
+        }
         double d = m.squaredDistanceTo(player);
-        if (d > 3 * 3 && ++returnTicks > 600) { // 30 s and still can't reach you: hop over
+        if (store == null && d > 3 * 3 && ++returnTicks > 600) { // 30 s and still can't reach you: hop over
             returnTicks = 0;
             teleportNear(m, player);
             d = m.squaredDistanceTo(player);
         }
-        if (d <= 3 * 3) {
+        if (store != null || d <= 3 * 3) {
             returnTicks = 0;
             m.getNavigation().stop();
             if (job != null) plugShafts((ServerWorld) m.getWorld(), entry.inventory);
-            deliver(m, player, entry.inventory);
+            if (store != null) deliver(m, player, entry.inventory, true);
+            else deliver(m, player, entry.inventory);
+            toPlayer = false;
             if (job != null && !job.done && isFull(entry.inventory)) {
                 say(player, "I'm still out of space: my inventory is full of tools and gear. Right-click me and "
                         + "take some things out, then ask me again.");
@@ -1171,7 +1196,48 @@ public class Helper {
         return xp;
     }
 
+    /** The closest Helper Storage within 48 blocks of the helper (rescanned every 5 seconds), or null. */
+    private BlockPos nearbyStorage(MobEntity m, ServerWorld world) {
+        long now = world.getTime();
+        if (storagePos != null && now < storageScanAt && Storage.isStorageBlock(world, storagePos)) return storagePos;
+        storageScanAt = now + 100;
+        storagePos = null;
+        BlockPos here = m.getBlockPos();
+        double best = 48 * 48;
+        int cx = here.getX() >> 4, cz = here.getZ() >> 4;
+        for (int x = cx - 3; x <= cx + 3; x++) {
+            for (int z = cz - 3; z <= cz + 3; z++) {
+                if (!world.isChunkLoaded(x, z)) continue;
+                for (BlockPos pos : world.getChunk(x, z).getBlockEntities().keySet()) {
+                    double dist = pos.getSquaredDistance(here);
+                    if (dist < best && Storage.isStorageBlock(world, pos)) {
+                        best = dist;
+                        storagePos = pos.toImmutable();
+                    }
+                }
+            }
+        }
+        return storagePos;
+    }
+
+    /** An open spot (2 tall, with a floor) next to a block, to stand by it. */
+    private static BlockPos standNear(ServerWorld world, BlockPos pos) {
+        for (Direction dir : Direction.Type.HORIZONTAL) {
+            for (int dy : new int[]{0, -1, 1}) {
+                BlockPos p = pos.offset(dir).up(dy);
+                if (world.getBlockState(p).isAir() && world.getBlockState(p.up()).isAir()
+                        && world.getBlockState(p.down()).isSideSolidFullSquare(world, p.down(), Direction.UP)) return p;
+            }
+        }
+        return null;
+    }
+
     private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv) {
+        deliver(m, player, inv, false);
+    }
+
+    private void deliver(MobEntity m, ServerPlayerEntity player, SimpleInventory inv, boolean toStorage) {
+        Storage.Data store = toStorage ? Storage.Data.get(player.getServer()) : null;
         Map<String, Integer> given = new LinkedHashMap<>();
         boolean droppedAtFeet = false;
         int keptBuilding = 0;
@@ -1185,12 +1251,18 @@ public class Helper {
                 if (keep == stack.getCount()) continue;
                 ItemStack give = stack.split(stack.getCount() - keep);
                 given.merge(give.getName().getString(), give.getCount(), Integer::sum);
-                player.getInventory().offerOrDrop(give);
+                if (store != null) store.add(player.getUuid(), give);
+                else player.getInventory().offerOrDrop(give);
                 continue;
             }
             given.merge(stack.getName().getString(), stack.getCount(), Integer::sum);
             ItemStack give = stack.copy();
-            player.getInventory().insertStack(give);
+            if (store != null) {
+                store.add(player.getUuid(), give);
+                give = ItemStack.EMPTY;
+            } else {
+                player.getInventory().insertStack(give);
+            }
             if (!give.isEmpty()) {
                 player.dropItem(give, false, false);
                 droppedAtFeet = true;
@@ -1205,8 +1277,8 @@ public class Helper {
                     : "I don't have anything new for you.");
             return;
         }
-        m.getWorld().playSound(null, player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP, SoundCategory.PLAYERS,
-                0.4f, 1.2f);
+        m.getWorld().playSound(null, store != null ? m.getBlockPos() : player.getBlockPos(), SoundEvents.ENTITY_ITEM_PICKUP,
+                SoundCategory.PLAYERS, 0.4f, 1.2f);
         StringBuilder sb = new StringBuilder();
         given.forEach((name, count) -> {
             if (sb.length() > 0) sb.append(", ");
@@ -1215,6 +1287,10 @@ public class Helper {
         danceTicks = Celebrate.DANCE_TICKS;
         m.getNavigation().stop();
         Celebrate.fireworks((ServerWorld) m.getWorld(), m.getPos());
+        if (store != null) {
+            say(player, "Put " + sb + " in your Helper Storage." + xpNote);
+            return;
+        }
         say(player, "Here you go: " + sb + "." + xpNote + (droppedAtFeet
                 ? " Your inventory is full, so I dropped the rest at your feet." : ""));
     }
