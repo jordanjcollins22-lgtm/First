@@ -22,9 +22,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Makes helpers shorter or taller. Minecraft 1.20.1 has no built-in way to resize an entity, so:
- * with the Pehkui mod installed the helper is truly scaled (any look, any size); without it, a
- * small helper is shown as the baby version of its mob when that mob has one.
+ * Makes helpers shorter or taller with Minecraft's own scale attribute (any look, any size).
  */
 public final class Size {
     private Size() {}
@@ -32,8 +30,9 @@ public final class Size {
     public static final float MIN = 0.25f;
     public static final float MAX = 4.0f;
 
+    /** Newer Minecraft has a built-in scale attribute, so helpers can always be resized. */
     public static boolean hasPehkui() {
-        return FabricLoader.getInstance().isModLoaded("pehkui");
+        return true;
     }
 
     /** The size saved for this helper's owner (1 = normal). */
@@ -45,21 +44,13 @@ public final class Size {
         return entry == null || entry.size <= 0 ? 1f : entry.size;
     }
 
-    /** Apply the saved size to a freshly spawned helper. Returns false if Pehkui isn't there to do it. */
+    /** Apply the saved size to a freshly spawned helper, with the vanilla scale attribute. */
     public static boolean apply(Entity helper, float size) {
-        if (!hasPehkui()) return false;
-        try {
-            Class<?> types = Class.forName("virtuoel.pehkui.api.ScaleTypes");
-            Object base = types.getField("BASE").get(null);
-            Method getData = base.getClass().getMethod("getScaleData", Entity.class);
-            Object data = getData.invoke(base, helper);
-            data.getClass().getMethod("setTargetScale", float.class).invoke(data, size);
-            data.getClass().getMethod("setScale", float.class).invoke(data, size);
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            HelperMod.LOG.warn("Couldn't resize the helper with Pehkui", e);
-            return false;
-        }
+        if (!(helper instanceof net.minecraft.world.entity.LivingEntity living)) return false;
+        var scale = living.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.SCALE);
+        if (scale == null) return false;
+        scale.setBaseValue(Math.max(MIN, Math.min(MAX, size)));
+        return true;
     }
 
     private static final Map<EntityType<?>, Optional<EntityDataAccessor<Boolean>>> BABY_FLAGS = new ConcurrentHashMap<>();
