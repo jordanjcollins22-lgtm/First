@@ -125,6 +125,11 @@ Block tags work with `#`, e.g. `#minecraft:logs`.
 
 It's drawn as a normal chest screen, so nobody else has to install anything. Each player has their own storage.
 
+**Hauls go to your storage:** when your helper brings back what it collected, fished or farmed and there's a
+Helper Storage within 48 blocks of it, it walks to the closest one and puts everything in there instead of
+in your pockets (it keeps its tools and a few building blocks, as before). With no Helper Storage nearby it
+brings it to you like before. `/helper deliver` always brings it to you.
+
 ## More real planets (needs Ad Astra)
 
 If Ad Astra is installed (it is in Prominence II), five more real places and an ocean planet show up on the rocket's planet
