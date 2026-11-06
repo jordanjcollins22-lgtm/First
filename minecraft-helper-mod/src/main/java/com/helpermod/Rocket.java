@@ -228,7 +228,7 @@ final class Rocket {
                 world.playSound(null, p.blockPosition(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.6f, 1.4f);
             }
             p.setDeltaMovement(new Vec3(0, Math.min(1.6, 0.3 + (t - COUNTDOWN) * 0.05), 0));
-            p.hurtMarked = true;
+            p.needsSync = true;
             p.resetFallDistance();
             world.sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() - 0.2, p.getZ(), 6, 0.15, 0.1, 0.15, 0.02);
             world.sendParticles(ParticleTypes.LARGE_SMOKE, p.getX(), p.getY() - 0.6, p.getZ(), 4, 0.25, 0.2, 0.25, 0.02);
@@ -237,7 +237,7 @@ final class Rocket {
             it.remove();
             p.resetFallDistance();
             p.setDeltaMovement(Vec3.ZERO);
-            p.hurtMarked = true;
+            p.needsSync = true;
             if (l.target.equals("home")) Space.home(p);
             else Space.go(p, l.target);
             p.addEffect(new MobEffectInstance(MobEffects.SLOW_FALLING, 200, 0, true, false));
