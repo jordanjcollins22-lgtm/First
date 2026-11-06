@@ -152,7 +152,7 @@ def uv(u1, u2, v1, v2):
 def m(v):  # piece pixels -> model coordinates (half size, the entity scales it back up 2x)
     return round(v / 2 + 4, 4)
 
-def elements(parts, texture_of):
+def elements(parts, texture_of, m=m, tint=TINT):
     out = []
     for role, x1, y1, z1, x2, y2, z2 in parts:
         t = texture_of(role)
@@ -166,8 +166,8 @@ def elements(parts, texture_of):
                     top = 16 - yb % 16 if yb % 16 else 0
                     def face(u):
                         f = {"texture": "#" + t, "uv": u}
-                        if role in TINT:
-                            f["tintindex"] = TINT[role]
+                        if role in tint:
+                            f["tintindex"] = tint[role]
                         return f
                     vy = [16 - (yb - (ya // 16) * 16), 16 - (ya - (ya // 16) * 16)]
                     vy = [max(0, round(vy[0], 3)), max(0, round(vy[1], 3))]
@@ -184,15 +184,115 @@ def elements(parts, texture_of):
                     out.append({"from": [m(xa), m(ya), m(za)], "to": [m(xb), m(yb), m(zb)], "faces": faces})
     return out
 
-def model(els):
+def model(els, folder="furniture"):
     used = sorted({f["texture"][1:] for e in els for f in e["faces"].values()})
-    return {"textures": {**{u: "helpermod:block/furniture/" + u for u in used}, "particle": "helpermod:block/furniture/" + (used[0] if used else "wood")},
+    return {"textures": {**{u: f"helpermod:block/{folder}/" + u for u in used}, "particle": f"helpermod:block/{folder}/" + (used[0] if used else "wood")},
             "elements": els}
 
 TINTS = [{"type": "minecraft:custom_model_data", "index": i, "default": -1} for i in range(4)]
 
 def leaf(name):
     return {"type": "minecraft:model", "model": "helpermod:furniture/" + name, "tints": TINTS}
+
+# ---------------------------------------------------------------------------------------------
+# The Star Roadster: a low single-seat speedster. Pixels are real size (16 = one block), x across
+# (-14..14), y up from the ground, z along the car (+z is the front). The seat is at x 0, z 0.
+# ---------------------------------------------------------------------------------------------
+def mirror(parts):
+    out = []
+    for r, x1, y1, z1, x2, y2, z2 in parts:
+        out += [(r, x1, y1, z1, x2, y2, z2), (r, -x2, y1, z1, -x1, y2, z2)]
+    return out
+
+def wheel(cz):
+    return [("TIRE", 10.5, 2, cz - 5.5, 14, 9, cz + 5.5), ("TIRE", 10.5, 0.5, cz - 4, 14, 10.5, cz + 4),
+            ("TIRE", 10.5, 0, cz - 2.5, 14, 11, cz + 2.5), ("RIM", 14, 2.5, cz - 3, 14.3, 8.5, cz + 3),
+            ("RIM", 14, 1.5, cz - 2, 14.3, 9.5, cz + 2), ("CHROME", 14.3, 4, cz - 1.5, 14.6, 7, cz + 1.5)]
+
+def fender(z1, z2):
+    return [("PAINT", 9.5, 10.5, z1, 14.6, 12.5, z2), ("PAINT", 9.5, 8.5, z1, 14.6, 10.5, z1 + 2),
+            ("PAINT", 9.5, 8.5, z2 - 2, 14.6, 10.5, z2), ("PAINT", 9.5, 12.5, z1 + 2, 14.2, 13.2, z2 - 2)]
+
+ROADSTER = mirror(wheel(18) + wheel(-19) + fender(10.5, 25.5) + fender(-26.5, -11.5) + [
+    ("BLACK", 11, 3.5, -11.5, 13.6, 7, 10.5),            # sills between the wheels
+    ("PAINT", 9.9, 10, -10, 11, 13.5, 9),                # door tops
+    ("CHROME", 11, 11.4, 1.5, 11.2, 12, 4),              # door handles
+    ("LIGHT", 6.5, 7, 29.5, 10, 10, 30.6),               # headlights
+    ("CHROME", 6, 6.5, 29.3, 10.5, 10.5, 30.3),
+    ("TAIL", 6, 8, -30.5, 9.5, 10.2, -29.9),             # tail lights
+    ("CHROME", 10.4, 13, 7, 12.6, 14.2, 8),              # wing mirrors
+    ("CHROME", 10, 12.2, 7.2, 10.5, 13, 7.8),
+    ("CHROME", 9, 13, 8.4, 9.6, 19.6, 9.1),              # windscreen frame
+    ("METAL", 2, 4.5, -32, 5, 7.5, -30),                 # rocket nozzles
+    ("BLACK", 2.6, 5.1, -32.1, 4.4, 6.9, -31.9),
+]) + [
+    ("BLACK", -10.5, 2, -27, 10.5, 4, 27),               # chassis
+    ("PAINT", -11, 4, -28, 11, 10, 28),                  # body
+    ("PAINT", -10, 10, 9, 10, 13, 27),                   # bonnet
+    ("PAINT", -5, 13, 10, 5, 13.8, 26),                  # bonnet bulge
+    ("STRIPE", -1.6, 13.8, 10, 1.6, 13.9, 26),           # racing stripe
+    ("PAINT", -10, 4, 28, 10, 11, 30),                   # nose
+    ("PAINT", -8, 5, 30, 8, 10, 31),
+    ("CHROME", -5.8, 4.8, 30.95, 5.8, 10.2, 31.2),       # grille
+    ("GRILLE", -5, 5.5, 31, 5, 9.5, 31.4),
+    ("CHROME", -11, 3, 30, 11, 4.5, 31.6),               # bumpers
+    ("CHROME", -11, 3, -31.6, 11, 4.5, -30),
+    ("PAINT", -10, 10, -28, 10, 12.5, -10),              # rear deck
+    ("PAINT", -10, 4, -30, 10, 11, -28),                 # tail
+    ("PAINT", -5, 12.5, -18, 5, 17, -10),                # speedster fairing behind the seat
+    ("PAINT", -4, 12.5, -22, 4, 15.5, -18),
+    ("PAINT", -3, 12.5, -25, 3, 13.8, -22),
+    ("LEATHER", -9.9, 10, -10, 9.9, 10.3, 8),            # cockpit floor
+    ("LEATHER", -6, 10.3, -7, 6, 12, 2),                 # seat
+    ("LEATHER", -6, 10.3, -10, 6, 19, -7),
+    ("LEATHER", -5, 19, -9.6, 5, 20, -7.4),
+    ("BLACK", -10, 12, 6, 10, 14, 8),                    # dashboard
+    ("WHITE", -3.5, 12.4, 5.85, -1, 13.6, 6),            # dials
+    ("WHITE", 1, 12.4, 5.85, 3.5, 13.6, 6),
+    ("BLACK", -0.5, 11, 4.5, 0.5, 13.5, 6),              # steering column and wheel
+    ("BLACK", -3, 16, 4.2, 3, 16.8, 4.8),
+    ("BLACK", -3, 12, 4.2, 3, 12.8, 4.8),
+    ("BLACK", -3, 12.8, 4.2, -2.2, 16, 4.8),
+    ("BLACK", 2.2, 12.8, 4.2, 3, 16, 4.8),
+    ("GLASS", -9, 13, 8.6, 9, 19, 8.9),                  # windscreen
+    ("CHROME", -9.6, 19, 8.4, 9.6, 19.6, 9.1),
+]
+
+CAR_TINT = {"PAINT": 0, "STRIPE": 1}
+CAR_TEX = {"PAINT": "paint", "STRIPE": "stripe", "TIRE": "tire", "RIM": "rim", "CHROME": "chrome", "METAL": "metal",
+           "BLACK": "black", "LIGHT": "headlight", "TAIL": "taillight", "GRILLE": "grille", "LEATHER": "leather",
+           "WHITE": "white", "GLASS": "glass"}
+CAR_TEXTURES = {
+    "paint": lambda x, y, r: gray(236 + (14 if y in (2, 3) else 0) + r.randint(-3, 3)),
+    "stripe": lambda x, y, r: gray(246 + r.randint(-3, 3)),
+    "tire": lambda x, y, r: gray(30 + (12 if (x + y) % 4 == 0 else 0) + r.randint(-4, 4)),
+    "rim": lambda x, y, r: gray(150 + (40 if (x * x + y * y) % 7 == 0 else 0) + r.randint(-6, 6)),
+    "chrome": lambda x, y, r: gray(205 + (45 if y < 5 else 0) - (35 if y > 12 else 0) + r.randint(-4, 4)),
+    "metal": lambda x, y, r: gray(120 + (20 if y % 3 == 0 else 0) + r.randint(-6, 6)),
+    "black": lambda x, y, r: gray(28 + r.randint(-4, 4)),
+    "headlight": lambda x, y, r: (255, 250, 215 + r.randint(-8, 8)) if (x - 7.5) ** 2 + (y - 7.5) ** 2 < 42 else gray(200),
+    "taillight": lambda x, y, r: (200 + r.randint(-15, 15), 20, 25),
+    "grille": lambda x, y, r: gray(60 if x % 3 == 0 or y % 3 == 0 else 18),
+    "leather": lambda x, y, r: (120 + r.randint(-6, 6) - (25 if x % 5 == 0 else 0), 62 + r.randint(-4, 4) - (12 if x % 5 == 0 else 0),
+                                34 + r.randint(-3, 3)),
+    "white": lambda x, y, r: gray(240 + r.randint(-4, 4)) if (x - 7.5) ** 2 + (y - 7.5) ** 2 < 50 else gray(25),
+    "glass": TEXTURES["glass"],
+}
+
+def car_m(v):  # pixels -> model units: half size around the model's centre, which sits on the seat point's ground
+    return round(v / 2 + 8, 4)
+
+def build_roadster(write):
+    for sub in ("items/vehicle", "models/vehicle", "textures/block/vehicle"):
+        shutil.rmtree(os.path.join(A, sub), ignore_errors=True)
+        os.makedirs(os.path.join(A, sub))
+    for name, fn in CAR_TEXTURES.items():
+        tex(name, fn).save(os.path.join(A, "textures/block/vehicle", name + ".png"))
+    els = elements(ROADSTER, lambda r: CAR_TEX.get(r), m=car_m, tint=CAR_TINT)
+    write("models/vehicle/roadster.json", model(els, "vehicle"))
+    tints = [{"type": "minecraft:custom_model_data", "index": i, "default": d} for i, d in ((0, 0xCC1111), (1, 0xF4F4F4))]
+    write("items/vehicle/roadster.json", {"model": {"type": "minecraft:model", "model": "helpermod:vehicle/roadster", "tints": tints}})
+    print("roadster:", len(els), "boxes")
 
 def main():
     for sub in ("items/furniture", "models/furniture", "textures/block/furniture"):
@@ -224,6 +324,7 @@ def main():
         if glow:
             write(f"models/furniture/{pid}_glow.json", model(glow))
             write(f"items/furniture/{pid}_glow.json", {"model": leaf(pid + "_glow")})
+    build_roadster(write)
     # The same files as a resource pack, for players who don't have the mod.
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -233,7 +334,8 @@ def main():
             z.writestr(info, data)
         add("pack.mcmeta", json.dumps({"pack": {"description": "Helper Buddies furniture models", "min_format": [69, 0],
                                                 "max_format": 1000}}))
-        for sub in ("items/furniture", "models/furniture", "textures/block/furniture"):
+        for sub in ("items/furniture", "models/furniture", "textures/block/furniture",
+                    "items/vehicle", "models/vehicle", "textures/block/vehicle"):
             d = os.path.join(A, sub)
             for f in sorted(os.listdir(d)):
                 add(f"assets/helpermod/{sub}/{f}", open(os.path.join(d, f), "rb").read())

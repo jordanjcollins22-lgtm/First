@@ -382,7 +382,7 @@ piece from the whole pack, of the rarity you rolled. `/helper tycoon odds` says 
 (put them before upgraders so the +10 gets multiplied). Brown **Smelters** do x1.5 and turn raw ore into ingots. Pink
 **Lucky Upgraders** have a 1 in 8 chance of x20. Each works once per ore, like upgraders.
 
-**Star Roadster:** a flying sports car (it uses the horse model) for 250k coins, in the first row of the tycoon shop (no tier needed) and in the Fairway Pro Shop too. `/helper roadster` says where. Drive it like a
+**Star Roadster:** a flying sports car with its own 3D model (a low single-seat roadster with chrome, headlights, a racing stripe and rocket nozzles; your paint colour changes the body) for 250k coins, in the first row of the tycoon shop (no tier needed) and in the Fairway Pro Shop too. `/helper roadster` says where. Drive it like a
 horse. Hold W and look up to take off, look where you want to go (sprint to go faster), let go of W to hover,
 and look down to land. Rocket smoke and flames pour out the back while it flies. Customise it:
 `/helper roadster paint <colour>` (red, blue, lime, gold, chrome, hot_pink... or a hex code like `#ff8800`),

@@ -63,7 +63,7 @@ final class FurniturePack {
     static void send(ServerPlayer p) {
         if (sha1() == null) return;
         p.connection.send(new ClientboundResourcePackPushPacket(PACK_ID, url(), sha1(), false,
-                Optional.of(Component.literal("Helper Buddies furniture models. Say yes to see the sofas, beds and stoves in 3D.")
+                Optional.of(Component.literal("Helper Buddies 3D models. Say yes to see the furniture and the Star Roadster in 3D.")
                         .withStyle(ChatFormatting.GOLD))));
     }
 
