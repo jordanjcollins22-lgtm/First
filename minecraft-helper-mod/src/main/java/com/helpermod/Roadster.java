@@ -32,6 +32,8 @@ import java.util.UUID;
  * hold W and look up to take off, look where you want to fly, let go of W to hover, look down to land.
  * Rocket smoke and flames pour out the back while it flies. Its paint is dyed horse armor, so any colour
  * works: /helper roadster paint red (or a hex code like #ff8800), and /helper roadster coat for the body.
+ * Since 2.9.0 it looks like a real car: the horse is shrunk and hidden, and a 3D roadster model
+ * (assets/helpermod/items/vehicle/roadster.json, made by tools/furniture_models.py) rides along with it.
  */
 final class Roadster {
     private Roadster() {}
@@ -81,6 +83,7 @@ final class Roadster {
         horse.setPersistenceRequired();
         world.addFreshEntity(horse);
         dress(horse, Variant.WHITE, DEFAULT_PAINT, true);
+        makeCar(horse);
         world.sendParticles(ParticleTypes.FIREWORK, horse.getX(), horse.getY() + 1, horse.getZ(), 30, 0.6, 0.6, 0.6, 0.1);
         Helper.say(player, "Your Star Roadster is parked next to you! Hop on and drive. Hold W and look up to take off, "
                 + "let go of W to hover, look down to land. /helper roadster paint <colour> to repaint it.");
@@ -92,8 +95,175 @@ final class Roadster {
         horse.setComponent(net.minecraft.core.component.DataComponents.HORSE_VARIANT, coat); // keeps its markings
         ItemStack armor = new ItemStack(Items.LEATHER_HORSE_ARMOR);
         armor.set(net.minecraft.core.component.DataComponents.DYED_COLOR, new net.minecraft.world.item.component.DyedItemColor(paint));
+        hide(armor, net.minecraft.world.entity.EquipmentSlot.BODY);
         horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.BODY, armor);
-        if (saddle) horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, new ItemStack(Items.SADDLE));
+        if (saddle) horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, saddle());
+        refreshModel(horse);
+    }
+
+    /** Still counts as worn, but draws nothing (no equipment asset), so only the car model shows. */
+    private static void hide(ItemStack s, net.minecraft.world.entity.EquipmentSlot slot) {
+        s.set(net.minecraft.core.component.DataComponents.EQUIPPABLE,
+                net.minecraft.world.item.equipment.Equippable.builder(slot).build());
+    }
+
+    private static ItemStack saddle() {
+        ItemStack s = new ItemStack(Items.SADDLE);
+        hide(s, net.minecraft.world.entity.EquipmentSlot.SADDLE);
+        return s;
+    }
+
+    private static boolean hidden(ItemStack s) {
+        var e = s.get(net.minecraft.core.component.DataComponents.EQUIPPABLE);
+        return s.isEmpty() || e != null && e.assetId().isEmpty();
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // The car model: an item display that sits where the horse is, on the ground, turned the same way
+    // ---------------------------------------------------------------------------------------
+
+    static final String MODEL_TAG = "helpermod_roadster_model";
+    private static final float CAR_SCALE = 0.5f; // the hidden horse: small, so you sit low in the car
+    private static final int STRIPE = 0xF4F4F4;
+    private static final Map<UUID, Horse> CARS = new HashMap<>();
+    private static final Map<UUID, Entity> MODELS = new HashMap<>();
+
+    /** Hide the horse inside the car (also turns roadsters bought before 2.9.0 into cars). */
+    static void makeCar(Horse h) {
+        if (!h.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY)) {
+            h.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.INVISIBILITY,
+                    net.minecraft.world.effect.MobEffectInstance.INFINITE_DURATION, 0, false, false));
+        }
+        var scale = h.getAttribute(Attributes.SCALE);
+        if (scale != null && scale.getBaseValue() != CAR_SCALE) scale.setBaseValue(CAR_SCALE);
+        Compat.setStep(h, 1.1f);
+        ItemStack armor = h.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.BODY);
+        if (!hidden(armor)) {
+            ItemStack copy = armor.copy();
+            hide(copy, net.minecraft.world.entity.EquipmentSlot.BODY);
+            h.setItemSlot(net.minecraft.world.entity.EquipmentSlot.BODY, copy);
+        }
+        if (!hidden(h.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.SADDLE))) {
+            h.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, saddle());
+        }
+        CARS.put(h.getUUID(), h);
+    }
+
+    private static int paintOf(Horse h) {
+        return net.minecraft.world.item.component.DyedItemColor.getOrDefault(
+                h.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.BODY), DEFAULT_PAINT);
+    }
+
+    /** Throw the model away so the next tick builds it again (new paint). */
+    private static void refreshModel(Horse h) {
+        Entity m = MODELS.remove(h.getUUID());
+        if (m != null) m.discard();
+        else for (Entity e : near(h)) e.discard();
+    }
+
+    private static List<Entity> near(Horse h) {
+        String link = MODEL_TAG + ":" + h.getUUID();
+        return h.level().getEntities((Entity) null, h.getBoundingBox().inflate(8),
+                e -> e.entityTags().contains(MODEL_TAG) && e.entityTags().contains(link));
+    }
+
+    private static Entity spawnModel(Horse h) {
+        ServerLevel world = (ServerLevel) h.level();
+        ItemStack look = new ItemStack(Items.STICK);
+        look.set(net.minecraft.core.component.DataComponents.ITEM_MODEL,
+                net.minecraft.resources.Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "vehicle/roadster"));
+        look.set(net.minecraft.core.component.DataComponents.CUSTOM_MODEL_DATA, new net.minecraft.world.item.component.CustomModelData(
+                List.of(), List.of(), List.of(), List.of(paintOf(h), STRIPE)));
+        Vec3 seat = h.getPassengerRidingPosition(h);
+        float drop = (float) (seat.y - h.getY());
+        CompoundTag nbt = new CompoundTag();
+        nbt.putString("id", "minecraft:item_display");
+        nbt.put("item", Compat.saveStack(look));
+        nbt.putString("item_display", "none");
+        CompoundTag tf = new CompoundTag();
+        tf.put("translation", floats(0, -drop, 0)); // the model's ground line on the ground, the seat under the rider
+        tf.put("left_rotation", floats(0, 0, 0, 1));
+        tf.put("scale", floats(2, 2, 2)); // the model is drawn at half size
+        tf.put("right_rotation", floats(0, 0, 0, 1));
+        nbt.put("transformation", tf);
+        nbt.putInt("teleport_duration", 2);
+        nbt.putFloat("width", 4);
+        nbt.putFloat("height", 2);
+        nbt.putFloat("view_range", 2);
+        net.minecraft.nbt.ListTag tags = new net.minecraft.nbt.ListTag();
+        tags.add(net.minecraft.nbt.StringTag.valueOf(MODEL_TAG));
+        tags.add(net.minecraft.nbt.StringTag.valueOf(MODEL_TAG + ":" + h.getUUID()));
+        nbt.put("Tags", tags);
+        Entity e = Compat.loadEntity(nbt, world, entity -> {
+            entity.snapTo(seat.x, seat.y, seat.z, h.getYRot(), 0);
+            return entity;
+        });
+        if (e != null) world.addFreshEntity(e);
+        return e;
+    }
+
+    private static net.minecraft.nbt.ListTag floats(float... f) {
+        net.minecraft.nbt.ListTag l = new net.minecraft.nbt.ListTag();
+        for (float v : f) l.add(net.minecraft.nbt.FloatTag.valueOf(v));
+        return l;
+    }
+
+    private static java.lang.reflect.Method rideMethod;
+
+    /** Entity#startRiding(vehicle, force...) whatever extra flags this version has. */
+    private static void ride(Entity e, Entity vehicle) {
+        try {
+            if (rideMethod == null) {
+                for (java.lang.reflect.Method m : Entity.class.getMethods()) {
+                    Class<?>[] t = m.getParameterTypes();
+                    if (!m.getName().equals("startRiding") || t.length < 2 || t[0] != Entity.class) continue;
+                    boolean flags = true;
+                    for (int i = 1; i < t.length; i++) flags &= t[i] == boolean.class;
+                    if (flags && (rideMethod == null || t.length < rideMethod.getParameterCount())) rideMethod = m;
+                }
+            }
+            Object[] args = new Object[rideMethod.getParameterCount()];
+            args[0] = vehicle;
+            for (int i = 1; i < args.length; i++) args[i] = true;
+            rideMethod.invoke(e, args);
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            HelperMod.LOG.warn("Couldn't seat the roadster model", ex);
+        }
+    }
+
+    /**
+     * Every tick: keep each car's model on it. While someone drives, the model rides the horse too (the
+     * driver's own game moves it, so it never lags behind); parked, it just sits where the horse is.
+     */
+    private static void moveModels() {
+        var it = CARS.entrySet().iterator();
+        while (it.hasNext()) {
+            var en = it.next();
+            Horse h = en.getValue();
+            Entity m = MODELS.get(en.getKey());
+            if (h.isRemoved()) {
+                it.remove();
+                if (m != null && (h.getRemovalReason() == null || h.getRemovalReason().shouldDestroy())) m.discard();
+                MODELS.remove(en.getKey());
+                continue;
+            }
+            if (m == null || m.isRemoved()) {
+                List<Entity> old = near(h);
+                m = old.isEmpty() ? spawnModel(h) : old.get(0);
+                for (int i = 1; i < old.size(); i++) old.get(i).discard();
+                if (m == null) continue;
+                MODELS.put(en.getKey(), m);
+            }
+            boolean driven = h.getFirstPassenger() instanceof net.minecraft.world.entity.player.Player;
+            if (driven && m.getVehicle() != h) ride(m, h);
+            else if (!driven && m.isPassenger()) m.stopRiding();
+            float yaw = h.getYRot();
+            if (Math.abs(net.minecraft.util.Mth.wrapDegrees(m.getYRot() - yaw)) > 0.5f) m.setYRot(yaw);
+            if (!m.isPassenger()) {
+                Vec3 seat = h.getPassengerRidingPosition(h);
+                if (m.position().distanceToSqr(seat) > 1e-4) m.teleportTo(seat.x, seat.y, seat.z);
+            }
+        }
     }
 
     private static Horse mine(ServerPlayer player) {
@@ -206,16 +376,17 @@ final class Roadster {
             if (!(rider.getVehicle() instanceof Horse h) || !h.entityTags().contains(TAG)) continue;
             fly(rider, h);
         }
-        // A parked roadster drops back to the ground.
+        // A parked roadster drops back to the ground. Roadsters that just loaded become cars.
         if (server.getTickCount() % 20 == 0) {
             for (ServerLevel w : server.getAllLevels()) {
                 for (Entity e : w.getAllEntities()) {
-                    if (e instanceof Horse h && h.isNoGravity() && h.entityTags().contains(TAG) && !h.isVehicle()) {
-                        land(h);
-                    }
+                    if (!(e instanceof Horse h) || !h.entityTags().contains(TAG)) continue;
+                    if (!CARS.containsKey(h.getUUID()) || !h.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY)) makeCar(h);
+                    if (h.isNoGravity() && !(h.getFirstPassenger() instanceof net.minecraft.world.entity.player.Player)) land(h);
                 }
             }
         }
+        moveModels();
     }
 
     /**
@@ -229,9 +400,14 @@ final class Roadster {
         h.getNavigation().stop();
     }
 
+    /** Where the rocket smoke comes out: the nozzles at the back of the car. */
+    private static Vec3 exhaust(Horse h) {
+        return h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(2.0)).add(0, 0.4, 0);
+    }
+
     private static void land(Horse h) {
         h.setNoGravity(false);
-        if (!h.isSaddled()) h.getSlot(400).set(new ItemStack(Items.SADDLE));
+        if (!h.isSaddled()) h.getSlot(400).set(saddle());
     }
 
     private static void fly(ServerPlayer rider, Horse h) {
@@ -268,7 +444,7 @@ final class Roadster {
         h.setDeltaMovement(h.getDeltaMovement().scale(0.4).add(v.scale(0.6)));
         h.needsSync = true;
         // Rocket smoke and flames out the back.
-        Vec3 back = h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(1.4)).add(0, 0.7, 0);
+        Vec3 back = exhaust(h);
         world.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
         world.sendParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
         if (forward > 0) world.sendParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
@@ -303,6 +479,8 @@ final class Roadster {
 
     static void reset() {
         WAYPOINTS.clear();
+        CARS.clear();
+        MODELS.clear();
     }
 
     /** /helper roadster waypoint <x> <z> (or "here" to come back to where you're standing). */
@@ -385,7 +563,7 @@ final class Roadster {
         if (flat > 0.5) h.setYRot((float) (Math.toDegrees(Math.atan2(-nx, nz))));
         h.setYBodyRot(h.getYRot());
         // Smoke and flames out the back, same as when you fly it yourself.
-        Vec3 back = h.position().subtract(Vec3.directionFromRotation(0, h.getYRot()).scale(1.4)).add(0, 0.7, 0);
+        Vec3 back = exhaust(h);
         world.sendParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, back.x, back.y, back.z, 2, 0.15, 0.1, 0.15, 0.01);
         world.sendParticles(ParticleTypes.FLAME, back.x, back.y, back.z, 3, 0.1, 0.05, 0.1, 0.02);
         if (wp.phase != Phase.LAND) world.sendParticles(ParticleTypes.FIREWORK, back.x, back.y, back.z, 1, 0.05, 0.05, 0.05, 0.02);
