@@ -248,7 +248,7 @@ final class Mind {
                 HelperCommands.unstick(player);
             } else {
                 Helper.say(player, "Nope, I'm moving fine! " + helper.whereText(player) + " " + helper.progressText()
-                        + " If I ever look stuck to you, say \\"helper unstick\\" and I'll pop over.");
+                        + " If I ever look stuck to you, say \"helper unstick\" and I'll pop over.");
             }
         } else if (has(ask, "where are you", "where r u", "where are u", "where you at", "where did you go")) {
             Helper.say(player, helper.whereText(player));
@@ -269,7 +269,7 @@ final class Mind {
             Helper.say(player, pick(player, "Of course! You're the best boss.", "Very happy. I love a good job.", "Yes! Thanks for keeping me busy."));
         } else { // are you ok / hurt / health / alive
             Helper.say(player, helper.healthText() + ". " + (helper.looksStuck(player)
-                    ? "I think I'm stuck though. Say \\"helper unstick\\" and I'll pop over." : helper.progressText()));
+                    ? "I think I'm stuck though. Say \"helper unstick\" and I'll pop over." : helper.progressText()));
         }
         return true;
     }
