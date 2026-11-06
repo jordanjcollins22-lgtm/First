@@ -209,6 +209,8 @@ only sees it if they have Helper Buddies 2.1.0 or newer installed too. Anyone wi
 join with a **[Get a mini map]** link, or can type `/helper minimap`: that puts a **Helper Mini Map** in their off
 hand, a normal map that fills in as they explore and re-centres on them as they walk, so it works with no mod at all.
 `/helper minimap` again takes it back.
+Since 2.7.1 friends without the mod can type plain **`/minimap`** too (and `/minimap on` / `/minimap off`); it does the
+same. With the mod installed, `/minimap` is still the corner map's own command.
 
 ## Talk to your helper
 

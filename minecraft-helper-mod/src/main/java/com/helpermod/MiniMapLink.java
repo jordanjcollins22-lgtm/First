@@ -109,10 +109,10 @@ public final class MiniMapLink {
 
     private static void tellAboutFallback(ServerPlayer p) {
         Component link = Component.literal("[Get a mini map]").withStyle(s -> s.withColor(ChatFormatting.GREEN).withUnderlined(true)
-                .withClickEvent(new ClickEvent.RunCommand("/helper minimap"))
+                .withClickEvent(new ClickEvent.RunCommand("/minimap"))
                 .withHoverEvent(new HoverEvent.ShowText(Component.literal("A map in your off hand that follows you"))));
         p.sendSystemMessage(Component.literal("[Helper] ").withStyle(ChatFormatting.GOLD)
-                .append(Component.literal("The corner mini map needs Helper Buddies 2.1.0 or newer on your own PC. Until then, ")
+                .append(Component.literal("The corner mini map needs Helper Buddies on your own PC. Until then, type /minimap or click ")
                         .withStyle(ChatFormatting.WHITE))
                 .append(link));
     }
@@ -140,19 +140,35 @@ public final class MiniMapLink {
         return map;
     }
 
-    /** /helper minimap: give or take back the follow-me map. */
+    /** /minimap on|off|... typed by someone without the mod: on gives the follow-me map, off takes it back. */
+    static void serverMinimap(ServerPlayer p, String settings) {
+        String s = settings.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean has = holdsMap(p) || mapTag(p.getOffhandItem()) != null || mapTag(p.getMainHandItem()) != null;
+        if ((s.equals("on") && has) || (s.equals("off") && !has)) {
+            Helper.say(p, has ? "You already have the Helper Mini Map." : "You don't have the Helper Mini Map out.");
+            return;
+        }
+        if (s.equals("on") || s.equals("off")) {
+            toggle(p);
+            return;
+        }
+        Helper.say(p, "Without Helper Buddies on your own PC, /minimap gives you a map in your off hand that follows you "
+                + "(/minimap on, /minimap off). Size, zoom and corner need the mod installed.");
+    }
+
+    /** /minimap or /helper minimap: give or take back the follow-me map. */
     static void toggle(ServerPlayer p) {
         for (int i = 0; i < p.getInventory().getContainerSize(); i++) {
             if (mapTag(p.getInventory().getItem(i)) != null) {
                 p.getInventory().setItem(i, ItemStack.EMPTY);
-                Helper.say(p, "Took the Helper Mini Map back. /helper minimap gives it to you again.");
+                Helper.say(p, "Took the Helper Mini Map back. /minimap gives it to you again.");
                 return;
             }
         }
         for (InteractionHand hand : InteractionHand.values()) {
             if (mapTag(p.getItemInHand(hand)) != null) {
                 p.setItemInHand(hand, ItemStack.EMPTY);
-                Helper.say(p, "Took the Helper Mini Map back. /helper minimap gives it to you again.");
+                Helper.say(p, "Took the Helper Mini Map back. /minimap gives it to you again.");
                 return;
             }
         }
