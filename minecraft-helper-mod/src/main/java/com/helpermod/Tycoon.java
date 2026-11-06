@@ -726,6 +726,8 @@ final class Tycoon {
             new Offer(3, 3000, "Netherite Scrap", () -> new ItemStack(Items.NETHERITE_SCRAP)),
             new Offer(3, 4000, "Totem of Undying", () -> new ItemStack(Items.TOTEM_OF_UNDYING)),
             new Offer(3, 2500, "Enchanted Golden Apple", () -> new ItemStack(Items.ENCHANTED_GOLDEN_APPLE)),
+            new Offer(2, 250_000, "Star Roadster (a flying sports car you can repaint)",
+                    () -> named(Items.LEATHER_HORSE_ARMOR, 1, "Star Roadster", Formatting.RED), 0, Roadster::spawn),
             // Ad Astra rockets, fully fueled (only shown when Ad Astra is installed)
             new Offer(1, 50_000, "Tier 1 Rocket, full of cryo fuel (Moon, Fairway)", () -> rocket(1)),
             new Offer(2, 150_000, "Tier 2 Rocket, full of cryo fuel (Mars)", () -> rocket(2)),
