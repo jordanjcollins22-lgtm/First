@@ -141,7 +141,7 @@ final class MiniMap {
 
     static void render(GuiGraphicsExtractor ctx) {
         Minecraft client = Minecraft.getInstance();
-        if (!enabled || client.player == null || client.level == null || client.options.hideGui) return;
+        if (!enabled || client.player == null || client.level == null || ClientCompat.hudHidden(client)) return;
         if (ClientCompat.screen(client) != null) return; // keep menus clean
         if (texture == null) {
             texture = new DynamicTexture(() -> "helpermod_minimap", new NativeImage(TEX, TEX, false));

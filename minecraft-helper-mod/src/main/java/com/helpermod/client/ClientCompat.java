@@ -25,6 +25,41 @@ final class ClientCompat {
         return null;
     }
 
+    private static java.lang.reflect.Field hideField;
+    private static Object hideOwnerKind; // "options" or "gui"
+    private static boolean hideLooked;
+
+    /** Whether the HUD is hidden (F1). Found by name, since the field moved in newer Minecraft. */
+    static boolean hudHidden(Minecraft client) {
+        if (!hideLooked) {
+            hideLooked = true;
+            for (Object[] owner : new Object[][]{{"options", client.options}, {"gui", client.gui}}) {
+                if (owner[1] == null || hideField != null) continue;
+                for (Class<?> c = owner[1].getClass(); c != null && c != Object.class && hideField == null; c = c.getSuperclass()) {
+                    for (var f : c.getDeclaredFields()) {
+                        String n = f.getName().toLowerCase();
+                        if (f.getType() == boolean.class && !java.lang.reflect.Modifier.isStatic(f.getModifiers())
+                                && (n.equals("hidegui") || n.equals("hidehud") || n.equals("hidden") || n.equals("hudhidden"))) {
+                            try {
+                                f.setAccessible(true);
+                                hideField = f;
+                                hideOwnerKind = owner[0];
+                            } catch (Throwable ignored) {
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (hideField == null) return false;
+        try {
+            return hideField.getBoolean("options".equals(hideOwnerKind) ? client.options : client.gui);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
     static void show(Minecraft client, Screen screen) {
         client.setScreenAndShow(screen);
     }
