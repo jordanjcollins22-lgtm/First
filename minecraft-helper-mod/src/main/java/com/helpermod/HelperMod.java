@@ -70,6 +70,7 @@ public class HelperMod implements ModInitializer {
             Golf.reset();
             BlackHole.reset();
             TycoonSidebar.reset();
+            Roadster.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
