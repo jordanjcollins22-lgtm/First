@@ -70,7 +70,7 @@ public final class Size {
         return BABY_FLAGS.computeIfAbsent(type, t -> {
             Entity sample = null;
             try {
-                sample = t.create(world);
+                sample = t.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
                 if (sample instanceof Zombie) return Optional.of(ZombieEntityAccessor.helpermod$getBaby());
                 if (sample instanceof Piglin) return Optional.of(PiglinEntityAccessor.helpermod$getBaby());
                 if (sample instanceof AgeableMob) return Optional.of(PassiveEntityAccessor.helpermod$getBaby());

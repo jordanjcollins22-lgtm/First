@@ -37,7 +37,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -282,7 +281,7 @@ final class BlackHole {
             Vortex v = it.next();
             v.ticks++;
             AABB box = new AABB(v.centre, v.centre).inflate(4, 2, 4);
-            List<Entity> ores = v.world.getEntities(null, box, BlackHole::isOre);
+            List<Entity> ores = v.world.getEntities((Entity) null, box, BlackHole::isOre);
             double pull = (double) v.ticks / VORTEX_TICKS; // the circle shrinks as it spins faster
             for (Entity e : ores) {
                 double dx = e.getX() - v.centre.x, dz = e.getZ() - v.centre.z;
@@ -435,14 +434,14 @@ final class BlackHole {
         ServerLevel to = server.overworld();
         double x, y, z;
         if (home != null) {
-            Identifier dim = Identifier.tryParse(home.getString("dim"));
+            Identifier dim = Identifier.tryParse(home.getStringOr("dim", ""));
             ServerLevel w = dim == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, dim));
             if (w != null) to = w;
             x = home.getDoubleOr("x", 0.0);
             y = home.getDoubleOr("y", 0.0);
             z = home.getDoubleOr("z", 0.0);
         } else {
-            BlockPos spawn = to.getSharedSpawnPos();
+            BlockPos spawn = to.getRespawnData().pos();
             x = spawn.getX() + 0.5;
             y = spawn.getY();
             z = spawn.getZ() + 0.5;
@@ -583,7 +582,7 @@ final class BlackHole {
         }
     }
 
-    private static void attr(Mob mob, Attribute a, double v) {
+    private static void attr(Mob mob, net.minecraft.core.Holder<Attribute> a, double v) {
         AttributeInstance inst = mob.getAttribute(a);
         if (inst != null) inst.setBaseValue(v);
     }
@@ -591,7 +590,7 @@ final class BlackHole {
     private static void start(ServerLevel world, BossDef b) {
         EntityType<?> type = Planets.type(b.type());
         if (type == null) return;
-        Entity e = type.create(world);
+        Entity e = type.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (!(e instanceof Mob boss)) {
             if (e != null) e.discard();
             return;
@@ -599,7 +598,7 @@ final class BlackHole {
         BlockPos at = altar(b).above();
         double ox = -Math.signum(b.dx()) * 7, oz = -Math.signum(b.dz()) * 7; // between the altar and the far edge
         boss.snapTo(at.getX() + 0.5 - ox, at.getY(), at.getZ() + 0.5 - oz, 0f, 0f);
-        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null, null);
+        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null);
         attr(boss, Attributes.MAX_HEALTH, b.health());
         attr(boss, Attributes.ATTACK_DAMAGE, b.damage());
         attr(boss, Attributes.MOVEMENT_SPEED, b.speed());
@@ -614,7 +613,7 @@ final class BlackHole {
         boss.setPersistenceRequired();
         boss.addTag(BOSS_TAG);
         boss.addTag(Planets.MOB_TAG);
-        ServerBossEvent bar = new ServerBossEvent(Component.literal(b.title()), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.NOTCHED_10);
+        ServerBossEvent bar = new ServerBossEvent(java.util.UUID.randomUUID(), Component.literal(b.title()), BossEvent.BossBarColor.PURPLE, BossEvent.BossBarOverlay.NOTCHED_10);
         bar.setDarkenScreen(true);
         FIGHTS.put(b.id(), new Fight(b, boss, bar));
         world.addFreshEntity(boss);
@@ -672,7 +671,7 @@ final class BlackHole {
             world.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, boss.getX(), boss.getY() + 1, boss.getZ(), 60, 1, 1, 1, 0.1);
             EntityType<?> minion = Planets.type(f.def.minion());
             for (int i = 0; minion != null && i < 3; i++) {
-                Entity m = minion.create(world);
+                Entity m = minion.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
                 if (m == null) continue;
                 double a = i * Math.PI * 2 / 3;
                 m.snapTo(boss.getX() + Math.cos(a) * 3, boss.getY() + (minion == EntityTypes.VEX ? 2 : 0), boss.getZ() + Math.sin(a) * 3, 0, 0);
@@ -734,7 +733,7 @@ final class BlackHole {
 
     private record ArmorSet(String id, String name, ChatFormatting color, String bonus, MobEffectInstance[] effects) {}
 
-    private static MobEffectInstance fx(net.minecraft.world.effect.MobEffect e, int amp) {
+    private static MobEffectInstance fx(net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> e, int amp) {
         return new MobEffectInstance(e, 100, amp, true, false, true);
     }
 
@@ -819,12 +818,13 @@ final class BlackHole {
 
     /** A strong enchanted book: one of the best enchantments at its top level. */
     static ItemStack book(RandomSource rnd) {
-        Enchantment[] good = {Enchantments.SHARPNESS, Enchantments.PROTECTION, Enchantments.EFFICIENCY, Enchantments.UNBREAKING,
+        @SuppressWarnings("unchecked")
+        ResourceKey<Enchantment>[] good = new ResourceKey[]{Enchantments.SHARPNESS, Enchantments.PROTECTION, Enchantments.EFFICIENCY, Enchantments.UNBREAKING,
                 Enchantments.FORTUNE, Enchantments.LOOTING, Enchantments.POWER, Enchantments.FEATHER_FALLING,
                 Enchantments.MENDING, Enchantments.SWEEPING_EDGE, Enchantments.FIRE_ASPECT, Enchantments.SILK_TOUCH,
                 Enchantments.INFINITY, Enchantments.DEPTH_STRIDER, Enchantments.SOUL_SPEED, Enchantments.SWIFT_SNEAK};
-        Enchantment e = good[rnd.nextInt(good.length)];
-        return EnchantedBookItem.createForEnchantment(new EnchantmentInstance(e, e.getMaxLevel()));
+        net.minecraft.core.Holder<Enchantment> e = Compat.ench(good[rnd.nextInt(good.length)]);
+        return EnchantmentHelper.createBook(new EnchantmentInstance(e, e.value().getMaxLevel()));
     }
 
     /** Diamond or netherite gear with a level-30 (treasure) enchant roll. */
@@ -833,7 +833,8 @@ final class BlackHole {
                 Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS, Items.BOW, Items.CROSSBOW, Items.TRIDENT, Items.NETHERITE_SWORD,
                 Items.NETHERITE_PICKAXE, Items.NETHERITE_CHESTPLATE};
         ItemStack s = new ItemStack(items[rnd.nextInt(items.length)]);
-        return EnchantmentHelper.enchantItem(rnd, s, 30, true);
+        return EnchantmentHelper.enchantItem(rnd, s, 30, Compat.registries().lookupOrThrow(Registries.ENCHANTMENT)
+                .listElements().map(h -> (net.minecraft.core.Holder<Enchantment>) h));
     }
 
     /** What a Rift Cache gives: a handful of good things, sometimes armor from a boss set. */
@@ -875,7 +876,11 @@ final class BlackHole {
             if (w.getBlockState(p.below()).isAir()) w.setBlock(p.below(), Blocks.POLISHED_BLACKSTONE.defaultBlockState(), Block.UPDATE_CLIENTS);
             w.setBlock(p, Blocks.CHEST.defaultBlockState(), Block.UPDATE_CLIENTS);
             w.setBlock(p.above(), Blocks.SOUL_LANTERN.defaultBlockState(), Block.UPDATE_CLIENTS);
-            if (w.getBlockEntity(p) instanceof ChestBlockEntity chest) chest.setCustomName(Component.literal("Rift Cache"));
+            if (w.getBlockEntity(p) instanceof ChestBlockEntity chest) {
+                chest.applyComponents(net.minecraft.core.component.DataComponentMap.builder()
+                        .set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal("Rift Cache")).build(),
+                        net.minecraft.core.component.DataComponentPatch.EMPTY);
+            }
         }
     }
 
@@ -973,7 +978,7 @@ final class BlackHole {
                 }
                 world.sendParticles(ParticleTypes.REVERSE_PORTAL, player.getX(), player.getY() + 0.5, player.getZ(), 120, 4, 0.5, 4, 0.05);
                 world.sendParticles(ParticleTypes.EXPLOSION, player.getX(), player.getY(), player.getZ(), 3, 1, 0, 1, 0);
-                world.playSound(null, player.blockPosition(), SoundEvents.GENERIC_EXPLODE, SoundSource.PLAYERS, 0.6f, 0.6f);
+                world.playSound(null, player.blockPosition(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.6f, 0.6f);
                 cooldown = 160;
             }
             case "staff" -> { // Starless Beam

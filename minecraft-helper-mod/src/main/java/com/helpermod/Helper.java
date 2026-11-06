@@ -48,6 +48,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import net.minecraft.resources.Identifier;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -76,10 +77,17 @@ public class Helper {
     private static final int FAR_PARALLEL = 8;
     /** Past this horizontal distance the helper walks over land toward the target before digging. */
     private static final double TRAVEL_DISTANCE = 40;
-    private static final TicketType<ChunkPos> SEARCH_TICKET =
-            TicketType.create("helpermod_search", Comparator.comparingLong(ChunkPos::toLong), 300);
-    private static final TicketType<ChunkPos> KEEP_LOADED_TICKET =
-            TicketType.create("helpermod_helper", Comparator.comparingLong(ChunkPos::toLong), 80);
+    private static TicketType SEARCH_TICKET;
+    private static TicketType KEEP_LOADED_TICKET;
+
+    /** Chunk tickets must be registered while the game starts up. */
+    static void registerTickets() {
+        SEARCH_TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
+                Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "search"), new TicketType(300L, TicketType.FLAG_LOADING));
+        KEEP_LOADED_TICKET = net.minecraft.core.Registry.register(net.minecraft.core.registries.BuiltInRegistries.TICKET_TYPE,
+                Identifier.fromNamespaceAndPath(HelperMod.MOD_ID, "helper"),
+                new TicketType(80L, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION));
+    }
 
     enum Mode { FOLLOW, COLLECT, RETURN, FISH, FARM, SEND }
 
@@ -299,7 +307,7 @@ public class Helper {
             clearBreaking(existing);
             existing.discard();
         }
-        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (helper == null) return;
         mineStep = -1;
         branchFrom = -1;
@@ -332,7 +340,7 @@ public class Helper {
         float yaw = old.getYRot();
         old.discard();
         mob = null;
-        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world);
+        WanderingTrader helper = EntityTypes.WANDERING_TRADER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (helper == null) return;
         helper.snapTo(pos.x, pos.y, pos.z, yaw, 0f);
         helper.setCustomName(Component.literal(player.getGameProfile().name() + "'s Helper"));
@@ -494,7 +502,7 @@ public class Helper {
         if (!ItemStack.matches(m.getMainHandItem(), rod)) m.setItemSlot(EquipmentSlot.MAINHAND, rod.copy());
         m.getLookControl().setLookAt(Vec3.atCenterOf(fishSpot));
         if (fishTimer <= 0) { // cast: wait 5 to 30 seconds like a player, less with Lure
-            int lure = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingSpeedBonus(rod);
+            int lure = Compat.enchLevel(net.minecraft.world.item.enchantment.Enchantments.LURE, rod);
             fishTimer = Math.max(40, 100 + world.getRandom().nextInt(500) - lure * 100);
             Compat.swing(m, InteractionHand.MAIN_HAND);
             world.playSound(null, fishSpot, SoundEvents.FISHING_BOBBER_THROW, SoundSource.NEUTRAL, 0.5f, 0.4f);
@@ -510,13 +518,13 @@ public class Helper {
         world.sendParticles(net.minecraft.core.particles.ParticleTypes.SPLASH, fishSpot.getX() + 0.5, fishSpot.getY() + 1,
                 fishSpot.getZ() + 0.5, 12, 0.3, 0.1, 0.3, 0.1);
         Compat.swing(m, InteractionHand.MAIN_HAND);
-        float luck = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingLuckBonus(rod);
+        float luck = net.minecraft.world.item.enchantment.EnchantmentHelper.getFishingLuckBonus(world, rod, m);
         net.minecraft.world.level.storage.loot.LootParams params = new net.minecraft.world.level.storage.loot.LootParams.Builder(world)
                 .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.ORIGIN, Vec3.atCenterOf(fishSpot))
                 .withParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.TOOL, rod)
                 .withLuck(luck)
                 .create(net.minecraft.world.level.storage.loot.parameters.LootContextParamSets.FISHING);
-        List<ItemStack> loot = world.getServer().getLootData()
+        List<ItemStack> loot = world.getServer().reloadableRegistries()
                 .getLootTable(net.minecraft.world.level.storage.loot.BuiltInLootTables.FISHING).getRandomItems(params);
         for (ItemStack caught : loot) {
             fishCaught += caught.getCount();
@@ -525,7 +533,7 @@ public class Helper {
         }
         if (currentEntry != null) currentEntry.xp += 1 + world.getRandom().nextInt(6); // fishing XP, handed over on delivery
         addWork(player, 2);
-        rod.hurtAndBreak(1, m, e -> {});
+        rod.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
         inv.setChanged();
         if (rod.isEmpty() || rodSlot(inv) < 0) {
             say(player, "My fishing rod is about to break, so I stopped. Give me a new one and ask me again.");
@@ -673,7 +681,7 @@ public class Helper {
         BlockState ripe = world.getBlockState(farmTarget);
         List<ItemStack> drops = Block.getDrops(ripe, world, farmTarget, world.getBlockEntity(farmTarget), m, m.getMainHandItem());
         // Replant with one of the seeds it just harvested (or one it was carrying).
-        ItemStack seed = ripe.getBlock().getCloneItemStack(world, farmTarget, ripe);
+        ItemStack seed = ripe.getCloneItemStack(world, farmTarget, false);
         boolean replanted = false;
         for (ItemStack d : drops) {
             if (!seed.isEmpty() && d.is(seed.getItem()) && !replanted) {
@@ -827,7 +835,7 @@ public class Helper {
             ItemStack give = s.copy();
             target.getInventory().add(give);
             if (!give.isEmpty()) {
-                target.drop(give, false, false);
+                target.drop(give, false, net.minecraft.util.Prediction.SERVER_ONLY);
                 dropped = true;
             }
         }
@@ -1014,7 +1022,7 @@ public class Helper {
             tickRide(m, player);
             return;
         }
-        if (m.maxUpStep() != WALK_STEP) m.setMaxUpStep(WALK_STEP); // got off: back to its normal step
+        if (m.maxUpStep() != WALK_STEP) Compat.setStep(m, WALK_STEP); // got off: back to its normal step
         if (m.isNoGravity() && !m.isVehicle()) m.setNoGravity(false); // got off a flying helper
         if (m.tickCount % 10 == 0) pickUpXp(m, player, entry);
         if (++gearTicks % 40 == 1) Combat.wearBestArmor(m, entry.inventory);
@@ -1140,11 +1148,11 @@ public class Helper {
      * a few seconds after the helper is gone, so nothing stays loaded for nothing.
      */
     private void keepLoaded(ServerLevel world, Mob m) {
-        ChunkPos here = new ChunkPos(m.blockPosition());
-        world.getChunkSource().addRegionTicket(KEEP_LOADED_TICKET, here, 3, here);
+        ChunkPos here = ChunkPos.containing(m.blockPosition());
+        world.getChunkSource().addTicketWithRadius(KEEP_LOADED_TICKET, here, 3);
         if (job != null && job.target != null) {
-            ChunkPos there = new ChunkPos(job.target);
-            world.getChunkSource().addRegionTicket(KEEP_LOADED_TICKET, there, 2, there);
+            ChunkPos there = ChunkPos.containing(job.target);
+            world.getChunkSource().addTicketWithRadius(KEEP_LOADED_TICKET, there, 2);
         }
     }
 
@@ -1159,7 +1167,7 @@ public class Helper {
         if (player.isPassenger()) player.stopRiding();
         m.getNavigation().stop();
         clearBreaking(m);
-        return player.startRiding(m, true);
+        return player.startRiding(m, true, true);
     }
 
     private static final Set<String> FLYERS = Set.of("minecraft:phantom", "minecraft:bat", "minecraft:parrot",
@@ -1219,7 +1227,7 @@ public class Helper {
             return;
         }
         // Like a horse: walk straight up 1-block steps, and hop over anything a little taller by itself.
-        if (m.maxUpStep() != RIDE_STEP) m.setMaxUpStep(RIDE_STEP);
+        if (m.maxUpStep() != RIDE_STEP) Compat.setStep(m, RIDE_STEP);
         if (!jump && moving && m.onGround() && m.horizontalCollision && !m.isInWater()) {
             m.setDeltaMovement(m.getDeltaMovement().x, 0.5, m.getDeltaMovement().z);
             m.needsSync = true;
@@ -1492,7 +1500,7 @@ public class Helper {
                 player.getInventory().add(give);
             }
             if (!give.isEmpty()) {
-                player.drop(give, false, false);
+                player.drop(give, false, net.minecraft.util.Prediction.SERVER_ONLY);
                 droppedAtFeet = true;
             }
             inv.setItem(i, ItemStack.EMPTY);
@@ -2147,14 +2155,14 @@ public class Helper {
     private static boolean isExposed(Level world, BlockPos p) {
         for (Direction dir : Direction.values()) {
             BlockPos n = p.relative(dir);
-            if (!world.getBlockState(n).isSolidRender(world, n)) return true;
+            if (!world.getBlockState(n).isSolidRender()) return true;
         }
         return false;
     }
 
     private static void scan(ServerLevel world, BlockPos center, int radius, int vertical, Job j) {
         int minY = Math.max(world.getMinY(), center.getY() - vertical);
-        int maxY = Math.min(world.getMaxBuildHeight() - 1, center.getY() + vertical);
+        int maxY = Math.min(world.getMaxY(), center.getY() + vertical);
         Set<BlockPos> seen = new HashSet<>(j.candidates);
         for (int cx = (center.getX() - radius) >> 4; cx <= (center.getX() + radius) >> 4; cx++) {
             for (int cz = (center.getZ() - radius) >> 4; cz <= (center.getZ() + radius) >> 4; cz++) {
@@ -2176,7 +2184,7 @@ public class Helper {
         int cx = chunk.getPos().x(), cz = chunk.getPos().z();
         LevelChunkSection[] sections = chunk.getSections();
         for (int si = 0; si < sections.length; si++) {
-            int baseY = SectionPos.sectionToBlockCoord(world.getMinSection() + si);
+            int baseY = SectionPos.sectionToBlockCoord(world.getMinSectionY() + si);
             if (baseY + 15 < minY || baseY > maxY) continue;
             LevelChunkSection section = sections[si];
             if (section == null || section.hasOnlyAir() || !section.maybeHas(j.spec::matches)) continue;
@@ -2206,7 +2214,7 @@ public class Helper {
     private boolean farSearch(Mob m, ServerPlayer player, ServerLevel world, SimpleContainer inv) {
         Job j = job;
         if (j.farRing < 0) {
-            j.farOrigin = new ChunkPos(m.blockPosition());
+            j.farOrigin = ChunkPos.containing(m.blockPosition());
             j.farRing = FAR_START_RING;
             j.farQueue.clear();
             j.farPending.clear();
@@ -2224,7 +2232,7 @@ public class Helper {
             LevelChunk chunk = chunks.getChunkNow(cp.x(), cp.z());
             if (chunk == null) continue; // still loading / generating
             it.remove();
-            scanChunk(world, chunk, world.getMinY(), world.getMaxBuildHeight() - 1, j, seen, null, 0);
+            scanChunk(world, chunk, world.getMinY(), world.getMaxY(), j, seen, null, 0);
         }
         while (j.farPending.size() < FAR_PARALLEL) {
             if (j.farQueue.isEmpty()) {
@@ -2240,7 +2248,7 @@ public class Helper {
                 queueRing(j);
             }
             ChunkPos cp = j.farQueue.pollFirst();
-            chunks.addRegionTicket(SEARCH_TICKET, cp, 0, cp);
+            chunks.addTicketWithRadius(SEARCH_TICKET, cp, 0);
             j.farPending.add(cp);
         }
         j.candidates.removeIf(p -> !isValidTarget(world, p, true));
@@ -2645,7 +2653,7 @@ public class Helper {
         world.destroyBlockProgress(m.getId(), pos, -1);
         world.destroyBlock(pos, false, m);
         if (!tool.isEmpty() && tool.isDamageableItem() && hardness != 0) {
-            tool.hurtAndBreak(1, m, e -> {});
+            tool.hurtAndBreak(1, m, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
             inv.setChanged();
             if (!Mining.isUsableTool(tool)) {
                 say(player, "My " + tool.getHoverName().getString() + " is about to break, so I've stopped using it. "

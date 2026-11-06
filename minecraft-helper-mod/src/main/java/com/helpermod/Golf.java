@@ -33,7 +33,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.MenuType;
-import net.minecraft.world.item.DyeableLeatherItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -123,14 +122,14 @@ final class Golf {
             Data d = new Data();
             if (nbt.contains("centre")) d.centre = BlockPos.of(nbt.getLongOr("centre", 0L));
             ListTag list = nbt.getListOrEmpty("welcomed");
-            for (int i = 0; i < list.size(); i++) d.welcomed.add(net.minecraft.nbt.Compat.uuidOf(list.get(i)));
+            for (int i = 0; i < list.size(); i++) d.welcomed.add(Compat.uuidOf(list.get(i)));
             return d;
         }
 
                 public CompoundTag save(CompoundTag nbt) {
             if (centre != null) nbt.putLong("centre", centre.asLong());
             ListTag list = new ListTag();
-            for (UUID id : welcomed) list.add(net.minecraft.nbt.Compat.uuidTag(id));
+            for (UUID id : welcomed) list.add(Compat.uuidTag(id));
             nbt.put("welcomed", list);
             return nbt;
         }
@@ -190,13 +189,13 @@ final class Golf {
 
     static ItemStack cap() {
         ItemStack cap = tagged(Items.LEATHER_HELMET, 1, "cap", "Golf Cap", ChatFormatting.WHITE, "Looking sharp on the green");
-        ((DyeableLeatherItem) Items.LEATHER_HELMET).setColor(cap, 0xF2F2F2);
+        cap.set(net.minecraft.core.component.DataComponents.DYED_COLOR, new net.minecraft.world.item.component.DyedItemColor(0xF2F2F2));
         return cap;
     }
 
     private static String kindOf(ItemStack stack) {
         CompoundTag nbt = Compat.tag(stack);
-        return nbt != null && nbt.contains(NBT) ? nbt.getString(NBT) : null;
+        return nbt != null && nbt.contains(NBT) ? nbt.getStringOr(NBT, "") : null;
     }
 
     private static Club clubOf(ItemStack stack) {
@@ -244,7 +243,7 @@ final class Golf {
         int cz = Mth.floor(player.getZ()) + AREA_Z1 + 24;
         world.getChunk(cx >> 4, cz >> 4);
         int g = world.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, cx, cz) - 1;
-        if (g < world.getMinY() + 16 || g > world.getMaxBuildHeight() - 40) return null;
+        if (g < world.getMinY() + 16 || g > (world.getMaxY() + 1) - 40) return null;
         g = Math.max(g, 52); // above the lakes
         BlockPos c = new BlockPos(cx, g, cz);
         flatten(world, c);
@@ -325,11 +324,11 @@ final class Golf {
     }
 
     private static void pro(ServerLevel world, BlockPos at) {
-        Villager v = EntityTypes.VILLAGER.create(world);
+        Villager v = EntityTypes.VILLAGER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (v == null) return;
         v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, -90f, 0f);
-        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null, null);
-        v.setVillagerData(v.getVillagerData().setProfession(VillagerProfession.NITWIT));
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null);
+        v.setVillagerData(v.getVillagerData().withProfession(v.registryAccess(), VillagerProfession.NITWIT));
         v.setCustomName(Component.literal("Golf Pro").withStyle(ChatFormatting.GREEN));
         v.setCustomNameVisible(true);
         v.setPersistenceRequired();
@@ -349,9 +348,10 @@ final class Golf {
         set(world, pos, Blocks.BIRCH_SIGN.defaultBlockState().setValue(net.minecraft.world.level.block.StandingSignBlock.ROTATION, rot));
         BlockEntity be = world.getBlockEntity(pos);
         if (be instanceof SignBlockEntity s) {
-            SignText text = new SignText();
-            for (int i = 0; i < Math.min(4, lines.length); i++) text = text.setMessage(i, Component.literal(lines[i]));
-            s.setText(text, true);
+            java.util.List<Component> msgs = new java.util.ArrayList<>();
+            for (int i = 0; i < 4; i++) msgs.add(i < lines.length ? Component.literal(lines[i]) : Component.empty());
+            SignText text = new SignText(msgs, msgs, net.minecraft.world.item.DyeColor.BLACK, false);
+            s.setText(text, net.minecraft.world.level.block.entity.SignTextSlot.FRONT);
             s.setChanged();
             world.sendBlockUpdated(pos, world.getBlockState(pos), world.getBlockState(pos), Block.UPDATE_CLIENTS);
         }
@@ -382,7 +382,7 @@ final class Golf {
         disc(world, c, h.cupX(), h.cupZ(), 4, Blocks.CONCRETE.green().defaultBlockState());
         for (int ox = -1; ox <= 1; ox++) for (int oz = -1; oz <= 1; oz++) set(world, at(c, h.teeX() + ox, 0, h.teeZ() + oz), Blocks.SMOOTH_STONE.defaultBlockState());
         cup(world, c, h, true);
-        Direction back = Direction.getNearest(-dx, 0, -dz);
+        Direction back = Direction.getNearest(-dx, 0, -dz, Direction.NORTH);
         BlockPos signAt = at(c, h.teeX(), 1, h.teeZ()).relative(back, 2).relative(back.getClockWise(), 2);
         sign(world, signAt, back.getOpposite() == Direction.UP ? Direction.SOUTH : back,
                 "Hole " + h.number(), h.kind(), "Par " + h.par(), len + " blocks");
@@ -539,7 +539,7 @@ final class Golf {
         world.playSound(null, ball.blockPosition(), club.id().equals("putter") ? SoundEvents.WOOD_HIT : SoundEvents.PLAYER_ATTACK_STRONG,
                 SoundSource.PLAYERS, 0.8f, 1.6f);
         world.sendParticles(ParticleTypes.CRIT, ball.getX(), ball.getY() + 0.1, ball.getZ(), 6, 0.1, 0.1, 0.1, 0.1);
-        player.swing(InteractionHand.MAIN_HAND, true);
+        Compat.swing(player, InteractionHand.MAIN_HAND);
         player.sendOverlayMessage(Component.literal(club.name() + " - stroke " + r.strokes).withStyle(ChatFormatting.AQUA));
     }
 
@@ -665,13 +665,13 @@ final class Golf {
     /** A golf cart: a fast, tame, saddled white horse that's yours. */
     private static boolean cart(ServerPlayer player) {
         ServerLevel world = player.level();
-        Horse horse = EntityTypes.HORSE.create(world);
+        Horse horse = EntityTypes.HORSE.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
         horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);
         horse.setTamed(true);
-        horse.setOwnerUUID(player.getUUID());
-        horse.equipSaddle(SoundSource.NEUTRAL);
+        horse.setOwner(player);
+        horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, new ItemStack(Items.SADDLE));
         var speed = horse.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(0.36);
         var jump = horse.getAttribute(Attributes.JUMP_STRENGTH);

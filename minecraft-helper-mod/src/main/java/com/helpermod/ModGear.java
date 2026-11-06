@@ -10,15 +10,11 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.DiggerItem;
-import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.ShieldItem;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.TridentItem;
 
 /**
@@ -43,11 +39,11 @@ final class ModGear {
             String path = id.getPath().toLowerCase(Locale.ROOT);
             boolean skip = false;
             for (String s : SKIP) if (path.contains(s)) skip = true;
-            if (skip || item.getMaxDamage() <= 0) continue;
+            if (skip || item.getDefaultInstance().getMaxDamage() <= 0) continue;
             long price = price(item);
             if (price <= 0) continue;
             int tier = price < 1_000 ? 1 : price < 20_000 ? 2 : 3;
-            list.add(new Gear(item, name(item, id), price, tier, rarityFor(price), item instanceof ArmorItem));
+            list.add(new Gear(item, name(item, id), price, tier, rarityFor(price), Compat.isArmor(item.getDefaultInstance())));
         }
         list.sort(Comparator.comparingLong(Gear::price));
         cache = List.copyOf(list);
@@ -74,28 +70,31 @@ final class ModGear {
     }
 
     private static double attackDamage(Item item) {
-        double dmg = 0;
-        for (AttributeModifier m : item.getDefaultAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE)) {
-            if (m.getOperation() == AttributeModifier.Operation.ADDITION) dmg += m.getAmount();
-        }
+        double dmg = Compat.modifierSum(item.getDefaultInstance(), Attributes.ATTACK_DAMAGE, EquipmentSlot.MAINHAND);
         return dmg + 1; // players hit for 1 with an empty hand
     }
 
     /** 0 = not a weapon or armour. */
     static long price(Item item) {
-        double durability = 1 + item.getMaxDamage() / 2000.0;
+        ItemStack stack = item.getDefaultInstance();
+        int maxDamage = stack.getMaxDamage();
+        double durability = 1 + maxDamage / 2000.0;
         double p;
-        if (item instanceof ArmorItem armor) {
-            double points = armor.getDefense() + armor.getToughness() * 1.0;
+        EquipmentSlot armorSlot = Compat.armorSlot(stack);
+        if (armorSlot != null) {
+            double points = Compat.modifierSum(stack, Attributes.ARMOR, armorSlot)
+                    + Compat.modifierSum(stack, Attributes.ARMOR_TOUGHNESS, armorSlot);
             if (points <= 0) return 0;
-            p = 10 * Math.pow(2, points - 2) * (1 + item.getMaxDamage() / 1000.0);
+            p = 10 * Math.pow(2, points - 2) * (1 + maxDamage / 1000.0);
         } else if (item instanceof ShieldItem) {
-            p = 80 + item.getMaxDamage() / 2.0;
+            p = 80 + maxDamage / 2.0;
         } else if (item instanceof ProjectileWeaponItem) {
-            p = 150 + item.getMaxDamage() * 1.5;
+            p = 150 + maxDamage * 1.5;
         } else {
-            boolean weapon = item instanceof SwordItem || item instanceof AxeItem || item instanceof TridentItem;
-            if (!weapon && (item instanceof DiggerItem || item instanceof HoeItem)) return 0; // pickaxes, shovels, hoes
+            boolean weapon = stack.is(net.minecraft.tags.ItemTags.SWORDS) || stack.is(net.minecraft.tags.ItemTags.AXES)
+                    || item instanceof TridentItem || stack.is(Items.MACE);
+            if (!weapon && (stack.is(net.minecraft.tags.ItemTags.PICKAXES) || stack.is(net.minecraft.tags.ItemTags.SHOVELS)
+                    || stack.is(net.minecraft.tags.ItemTags.HOES))) return 0; // pickaxes, shovels, hoes
             double dmg = attackDamage(item);
             if (!weapon && dmg < 5) return 0; // modded weapons that don't extend SwordItem still count when they hit hard
             if (dmg > 100) return 0; // creative-only

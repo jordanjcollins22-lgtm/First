@@ -153,7 +153,7 @@ final class Planets {
                 if (item == Items.AIR) continue;
                 int left = reward.count();
                 while (left > 0) {
-                    int n = Math.min(left, item.getMaxStackSize());
+                    int n = Math.min(left, item.getDefaultMaxStackSize());
                     out.add(new ItemStack(item, n));
                     left -= n;
                 }
@@ -204,7 +204,7 @@ final class Planets {
             }
             BlockPos pos = new BlockPos(x, y, z);
             if (y <= world.getMinY() + 1 || !world.getBlockState(pos.below()).isRedstoneConductor(world, pos.below())) continue;
-            if (!world.noCollision(type.getAABB(x + 0.5, y, z + 0.5))) continue;
+            if (!world.noCollision(type.getSpawnAABB(x + 0.5, y, z + 0.5))) continue;
             Entity e = type.spawn(world, pos, EntitySpawnReason.NATURAL);
             if (e != null) e.addTag(MOB_TAG);
             return;

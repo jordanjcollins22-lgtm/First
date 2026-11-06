@@ -291,17 +291,22 @@ final class Furniture {
                 p.on = c.getBooleanOr("on", false);
                 if (c.contains("items")) {
                     NonNullList<ItemStack> items = NonNullList.withSize(27, ItemStack.EMPTY);
-                    ContainerHelper.loadAllItems(c.getCompoundOrEmpty("items"), items);
+                    Compat.loadItems(c.getCompoundOrEmpty("items"), items);
                     p.storage = new SimpleContainer(27);
                     for (int s = 0; s < 27; s++) p.storage.setItem(s, items.get(s));
-                    p.storage.addListener(inv -> d.setDirty());
                 }
                 d.placed.put(Compat.getUUID(c, "id"), p);
             }
             return d;
         }
 
-                public CompoundTag save(CompoundTag nbt) {
+        /** Items in storage furniture change without telling the saved data, so always save. */
+        @Override
+        public boolean isDirty() {
+            return true;
+        }
+
+        public CompoundTag save(CompoundTag nbt) {
             ListTag list = new ListTag();
             for (Map.Entry<UUID, Placed> e : placed.entrySet()) {
                 Placed p = e.getValue();
@@ -314,7 +319,7 @@ final class Furniture {
                 if (p.storage != null && !p.storage.isEmpty()) {
                     NonNullList<ItemStack> items = NonNullList.withSize(27, ItemStack.EMPTY);
                     for (int s = 0; s < 27; s++) items.set(s, p.storage.getItem(s));
-                    c.put("items", ContainerHelper.saveAllItems(new CompoundTag(), items));
+                    c.put("items", Compat.saveItems(items));
                 }
                 list.add(c);
             }
@@ -337,10 +342,8 @@ final class Furniture {
         m.putString("type", piece.id());
         Compat.editTag(stack, t -> t.put(ITEM_TAG, m));
         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(piece.name()).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GOLD));
-        ListTag lore = new ListTag();
-        lore.add(StringTag.valueOf(Component.Serializer.toJson(Component.literal(piece.room() + " furniture. Right-click a block to place it.")
-                .withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY))));
-        Compat.lore(stack, lore);
+        Compat.lore(stack, java.util.List.of(Component.literal(piece.room() + " furniture. Right-click a block to place it.")
+                .withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY)));
         return stack;
     }
 
@@ -430,7 +433,7 @@ final class Furniture {
     }
 
     private static Entity spawn(ServerLevel world, CompoundTag nbt, double x, double y, double z, float yaw) {
-        Entity e = EntityType.loadEntityRecursive(nbt, world, entity -> {
+        Entity e = Compat.loadEntity(nbt, world, entity -> {
             entity.snapTo(x, y, z, yaw, 0);
             return entity;
         });
@@ -549,13 +552,13 @@ final class Furniture {
         if (piece.use() == Use.STORAGE) placed.storage = new SimpleContainer(27);
         Data data = Data.get(world.getServer());
         UUID id = UUID.randomUUID();
-        if (placed.storage != null) placed.storage.addListener(inv -> data.setDirty());
+        
         data.placed.put(id, placed);
         data.setDirty();
         build(world, id, placed);
         if (!player.isCreative()) stack.shrink(1);
         world.playSound(null, pos, SoundEvents.WOOD_PLACE, SoundSource.BLOCKS, 1f, 1f);
-        player.swing(hand, true);
+        Compat.swing(player, hand);
         return InteractionResult.SUCCESS;
     }
 
@@ -647,7 +650,7 @@ final class Furniture {
         }
         if (piece.use() == Use.WATER && held.is(Items.GLASS_BOTTLE)) {
             held.shrink(1);
-            player.getInventory().placeItemBackInInventory(net.minecraft.world.item.alchemy.PotionUtils.setPotion(new ItemStack(Items.POTION),
+            player.getInventory().placeItemBackInInventory(net.minecraft.world.item.alchemy.PotionContents.createItemStack(Items.POTION,
                     net.minecraft.world.item.alchemy.Potions.WATER), net.minecraft.util.Prediction.SERVER_ONLY);
             world.playSound(null, placed.pos, SoundEvents.BOTTLE_FILL, SoundSource.BLOCKS, 1f, 1f);
             return InteractionResult.SUCCESS;
@@ -682,10 +685,10 @@ final class Furniture {
     /** Changes a material if the player holds something that can be one. Never uses the item up. */
     private static boolean customize(ServerPlayer player, Placed placed, ItemStack held) {
         if (held.getItem() instanceof DyeItem dye) {
-            Identifier wool = Identifier.fromNamespaceAndPath("minecraft", dye.getDyeColor().getName() + "_wool");
+            Identifier wool = Identifier.fromNamespaceAndPath("minecraft", dye.getDefaultInstance().get(net.minecraft.core.component.DataComponents.DYE).getName() + "_wool");
             if (BuiltInRegistries.BLOCK.containsKey(wool)) {
                 placed.fabric = wool.toString();
-                player.sendOverlayMessage(Component.literal("Fabric: " + nice(dye.getDyeColor())).withStyle(ChatFormatting.GREEN));
+                player.sendOverlayMessage(Component.literal("Fabric: " + nice(dye.getDefaultInstance().get(net.minecraft.core.component.DataComponents.DYE))).withStyle(ChatFormatting.GREEN));
                 return true;
             }
         }
@@ -710,7 +713,7 @@ final class Furniture {
             player.sendOverlayMessage(Component.literal("Fabric: " + label).withStyle(ChatFormatting.GREEN));
             return true;
         }
-        if (st.isSolidRender(EmptyBlockGetter.INSTANCE, BlockPos.ZERO) && !block.defaultBlockState().hasBlockEntity()) {
+        if (st.isSolidRender() && !block.defaultBlockState().hasBlockEntity()) {
             placed.top = id;
             player.sendOverlayMessage(Component.literal("Top: " + label).withStyle(ChatFormatting.GREEN));
             return true;
@@ -747,7 +750,7 @@ final class Furniture {
         double y = cell.getY() + piece.seat() / 16.0 - 0.2;
         Entity seat = spawn(world, nbt, cell.getX() + 0.5, y, cell.getZ() + 0.5, front.toYRot());
         if (seat != null) {
-            player.startRiding(seat, true);
+            player.startRiding(seat, true, true);
             player.sendOverlayMessage(Component.literal("Sneak to get up.").withStyle(ChatFormatting.GRAY));
         }
     }
@@ -759,7 +762,6 @@ final class Furniture {
     private static void openStorage(ServerPlayer player, Data data, Placed placed, Piece piece) {
         if (placed.storage == null) {
             placed.storage = new SimpleContainer(27);
-            placed.storage.addListener(inv -> data.setDirty());
         }
         SimpleContainer inv = placed.storage;
         player.openMenu(new SimpleMenuProvider(
@@ -847,7 +849,7 @@ final class Furniture {
             for (int i = 0; i < SIZE; i++) view.setItem(i, ItemStack.EMPTY);
             for (int r = 0; r < ROOMS.length; r++) {
                 ItemStack tab = Storage.Menu.button(ROOM_ICONS[r], ROOMS[r], r == room ? "Showing now" : "Click to show");
-                if (r == room) tab.enchant(net.minecraft.world.item.enchantment.Enchantments.UNBREAKING, 1);
+                if (r == room) tab.set(net.minecraft.core.component.DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
                 view.setItem(r, tab);
             }
             shown.clear();

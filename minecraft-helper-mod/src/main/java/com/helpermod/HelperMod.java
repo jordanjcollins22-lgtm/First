@@ -22,6 +22,7 @@ public class HelperMod implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        Helper.registerTickets();
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 HelperCommands.register(dispatcher));
         ServerTickEvents.END_SERVER_TICK.register(HelperManager::tick);

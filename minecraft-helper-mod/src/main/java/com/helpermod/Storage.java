@@ -25,14 +25,12 @@ import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.TransientCraftingContainer;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.ShieldItem;
-import net.minecraft.world.item.TieredItem;
 import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -162,14 +160,14 @@ public final class Storage {
 
         boolean shows(ItemStack s) {
             Item i = s.getItem();
-            boolean gear = i instanceof TieredItem || i instanceof ArmorItem || i instanceof ProjectileWeaponItem
+            boolean gear = Compat.isTool(s) || Compat.isWeapon(s) || Compat.isArmor(s) || i instanceof ProjectileWeaponItem
                     || i instanceof ShieldItem || i instanceof TridentItem;
             return switch (this) {
                 case ALL -> true;
                 case BLOCKS -> i instanceof BlockItem;
                 case GEAR -> gear;
-                case FOOD -> Compat.edible(i);
-                case ITEMS -> !(i instanceof BlockItem) && !gear && !Compat.edible(i);
+                case FOOD -> Compat.edible(s);
+                case ITEMS -> !(i instanceof BlockItem) && !gear && !Compat.edible(s);
             };
         }
     }
@@ -240,7 +238,7 @@ public final class Storage {
                 ListTag items = p.getListOrEmpty("items");
                 for (int k = 0; k < items.size(); k++) {
                     CompoundTag t = items.getCompoundOrEmpty(k);
-                    ItemStack stack = Compat.loadStack(t.getCompound("item"));
+                    ItemStack stack = Compat.loadStack(t.getCompoundOrEmpty("item"));
                     long count = t.getLongOr("count", 0L);
                     if (!stack.isEmpty() && count > 0) list.add(new Stored(stack.copyWithCount(1), count));
                 }
@@ -366,8 +364,9 @@ public final class Storage {
         /** What the grid makes right now, or nothing. */
         private ItemStack result() {
             ServerLevel world = player.level();
-            return world.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, grid, world)
-                    .map(r -> r.assemble(grid, world.registryAccess()))
+            net.minecraft.world.item.crafting.CraftingInput input = grid.asCraftInput();
+            return world.recipeAccess().getRecipeFor(RecipeType.CRAFTING, input, world)
+                    .map(r -> r.value().assemble(input))
                     .orElse(ItemStack.EMPTY);
         }
 
@@ -555,14 +554,17 @@ public final class Storage {
             int made = 0;
             int limit = shift ? 64 : 1;
             for (int n = 0; n < limit; n++) {
-                Optional<CraftingRecipe> recipe = world.getRecipeManager().getRecipeFor(RecipeType.CRAFTING, grid, world);
+                net.minecraft.world.item.crafting.CraftingInput.Positioned placed = grid.asPositionedCraftInput();
+                net.minecraft.world.item.crafting.CraftingInput input = placed.input();
+                Optional<net.minecraft.world.item.crafting.RecipeHolder<CraftingRecipe>> recipe =
+                        world.recipeAccess().getRecipeFor(RecipeType.CRAFTING, input, world);
                 if (recipe.isEmpty()) break;
-                ItemStack result = recipe.get().assemble(grid, world.registryAccess());
+                ItemStack result = recipe.get().value().assemble(input);
                 if (result.isEmpty()) break;
                 ItemStack cursor = getCarried();
                 if (!shift && !cursor.isEmpty() && !(ItemStack.isSameItemSameComponents(cursor, result)
                         && cursor.getCount() + result.getCount() <= cursor.getMaxStackSize())) break;
-                NonNullList<ItemStack> leftovers = world.getRecipeManager().getRemainingItemsFor(RecipeType.CRAFTING, grid, world);
+                NonNullList<ItemStack> leftovers = recipe.get().value().getRemainingItems(input);
                 for (int i = 0; i < 9; i++) {
                     ItemStack before = grid.getItem(i).copy();
                     if (before.isEmpty()) continue;
@@ -571,10 +573,12 @@ public final class Storage {
                         Stored more = data().find(owner(), before);
                         grid.setItem(i, more == null ? ItemStack.EMPTY : data().take(owner(), more, 1));
                     }
-                    ItemStack left = leftovers.get(i);
+                    int lx = i % 3 - placed.left(), ly = i / 3 - placed.top();
+                    int li = lx >= 0 && ly >= 0 && lx < input.width() && ly < input.height() ? lx + ly * input.width() : -1;
+                    ItemStack left = li >= 0 && li < leftovers.size() ? leftovers.get(li) : ItemStack.EMPTY;
                     if (!left.isEmpty()) data().add(owner(), left.copy()); // e.g. empty buckets
                 }
-                result.onCraftedBy(world, player, result.getCount());
+                result.onCraftedBy(player, result.getCount());
                 if (shift) {
                     player.getInventory().add(result);
                     if (!result.isEmpty()) data().add(owner(), result); // inventory full: into storage

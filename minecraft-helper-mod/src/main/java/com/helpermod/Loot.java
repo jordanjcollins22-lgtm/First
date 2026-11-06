@@ -57,7 +57,7 @@ final class Loot {
 
     static ItemStack enchanted(Item item, Object... enchants) {
         ItemStack stack = new ItemStack(item);
-        for (int i = 0; i + 1 < enchants.length; i += 2) stack.enchant((Enchantment) enchants[i], (Integer) enchants[i + 1]);
+        for (int i = 0; i + 1 < enchants.length; i += 2) stack.enchant(Compat.ench((net.minecraft.resources.ResourceKey<Enchantment>) enchants[i]), (Integer) enchants[i + 1]);
         return stack;
     }
 
@@ -204,7 +204,7 @@ final class Loot {
         ItemStack stack = new ItemStack(Items.CHEST);
         Compat.editTag(stack, t -> t.putString(TAG, id));
         named(stack, b.name(), b.color());
-        ListTag lore = new ListTag();
+        java.util.List<Component> lore = new java.util.ArrayList<>();
         String inside = id.equals("gear") ? "Weapons and armour" : id.equals("machine") ? "Tycoon machines and droppers" : "Gear and machines, better odds";
         lore.add(Component.literal(inside).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GRAY));
         lore.add(Component.literal("Right-click to open").withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.GREEN));

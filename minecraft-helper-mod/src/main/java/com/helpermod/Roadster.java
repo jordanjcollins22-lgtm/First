@@ -17,7 +17,6 @@ import net.minecraft.world.entity.animal.equine.Horse;
 import net.minecraft.world.entity.animal.equine.Markings;
 import net.minecraft.world.entity.animal.equine.Variant;
 import net.minecraft.world.item.DyeColor;
-import net.minecraft.world.item.DyeableLeatherItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.AABB;
@@ -45,7 +44,7 @@ final class Roadster {
     /** The red horse-armor button the shops show for it. */
     static ItemStack shopIcon() {
         ItemStack s = new ItemStack(Items.LEATHER_HORSE_ARMOR);
-        ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(s, DEFAULT_PAINT);
+        s.set(net.minecraft.core.component.DataComponents.DYED_COLOR, new net.minecraft.world.item.component.DyedItemColor(DEFAULT_PAINT));
         s.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal("Star Roadster").withStyle(ChatFormatting.RED));
         return s;
     }
@@ -64,12 +63,12 @@ final class Roadster {
     /** Bought in the tycoon shop: park a new roadster next to the player. */
     static boolean spawn(ServerPlayer player) {
         ServerLevel world = player.level();
-        Horse horse = EntityTypes.HORSE.create(world);
+        Horse horse = EntityTypes.HORSE.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (horse == null) return false;
         Vec3 at = player.position().add(player.getLookAngle().scale(2).multiply(1, 0, 1));
         horse.snapTo(at.x, player.getY(), at.z, player.getYRot(), 0);
         horse.setTamed(true);
-        horse.setOwnerUUID(player.getUUID());
+        horse.setOwner(player);
         horse.addTag(TAG);
         var speed = horse.getAttribute(Attributes.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(0.42);
@@ -90,22 +89,18 @@ final class Roadster {
 
     /** Saddle, coat and painted armor, set through the horse's own save data so it always sticks. */
     private static void dress(Horse horse, Variant coat, int paint, boolean saddle) {
-        CompoundTag nbt = new CompoundTag();
-        horse.addAdditionalSaveData(nbt);
-        Markings marking = Markings.byId((nbt.getInt("Variant") >> 8) & 0xFF);
-        nbt.putInt("Variant", (coat.getId() & 0xFF) | (marking.getId() & 0xFF) << 8);
+        horse.setComponent(net.minecraft.core.component.DataComponents.HORSE_VARIANT, coat); // keeps its markings
         ItemStack armor = new ItemStack(Items.LEATHER_HORSE_ARMOR);
-        ((DyeableLeatherItem) Items.LEATHER_HORSE_ARMOR).setColor(armor, paint);
-        nbt.put("ArmorItem", Compat.saveStack(armor));
-        if (saddle) nbt.put("SaddleItem", new Compat.saveStack(ItemStack(Items.SADDLE)));
-        horse.readAdditionalSaveData(nbt);
+        armor.set(net.minecraft.core.component.DataComponents.DYED_COLOR, new net.minecraft.world.item.component.DyedItemColor(paint));
+        horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.BODY, armor);
+        if (saddle) horse.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, new ItemStack(Items.SADDLE));
     }
 
     private static Horse mine(ServerPlayer player) {
         if (player.getVehicle() instanceof Horse h && h.entityTags().contains(TAG)) return h;
         AABB around = player.getBoundingBox().inflate(32);
         List<Horse> list = player.level().getEntitiesOfClass(Horse.class, around,
-                h -> h.entityTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID()));
+                h -> h.entityTags().contains(TAG) && Compat.ownedBy(h, player.getUUID()));
         Horse best = null;
         for (Horse h : list) if (best == null || h.distanceToSqr(player) < best.distanceToSqr(player)) best = h;
         return best;
@@ -130,8 +125,7 @@ final class Roadster {
         }
         DyeColor dye = DyeColor.byName(t, null);
         if (dye == null) return -1;
-        float[] c = dye.getTextureDiffuseColors();
-        return ((int) (c[0] * 255) << 16) | ((int) (c[1] * 255) << 8) | (int) (c[2] * 255);
+        return dye.getTextureDiffuseColor() & 0xFFFFFF;
     }
 
     static void paint(ServerPlayer player, String colour) {
@@ -146,9 +140,7 @@ final class Roadster {
                     + "hot_pink, or a hex code like #ff8800.");
             return;
         }
-        CompoundTag nbt = new CompoundTag();
-        h.addAdditionalSaveData(nbt);
-        dress(h, Variant.byId(nbt.getInt("Variant") & 0xFF), rgb, false);
+        dress(h, h.getVariant(), rgb, false);
         ((ServerLevel) h.level()).sendParticles(ParticleTypes.HAPPY_VILLAGER, h.getX(), h.getY() + 1, h.getZ(), 20, 0.6, 0.6, 0.6, 0);
         Helper.say(player, "Fresh paint! Your Star Roadster is now " + colour + ".");
     }
@@ -165,13 +157,8 @@ final class Roadster {
             Helper.say(player, "Coats: white, creamy, chestnut, brown, black, gray, dark_brown.");
             return;
         }
-        CompoundTag nbt = new CompoundTag();
-        h.addAdditionalSaveData(nbt);
-        int paint = DEFAULT_PAINT;
-        if (nbt.contains("ArmorItem")) {
-            ItemStack armor = Compat.loadStack(nbt.getCompound("ArmorItem"));
-            if (armor.getItem() instanceof DyeableLeatherItem d) paint = d.getColor(armor);
-        }
+        int paint = net.minecraft.world.item.component.DyedItemColor.getOrDefault(
+                h.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.BODY), DEFAULT_PAINT);
         dress(h, coat, paint, false);
         Helper.say(player, "Your Star Roadster's body is " + coat.getSerializedName() + " now.");
     }
@@ -191,7 +178,7 @@ final class Roadster {
         Horse found = null;
         for (ServerLevel w : player.level().getServer().getAllLevels()) {
             for (Entity e : w.getAllEntities()) {
-                if (e instanceof Horse h && h.entityTags().contains(TAG) && player.getUUID().equals(h.getOwnerUUID())) {
+                if (e instanceof Horse h && h.entityTags().contains(TAG) && Compat.ownedBy(h, player.getUUID())) {
                     found = h;
                     break;
                 }
@@ -365,7 +352,7 @@ final class Roadster {
         double nx = flat > 0.01 ? dx / flat : 0, nz = flat > 0.01 ? dz / flat : 0;
         int ground = groundY(world, h.getX(), h.getZ());
         for (int k = 8; k <= 32; k += 8) ground = Math.max(ground, groundY(world, h.getX() + nx * k, h.getZ() + nz * k));
-        double cruise = Math.min(world.getMaxBuildHeight() - 8, Math.max(MIN_CRUISE_Y, ground + 25));
+        double cruise = Math.min((world.getMaxY() + 1) - 8, Math.max(MIN_CRUISE_Y, ground + 25));
         Vec3 v;
         if (wp.phase != Phase.LAND && flat < 3) wp.phase = Phase.LAND;
         switch (wp.phase) {

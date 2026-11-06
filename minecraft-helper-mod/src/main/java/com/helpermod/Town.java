@@ -44,7 +44,7 @@ final class Town {
     private static final int DOME = 5;
     private static final int RING = 20;
 
-    private record Resident(String name, VillagerProfession job, Block workstation) {}
+    private record Resident(String name, net.minecraft.resources.ResourceKey<VillagerProfession> job, Block workstation) {}
 
     private static final Resident[] HOUSES = {
             new Resident("Old Finn", VillagerProfession.FISHERMAN, Blocks.BARREL),
@@ -135,7 +135,7 @@ final class Town {
         int cx = Mth.floor(player.getX() + Math.cos(angle) * 48);
         int cz = Mth.floor(player.getZ() + Math.sin(angle) * 48);
         int cy = floorY(world, cx, cz);
-        if (cy <= world.getMinY() + 8 || cy >= world.getMaxBuildHeight() - 16) return null;
+        if (cy <= world.getMinY() + 8 || cy >= (world.getMaxY() + 1) - 16) return null;
 
         diner(world, new BlockPos(cx, cy, cz));
         for (int i = 0; i < HOUSES.length; i++) {
@@ -145,7 +145,7 @@ final class Town {
             int hy = floorY(world, hx, hz);
             if (hy <= world.getMinY() + 8) hy = cy;
             // The door faces the town centre.
-            Direction facing = Direction.getNearest(cx - hx, 0, cz - hz);
+            Direction facing = Direction.getNearest(cx - hx, 0, cz - hz, Direction.NORTH);
             dome(world, new BlockPos(hx, hy, hz), facing, HOUSES[i]);
             path(world, new BlockPos(cx, cy, cz), new BlockPos(hx, hy, hz));
         }
@@ -291,11 +291,11 @@ final class Town {
     }
 
     private static void resident(ServerLevel world, BlockPos at, Resident who) {
-        Villager v = EntityTypes.VILLAGER.create(world);
+        Villager v = EntityTypes.VILLAGER.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (v == null) return;
         v.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, world.getRandom().nextFloat() * 360f, 0f);
-        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null, null);
-        v.setVillagerData(v.getVillagerData().setProfession(who.job()).setLevel(2));
+        v.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.STRUCTURE, null);
+        v.setVillagerData(v.getVillagerData().withProfession(v.registryAccess(), who.job()).withLevel(2));
         v.setVillagerXp(10); // keeps the job even if it loses its work block
         v.setCustomName(Component.literal(who.name()).withStyle(ChatFormatting.AQUA));
         v.setCustomNameVisible(true);

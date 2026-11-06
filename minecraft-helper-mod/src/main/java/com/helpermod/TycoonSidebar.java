@@ -33,7 +33,7 @@ final class TycoonSidebar {
 
     private static final String OBJECTIVE = "helper_tycoon";
     private static final int WINDOW = 10; // seconds averaged for "per second"
-    private static final int SIDEBAR_SLOT = 1;
+    private static final net.minecraft.world.scores.DisplaySlot SIDEBAR_SLOT = net.minecraft.world.scores.DisplaySlot.SIDEBAR;
 
     static final class Data extends SavedData {
         private static final String ID = "helpermod_tycoon_sidebar";
@@ -69,7 +69,7 @@ final class TycoonSidebar {
     private static final Map<UUID, Shown> SHOWN = new HashMap<>();
     private static final Objective DISPLAY = new Objective(new Scoreboard(), OBJECTIVE,
             ObjectiveCriteria.DUMMY, Component.literal("Tycoon").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD),
-            ObjectiveCriteria.RenderType.INTEGER);
+            ObjectiveCriteria.RenderType.INTEGER, false, null);
 
     static void reset() {
         EARNED.clear();
@@ -126,13 +126,13 @@ final class TycoonSidebar {
         String totalLine = ChatFormatting.GOLD + total;
         String rateLine = ChatFormatting.YELLOW + rate;
         if (!totalLine.equals(s.total)) {
-            if (s.total != null) net.send(new ClientboundSetScorePacket(ServerScoreboard.Method.REMOVE, OBJECTIVE, s.total, 0));
-            net.send(new ClientboundSetScorePacket(ServerScoreboard.Method.CHANGE, OBJECTIVE, totalLine, 2));
+            if (s.total != null) net.send(new net.minecraft.network.protocol.game.ClientboundResetScorePacket(s.total, OBJECTIVE));
+            net.send(new ClientboundSetScorePacket(totalLine, OBJECTIVE, 2, java.util.Optional.empty(), java.util.Optional.empty()));
             s.total = totalLine;
         }
         if (!rateLine.equals(s.rate)) {
-            if (s.rate != null) net.send(new ClientboundSetScorePacket(ServerScoreboard.Method.REMOVE, OBJECTIVE, s.rate, 0));
-            net.send(new ClientboundSetScorePacket(ServerScoreboard.Method.CHANGE, OBJECTIVE, rateLine, 1));
+            if (s.rate != null) net.send(new net.minecraft.network.protocol.game.ClientboundResetScorePacket(s.rate, OBJECTIVE));
+            net.send(new ClientboundSetScorePacket(rateLine, OBJECTIVE, 1, java.util.Optional.empty(), java.util.Optional.empty()));
             s.rate = rateLine;
         }
     }

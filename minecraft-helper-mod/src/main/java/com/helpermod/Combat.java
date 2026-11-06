@@ -20,7 +20,6 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -95,12 +94,8 @@ public final class Combat {
     // Gear
     // ---------------------------------------------------------------------------------------
 
-    private static double modifierSum(ItemStack stack, Attribute attribute) {
-        double total = 0;
-        for (AttributeModifier mod : stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(attribute)) {
-            if (mod.getOperation() == AttributeModifier.Operation.ADDITION) total += mod.getAmount();
-        }
-        return total;
+    private static double modifierSum(ItemStack stack, net.minecraft.core.Holder<Attribute> attribute) {
+        return Compat.modifierSum(stack, attribute, EquipmentSlot.MAINHAND);
     }
 
     private static float damageOf(ItemStack weapon) {
@@ -136,8 +131,8 @@ public final class Combat {
             double bestScore = 0;
             for (int i = 0; i < inv.getContainerSize(); i++) {
                 ItemStack stack = inv.getItem(i);
-                if (!(stack.getItem() instanceof ArmorItem armor) || armor.getEquipmentSlot() != slot) continue;
-                double score = armor.getDefense() + armor.getToughness() * 0.5
+                if (Compat.armorSlot(stack) != slot) continue;
+                double score = Compat.armorValue(stack)
                         + Compat.enchLevel(Enchantments.PROTECTION, stack) * 0.1;
                 if (score > bestScore) {
                     bestScore = score;
@@ -172,10 +167,13 @@ public final class Combat {
         if (!ItemStack.matches(helper.getMainHandItem(), weapon)) {
             helper.setItemSlot(EquipmentSlot.MAINHAND, weapon.copy());
         }
-        float damage = damageOf(weapon) + EnchantmentHelper.getDamageBonus(weapon, target.getMobType());
+        float damage = damageOf(weapon);
+        if (helper.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            damage = EnchantmentHelper.modifyDamage(sl, weapon, target, helper.damageSources().mobAttack(helper), damage);
+        }
         Compat.swing(helper, net.minecraft.world.InteractionHand.MAIN_HAND);
         creditOwner(helper, target);
-        boolean hit = target.hurt(helper.damageSources().mobAttack(helper), damage);
+        boolean hit = target.hurtOrSimulate(helper.damageSources().mobAttack(helper), damage);
         if (hit) {
             int knockback = Compat.enchLevel(Enchantments.KNOCKBACK, weapon);
             float yaw = helper.getYRot() * Mth.DEG_TO_RAD;
@@ -183,7 +181,7 @@ public final class Combat {
             int fire = Compat.enchLevel(Enchantments.FIRE_ASPECT, weapon);
             if (fire > 0) target.igniteForSeconds(4 * fire);
             if (!weapon.isEmpty() && weapon.isDamageableItem()) {
-                weapon.hurtAndBreak(1, helper, e -> {});
+                weapon.hurtAndBreak(1, helper, net.minecraft.world.entity.EquipmentSlot.MAINHAND);
                 inv.setChanged();
                 if (!Mining.isUsableTool(weapon)) onWornOut.accept(weapon.getHoverName().getString());
             }

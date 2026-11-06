@@ -48,7 +48,6 @@ public class HelperData extends SavedData {
         public float size = 1f;
 
         Entry() {
-            inventory.addListener(inv -> setDirty());
         }
     }
 
@@ -78,6 +77,27 @@ public class HelperData extends SavedData {
 
         Pockets() {
             super(INVENTORY_SIZE);
+        }
+
+        void fromTag(net.minecraft.nbt.ListTag list) {
+            for (int i = 0; i < getContainerSize(); i++) setItem(i, ItemStack.EMPTY);
+            for (int i = 0; i < list.size(); i++) {
+                CompoundTag t = list.getCompoundOrEmpty(i);
+                int slot = t.getByteOr("Slot", (byte) 0) & 255;
+                if (slot < getContainerSize()) setItem(slot, Compat.loadStack(t));
+            }
+        }
+
+        net.minecraft.nbt.ListTag createTag() {
+            net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
+            for (int i = 0; i < getContainerSize(); i++) {
+                ItemStack st = getItem(i);
+                if (st.isEmpty()) continue;
+                CompoundTag t = Compat.saveStack(st);
+                t.putByte("Slot", (byte) i);
+                list.add(t);
+            }
+            return list;
         }
 
         @Override
@@ -135,7 +155,7 @@ public class HelperData extends SavedData {
             UUID owner = Compat.getUUID(tag, "owner");
             if (tag.contains("entity")) entry.entity = Compat.getUUID(tag, "entity");
             entry.active = tag.getBooleanOr("active", false);
-            entry.guard = !tag.contains("guard") || tag.getBoolean("guard");
+            entry.guard = tag.getBooleanOr("guard", true);
             entry.work = tag.getIntOr("work", 0); // before the items, so every unlocked pocket is there to fill
             entry.level = levelFor(entry.work);
             entry.inventory.unlocked = pocketsFor(entry.level);
@@ -154,7 +174,13 @@ public class HelperData extends SavedData {
         return data;
     }
 
-        public CompoundTag save(CompoundTag nbt) {
+        /** Pocket contents change without telling the saved data, so always save. */
+    @Override
+    public boolean isDirty() {
+        return true;
+    }
+
+    public CompoundTag save(CompoundTag nbt) {
         ListTag list = new ListTag();
         entries.forEach((owner, entry) -> {
             CompoundTag tag = new CompoundTag();

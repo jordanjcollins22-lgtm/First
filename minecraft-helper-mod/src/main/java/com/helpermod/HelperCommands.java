@@ -115,7 +115,7 @@ public final class HelperCommands {
                         .then(literal("rebirth")
                                 .executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrException(), false); return 1; })
                                 .then(literal("confirm").executes(ctx -> { Tycoon.rebirth(ctx.getSource().getPlayerOrException(), true); return 1; })))
-                        .then(literal("give").requires(src -> src.hasPermission(2))
+                        .then(literal("give").requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_GAMEMASTERS))
                                 .then(argument("player", net.minecraft.commands.arguments.EntityArgument.player())
                                         .then(argument("coins", com.mojang.brigadier.arguments.LongArgumentType.longArg(1))
                                                 .executes(ctx -> {
@@ -266,7 +266,7 @@ public final class HelperCommands {
             }
             items.add(hand.copy());
             if (!helper.send(player, target, items)) return;
-            player.getInventory().removeItemNoUpdate(player.getInventory().selected);
+            player.getInventory().removeItemNoUpdate(player.getInventory().getSelectedSlot());
         }
         target.sendOverlayMessage(Component.literal(player.getName().getString() + "'s helper is bringing you something!").withStyle(ChatFormatting.GOLD));
     }

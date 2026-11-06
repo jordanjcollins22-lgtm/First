@@ -146,7 +146,7 @@ final class Tycoon {
             ListTag list = nbt.getListOrEmpty("droppers");
             for (int i = 0; i < list.size(); i++) {
                 CompoundTag t = list.getCompoundOrEmpty(i);
-                d.droppers.put(t.getString("key"), new Dropper(Compat.getUUID(t, "owner"), t.getInt("level")));
+                d.droppers.put(t.getStringOr("key", ""), new Dropper(Compat.getUUID(t, "owner"), t.getIntOr("level", 0)));
             }
             return d;
         }
@@ -226,10 +226,8 @@ final class Tycoon {
     static ItemStack dropperItem(int level) {
         ItemStack stack = dropperItem();
         Compat.editTag(stack, t -> t.putInt(LEVEL_NBT, level));
-        ListTag lore = new ListTag();
-        lore.add(net.minecraft.nbt.StringTag.valueOf(Component.Serializer.toJson(
-                Component.literal("Starts at level " + level).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW))));
-        Compat.lore(stack, lore);
+        Compat.lore(stack, java.util.List.of(
+                Component.literal("Starts at level " + level).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW)));
         return stack;
     }
 
@@ -718,8 +716,7 @@ final class Tycoon {
         player.sendSystemMessage(Component.literal("Top tycoons (coins earned):").withStyle(ChatFormatting.GOLD));
         for (int i = 0; i < Math.min(5, rows.size()); i++) {
             UUID id = rows.get(i).getKey();
-            String name = player.level().getServer().getProfileCache() == null ? null
-                    : player.level().getServer().getProfileCache().get(id).map(com.mojang.authlib.GameProfile::getName).orElse(null);
+            String name = Compat.playerName(player.level().getServer(), id);
             int rb = data.rebirths(id);
             player.sendSystemMessage(Component.literal((i + 1) + ". " + (name == null ? "A player" : name) + "  "
                     + String.format(java.util.Locale.ROOT, "%,d", rows.get(i).getValue())
@@ -739,7 +736,7 @@ final class Tycoon {
     // ---------------------------------------------------------------------------------------
 
     private static boolean has(ServerPlayer player, String advancement) {
-        Advancement adv = player.level().getServer().getAdvancements().getAdvancement(Identifier.parse(advancement));
+        net.minecraft.advancements.AdvancementHolder adv = player.level().getServer().getAdvancements().get(Identifier.parse(advancement));
         return adv != null && player.getAdvancements().getOrStartProgress(adv).isDone();
     }
 
@@ -845,8 +842,8 @@ final class Tycoon {
             new Offer(3, 25000, "Star Upgrader (x10)", Tycoon::starUpgrader, 1),
             // Big-ticket items for when you're rich.
             new Offer(3, 25_000, "Shulker Box", () -> new ItemStack(Items.SHULKER_BOX)),
-            new Offer(3, 50_000, "Mending book", () -> net.minecraft.world.item.EnchantedBookItem.createForEnchantment(
-                    new net.minecraft.world.item.enchantment.EnchantmentInstance(net.minecraft.world.item.enchantment.Enchantments.MENDING, 1))),
+            new Offer(3, 50_000, "Mending book", () -> net.minecraft.world.item.enchantment.EnchantmentHelper.createBook(
+                    new net.minecraft.world.item.enchantment.EnchantmentInstance(Compat.ench(net.minecraft.world.item.enchantment.Enchantments.MENDING), 1))),
             new Offer(3, 100_000, "Netherite Ingot", () -> new ItemStack(Items.NETHERITE_INGOT)),
             new Offer(3, 250_000, "Elytra", () -> new ItemStack(Items.ELYTRA)),
             new Offer(3, 500_000, "Beacon", () -> new ItemStack(Items.BEACON)),

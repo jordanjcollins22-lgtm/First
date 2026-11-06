@@ -207,7 +207,7 @@ final class Bosses {
         int cz = Mth.floor(player.getZ() + Math.sin(angle) * 40);
         world.getChunk(cx >> 4, cz >> 4); // make sure it's loaded
         int y = world.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, cx, cz);
-        if (y <= world.getMinY() + 4 || y >= world.getMaxBuildHeight() - 12) return null;
+        if (y <= world.getMinY() + 4 || y >= (world.getMaxY() + 1) - 12) return null;
         BlockState floor = block(theme.floor(), Blocks.POLISHED_BLACKSTONE_BRICKS.defaultBlockState());
         BlockState pillar = block(theme.pillar(), Blocks.CHISELED_POLISHED_BLACKSTONE.defaultBlockState());
         BlockState under = Blocks.COBBLED_DEEPSLATE.defaultBlockState();
@@ -251,13 +251,13 @@ final class Bosses {
         EntityType<?> type = Planets.type(theme.boss().type());
         if (type == null) return;
         BlockPos at = arena.above().offset(0, 0, 6);
-        Entity e = type.create(world);
+        Entity e = type.create(world, net.minecraft.world.entity.EntitySpawnReason.MOB_SUMMONED);
         if (!(e instanceof Mob boss)) {
             if (e != null) e.discard();
             return;
         }
         boss.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 180f, 0f);
-        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null, null);
+        boss.finalizeSpawn(world, world.getCurrentDifficultyAt(at), EntitySpawnReason.EVENT, null);
         if (boss instanceof MagmaCube cube) cube.setSize(6, true);
         Planets.Boss b = theme.boss();
         set(boss, Attributes.MAX_HEALTH, b.health());
@@ -274,7 +274,7 @@ final class Bosses {
         boss.setCustomNameVisible(true);
         boss.setPersistenceRequired();
         boss.addTag(TAG);
-        ServerBossEvent bar = new ServerBossEvent(Component.literal(b.name() + " of " + theme.display()), BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
+        ServerBossEvent bar = new ServerBossEvent(java.util.UUID.randomUUID(), Component.literal(b.name() + " of " + theme.display()), BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.NOTCHED_10);
         FIGHTS.put(key, new Fight(boss, bar)); // before spawning, so onEntityLoad knows it belongs to a fight
         world.addFreshEntity(boss);
         world.playSound(null, at, SoundEvents.WITHER_SPAWN, SoundSource.HOSTILE, 1.5f, 0.8f);
@@ -284,7 +284,7 @@ final class Bosses {
         }
     }
 
-    private static void set(Mob mob, net.minecraft.world.entity.ai.attributes.Attribute attr, double value) {
+    private static void set(Mob mob, net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attr, double value) {
         AttributeInstance inst = mob.getAttribute(attr);
         if (inst != null) inst.setBaseValue(value);
     }
@@ -341,7 +341,7 @@ final class Bosses {
                 }
                 if (nearest != null) {
                     boss.setTarget(nearest);
-                    if (boss instanceof IronGolem golem) golem.setPersistentAngerTarget(nearest.getUUID());
+                    if (boss instanceof IronGolem golem) golem.setPersistentAngerTarget(net.minecraft.world.entity.EntityReference.of(nearest.getUUID()));
                 }
             }
             if (boss.distanceToSqr(Vec3.atCenterOf(arena)) > (RADIUS + 10) * (RADIUS + 10)) { // dragged out: back to the arena

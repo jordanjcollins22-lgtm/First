@@ -70,14 +70,14 @@ public final class Devices {
     public static ItemStack spawnerItem(BlockEntity be) {
         String mob = "";
         if (be != null) {
-            mob = be.saveWithoutMetadata().getCompound("SpawnData").getCompound("entity").getString("id");
+            mob = be.saveWithoutMetadata(be.getLevel().registryAccess()).getCompoundOrEmpty("SpawnData").getCompoundOrEmpty("entity").getStringOr("id", "");
         }
         ItemStack stack = new ItemStack(Items.SPAWNER);
         String name = "Monster Spawner";
         Identifier id = Identifier.tryParse(mob);
         if (id != null && !mob.isEmpty()) {
             Compat.editTag(stack, t -> t.putString(SPAWNER_MOB_KEY, mob));
-            var type = EntityType.byString(mob);
+            var type = Compat.entityType(mob);
             if (type.isPresent()) name = type.get().getDescription().getString() + " Spawner";
         }
         stack.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, Component.literal(name).withStyle(s -> s.withItalic(false)).withStyle(ChatFormatting.YELLOW));
@@ -95,13 +95,13 @@ public final class Devices {
         }
         world.setBlockAndUpdate(pos, state);
         if (world.getBlockEntity(pos) instanceof SpawnerBlockEntity spawner) {
-            EntityType.byString(Compat.tag(stack).getStringOr(SPAWNER_MOB_KEY, ""))
+            Compat.entityType(Compat.tag(stack).getStringOr(SPAWNER_MOB_KEY, ""))
                     .ifPresent(type -> spawner.setEntityId(type, world.getRandom()));
             spawner.setChanged();
             world.sendBlockUpdated(pos, state, state, 3);
         }
         world.playSound(null, pos, SoundEvents.STONE_PLACE, SoundSource.BLOCKS, 1f, 0.8f);
-        player.swing(hand, true);
+        Compat.swing(player, hand);
         if (!player.isCreative()) stack.shrink(1);
         return InteractionResult.SUCCESS;
     }
@@ -216,7 +216,7 @@ public final class Devices {
             if (xp[0] > 0) ExperienceOrb.award(world, Vec3.atCenterOf(pos), xp[0]); // don't lose stored XP
             return false;
         }
-        AABB area = new AABB(pos.offset(-RANGE, -1, -RANGE), pos.offset(RANGE + 1, RANGE + 2, RANGE + 1));
+        AABB area = AABB.encapsulatingFullBlocks(pos.offset(-RANGE, -1, -RANGE), pos.offset(RANGE, RANGE + 1, RANGE));
         FakePlayer killer = FakePlayer.get(world);
         for (Mob mob : world.getEntitiesOfClass(Mob.class, area, Devices::isHarvestable)) {
             mob.hurt(world.damageSources().playerAttack(killer), Float.MAX_VALUE);
