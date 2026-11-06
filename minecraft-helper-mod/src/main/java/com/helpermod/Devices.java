@@ -76,7 +76,8 @@ public final class Devices {
         String name = "Monster Spawner";
         Identifier id = Identifier.tryParse(mob);
         if (id != null && !mob.isEmpty()) {
-            Compat.editTag(stack, t -> t.putString(SPAWNER_MOB_KEY, mob));
+            String spawnMob = mob;
+            Compat.editTag(stack, t -> t.putString(SPAWNER_MOB_KEY, spawnMob));
             var type = Compat.entityType(mob);
             if (type.isPresent()) name = type.get().getDescription().getString() + " Spawner";
         }

@@ -65,6 +65,12 @@ public class HelperMod implements ModInitializer {
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
         ServerLifecycleEvents.SERVER_STARTING.register(Compat::serverStarting);
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
+        if (System.getenv("HELPERMOD_SMOKETEST") != null) { // CI: start a server, check it boots, stop
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+                LOG.info("HELPERMOD SMOKETEST OK");
+                server.halt(false);
+            });
+        }
         ServerLifecycleEvents.SERVER_STOPPING.register(HelperManager::saveParcels);
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
             Compat.serverStopped();

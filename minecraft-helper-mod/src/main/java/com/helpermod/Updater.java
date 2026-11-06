@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
  * Keeps the mod up to date.
  *
  * At launch, and again every 30 minutes while the game is open, this checks the repo's GitHub
- * releases (tags named helper-v1.2.3) in the background. On a player's PC (singleplayer or LAN,
+ * releases (tags named helper26-v2.0.0; the 1.20.1 line used helper-v) in the background. On a player's PC (singleplayer or LAN,
  * host and guests alike) it doesn't download anything by itself: UpdateScreen pops up in game with
  * what's new and asks "Update now?". Pressing Yes downloads the jar in the background.
  * Minecraft loads mod code once at startup, so the new version can't replace the running one:
@@ -49,7 +49,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Updater {
     private static final String RELEASES = "https://api.github.com/repos/jordanjcollins22-lgtm/First/releases?per_page=30";
-    private static final String TAG_PREFIX = "helper-v";
+    private static final String TAG_PREFIX = "helper26-v";
     private static final long RECHECK_MINUTES = 30;
 
     /** One release newer than the running version, newest first. */

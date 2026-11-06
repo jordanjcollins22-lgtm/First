@@ -1,16 +1,16 @@
 name: Helper mod release
 
-# Publishes the jar as a GitHub release named helper-v<mod_version>. The mod's built-in updater shows the
-# newest helper-v* release in game (notes from release-notes/<ver>.md) and asks the player to update.
+# Publishes the jar as a GitHub release named helper26-v<mod_version>. The mod's built-in updater shows the
+# newest helper26-v* release in game (notes from release-notes/<ver>.md) and asks the player to update.
 #
 # Two ways to publish:
-# - push a tag like helper-v1.31.0, or
+# - push a tag like helper26-v1.31.0, or
 # - push a mod branch whose version has a release-notes/<version>.md file. It publishes only when that
 #   version has no release yet and is newer than every published one, so pushing older stacked
 #   branches never publishes an older version.
 on:
   push:
-    tags: ["helper-v*"]
+    tags: ["helper26-v*"]
     branches: ["claude/helper-*"]
     paths: ["minecraft-helper-mod/**"]
 
@@ -37,13 +37,13 @@ jobs:
           ver="$(grep '^mod_version=' gradle.properties | cut -d= -f2)"
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            [ "${GITHUB_REF_NAME#helper-v}" = "$ver" ] || { echo "Tag $GITHUB_REF_NAME but mod_version is $ver"; exit 1; }
+            [ "${GITHUB_REF_NAME#helper26-v}" = "$ver" ] || { echo "Tag $GITHUB_REF_NAME but mod_version is $ver"; exit 1; }
             echo "go=yes" >> "$GITHUB_OUTPUT"; exit 0
           fi
           if [ ! -f "release-notes/$ver.md" ]; then echo "No release-notes/$ver.md, not publishing."; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
-          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep '^helper-v' || true)"
-          if echo "$tags" | grep -qx "helper-v$ver"; then echo "helper-v$ver already published."; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
-          newest="$( (echo "$tags" | sed 's/^helper-v//'; echo "$ver") | grep . | sort -V | tail -n1)"
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[].tagName' | grep '^helper26-v' || true)"
+          if echo "$tags" | grep -qx "helper26-v$ver"; then echo "helper26-v$ver already published."; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
+          newest="$( (echo "$tags" | sed 's/^helper26-v//'; echo "$ver") | grep . | sort -V | tail -n1)"
           if [ "$newest" != "$ver" ]; then echo "$newest is already out, not publishing older $ver."; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
           echo "go=yes" >> "$GITHUB_OUTPUT"
       - if: steps.decide.outputs.go == 'yes'
@@ -61,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VER: ${{ steps.decide.outputs.ver }}
         run: |
-          tag="helper-v$VER"
+          tag="helper26-v$VER"
           jar="$(ls build/libs/*.jar | grep -v sources | head -n1)"
           gh release delete "$tag" --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
           notes="release-notes/$VER.md"
