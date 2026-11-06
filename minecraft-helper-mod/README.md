@@ -327,7 +327,7 @@ uses the item up. **Sneak + empty hand** turns it. **Empty hand** uses it: sit o
 open storage (27 slots), switch lights, the TV, taps, the stove and the shower. **Punch** it to pick it up; it keeps its
 materials and drops whatever was stored in it.
 
-Furniture is made of vanilla block displays, so friends without the mod see it too.
+Furniture is drawn with vanilla display entities, so it works on servers too.
 
 **Real furniture (2.5.0):** the pieces now work like the real thing.
 
@@ -341,6 +341,17 @@ Furniture is made of vanilla block displays, so friends without the mod see it t
   poison, hunger and wither. The hot tub also heals you (Regeneration).
 - **TV:** switched on, it shows Helper TV: the time, the weather and Helper News, changing channel every few seconds.
 - **Wall Clock:** shows the in-game time on its face; right-click it to read it out.
+
+**3D models (2.7.0):** every piece is now a proper 3D model with its own textures (wood grain, fabric weave, brushed
+metal, glass, books...) and extra detail: back cushions and pillows on the sofa, oven window and knobs on the stove,
+drawer handles, chair slats, clock numbers and more. Wood, legs, fabric and top are tinted to the material you pick, so
+customizing still works. Lights, screens and burners glow when switched on. Furniture placed before 2.7.0 swaps itself to
+the new model the next time it loads.
+
+Players with the mod see the models straight away (they're in the mod). **Friends without the mod** are offered a small
+resource pack when they join; saying yes shows them the models too (`/helper furniture pack` offers it again). The pack is
+built from the same files by `tools/furniture_models.py` (run it after changing any piece in Furniture.java) and hosted on
+the `claude/helper-assets` branch as `helper-furniture-pack-<sha1>.zip`.
 
 **Weapons, armour and loot boxes (1.32.0):** the tycoon shop now has pages (arrows in the bottom corners). It sells
 weapons and armour (iron to netherite, full armour sets give all 4 pieces, plus enchanted ones at tier 3) and three

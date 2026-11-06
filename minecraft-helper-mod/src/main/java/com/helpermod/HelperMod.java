@@ -68,6 +68,8 @@ public class HelperMod implements ModInitializer {
         MiniMapLink.register(); // who has the corner mini map; a follow-me map for those who don't
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> MiniMapLink.onJoin(handler.player));
         ServerTickEvents.END_SERVER_TICK.register(MiniMapLink::tick);
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> FurniturePack.onJoin(handler.player)); // 3D models for friends without the mod
+        ServerTickEvents.END_SERVER_TICK.register(FurniturePack::tick);
         // Work out which blocks drop what while the world is loading, not mid-game on the first /helper collect.
         ServerLifecycleEvents.SERVER_STARTING.register(Compat::serverStarting);
         ServerLifecycleEvents.SERVER_STARTED.register(Materials::ensureIndex);
@@ -82,6 +84,8 @@ public class HelperMod implements ModInitializer {
                             + " top block " + w.getBlockState(new net.minecraft.core.BlockPos(0,
                             w.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, 0, 0) - 1, 0)));
                 }
+                if (FurniturePack.sha1() == null) { LOG.error("HELPERMOD SMOKETEST furniture pack missing from the jar"); server.halt(false); return; }
+                LOG.info("HELPERMOD SMOKETEST furniture pack " + FurniturePack.url());
                 LOG.info("HELPERMOD SMOKETEST OK");
                 server.halt(false);
             });
@@ -105,6 +109,7 @@ public class HelperMod implements ModInitializer {
             Roadster.reset();
             Furniture.reset();
             Rocket.reset();
+            FurniturePack.reset();
         });
         Space.register();
         Updater.start(); // checks GitHub for a newer version in the background
