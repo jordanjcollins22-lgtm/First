@@ -307,7 +307,7 @@ worth, e.g. Bread 8, Diamond 50, Golden Apple 150, Netherite Ingot 600.
 
 ## Furniture (1.34.0)
 
-`/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 42 pieces in seven rooms.
+`/helper furniture` (or the first page of the tycoon shop) opens the **Furniture Catalogue**: 43 pieces in seven rooms.
 Since 2.3.0 every piece is also sold on its own in the **tycoon shop** ("Kitchen: Stove", "Outdoor: Hot Tub"...), right after the catalogue.
 
 | Room | Pieces |
@@ -315,7 +315,7 @@ Since 2.3.0 every piece is also sold on its own in the **tycoon shop** ("Kitchen
 | Kitchen | Counter (storage), Kitchen Sink (tap, fills bottles), Stove (burners light up and smoke), Fridge (storage), Wall Cabinet (storage) |
 | Living room | Sofa (2 seats), Armchair, Coffee Table, TV (switch it on), TV Stand (storage), Floor Lamp (real light), Tall Bookshelf (storage) |
 | Dining room | Dining Table, Dining Chair, Glass Cupboard (storage) |
-| Bedroom | Wardrobe, Bedside Table with Lamp, Dresser (all storage), Desk, Bed Headboard, Vanity Table with Mirror |
+| Bedroom | Bed (sleep, sets spawn), Wardrobe, Bedside Table with Lamp, Dresser (all storage), Desk (crafting table), Bed Headboard, Vanity Table with Mirror |
 | Bathroom | Toilet, Bathtub (water and a seat), Sink with Mirror, Shower (running water), Towel Rack |
 | Outdoor (2.3.0) | Picnic Table (seats), Patio Umbrella, Sun Lounger, BBQ Grill (lights up and smokes), Fire Pit (flames and crackling), Garden Lamp Post (real light), Mailbox (storage), Planter Box, Hot Tub (fills up and bubbles, sit in it), Garden Fountain, Patio Chair |
 | Other | Office Chair, Garden Bench, Big Potted Plant, Ceiling Light, Wall Clock |
@@ -328,6 +328,19 @@ open storage (27 slots), switch lights, the TV, taps, the stove and the shower. 
 materials and drops whatever was stored in it.
 
 Furniture is made of vanilla block displays, so friends without the mod see it too.
+
+**Real furniture (2.5.0):** the pieces now work like the real thing.
+
+- **Bed** (new, Bedroom): a real bed in a wooden frame. Right-click it to sleep through the night; it sets your spawn
+  point. Dye it or right-click with wool to change the colour of the covers. 43 pieces now.
+- **Cooking:** light the Stove, BBQ Grill or Fire Pit and right-click it holding raw beef, pork, chicken, mutton, rabbit,
+  cod, salmon, potatoes or kelp. Up to 8 cook at once and pop out cooked after about 10 seconds.
+- **Desk:** right-click it for a working crafting table.
+- **Sinks, bathtub and hot tub:** fill bottles *and buckets* with water.
+- **Shower, bathtub and hot tub:** stand under a running shower or sit in a filled tub to put out fire and wash off
+  poison, hunger and wither. The hot tub also heals you (Regeneration).
+- **TV:** switched on, it shows Helper TV: the time, the weather and Helper News, changing channel every few seconds.
+- **Wall Clock:** shows the in-game time on its face; right-click it to read it out.
 
 **Weapons, armour and loot boxes (1.32.0):** the tycoon shop now has pages (arrows in the bottom corners). It sells
 weapons and armour (iron to netherite, full armour sets give all 4 pieces, plus enchanted ones at tier 3) and three
