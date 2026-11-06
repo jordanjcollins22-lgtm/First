@@ -178,6 +178,13 @@ Your helper understands plain chat. Start a message with "helper" (or "buddy"):
 - "helper go fishing", "helper farm", "helper ride", "helper bring it to me"
 - "helper follow me", "helper stop", "helper what are you doing?", "helper how are you?"
 - Ending with it works too: "hi helper", "thanks buddy".
+- Ask it about itself: "helper, are you stuck?" (if it is, it pops over to you; `/helper unstick` does the
+  same), "where are you?" (distance, direction, height and coordinates), "are you ok?" (health), "are you
+  full?" / "what are you carrying?", "are you done yet?" / "how many more?", "can you hear me?", "what level are you?"
+- Send things to friends: hold an item and say "helper, give this to Steve" (or `/helper send Steve`). The
+  helper walks it over (hopping the long bits), hands it to them and comes back. "helper, take your haul to
+  Steve" (or `/helper send Steve haul`) sends what the helper is carrying instead. If Steve logs off or it
+  can't reach them in two minutes, you get it back.
 
 On a server everyone sees the conversation: other players get the reply as "[name's Helper] ...". It also
 works with chat mods that replace the normal chat.
@@ -224,7 +231,7 @@ on the right side of the screen, only to you. The "+coins" pop-up in the middle 
 **Rich?** The end of the tier 3 shop has big-ticket items: Shulker Box (25k), Mending book (50k), Netherite
 Ingot (100k), Elytra (250k), Beacon (500k) and Helper Training (1M, +1 helper level, up to 10).
 
-**Star Roadster:** a flying sports car (it uses the horse model) for 250k coins, needs tier 2. Drive it like a
+**Star Roadster:** a flying sports car (it uses the horse model) for 250k coins, in the first row of the tycoon shop (no tier needed) and in the Fairway Pro Shop too. `/helper roadster` says where. Drive it like a
 horse. Hold W and look up to take off, look where you want to go (sprint to go faster), let go of W to hover,
 and look down to land. Rocket smoke and flames pour out the back while it flies. Customise it:
 `/helper roadster paint <colour>` (red, blue, lime, gold, chrome, hot_pink... or a hex code like `#ff8800`),

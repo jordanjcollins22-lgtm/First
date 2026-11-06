@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.command.CommandSource;
 import net.minecraft.entity.EntityType;
+import net.minecraft.item.ItemStack;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -40,6 +41,19 @@ public final class HelperCommands {
                 .then(literal("stop").executes(HelperCommands::stop))
                 .then(literal("deliver").executes(HelperCommands::deliver))
                 .then(literal("status").executes(HelperCommands::status))
+                .then(literal("unstick").executes(ctx -> { unstick(ctx.getSource().getPlayerOrThrow()); return 1; }))
+                .then(literal("send")
+                        .then(argument("player", StringArgumentType.word())
+                                .suggests((ctx, builder) -> CommandSource.suggestMatching(
+                                        ctx.getSource().getServer().getPlayerNames(), builder))
+                                .executes(ctx -> { send(ctx.getSource().getPlayerOrThrow(), StringArgumentType.getString(ctx, "player"), "hand"); return 1; })
+                                .then(argument("what", StringArgumentType.word())
+                                        .suggests((ctx, builder) -> CommandSource.suggestMatching(List.of("hand", "haul"), builder))
+                                        .executes(ctx -> {
+                                            send(ctx.getSource().getPlayerOrThrow(), StringArgumentType.getString(ctx, "player"),
+                                                    StringArgumentType.getString(ctx, "what"));
+                                            return 1;
+                                        }))))
                 .then(literal("guard")
                         .then(literal("on").executes(ctx -> guard(ctx, true)))
                         .then(literal("off").executes(ctx -> guard(ctx, false))))
@@ -117,7 +131,8 @@ public final class HelperCommands {
                 .then(literal("golf").executes(ctx -> { Golf.info(ctx.getSource().getPlayerOrThrow()); return 1; })
                         .then(literal("shop").executes(ctx -> { Golf.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("ball").executes(ctx -> { Golf.pickUp(ctx.getSource().getPlayerOrThrow()); return 1; })))
-                .then(literal("roadster")
+                .then(literal("roadster").executes(ctx -> { Roadster.info(ctx.getSource().getPlayerOrThrow()); return 1; })
+                        .then(literal("shop").executes(ctx -> { Tycoon.openShop(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("call").executes(ctx -> { Roadster.call(ctx.getSource().getPlayerOrThrow()); return 1; }))
                         .then(literal("paint").then(net.minecraft.server.command.CommandManager.argument("colour",
                                 com.mojang.brigadier.arguments.StringArgumentType.greedyString()).executes(ctx -> {
@@ -150,6 +165,8 @@ public final class HelperCommands {
                 "/helper deliver  - bring me what you have now",
                 "/helper stop  - stop and follow me",
                 "/helper status  - what are you doing?",
+                "/helper send <player> [hand|haul]  - take what's in your hand (or the helper's haul) to another player",
+                "/helper unstick  - stuck somewhere? pop back to me",
                 "/helper guard on|off  - fight mobs that come after you (on by default)",
                 "/helper look <mob>  - make your helper look like any mob, e.g. /helper look creeper",
                 "/helper look me  - make your helper look like you again",
@@ -168,7 +185,7 @@ public final class HelperCommands {
                 "/helper town  - where's Reef Town? (the undersea town on Bikini Bottom)",
                 "/helper mine marker  - get a Mine Marker: place it where you want your helper's mine",
                 "/helper golf  - Fairway golf planet: where's the club, your round, /helper golf shop, /helper golf ball (pick up your ball)",
-                "/helper roadster paint <colour>|coat <coat>|name <name>|call  - customise or call your Star Roadster (tycoon shop)",
+                "/helper roadster  - the Star Roadster flying car: buy it in /helper tycoon shop or /helper golf shop. paint <colour>|coat <coat>|name <name>|call",
                 "/helper blackhole  - how to make a Singularity and the Black Hole's bosses. /helper blackhole leave gets you out",
                 "/helper update  - is a newer version of this mod downloaded? (it updates itself)",
                 "Right-click your helper to give it tools, weapons and armor, or take items.",
@@ -186,6 +203,67 @@ public final class HelperCommands {
             helper.spawnNear(player, entry);
         }
         return entry;
+    }
+
+    /** Online player by name, ignoring case, or null. */
+    static ServerPlayerEntity onlinePlayer(net.minecraft.server.MinecraftServer server, String name) {
+        for (ServerPlayerEntity p : server.getPlayerManager().getPlayerList()) {
+            if (p.getGameProfile().getName().equalsIgnoreCase(name)) return p;
+        }
+        return null;
+    }
+
+    /** /helper send <player> [hand|haul]: the helper walks the items over to another player. */
+    static void send(ServerPlayerEntity player, String targetName, String what) {
+        ServerPlayerEntity target = onlinePlayer(player.getServer(), targetName);
+        if (target == null) {
+            Helper.say(player, "I can't find a player called " + targetName + " online.");
+            return;
+        }
+        if (target == player) {
+            Helper.say(player, "That's you! Use /helper deliver to get my haul.");
+            return;
+        }
+        HelperData.Entry entry = ensureSummoned(player);
+        Helper helper = HelperManager.helperFor(player.getUuid());
+        List<ItemStack> items = new ArrayList<>();
+        boolean haul = what.equalsIgnoreCase("haul") || what.equalsIgnoreCase("all") || what.equalsIgnoreCase("everything");
+        if (haul) {
+            var inv = entry.inventory;
+            for (int i = 0; i < inv.size(); i++) {
+                ItemStack s = inv.getStack(i);
+                if (s.isEmpty() || s.isDamageable()) continue; // keep its tools
+                items.add(s.copy());
+            }
+            if (items.isEmpty()) {
+                Helper.say(player, "I'm not carrying anything to take (I keep my tools).");
+                return;
+            }
+            if (!helper.send(player, target, items)) return;
+            for (int i = 0; i < inv.size(); i++) {
+                ItemStack s = inv.getStack(i);
+                if (!s.isEmpty() && !s.isDamageable()) inv.setStack(i, ItemStack.EMPTY);
+            }
+            inv.markDirty();
+        } else {
+            ItemStack hand = player.getMainHandStack();
+            if (hand.isEmpty()) {
+                Helper.say(player, "Hold the thing you want me to take to " + target.getName().getString()
+                        + " in your hand, then ask again. (Or /helper send " + target.getName().getString() + " haul for what I'm carrying.)");
+                return;
+            }
+            items.add(hand.copy());
+            if (!helper.send(player, target, items)) return;
+            player.getInventory().removeStack(player.getInventory().selectedSlot);
+        }
+        target.sendMessage(Text.literal(player.getName().getString() + "'s helper is bringing you something!").formatted(Formatting.GOLD), true);
+    }
+
+    /** /helper unstick, or "helper, are you stuck?" when it is. */
+    static void unstick(ServerPlayerEntity player) {
+        HelperData.Entry entry = ensureSummoned(player);
+        HelperManager.helperFor(player.getUuid()).unstick(player, entry);
+        Helper.say(player, "Phew, thanks! I'm out and right next to you. I'll pick up where I left off.");
     }
 
     private static int summon(CommandContext<ServerCommandSource> ctx) throws CommandSyntaxException {

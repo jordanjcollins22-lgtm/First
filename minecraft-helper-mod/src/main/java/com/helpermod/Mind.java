@@ -163,6 +163,14 @@ final class Mind {
             Helper.say(player, pick(player, "Yes? I'm right here.", "What's up?", "Need something?"));
             return;
         }
+        if (askAboutSelf(player, ask)) return;
+        Matcher sendTo = Pattern.compile("\\b(give|take|bring|send|deliver|carry|hand)\\b.*?\\bto\\s+([a-z0-9_]{3,16})\\b").matcher(ask);
+        if (sendTo.find() && !sendTo.group(2).equals("me")
+                && HelperCommands.onlinePlayer(player.getServer(), sendTo.group(2)) != null) {
+            boolean haul = has(ask, "haul", "everything", "all", "your stuff", "what you have", "what you've got", "your items");
+            HelperCommands.send(player, sendTo.group(2), haul ? "haul" : "hand");
+            return;
+        }
         Matcher collect = Pattern.compile("\\b(get|collect|mine|gather|find|fetch|grab|dig)\\b\\s+(?:me\\s+)?(?:some\\s+)?(?:\\d+\\s+)?(?:of\\s+)?([a-z_:]+)").matcher(ask);
         if (has(ask, "fish", "fishing")) {
             run(player, "helper fish " + Math.min(number(ask, 16), 999));
@@ -204,10 +212,66 @@ final class Mind {
             Helper.say(player, "I'm your helper. I mine, fish, farm, fight and carry things for you. Ask me in chat, like \"helper, get 20 iron\".");
         } else if (has(ask, "help", "what can you do")) {
             Helper.say(player, "Try: \"helper, get 32 coal\", \"helper go fishing\", \"helper farm\", \"helper follow me\", "
-                    + "\"helper bring it to me\" or \"helper what are you doing\".");
+                    + "\"helper bring it to me\", \"helper give this to Steve\", \"helper are you stuck?\" or \"helper where are you?\".");
         } else {
             Helper.say(player, "Sorry, I didn't get that. Try \"helper, get 20 iron\", \"helper go fishing\" or \"helper follow me\".");
         }
+    }
+
+    /**
+     * Basic questions about the helper itself: are you stuck, where are you, are you ok, are you full,
+     * how far along are you. Answered from what it's really doing. True if the question was one of these.
+     */
+    private static boolean askAboutSelf(ServerPlayerEntity player, String ask) {
+        HelperData.Entry entry = HelperData.get(player.getServer()).get(player.getUuid());
+        if (has(ask, "unstick", "get unstuck")) {
+            HelperCommands.unstick(player);
+            return true;
+        }
+        if (!has(ask, "stuck", "trapped", "are you lost", "you lost", "where are you", "where r u", "where are u", "where you at", "where did you go",
+                "are you ok", "are you okay", "you ok", "you okay", "r u ok", "are you alright", "are you hurt", "you hurt",
+                "health", "are you alive", "are you dead", "are you full", "you full", "inventory full", "pockets",
+                "what do you have", "what have you got", "what are you carrying", "what you got",
+                "are you done", "you done", "done yet", "finished", "how long", "how many more", "how much more", "progress",
+                "can you hear me", "are you there", "you there", "are you listening",
+                "what level", "your level", "how strong", "hungry", "tired", "sleepy", "are you happy", "do you like me")) {
+            return false;
+        }
+        if (entry == null || !entry.active) {
+            Helper.say(player, "I'm not out right now! /helper summon and I'll be right there.");
+            return true;
+        }
+        Helper helper = HelperManager.helperFor(player.getUuid());
+        SimpleInventory inv = entry.inventory;
+        if (has(ask, "stuck", "trapped", "are you lost", "you lost")) {
+            if (helper.looksStuck(player)) {
+                HelperCommands.unstick(player);
+            } else {
+                Helper.say(player, "Nope, I'm moving fine! " + helper.whereText(player) + " " + helper.progressText()
+                        + " If I ever look stuck to you, say \\"helper unstick\\" and I'll pop over.");
+            }
+        } else if (has(ask, "where are you", "where r u", "where are u", "where you at", "where did you go")) {
+            Helper.say(player, helper.whereText(player));
+        } else if (has(ask, "are you full", "you full", "inventory full", "pockets", "what do you have", "what have you got",
+                "what are you carrying", "what you got")) {
+            Helper.say(player, helper.pocketsText(inv));
+        } else if (has(ask, "are you done", "you done", "done yet", "finished", "how long", "how many more", "how much more", "progress")) {
+            Helper.say(player, helper.progressText());
+        } else if (has(ask, "can you hear me", "are you there", "you there", "are you listening")) {
+            Helper.say(player, pick(player, "Loud and clear!", "Yep, I'm here.", "Always listening, boss.") + " " + helper.whereText(player));
+        } else if (has(ask, "what level", "your level", "how strong")) {
+            Helper.say(player, Helper.levelText(entry) + ", " + entry.inventory.unlocked + " pockets. I level up by doing jobs for you.");
+        } else if (has(ask, "hungry")) {
+            Helper.say(player, "Helpers don't eat, but thanks for asking! Are YOU hungry? Keep some food on you.");
+        } else if (has(ask, "tired", "sleepy")) {
+            Helper.say(player, "Never tired! " + (player.getWorld().isNight() ? "It is night though, maybe you should sleep." : "Let's keep going."));
+        } else if (has(ask, "are you happy", "do you like me")) {
+            Helper.say(player, pick(player, "Of course! You're the best boss.", "Very happy. I love a good job.", "Yes! Thanks for keeping me busy."));
+        } else { // are you ok / hurt / health / alive
+            Helper.say(player, helper.healthText() + ". " + (helper.looksStuck(player)
+                    ? "I think I'm stuck though. Say \\"helper unstick\\" and I'll pop over." : helper.progressText()));
+        }
+        return true;
     }
 
     private static String pick(ServerPlayerEntity player, String... lines) {
