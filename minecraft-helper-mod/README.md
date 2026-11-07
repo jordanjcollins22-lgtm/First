@@ -392,6 +392,8 @@ and `/helper roadster call` brings it to you.
 **Roadster autopilot:** `/helper roadster waypoint <x> <z>` sets a temporary waypoint (`waypoint clear` cancels it).
 Sit in your roadster and it takes off by itself, climbs above the ground (at least to Y 120), flies there and lands on
 the spot, then the waypoint is gone. The action bar counts down the distance. Press S at any time to take over.
+Since 2.9.2 a problem in the roadster can no longer crash the game or stop your world from opening: it's logged, the
+autopilot switches off and the car lands. (2.9.0 and 2.9.1 could crash on autopilot.)
 
 **Space Rockets (2.6.0):** the shop sells the mod's own Space Rockets (page 1, after the Furniture Catalogue), so
 you can reach the planets in survival with no other mods. Hold one and right-click: pick a planet (or Home), a 3-2-1
