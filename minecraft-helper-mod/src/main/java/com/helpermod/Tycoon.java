@@ -825,6 +825,9 @@ final class Tycoon {
             }),
             new Offer(1, Backpack.PRICE_SMALL, "Backpack (27 slots, opens anywhere)", () -> Backpack.item(3)),
             new Offer(1, Backpack.PRICE_BIG, "Big Backpack (54 slots, opens anywhere)", () -> Backpack.item(6)),
+            new Offer(1, Hammer.PRICE_IRON, "Iron Hammer (mines 3x3)", () -> Hammer.item("iron")),
+            new Offer(2, Hammer.PRICE_DIAMOND, "Diamond Hammer (mines 3x3)", () -> Hammer.item("diamond")),
+            new Offer(3, Hammer.PRICE_NETHERITE, "Netherite Hammer (mines 3x3)", () -> Hammer.item("netherite")),
             // Space Rockets: fly to the planets (never used up)
             new Offer(1, Rocket.PRICE[1], Rocket.shopName(1), () -> Rocket.item(1)),
             new Offer(2, Rocket.PRICE[2], Rocket.shopName(2), () -> Rocket.item(2)),

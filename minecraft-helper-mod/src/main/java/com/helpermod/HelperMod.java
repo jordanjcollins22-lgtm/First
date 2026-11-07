@@ -35,6 +35,9 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(Furniture::tick);
         ServerEntityEvents.ENTITY_LOAD.register(Furniture::onEntityLoad);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Rocket::onUseBlock); // space rockets
+        // Hammers mine a 3x3 square
+        net.fabricmc.fabric.api.event.player.AttackBlockCallback.EVENT.register(Hammer::onAttackBlock);
+        net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents.AFTER.register(Hammer::afterBreak);
         // Backpacks open from the hand, anywhere (registered first: never placed, never put on a horse)
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Backpack::onUseItem);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Backpack::onUseBlock);
