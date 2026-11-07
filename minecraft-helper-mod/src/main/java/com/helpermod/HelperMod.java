@@ -35,6 +35,10 @@ public class HelperMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(Furniture::tick);
         ServerEntityEvents.ENTITY_LOAD.register(Furniture::onEntityLoad);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Rocket::onUseBlock); // space rockets
+        // Backpacks open from the hand, anywhere (registered first: never placed, never put on a horse)
+        net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Backpack::onUseItem);
+        net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Backpack::onUseBlock);
+        UseEntityCallback.EVENT.register(Backpack::onUseEntity);
         net.fabricmc.fabric.api.event.player.UseItemCallback.EVENT.register(Rocket::onUseItem);
         ServerTickEvents.END_SERVER_TICK.register(Rocket::tick);
         net.fabricmc.fabric.api.event.player.UseBlockCallback.EVENT.register(Loot::onUseBlock); // loot boxes open, never get placed
