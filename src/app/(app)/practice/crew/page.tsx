@@ -120,10 +120,21 @@ export default async function CrewJourneyPage() {
       ),
     },
     {
+      key: "area-full",
+      path: "crew",
+      title: "A full area",
+      what: "Front beds already has Sam and Alex in it, the most one area takes. Instead of a Join button its card says it's full, so the third person picks another area.",
+      screen: (
+        <Look>
+          <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("full")} accountManager={am} map={whereEachAreaIs} />
+        </Look>
+      ),
+    },
+    {
       key: "prepping",
       path: "crew",
       title: "Prep this area",
-      what: "Only the prep for this area, ticked as each thing is done. Nothing about the install shows here.",
+      what: "Only the prep for this area, ticked as each thing is done. Nothing about the install shows here. There is no Leave button: you stay in this area until its photo is in.",
       screen: (
         <Look>
           <AreaBoard jobId={SAMPLE_JOB_ID} zones={zones} board={sampleBoard("prepping")} accountManager={am} map={whereEachAreaIs} />

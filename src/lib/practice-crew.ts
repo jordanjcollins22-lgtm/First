@@ -79,7 +79,8 @@ export function sampleShopDay(): ShopDay {
  * nothing started, prepping the first area, its prep photo due, on to the
  * next, every area prepped, doing the work, and the after photo due.
  */
-export type BoardStage = "open" | "prepping" | "prep_photo" | "next" | "all_prepped" | "working" | "after_photo";
+/** "full": the first area already has as many people as it takes, and you are not one of them. */
+export type BoardStage = "open" | "prepping" | "prep_photo" | "next" | "all_prepped" | "working" | "after_photo" | "full";
 
 export function sampleBoard(stage: BoardStage): AreaBoardData {
   const zones = sampleZones();
@@ -107,13 +108,14 @@ export function sampleBoard(stage: BoardStage): AreaBoardData {
     steps[zone.id] = all.map((step, n) => ({ step, doneBy: n < ticks ? "Jordan" : null }));
     tips[zone.id] = tipsFor(source.typeId);
     const mine = i === mineIndex;
+    const crowded = stage === "full" && i === 0;
     const prepDone = ticks >= prep;
     const phase = ticks < prep ? "prep" : ticks < prep + work ? "work" : ticks < all.length ? "cleanup" : "done";
     return {
       zoneId: zone.id,
-      status: mine ? "working" : "open",
-      people: mine ? [{ profileId: ME, name: "Jordan" }] : [],
-      kits: mine ? [2] : [],
+      status: mine || crowded ? "working" : "open",
+      people: mine ? [{ profileId: ME, name: "Jordan" }] : crowded ? [{ profileId: "sam", name: "Sam" }, { profileId: "alex", name: "Alex" }] : [],
+      kits: mine || crowded ? [2] : [],
       phase,
       stepsDone: ticks,
       stepsTotal: all.length,
