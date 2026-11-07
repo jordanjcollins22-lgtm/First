@@ -395,6 +395,12 @@ the spot, then the waypoint is gone. The action bar counts down the distance. Pr
 Since 2.9.2 a problem in the roadster can no longer crash the game or stop your world from opening: it's logged, the
 autopilot switches off and the car lands. (2.9.0 and 2.9.1 could crash on autopilot.)
 
+**Backpacks (2.10.0):** a Backpack (27 slots) or Big Backpack (54 slots). Hold it and right-click to open it
+anywhere. What's inside stays on the item, so it keeps your things when you drop it, put it in a chest or give it
+away. Dye it in a crafting grid like leather armour. Backpacks can't go inside backpacks. Buy them in the tycoon shop
+(300 and 1,500 coins) or craft them: 8 leather around a chest makes a Backpack; leather, 2 chests and a diamond
+(`L C L / L D L / L C L`) make a Big Backpack.
+
 **Space Rockets (2.6.0):** the shop sells the mod's own Space Rockets (page 1, after the Furniture Catalogue), so
 you can reach the planets in survival with no other mods. Hold one and right-click: pick a planet (or Home), a 3-2-1
 countdown runs, you blast off in flames and smoke and land on the planet with Slow Falling. A rocket is never used up.

@@ -823,6 +823,8 @@ final class Tycoon {
                 p.level().getServer().execute(() -> Furniture.openCatalog(p));
                 return false;
             }),
+            new Offer(1, Backpack.PRICE_SMALL, "Backpack (27 slots, opens anywhere)", () -> Backpack.item(3)),
+            new Offer(1, Backpack.PRICE_BIG, "Big Backpack (54 slots, opens anywhere)", () -> Backpack.item(6)),
             // Space Rockets: fly to the planets (never used up)
             new Offer(1, Rocket.PRICE[1], Rocket.shopName(1), () -> Rocket.item(1)),
             new Offer(2, Rocket.PRICE[2], Rocket.shopName(2), () -> Rocket.item(2)),
