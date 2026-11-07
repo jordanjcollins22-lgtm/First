@@ -395,6 +395,12 @@ the spot, then the waypoint is gone. The action bar counts down the distance. Pr
 Since 2.9.2 a problem in the roadster can no longer crash the game or stop your world from opening: it's logged, the
 autopilot switches off and the car lands. (2.9.0 and 2.9.1 could crash on autopilot.)
 
+**Hammers (2.11.0):** Iron, Diamond and Netherite Hammers mine a 3x3 square at once, flat against the face you
+hit (walls, floors and ceilings). The extra blocks only break if the hammer could mine them anyway and they aren't
+much harder than the block you hit (so no bedrock, and no obsidian around stone). Each block wears the hammer like
+normal mining. Sneak to mine one block. Tycoon shop: 600 / 3,500 / 80,000 coins. Craft Iron or Diamond Hammers from
+3 iron (or diamond) blocks on top of 2 sticks.
+
 **Backpacks (2.10.0):** a Backpack (27 slots) or Big Backpack (54 slots). Hold it and right-click to open it
 anywhere. What's inside stays on the item, so it keeps your things when you drop it, put it in a chest or give it
 away. Dye it in a crafting grid like leather armour. Backpacks can't go inside backpacks. Buy them in the tycoon shop

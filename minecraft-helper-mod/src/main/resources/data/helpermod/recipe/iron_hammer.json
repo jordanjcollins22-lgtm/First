@@ -1,0 +1,41 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "BBB",
+    " S ",
+    " S "
+  ],
+  "key": {
+    "B": "minecraft:iron_block",
+    "S": "minecraft:stick"
+  },
+  "result": {
+    "id": "minecraft:iron_pickaxe",
+    "count": 1,
+    "components": {
+      "minecraft:custom_data": {
+        "HelperHammer": {
+          "metal": "iron"
+        }
+      },
+      "minecraft:custom_name": {
+        "text": "Iron Hammer",
+        "italic": false,
+        "color": "gold"
+      },
+      "minecraft:lore": [
+        {
+          "text": "Mines a 3x3 square at once.",
+          "italic": false,
+          "color": "gray"
+        },
+        {
+          "text": "Sneak to mine just one block.",
+          "italic": false,
+          "color": "gray"
+        }
+      ]
+    }
+  }
+}
