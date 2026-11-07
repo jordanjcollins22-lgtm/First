@@ -208,32 +208,8 @@ final class Roadster {
         return l;
     }
 
-    private static java.lang.reflect.Method rideMethod;
-
-    /** Entity#startRiding(vehicle, force...) whatever extra flags this version has. */
-    private static void ride(Entity e, Entity vehicle) {
-        try {
-            if (rideMethod == null) {
-                for (java.lang.reflect.Method m : Entity.class.getMethods()) {
-                    Class<?>[] t = m.getParameterTypes();
-                    if (!m.getName().equals("startRiding") || t.length < 2 || t[0] != Entity.class) continue;
-                    boolean flags = true;
-                    for (int i = 1; i < t.length; i++) flags &= t[i] == boolean.class;
-                    if (flags && (rideMethod == null || t.length < rideMethod.getParameterCount())) rideMethod = m;
-                }
-            }
-            Object[] args = new Object[rideMethod.getParameterCount()];
-            args[0] = vehicle;
-            for (int i = 1; i < args.length; i++) args[i] = true;
-            rideMethod.invoke(e, args);
-        } catch (ReflectiveOperationException | RuntimeException ex) {
-            HelperMod.LOG.warn("Couldn't seat the roadster model", ex);
-        }
-    }
-
     /**
-     * Every tick: keep each car's model on it. While someone drives, the model rides the horse too (the
-     * driver's own game moves it, so it never lags behind); parked, it just sits where the horse is.
+     * Every tick: keep each car's model on it, where the horse is, turned the same way.
      */
     private static void moveModels() {
         var it = CARS.entrySet().iterator();
@@ -254,15 +230,13 @@ final class Roadster {
                 if (m == null) continue;
                 MODELS.put(en.getKey(), m);
             }
-            boolean driven = h.getFirstPassenger() instanceof net.minecraft.world.entity.player.Player;
-            if (driven && m.getVehicle() != h) ride(m, h);
-            else if (!driven && m.isPassenger()) m.stopRiding();
+            // 2.9.2: the model never rides the horse any more (a second passenger next to the driver
+            // crashed the game in autopilot). It just follows the horse every tick; teleport_duration smooths it.
+            if (m.isPassenger()) m.stopRiding();
             float yaw = h.getYRot();
             if (Math.abs(net.minecraft.util.Mth.wrapDegrees(m.getYRot() - yaw)) > 0.5f) m.setYRot(yaw);
-            if (!m.isPassenger()) {
-                Vec3 seat = h.getPassengerRidingPosition(h);
-                if (m.position().distanceToSqr(seat) > 1e-4) m.teleportTo(seat.x, seat.y, seat.z);
-            }
+            Vec3 seat = h.getPassengerRidingPosition(h);
+            if (m.position().distanceToSqr(seat) > 1e-4) m.teleportTo(seat.x, seat.y, seat.z);
         }
     }
 
@@ -371,16 +345,35 @@ final class Roadster {
     // Flying
     // ---------------------------------------------------------------------------------------
 
+    private static int errors;
+
+    /** A bug in the roadster must never crash the game or stop a world from opening: log it and carry on. */
     static void tick(MinecraftServer server) {
+        try {
+            tickInner(server);
+        } catch (RuntimeException ex) {
+            if (errors++ < 5) HelperMod.LOG.error("Star Roadster tick failed; autopilot switched off", ex);
+            WAYPOINTS.clear();
+        }
+    }
+
+    private static void tickInner(MinecraftServer server) {
         for (ServerPlayer rider : server.getPlayerList().getPlayers()) {
             if (!(rider.getVehicle() instanceof Horse h) || !h.entityTags().contains(TAG)) continue;
-            fly(rider, h);
+            try {
+                fly(rider, h);
+            } catch (RuntimeException ex) {
+                if (errors++ < 5) HelperMod.LOG.error("Star Roadster flight failed; autopilot switched off", ex);
+                WAYPOINTS.remove(rider.getUUID());
+                land(h);
+            }
         }
         // A parked roadster drops back to the ground. Roadsters that just loaded become cars.
         if (server.getTickCount() % 20 == 0) {
             for (ServerLevel w : server.getAllLevels()) {
-                for (Entity e : w.getAllEntities()) {
-                    if (!(e instanceof Horse h) || !h.entityTags().contains(TAG)) continue;
+                List<Horse> roadsters = new java.util.ArrayList<>();
+                for (Entity e : w.getAllEntities()) if (e instanceof Horse h && h.entityTags().contains(TAG)) roadsters.add(h);
+                for (Horse h : roadsters) {
                     if (!CARS.containsKey(h.getUUID()) || !h.hasEffect(net.minecraft.world.effect.MobEffects.INVISIBILITY)) makeCar(h);
                     if (h.isNoGravity() && !(h.getFirstPassenger() instanceof net.minecraft.world.entity.player.Player)) land(h);
                 }
@@ -396,7 +389,7 @@ final class Roadster {
      */
     private static void takeOff(Horse h) {
         h.setNoGravity(true);
-        if (h.isSaddled()) h.getSlot(400).set(ItemStack.EMPTY);
+        if (h.isSaddled()) h.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, ItemStack.EMPTY);
         h.getNavigation().stop();
     }
 
@@ -407,13 +400,13 @@ final class Roadster {
 
     private static void land(Horse h) {
         h.setNoGravity(false);
-        if (!h.isSaddled()) h.getSlot(400).set(saddle());
+        if (!h.isSaddled()) h.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, saddle());
     }
 
     private static void fly(ServerPlayer rider, Horse h) {
         if (h.isNoGravity()) {
             h.getNavigation().stop(); // its own legs stay out of it while flying
-            if (h.isSaddled()) h.getSlot(400).set(ItemStack.EMPTY); // e.g. after a restart mid-flight
+            if (h.isSaddled()) h.setItemSlot(net.minecraft.world.entity.EquipmentSlot.SADDLE, ItemStack.EMPTY); // e.g. after a restart mid-flight
         }
         ServerLevel world = rider.level();
         if (autopilot(rider, h, world)) return;
