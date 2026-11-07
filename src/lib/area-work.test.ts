@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { allPrepped, areaNeeds, boardState, canTick, pickKits, stepsFor, tipsFor } from "./area-work";
+import { AREA_CREW_LIMIT, allPrepped, areaNeeds, boardState, canTick, crewLimitOf, fullReason, pickKits, stepsFor, tipsFor } from "./area-work";
 
 const tools = [
   { id: "shovel", name: "Shovel", kits: [1] },
@@ -153,5 +153,19 @@ describe("lawn care that brings ground back to grass", () => {
   it("only talks about clippings when there was mowing", () => {
     expect(stepsFor("lawn-care", { serviceType: "Mowing" }).at(-1)?.label).toMatch(/clippings/);
     expect(stepsFor("lawn-care", { serviceType: "Fertilization" }).at(-1)?.label).toBe("Blow off the walks and driveway.");
+  });
+});
+
+describe("how many people an area takes", () => {
+  it("uses the default when the zone sets none", () => {
+    expect(crewLimitOf({})).toBe(AREA_CREW_LIMIT);
+    expect(crewLimitOf({ maxCrew: 0 })).toBe(AREA_CREW_LIMIT);
+    expect(crewLimitOf({ maxCrew: 3 })).toBe(3);
+  });
+  it("is full once it holds its limit, not counting you", () => {
+    const people = [{ profileId: "a", name: "A" }, { profileId: "b", name: "B" }];
+    expect(fullReason({ people: people.slice(0, 1) }, 2, "me")).toBeNull();
+    expect(fullReason({ people }, 2, "me")).toMatch(/full/);
+    expect(fullReason({ people }, 2, "a")).toBeNull();
   });
 });

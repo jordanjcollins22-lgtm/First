@@ -1,7 +1,8 @@
 import { usesPreviousCrewSheet } from "@/lib/crew-sheet-layout";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
-import { allPrepped, areaNeeds, boardState, stepsFor, tipsFor, type AreaNeeds, type AreaState, type AreaStep, type Tip } from "@/lib/area-work";
+import { canRunJobs } from "@/lib/roles";
+import { allPrepped, areaNeeds, boardState, crewLimitOf, stepsFor, tipsFor, type AreaNeeds, type AreaState, type AreaStep, type Tip } from "@/lib/area-work";
 import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import type { WorkZone } from "@/components/canvas/types";
 
@@ -18,6 +19,10 @@ export interface AreaBoardData {
   tools: Record<string, string[]>;
   /** Under way before the crew sheet changed: keeps the sheet it started on. See lib/crew-sheet-layout. */
   previousLayout: boolean;
+  /** zoneId -> how many people may be in it at once. Missing: AREA_CREW_LIMIT. */
+  limits?: Record<string, number>;
+  /** Whoever runs the job may leave or move between areas before the photo is in. Everybody else stays until it is. */
+  canLeaveFreely?: boolean;
 }
 
 /**
@@ -79,6 +84,8 @@ export async function loadAreaBoard(
     tips: Object.fromEntries(zones.map((zone) => [zone.id, tipsFor(zone.service!.typeId)])),
     tools: Object.fromEntries(zones.map((zone) => [zone.id, needs.get(zone.id)?.tools ?? []])),
     previousLayout,
+    limits: Object.fromEntries(zones.map((zone) => [zone.id, crewLimitOf(zone)])),
+    canLeaveFreely: me ? canRunJobs(((me as unknown as { roles?: string[] }).roles ?? []) as string[]) : false,
   };
 }
 

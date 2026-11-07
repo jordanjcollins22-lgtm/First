@@ -7,6 +7,7 @@ import { ImpersonationBanner } from "@/components/impersonation-banner";
 import { DemoBanner } from "@/components/demo-banner";
 import { inDemo } from "@/lib/demo-mode";
 import { OutboxRunner } from "@/components/offline/outbox-runner";
+import { ReviewChecklist } from "@/components/review/review-checklist";
 import { getCurrentProfile, getRealProfile, listProfiles } from "@/lib/data/team";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganization } from "@/lib/data/organizations";
@@ -142,6 +143,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="flex-1 pb-[env(safe-area-inset-bottom)]">{children}</main>
         {roles.includes("admin") && <AdminChatWidget />}
         <OutboxRunner />
+        <ReviewChecklist />
       </body>
     </html>
   );

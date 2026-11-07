@@ -34,9 +34,11 @@ import type { Database } from "./database.types";
 // /mow is the quick mow page from a post's link: address, price, card.
 // /careers is the job ad's apply form and video step, for people who don't
 // work here yet.
+// /review is a Flow Board review page: sample data only, and it 404s
+// anywhere but a preview deployment (see review-pages.ts).
 // /stop is the way out of a cold email to a property manager. Same reason as
 // /u: they have no account and must never meet a sign-in wall.
-export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop", "/privacy", "/site", "/rate"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop", "/privacy", "/site", "/rate", "/review"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

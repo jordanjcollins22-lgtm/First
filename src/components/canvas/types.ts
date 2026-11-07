@@ -56,6 +56,11 @@ export interface WorkZone {
    * Its outline is centred here and takes the size of its measurements.
    */
   anchor?: Point;
+  /**
+   * How many people may work in this area at once. Unset uses the default
+   * in lib/area-work (AREA_CREW_LIMIT).
+   */
+  maxCrew?: number | null;
 }
 
 export interface StoredDesign {
