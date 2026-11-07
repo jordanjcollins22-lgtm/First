@@ -146,7 +146,7 @@ final class Backpack {
                 ItemStack s = box.getItem(i);
                 if (!is(s)) continue;
                 box.setItem(i, ItemStack.EMPTY);
-                if (!player.getInventory().add(s)) player.drop(s, false);
+                player.getInventory().placeItemBackInInventory(s, net.minecraft.util.Prediction.SERVER_ONLY);
                 if (!told) player.sendOverlayMessage(Component.literal("A backpack can't go inside a backpack.").withStyle(ChatFormatting.YELLOW));
                 told = true;
             }
@@ -157,7 +157,7 @@ final class Backpack {
             if (bag.isEmpty()) { // the backpack itself is gone: hand the things back instead of losing them
                 for (int i = 0; i < box.getContainerSize(); i++) {
                     ItemStack s = box.removeItemNoUpdate(i);
-                    if (!s.isEmpty() && !player.getInventory().add(s)) player.drop(s, false);
+                    if (!s.isEmpty()) player.getInventory().placeItemBackInInventory(s, net.minecraft.util.Prediction.SERVER_ONLY);
                 }
                 return;
             }
