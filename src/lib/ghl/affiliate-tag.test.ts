@@ -48,6 +48,10 @@ describe("crediting a tag", () => {
     expect(creditTag("samlee", people)?.profileId).toBe("sam");
     expect(creditTag("jace465", people)?.profileId).toBe("jace");
     expect(creditTag("justin2412", people)).toEqual({ profileId: "justin", name: "Justin", earns: false });
+    // Only a first name on file: the id still starts with it.
+    expect(creditTag("jaceburgess465", [person({ id: "j", fullName: "Jace" })])?.profileId).toBe("j");
+    // A different last name than the one on file is not them.
+    expect(creditTag("jacesmith1", people)).toBeNull();
   });
 
   it("never pays an owner, but still says whose it was", () => {

@@ -67,8 +67,8 @@ const letters = (s: string | null | undefined) => (s ?? "").toLowerCase().replac
 /**
  * Who a tag belongs to. Their own code (an app affiliate code or one of their
  * tracked link codes) first; otherwise a GoHighLevel affiliate id made of
- * their name, e.g. "jaceburgess465" for Jace Burgess, or of their first name
- * alone ("justin2412"). Only a single clear
+ * their name, e.g. "jaceburgess465" for Jace Burgess, or starting with their
+ * first name ("justin2412"). Only a single clear
  * match counts: a tag two people could own credits nobody, and shows up on
  * the monthly check instead.
  */
@@ -92,9 +92,18 @@ export function creditTag(tag: string | null, people: TagPerson[], linkOwners: M
     return whole.length >= 4 && whole === name;
   });
   if (hits.length) return hits.length === 1 ? toCredit(hits[0]) : null;
-  // A GoHighLevel id of just a first name ("justin2412"), when only one person has it.
-  const first = people.filter((p) => letters((p.firstName || p.fullName || "").trim().split(/\s+/)[0]) === name);
-  return first.length === 1 ? toCredit(first[0]) : null;
+  // A GoHighLevel id that starts with their first name ("justin2412", or
+  // "jaceburgess465" when we only know "Jace"), when only one person fits.
+  // What follows the first name must be their last name, when we know it.
+  const fits = people.filter((p) => {
+    const parts = (p.firstName || p.fullName || "").trim().split(/\s+/);
+    const first = letters(parts[0]);
+    if (first.length < 3 || !name.startsWith(first)) return false;
+    const rest = name.slice(first.length);
+    const last = letters(p.firstName ? p.lastName : parts.slice(1).join(""));
+    return !rest || !last || rest === last;
+  });
+  return fits.length === 1 ? toCredit(fits[0]) : null;
 }
 
 /** The person's own GoHighLevel booking link, tagged with their app affiliate code. */

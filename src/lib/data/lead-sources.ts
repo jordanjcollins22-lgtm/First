@@ -6,6 +6,7 @@ import { creditTag, ghlBookingLink, type LeadTag, type TagPerson } from "@/lib/g
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
 import { loadMoney } from "@/lib/data/commission";
 import { isOwnerLevel } from "@/lib/roles";
+import { isFieldOnly, qualifiesForAffiliateLink } from "@/lib/affiliate-roles";
 
 export interface LeadRecord {
   /** The job the lead is, so other reports can join on it. */
@@ -193,9 +194,7 @@ async function tagOwners(
 ): Promise<{ people: TagPerson[]; linkOwners: Map<string, string> }> {
   const [{ data: profiles }, { data: links }] = await Promise.all([
     supabase.from("profiles").select("id, first_name, last_name, full_name, affiliate_slug").eq("organization_id", organizationId).limit(2000),
-    tags.length
-      ? supabase.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).in("code", tags)
-      : Promise.resolve({ data: [] }),
+    supabase.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).in("code", tags),
   ]);
   type P = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; affiliate_slug: string | null };
   const list = (profiles ?? []) as P[];
@@ -242,21 +241,34 @@ export async function listMarketingTeam(scope?: DataScope): Promise<string[]> {
 
 /**
  * Each team member's tagged GoHighLevel booking link (lib/ghl/affiliate-tag.ts),
- * for the owner to hand out. Anybody but an owner who has an app affiliate
- * code; a booking through it is credited to them.
+ * for the owner to hand out: anybody but an owner who has, or should have, an
+ * app affiliate code. A booking through it is credited to them. Somebody with
+ * no code yet shows with no link: it is made when they open their home
+ * screen, or when an admin opens the Calendar page's booking links.
  */
-export async function listGhlLinks(scope?: DataScope): Promise<{ name: string; link: string }[]> {
+export async function listGhlLinks(scope?: DataScope): Promise<{ name: string; link: string | null }[]> {
   const base = ghlBookingBase();
   if (!base) return [];
   const supabase = scope?.client ?? (await createClient());
   const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
-  const { people } = await tagOwners(supabase, organizationId, []);
-  return people
-    .filter((p) => !p.isOwner && p.affiliateSlug)
+  const [{ data: profiles }, { data: links }] = await Promise.all([
+    supabase.from("profiles").select("id, first_name, last_name, full_name, affiliate_slug, is_affiliate").eq("organization_id", organizationId).limit(2000),
+    supabase.from("outreach_links").select("profile_id").eq("organization_id", organizationId).limit(5000),
+  ]);
+  type P = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; affiliate_slug: string | null; is_affiliate: boolean };
+  const list = (profiles ?? []) as P[];
+  const { data: roles } = list.length ? await supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", list.map((p) => p.id)) : { data: [] };
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (roles ?? []) as { profile_id: string; role_name: string }[]) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  const sharers = new Set(((links ?? []) as { profile_id: string | null }[]).map((l) => l.profile_id));
+  return list
+    .filter((p) => {
+      const r = rolesOf.get(p.id) ?? [];
+      return !isOwnerLevel(r) && (p.affiliate_slug || p.is_affiliate || sharers.has(p.id) || qualifiesForAffiliateLink(r) || isFieldOnly(r));
+    })
     .map((p) => ({
-      name: [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || "A team member",
-      link: ghlBookingLink(base, p.affiliateSlug) as string,
+      name: [p.first_name, p.last_name].filter(Boolean).join(" ") || p.full_name || "A team member",
+      link: ghlBookingLink(base, p.affiliate_slug),
     }))
-    .filter((r) => r.link)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => Number(!a.link) - Number(!b.link) || a.name.localeCompare(b.name));
 }

@@ -32,7 +32,7 @@ export function LeadSourcesPanel({
   /** The marketing team, by first name, who share the content profit pool. */
   team?: string[];
   /** Each team member's tagged GoHighLevel booking link, to hand out. */
-  ghlLinks?: { name: string; link: string }[];
+  ghlLinks?: { name: string; link: string | null }[];
   /** When the page was drawn, so the periods count back from one moment. */
   now: string;
 }) {
@@ -233,13 +233,17 @@ export function LeadSourcesPanel({
           tag on it (ref= on the links below, or am_id= on a GoHighLevel affiliate link) says whose it was. Hand each person their link.
         </p>
         {ghlLinks.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">No tagged links yet: a person gets one once they have a booking link in the app.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Nobody on the team to make a link for yet.</p>
         ) : (
           <ul className="mt-2 grid gap-1 text-sm">
             {ghlLinks.map((g) => (
-              <li key={g.link} className="rounded-lg border border-border/60 p-2">
+              <li key={`${g.name}:${g.link}`} className="rounded-lg border border-border/60 p-2">
                 <span className="font-medium">{g.name}</span>
-                <span className="block select-all break-all font-mono text-xs text-muted-foreground">{g.link}</span>
+                {g.link ? (
+                  <span className="block select-all break-all font-mono text-xs text-muted-foreground">{g.link}</span>
+                ) : (
+                  <span className="block text-xs text-muted-foreground">No code yet: it is made when they open their home screen, or when you open the Calendar page&apos;s booking links.</span>
+                )}
               </li>
             ))}
           </ul>
