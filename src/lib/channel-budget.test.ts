@@ -65,5 +65,10 @@ describe("4% by source", () => {
     expect(by.get("Facebook ad")).toEqual({ ads: 40, people: 0 });
     expect(by.get("Facebook comment")).toEqual({ ads: 10, people: 20 });
   });
+
+  it("leaves out a person's 4% on jobs from before commissions started", () => {
+    const by = fourPctBySource([{ source: src("Facebook comment"), sold: true, revenue: 500, hasAffiliate: true, createdAt: "2026-10-01T00:00:00Z" }]);
+    expect(by.get("Facebook comment")).toBeUndefined();
+  });
 });
 

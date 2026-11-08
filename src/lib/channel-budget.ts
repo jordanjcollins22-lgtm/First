@@ -126,12 +126,15 @@ export interface SourceFourPct {
  * so it sits next to the lead sources table.
  */
 export function fourPctBySource(
-  leads: { source: LeadSource; sold: boolean; revenue: number; hasAffiliate: boolean }[],
+  leads: { source: LeadSource; sold: boolean; revenue: number; hasAffiliate: boolean; createdAt?: string }[],
   pct: number = CHANNEL_PCT
 ): Map<string, SourceFourPct> {
   const by = new Map<string, SourceFourPct>();
+  const from = new Date(`${COMMISSIONS_FROM}T00:00:00Z`).getTime();
   for (const lead of leads) {
     if (!lead.sold || !(lead.revenue > 0)) continue;
+    // People are only paid from the day commissions started (Jordan): older person-brought jobs are left out.
+    if (lead.hasAffiliate && lead.createdAt && new Date(lead.createdAt).getTime() < from) continue;
     const row = by.get(lead.source.group) ?? { ads: 0, people: 0 };
     const cut = (lead.revenue * pct) / 100;
     if (lead.hasAffiliate) row.people = round2(row.people + cut);
