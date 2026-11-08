@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { summariseSources } from "@/lib/lead-sources";
-import { CHANNEL_PCT, affiliateSplit } from "@/lib/channel-budget";
+import { CHANNEL_PCT, COMMISSIONS_FROM, affiliateSplit } from "@/lib/channel-budget";
 import { CONTENT_POOL_PCT, contentPool } from "@/lib/content-pool";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 
@@ -44,11 +44,14 @@ export function LeadSourcesPanel({
   const max = Math.max(1, ...rows.map((r) => r.leads));
   const split = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
-    return affiliateSplit(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
+    // Only jobs from the day commissions started being counted here.
+    const from = Math.max(since, new Date(`${COMMISSIONS_FROM}T00:00:00Z`).getTime());
+    return affiliateSplit(leads.filter((l) => new Date(l.createdAt).getTime() >= from));
   }, [leads, days, now]);
   const budgets = split.sources;
   const budgetTotal = budgets.reduce((n, b) => n + b.budget, 0);
   const peopleTotal = split.people.reduce((n, p) => n + p.cut, 0);
+  const startedOn = new Date(`${COMMISSIONS_FROM}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   const pool = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
     return contentPool(leads.filter((l) => new Date(l.createdAt).getTime() >= since), team);
@@ -127,7 +130,11 @@ export function LeadSourcesPanel({
         <h3 className="text-base font-bold">Affiliate {CHANNEL_PCT}%: people and other sources</h3>
         <p className="text-sm text-muted-foreground">
           Every job pays an affiliate {CHANNEL_PCT}% of what the client paid. If a person brought it in, it goes to that person. If it came from
-          anything else (an ad, a post, an automation, the calendar), it goes back into ads on that channel.
+          anything else (an ad, a post, an automation, the calendar), it goes back into ads on that channel. Counted from {startedOn}; older
+          jobs are in the lead sources above but not paid on.
+        </p>
+        <p className="mt-2 text-sm font-semibold">
+          Sent out: {money(peopleTotal + budgetTotal)} ({money(peopleTotal)} to people, {money(budgetTotal)} back into ads)
         </p>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div className="rounded-lg border border-border/60 p-2">
@@ -148,7 +155,7 @@ export function LeadSourcesPanel({
 
         <h4 className="mt-4 text-sm font-semibold">From people: paid to that person</h4>
         {split.people.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">No paid jobs brought in by a person in this period.</p>
+          <p className="mt-1 text-sm text-muted-foreground">No paid jobs brought in by a person since {startedOn}.</p>
         ) : (
           <div className="mt-1 overflow-x-auto">
             <table className="w-full min-w-[420px] text-sm">
@@ -180,7 +187,7 @@ export function LeadSourcesPanel({
 
         <h4 className="mt-4 text-sm font-semibold">From other sources: back into ads on that channel</h4>
         {budgets.length === 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">No paid jobs from other sources in this period.</p>
+          <p className="mt-1 text-sm text-muted-foreground">No paid jobs from other sources since {startedOn}.</p>
         ) : (
           <div className="mt-1 overflow-x-auto">
             <table className="w-full min-w-[420px] text-sm">

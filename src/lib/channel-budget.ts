@@ -14,6 +14,12 @@ import type { LeadSource } from "@/lib/lead-sources";
 
 export const CHANNEL_PCT = SHARE_PCT.affiliate;
 
+/**
+ * The day the affiliate 4% started being counted here (Jordan, 2026-11-08).
+ * Older jobs were not tracked well enough to pay on, so they stay out of it.
+ */
+export const COMMISSIONS_FROM = "2026-11-08";
+
 export interface BudgetLead {
   source: LeadSource;
   /** What the client actually paid on the job so far. */
