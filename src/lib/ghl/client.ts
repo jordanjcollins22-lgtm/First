@@ -199,3 +199,28 @@ export async function getContact(id: string): Promise<GhlContact | null> {
     return null;
   }
 }
+
+/** The contact's whole record, custom fields included, or null when it can't be read. */
+export async function getContactRecord(id: string): Promise<Record<string, unknown> | null> {
+  try {
+    const result = await call<{ contact?: Record<string, unknown> }>("GET", `/contacts/${encodeURIComponent(id)}`);
+    return result.contact ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The sub-account's contact custom fields: id, name and key. */
+export async function listContactFields(): Promise<{ id: string; name: string; fieldKey: string | null }[]> {
+  try {
+    const result = await call<{ customFields?: { id?: string; name?: string; fieldKey?: string; model?: string }[] }>(
+      "GET",
+      `/locations/${encodeURIComponent(env.ghlLocationId)}/customFields?model=contact`
+    );
+    return (result.customFields ?? [])
+      .filter((f) => f.id && f.name && (!f.model || f.model === "contact"))
+      .map((f) => ({ id: String(f.id), name: String(f.name), fieldKey: f.fieldKey ?? null }));
+  } catch {
+    return [];
+  }
+}

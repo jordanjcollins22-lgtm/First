@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { DataScope } from "@/lib/data/review-scope";
+import { ghlFunnels } from "@/lib/data/ghl-funnel";
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
 import { loadMoney } from "@/lib/data/commission";
 import { isOwnerLevel } from "@/lib/roles";
@@ -41,7 +42,7 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
     .from("jobs")
     .select(
       "id, created_at, referral_code, referred_by_profile_id, source_attractor_wave_id, ghl_appointment_id, " +
-        "properties!inner(customers!inner(organization_id, source, referred_by_customer_id)), job_proposals(status, total_cost, discount_amount, paid_at, estimate)"
+        "properties!inner(customers!inner(organization_id, source, referred_by_customer_id, ghl_contact_id)), job_proposals(status, total_cost, discount_amount, paid_at, estimate)"
     )
     .eq("properties.customers.organization_id", organizationId)
     .gte("created_at", since)
@@ -56,7 +57,7 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
     referred_by_profile_id: string | null;
     source_attractor_wave_id: string | null;
     ghl_appointment_id: string | null;
-    properties: { customers: { source: string | null; referred_by_customer_id: string | null } | null } | null;
+    properties: { customers: { source: string | null; referred_by_customer_id: string | null; ghl_contact_id: string | null } | null } | null;
     job_proposals: ProposalRow[] | ProposalRow | null;
   };
   const rows = (jobs ?? []) as unknown as JobRow[];
@@ -99,7 +100,7 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
   const linkBy = new Map((links ?? []).map((l) => [l.code, l]));
   const mowBy = new Map((mows ?? []).filter((m) => m.job_id).map((m) => [m.job_id as string, m]));
 
-  return rows.map((j) => {
+  const records = rows.map((j) => {
     const click = clickBy.get(j.id);
     const link = j.referral_code ? linkBy.get(j.referral_code) : undefined;
     const customer = j.properties?.customers ?? null;
@@ -140,6 +141,18 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
       }),
     };
   });
+  // Leads that only say they came through GoHighLevel (or left no trail) are split by the
+  // funnel field GoHighLevel keeps on the contact, when GoHighLevel can be read.
+  const vague = new Set(["GoHighLevel calendar", "Booked online, no trail"]);
+  const contactOf = new Map(rows.map((j) => [j.id, j.properties?.customers?.ghl_contact_id ?? null]));
+  const ask = records.filter((r) => vague.has(r.source.group) && !r.source.detail).map((r) => contactOf.get(r.jobId)).filter((c): c is string => Boolean(c));
+  const funnels = await ghlFunnels(ask).catch(() => new Map<string, string>());
+  for (const r of records) {
+    const contact = contactOf.get(r.jobId);
+    const funnel = contact ? funnels.get(contact) : undefined;
+    if (funnel && vague.has(r.source.group) && !r.source.detail) r.source = { ...r.source, detail: funnel };
+  }
+  return records;
 }
 
 /**
