@@ -17,7 +17,7 @@ import { getBookingTest } from "@/lib/data/booking-test";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { LeadSourcesPanel } from "@/components/marketing/lead-sources-panel";
-import { listLeadSources } from "@/lib/data/lead-sources";
+import { listLeadSources, listMarketingTeam } from "@/lib/data/lead-sources";
 import { PropertyManagers } from "@/components/marketing/property-managers";
 import { getPmBoard } from "@/lib/data/pm-board";
 
@@ -86,7 +86,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
 async function AttributionTab() {
   const profile = await getCurrentProfile();
   const owner = isOwnerLevel(profile?.roles ?? []);
-  const [report, bookingTest, leads] = await Promise.all([
+  const [report, bookingTest, leads, team] = await Promise.all([
     attributionReport().catch((err) => {
       console.error("Attribution failed to load:", err);
       return null;
@@ -98,8 +98,10 @@ async function AttributionTab() {
       console.error("Lead sources failed to load:", err);
       return null;
     }),
+    // Who shares the content profit pool.
+    listMarketingTeam().catch(() => [] as string[]),
   ]);
-  const sources = leads ? <LeadSourcesPanel leads={leads} now={new Date().toISOString()} /> : null;
+  const sources = leads ? <LeadSourcesPanel leads={leads} team={team} now={new Date().toISOString()} /> : null;
   const test = bookingTest ? <BookingTestCard test={bookingTest} /> : null;
   if (!report) {
     return (

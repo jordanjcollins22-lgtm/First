@@ -19,6 +19,10 @@ export interface LeadRecord {
    * When nobody did, the affiliate's 4% goes to the channel's growth budget.
    */
   hasAffiliate: boolean;
+  /** Came in through a tracked link on one of our posts: the content profit pool counts it. */
+  fromContent: boolean;
+  /** The job's profit in dollars, as its estimate worked it out, or null when it has none. */
+  profit: number | null;
 }
 
 /**
@@ -36,13 +40,14 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
     .from("jobs")
     .select(
       "id, created_at, referral_code, referred_by_profile_id, source_attractor_wave_id, ghl_appointment_id, " +
-        "properties!inner(customers!inner(organization_id, source, referred_by_customer_id)), job_proposals(status, total_cost, discount_amount, paid_at)"
+        "properties!inner(customers!inner(organization_id, source, referred_by_customer_id)), job_proposals(status, total_cost, discount_amount, paid_at, estimate)"
     )
     .eq("properties.customers.organization_id", organizationId)
     .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(3000);
   if (error) throw error;
+  type ProposalRow = { status: string; total_cost: number | null; discount_amount: number | null; paid_at: string | null; estimate: { grossCents?: number } | null };
   type JobRow = {
     id: string;
     created_at: string;
@@ -51,7 +56,7 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
     source_attractor_wave_id: string | null;
     ghl_appointment_id: string | null;
     properties: { customers: { source: string | null; referred_by_customer_id: string | null } | null } | null;
-    job_proposals: { status: string; total_cost: number | null; discount_amount: number | null; paid_at: string | null }[] | { status: string; total_cost: number | null; discount_amount: number | null; paid_at: string | null } | null;
+    job_proposals: ProposalRow[] | ProposalRow | null;
   };
   const rows = (jobs ?? []) as unknown as JobRow[];
   const ids = rows.map((j) => j.id);
@@ -115,6 +120,8 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
       revenue,
       collected,
       hasAffiliate: earnsShare(j.referred_by_profile_id ?? link?.profile_id),
+      fromContent: link?.kind === "post",
+      profit: proposalSold && typeof proposal?.estimate?.grossCents === "number" ? proposal.estimate.grossCents / 100 : null,
       source: leadSource({
         adSource: click?.utm_source ?? null,
         adCampaign: click?.utm_campaign ?? null,
@@ -132,4 +139,27 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
       }),
     };
   });
+}
+
+/**
+ * The marketing team, for the content profit pool: everybody who hands out
+ * tracked links, by first name, the owner aside.
+ */
+export async function listMarketingTeam(): Promise<string[]> {
+  const supabase = await createClient();
+  const organizationId = await getCurrentOrganizationId();
+  const { data: links, error } = await supabase.from("outreach_links").select("profile_id").eq("organization_id", organizationId).limit(5000);
+  if (error) throw error;
+  const ids = Array.from(new Set((links ?? []).map((l) => l.profile_id as string | null).filter((p): p is string => Boolean(p))));
+  if (!ids.length) return [];
+  const [{ data: profiles }, { data: roles }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, first_name, email").in("id", ids),
+    supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", ids),
+  ]);
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (roles ?? []) as { profile_id: string; role_name: string }[]) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  return ((profiles ?? []) as { id: string; full_name: string | null; first_name: string | null; email: string }[])
+    .filter((p) => !isOwnerLevel(rolesOf.get(p.id) ?? []))
+    .map((p) => (p.first_name || p.full_name || p.email || "").split(" ")[0] || "Someone")
+    .sort((a, b) => a.localeCompare(b));
 }

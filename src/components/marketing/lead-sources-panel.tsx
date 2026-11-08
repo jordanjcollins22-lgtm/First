@@ -5,6 +5,7 @@ import { Fragment, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { summariseSources } from "@/lib/lead-sources";
 import { CHANNEL_PCT, channelBudgets } from "@/lib/channel-budget";
+import { CONTENT_POOL_PCT, contentPool } from "@/lib/content-pool";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 
 const PERIODS = [
@@ -20,7 +21,17 @@ const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
  * many sold, the close rate and the money, longest bar first. Under each,
  * whose link or which campaign.
  */
-export function LeadSourcesPanel({ leads, now }: { leads: LeadRecord[]; /** When the page was drawn, so the periods count back from one moment. */ now: string }) {
+export function LeadSourcesPanel({
+  leads,
+  team = [],
+  now,
+}: {
+  leads: LeadRecord[];
+  /** The marketing team, by first name, who share the content profit pool. */
+  team?: string[];
+  /** When the page was drawn, so the periods count back from one moment. */
+  now: string;
+}) {
   const [days, setDays] = useState(90);
   const [open, setOpen] = useState<string | null>(null);
   const rows = useMemo(() => {
@@ -36,6 +47,10 @@ export function LeadSourcesPanel({ leads, now }: { leads: LeadRecord[]; /** When
     return channelBudgets(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
   }, [leads, days, now]);
   const budgetTotal = budgets.reduce((n, b) => n + b.budget, 0);
+  const pool = useMemo(() => {
+    const since = new Date(now).getTime() - days * 86_400_000;
+    return contentPool(leads.filter((l) => new Date(l.createdAt).getTime() >= since), team);
+  }, [leads, team, days, now]);
 
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
@@ -142,6 +157,37 @@ export function LeadSourcesPanel({ leads, now }: { leads: LeadRecord[]; /** When
             </table>
           </div>
         )}
+      </div>
+      <div className="mt-5" id="content-pool">
+        <h3 className="text-base font-bold">Content profit pool</h3>
+        <p className="text-sm text-muted-foreground">
+          {CONTENT_POOL_PCT}% of the profit (price less costs) on jobs that came from our posts, split evenly across the marketing team. A job only
+          counts when it came in through a tracked link on the post, so put one on every post. When it is paid out is not decided yet.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">Jobs from content</p>
+            <p className="text-lg font-bold tabular-nums">{pool.jobs}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">Profit on them</p>
+            <p className="text-lg font-bold tabular-nums">{money(pool.profit)}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">Pool ({CONTENT_POOL_PCT}%)</p>
+            <p className="text-lg font-bold tabular-nums">{money(pool.pool)}</p>
+          </div>
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">Each person</p>
+            <p className="text-lg font-bold tabular-nums">{pool.team.length ? money(pool.perPerson) : "—"}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {pool.team.length
+            ? `Split ${pool.team.length} ways: ${pool.team.join(", ")}.`
+            : "Nobody on the marketing team yet. Anyone who hands out tracked links is on it."}
+          {pool.unpriced > 0 ? ` ${pool.unpriced} job${pool.unpriced === 1 ? "" : "s"} from content had no profit worked out, so ${pool.unpriced === 1 ? "it is" : "they are"} not in the pool.` : ""}
+        </p>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
         A lead counts once, under its most specific clue: an ad click, then the tracked link it came through, then a team member&apos;s booking link,
