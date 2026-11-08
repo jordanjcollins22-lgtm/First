@@ -252,10 +252,10 @@ export async function listGhlLinks(scope?: DataScope): Promise<{ name: string; l
   const supabase = scope?.client ?? (await createClient());
   const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
   const [{ data: profiles }, { data: links }] = await Promise.all([
-    supabase.from("profiles").select("id, first_name, last_name, full_name, affiliate_slug, is_affiliate").eq("organization_id", organizationId).limit(2000),
+    supabase.from("profiles").select("id, first_name, last_name, full_name, email, affiliate_slug, is_affiliate").eq("organization_id", organizationId).limit(2000),
     supabase.from("outreach_links").select("profile_id").eq("organization_id", organizationId).limit(5000),
   ]);
-  type P = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; affiliate_slug: string | null; is_affiliate: boolean };
+  type P = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; affiliate_slug: string | null; is_affiliate: boolean; email: string | null };
   const list = (profiles ?? []) as P[];
   const { data: roles } = list.length ? await supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", list.map((p) => p.id)) : { data: [] };
   const rolesOf = new Map<string, string[]>();
@@ -267,7 +267,7 @@ export async function listGhlLinks(scope?: DataScope): Promise<{ name: string; l
       return !isOwnerLevel(r) && (p.affiliate_slug || p.is_affiliate || sharers.has(p.id) || qualifiesForAffiliateLink(r) || isFieldOnly(r));
     })
     .map((p) => ({
-      name: [p.first_name, p.last_name].filter(Boolean).join(" ") || p.full_name || "A team member",
+      name: [p.first_name, p.last_name].filter(Boolean).join(" ") || p.full_name || p.email || "A team member",
       link: ghlBookingLink(base, p.affiliate_slug),
     }))
     .sort((a, b) => Number(!a.link) - Number(!b.link) || a.name.localeCompare(b.name));
