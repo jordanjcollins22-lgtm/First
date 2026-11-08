@@ -9,6 +9,12 @@ import {
   MAX_SERVICES,
   normalizeWebsite,
   robotsTxt,
+  serviceBySlug,
+  serviceHref,
+  serviceIntro,
+  serviceJsonLd,
+  serviceSlug,
+  serviceTitle,
   sitemapXml,
   siteUrls,
   websiteLinks,
@@ -111,5 +117,48 @@ describe("town pages", () => {
     const xml = sitemapXml(own.map((loc) => ({ loc, lastmod: "2026-10-13T00:00:00Z" })));
     expect(xml).toContain("<loc>https://jslandscapingmd.com/areas/bel-air</loc><lastmod>2026-10-13</lastmod>");
     expect(robotsTxt("https://jslandscapingmd.com/sitemap.xml")).toContain("Sitemap: https://jslandscapingmd.com/sitemap.xml");
+  });
+});
+
+describe("service pages", () => {
+  const mulch = DEFAULT_WEBSITE.services[2];
+
+  it("gives every service a page, county-wide and in each town", () => {
+    expect(serviceSlug("Mulch & bed refresh")).toBe("mulch-bed-refresh");
+    expect(serviceBySlug(DEFAULT_WEBSITE, "mulch-bed-refresh")?.name).toBe("Mulch & bed refresh");
+    expect(serviceBySlug(DEFAULT_WEBSITE, "pool-cleaning")).toBeNull();
+    expect(serviceHref(null, "Lawn mowing")).toBe("/site/services/lawn-mowing");
+    expect(serviceHref("js", "Lawn mowing", "Bel Air")).toBe("/site/areas/bel-air/lawn-mowing?org=js");
+  });
+
+  it("titles and describes the page by service and place", () => {
+    expect(serviceTitle(mulch, "Fallston", "JS Landscaping")).toBe("Mulch & bed refresh in Fallston, MD · JS Landscaping");
+    expect(serviceTitle(mulch, null, "JS Landscaping")).toBe("Mulch & bed refresh in Harford County, MD · JS Landscaping");
+    expect(serviceIntro(mulch, "Fallston", "JS Landscaping")).toMatch(/^JS Landscaping does mulch & bed refresh in Fallston, Maryland\. Beds are weeded/);
+    expect(serviceIntro({ name: "Grading", blurb: "Level ground." }, null, "JS")).toContain("Level ground.");
+  });
+
+  it("describes the service for search engines, with the business as provider", () => {
+    const ld = serviceJsonLd(DEFAULT_WEBSITE, "https://jslandscapingmd.com/areas/joppa/mulch-bed-refresh", mulch, "Joppa");
+    expect(ld["@type"]).toBe("Service");
+    expect(ld.areaServed).toEqual([{ "@type": "City", name: "Joppa, MD" }]);
+    expect((ld.provider as Record<string, unknown>)["@type"]).toBe("LocalBusiness");
+    expect((serviceJsonLd(DEFAULT_WEBSITE, "https://x/", mulch).areaServed as unknown[]).length).toBe(10);
+  });
+
+  it("puts every service and service-in-town page in the sitemap", () => {
+    const own = siteUrls("https://jslandscapingmd.com", true, DEFAULT_WEBSITE, null);
+    expect(own).toHaveLength(1 + 10 + 6 + 60);
+    expect(own).toContain("https://jslandscapingmd.com/services/lawn-mowing");
+    expect(own).toContain("https://jslandscapingmd.com/areas/havre-de-grace/snow-removal-salting");
+    const app = siteUrls("https://app.jslandscapingmd.com", false, DEFAULT_WEBSITE, "js");
+    expect(app).toContain("https://app.jslandscapingmd.com/site/areas/bel-air/lawn-mowing?org=js");
+  });
+
+  it("serves the service pages at the root of the business's own domain", () => {
+    expect(websiteRewrite("jslandscapingmd.com", "/services/lawn-mowing")).toBe("/site/services/lawn-mowing");
+    expect(websiteRewrite("jslandscapingmd.com", "/areas/bel-air/lawn-mowing/")).toBe("/site/areas/bel-air/lawn-mowing");
+    expect(websiteRewrite("jslandscapingmd.com", "/areas/bel-air/lawn-mowing/x")).toBeNull();
+    expect(websiteRewrite("jslandscapingmd.com", "/services/../admin")).toBeNull();
   });
 });

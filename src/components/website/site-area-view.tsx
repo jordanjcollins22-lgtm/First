@@ -1,7 +1,7 @@
 import { CheckCircle2, MapPin, Phone } from "lucide-react";
 
 import { SiteReviews } from "@/components/website/site-view";
-import { areaHref, defaultAreaIntro, websiteLinks, type SiteReview, type WebsiteArea, type WebsiteContent } from "@/lib/website";
+import { areaHref, defaultAreaIntro, serviceHref, websiteLinks, type SiteReview, type WebsiteArea, type WebsiteContent } from "@/lib/website";
 
 /**
  * One town's page: what the business does there, in that town's name, for
@@ -73,7 +73,9 @@ export function SiteAreaView({
             {c.services.map((s) => (
               <div key={s.name} className="rounded-xl border border-stone-200 p-4">
                 <h3 className="font-bold">
-                  {s.name} in {area.town}
+                  <a href={serviceHref(orgSlug, s.name, area.town)} {...target} className="hover:text-[#2f6d3c] hover:underline">
+                    {s.name} in {area.town}
+                  </a>
                 </h3>
                 {s.blurb && <p className="mt-1 text-sm text-stone-600">{s.blurb}</p>}
               </div>

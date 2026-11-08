@@ -1,6 +1,6 @@
 import { CheckCircle2, Mail, MapPin, Phone, Star } from "lucide-react";
 
-import { areaHref, websiteLinks, type SiteReview, type WebsiteContent } from "@/lib/website";
+import { areaHref, serviceHref, websiteLinks, type SiteReview, type WebsiteContent } from "@/lib/website";
 
 /**
  * The business's website, drawn from its content.
@@ -64,7 +64,11 @@ export function SiteView({
           <div className="mt-6 grid gap-3 @lg:grid-cols-2 @4xl:grid-cols-3">
             {c.services.map((s) => (
               <div key={s.name} className="rounded-xl border border-stone-200 p-4">
-                <h3 className="font-bold">{s.name}</h3>
+                <h3 className="font-bold">
+                  <a href={serviceHref(orgSlug, s.name)} {...target} className="hover:text-[#2f6d3c] hover:underline">
+                    {s.name}
+                  </a>
+                </h3>
                 {s.blurb && <p className="mt-1 text-sm text-stone-600">{s.blurb}</p>}
               </div>
             ))}

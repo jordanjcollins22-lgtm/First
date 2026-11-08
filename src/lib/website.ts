@@ -187,6 +187,81 @@ export function localBusinessJsonLd(c: WebsiteContent, pageUrl: string, town?: s
   };
 }
 
+/** "Mulch & bed refresh" → "mulch-bed-refresh". The same rule as a town's slug. */
+export function serviceSlug(name: string): string {
+  return areaSlug(name);
+}
+
+export function serviceBySlug(content: WebsiteContent, slug: string): WebsiteService | null {
+  return content.services.find((s) => serviceSlug(s.name) === slug) ?? null;
+}
+
+/** Where a service's page lives: /site/services/<service>, or /site/areas/<town>/<service> for one town. */
+export function serviceHref(orgSlug: string | null, service: string, town?: string | null): string {
+  const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
+  return town ? `/site/areas/${areaSlug(town)}/${serviceSlug(service)}${q}` : `/site/services/${serviceSlug(service)}${q}`;
+}
+
+/**
+ * What each of the starting services is, in a sentence or two of its own, so
+ * a service page says something a town page does not. A service the owner
+ * added in the editor gets the general paragraph with its own name.
+ */
+const SERVICE_DETAIL: Record<string, string> = {
+  "lawn-mowing":
+    "Every cut is mowed at the right height for the season, string-trimmed along beds and fences, edged at the driveway and walks, and blown clean. Weekly or every other week, the same crew on the same day.",
+  "aeration-overseeding":
+    "Core aeration opens up compacted soil so water and seed reach the roots, then we overseed with a blend that suits Maryland's transition zone. Early fall is the best window; spring works too.",
+  "mulch-bed-refresh":
+    "Beds are weeded, given a crisp spade edge, and topped with fresh mulch at the right depth, kept off stems and trunks. It's the quickest way to make a whole yard look finished.",
+  "fall-cleanup-leaf-removal":
+    "Leaves are cleared from the lawn and beds and hauled away, perennials cut back, and gutters cleared on request, so the grass isn't smothered over winter.",
+  "shrub-tree-trimming":
+    "Shrubs are shaped and thinned at the right time of year for each plant, small trees raised and cleaned up, and every clipping hauled away.",
+  "snow-removal-salting":
+    "Driveways and walks are plowed or shoveled and salted before you leave for work, with salt you can prepay for the season.",
+};
+
+/** The paragraph a service page says: what the service is, and where. */
+export function serviceIntro(service: WebsiteService, town: string | null, businessName: string): string {
+  const where = town ? `${town}, Maryland` : "Harford County, Maryland";
+  const detail = SERVICE_DETAIL[serviceSlug(service.name)] ?? (service.blurb ? `${service.blurb}` : "");
+  const lead = `${businessName} does ${service.name.toLowerCase()} in ${where}.`;
+  const close = town
+    ? `We're local to Harford County, so a crew is usually already working near ${town}. Book a free evaluation and we'll come look, measure and send a written price.`
+    : "Book a free evaluation and we'll come look, measure and send a written price.";
+  return [lead, detail, close].filter(Boolean).join(" ");
+}
+
+/** A page title that names the service and the place first, as people search for it. */
+export function serviceTitle(service: WebsiteService, town: string | null, businessName: string): string {
+  return `${service.name} in ${town ?? "Harford County"}, MD · ${businessName}`;
+}
+
+/**
+ * The schema.org Service description for a service page, with the business
+ * as its provider and the town (or every town) as where it is offered.
+ */
+export function serviceJsonLd(c: WebsiteContent, pageUrl: string, service: WebsiteService, town?: string | null): Record<string, unknown> {
+  const served = town ? [town] : c.areas.map((a) => a.town);
+  return {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    name: town ? `${service.name} in ${town}, MD` : service.name,
+    serviceType: service.name,
+    url: pageUrl,
+    description: serviceIntro(service, town ?? null, c.businessName),
+    areaServed: served.map((name) => ({ "@type": "City", name: `${name}, MD` })),
+    provider: {
+      "@type": "LocalBusiness",
+      name: c.businessName,
+      ...(c.phone ? { telephone: c.phone } : {}),
+      ...(c.email ? { email: c.email } : {}),
+      address: { "@type": "PostalAddress", addressRegion: "MD", addressCountry: "US", ...(town ? { addressLocality: town } : {}) },
+    },
+  };
+}
+
 function xmlEscape(v: string): string {
   return v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -208,7 +283,14 @@ export function siteUrls(origin: string, onWebsiteHost: boolean, content: Websit
   const root = origin.replace(/\/$/, "");
   const q = !onWebsiteHost && orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
   const home = onWebsiteHost ? `${root}/` : `${root}/site${q}`;
-  return [home, ...content.areas.map((a) => (onWebsiteHost ? `${root}/areas/${areaSlug(a.town)}` : `${root}/site/areas/${areaSlug(a.town)}${q}`))];
+  const at = (path: string) => (onWebsiteHost ? `${root}${path}` : `${root}/site${path}${q}`);
+  const services = content.services.map((s) => serviceSlug(s.name)).filter(Boolean);
+  return [
+    home,
+    ...content.areas.map((a) => at(`/areas/${areaSlug(a.town)}`)),
+    ...services.map((s) => at(`/services/${s}`)),
+    ...content.areas.flatMap((a) => services.map((s) => at(`/areas/${areaSlug(a.town)}/${s}`))),
+  ];
 }
 
 export function robotsTxt(sitemapUrl: string): string {
@@ -233,8 +315,9 @@ export const WEBSITE_HOSTS = ["jslandscapingmd.com", "www.jslandscapingmd.com"] 
 export function websiteRewrite(host: string | null, pathname: string): string | null {
   if (!isWebsiteHost(host)) return null;
   if (pathname === "/") return "/site";
-  // The town pages, and the two files search engines ask the root for.
-  if (/^\/areas\/[a-z0-9-]{1,80}\/?$/.test(pathname)) return `/site${pathname.replace(/\/$/, "")}`;
+  // The town and service pages, and the two files search engines ask the root for.
+  if (/^\/areas\/[a-z0-9-]{1,80}(\/[a-z0-9-]{1,80})?\/?$/.test(pathname)) return `/site${pathname.replace(/\/$/, "")}`;
+  if (/^\/services\/[a-z0-9-]{1,80}\/?$/.test(pathname)) return `/site${pathname.replace(/\/$/, "")}`;
   if (pathname === "/robots.txt" || pathname === "/sitemap.xml") return `/site${pathname}`;
   return null;
 }
