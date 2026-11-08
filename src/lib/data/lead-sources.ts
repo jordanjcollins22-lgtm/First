@@ -21,6 +21,8 @@ export interface LeadRecord {
    * When nobody did, the affiliate's 4% goes to the channel's growth budget.
    */
   hasAffiliate: boolean;
+  /** The first name of the person who earns that 4%, when one does. */
+  affiliate: string | null;
   /** Came in through a tracked link on one of our posts: the content profit pool counts it. */
   fromContent: boolean;
   /** The job's profit in dollars, as its estimate worked it out, or null when it has none. */
@@ -122,6 +124,9 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
       revenue,
       collected,
       hasAffiliate: earnsShare(j.referred_by_profile_id ?? link?.profile_id),
+      affiliate: earnsShare(j.referred_by_profile_id ?? link?.profile_id)
+        ? nameOf.get((j.referred_by_profile_id ?? link?.profile_id) as string) ?? "A team member"
+        : null,
       fromContent: link?.kind === "post",
       profit: proposalSold && typeof proposal?.estimate?.grossCents === "number" ? proposal.estimate.grossCents / 100 : null,
       source: leadSource({

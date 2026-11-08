@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { summariseSources } from "@/lib/lead-sources";
-import { CHANNEL_PCT, channelBudgets } from "@/lib/channel-budget";
+import { CHANNEL_PCT, affiliateSplit } from "@/lib/channel-budget";
 import { CONTENT_POOL_PCT, contentPool } from "@/lib/content-pool";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 
@@ -42,11 +42,13 @@ export function LeadSourcesPanel({
   const sold = rows.reduce((n, r) => n + r.sold, 0);
   const revenue = rows.reduce((n, r) => n + r.revenue, 0);
   const max = Math.max(1, ...rows.map((r) => r.leads));
-  const budgets = useMemo(() => {
+  const split = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
-    return channelBudgets(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
+    return affiliateSplit(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
   }, [leads, days, now]);
+  const budgets = split.sources;
   const budgetTotal = budgets.reduce((n, b) => n + b.budget, 0);
+  const peopleTotal = split.people.reduce((n, p) => n + p.cut, 0);
   const pool = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
     return contentPool(leads.filter((l) => new Date(l.createdAt).getTime() >= since), team);
@@ -122,22 +124,72 @@ export function LeadSourcesPanel({
         </div>
       )}
       <div className="mt-5" id="growth-budget">
-        <h3 className="text-base font-bold">Growth budget by channel</h3>
+        <h3 className="text-base font-bold">Affiliate {CHANNEL_PCT}%: people and other sources</h3>
         <p className="text-sm text-muted-foreground">
-          The affiliate&apos;s {CHANNEL_PCT}% of what the client paid goes to the person who brought the job in. When nobody did, it goes here,
-          to spend growing the channel the job came from.
+          Every job pays an affiliate {CHANNEL_PCT}% of what the client paid. If a person brought it in, it goes to that person. If it came from
+          anything else (an ad, a post, an automation, the calendar), it goes back into ads on that channel.
         </p>
-        {budgets.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">No paid jobs without an affiliate in this period.</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">From people</p>
+            <p className="text-lg font-bold tabular-nums">
+              {split.peopleLeads} {split.peopleLeads === 1 ? "lead" : "leads"} · {money(peopleTotal)}
+            </p>
+            <p className="text-xs text-muted-foreground">paid to them</p>
+          </div>
+          <div className="rounded-lg border border-border/60 p-2">
+            <p className="text-xs text-muted-foreground">From other sources</p>
+            <p className="text-lg font-bold tabular-nums">
+              {split.sourceLeads} {split.sourceLeads === 1 ? "lead" : "leads"} · {money(budgetTotal)}
+            </p>
+            <p className="text-xs text-muted-foreground">back into ads</p>
+          </div>
+        </div>
+
+        <h4 className="mt-4 text-sm font-semibold">From people: paid to that person</h4>
+        {split.people.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">No paid jobs brought in by a person in this period.</p>
         ) : (
-          <div className="mt-2 overflow-x-auto">
+          <div className="mt-1 overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Person</th>
+                  <th className="py-1 pr-2 text-right font-medium">Paid jobs</th>
+                  <th className="py-1 pr-2 text-right font-medium">Clients paid</th>
+                  <th className="py-1 text-right font-medium">Their {CHANNEL_PCT}%</th>
+                </tr>
+              </thead>
+              <tbody>
+                {split.people.map((p) => (
+                  <tr key={p.name} className="border-t border-border/60">
+                    <td className="py-2 pr-2 font-medium">{p.name}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{p.jobs}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{money(p.collected)}</td>
+                    <td className="py-2 text-right font-semibold tabular-nums">{money(p.cut)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-border">
+                  <td className="py-2 pr-2 font-semibold" colSpan={3}>Total to people</td>
+                  <td className="py-2 text-right font-bold tabular-nums">{money(peopleTotal)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <h4 className="mt-4 text-sm font-semibold">From other sources: back into ads on that channel</h4>
+        {budgets.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">No paid jobs from other sources in this period.</p>
+        ) : (
+          <div className="mt-1 overflow-x-auto">
             <table className="w-full min-w-[420px] text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted-foreground">
                   <th className="py-1 pr-2 font-medium">Channel</th>
                   <th className="py-1 pr-2 text-right font-medium">Paid jobs</th>
                   <th className="py-1 pr-2 text-right font-medium">Clients paid</th>
-                  <th className="py-1 text-right font-medium">Budget ({CHANNEL_PCT}%)</th>
+                  <th className="py-1 text-right font-medium">For its ads ({CHANNEL_PCT}%)</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,7 +202,7 @@ export function LeadSourcesPanel({
                   </tr>
                 ))}
                 <tr className="border-t-2 border-border">
-                  <td className="py-2 pr-2 font-semibold" colSpan={3}>Total to spend</td>
+                  <td className="py-2 pr-2 font-semibold" colSpan={3}>Total back into ads</td>
                   <td className="py-2 text-right font-bold tabular-nums">{money(budgetTotal)}</td>
                 </tr>
               </tbody>
