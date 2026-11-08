@@ -13,6 +13,7 @@ export function ProjectButtons({
   hasSiteMap,
   photoCount,
   managerView = false,
+  pricingReport = false,
 }: {
   jobId: string;
   /** The client's own copy of the proposal. Null until one exists. */
@@ -21,6 +22,8 @@ export function ProjectButtons({
   photoCount: number;
   /** Whoever runs jobs gets the whole crew sheet at once; the crew get theirs one area at a time. */
   managerView?: boolean;
+  /** Whoever may see the job's money gets the one-page pricing report. */
+  pricingReport?: boolean;
 }) {
   const buttons = [
     { key: "proposal", label: "Proposal", icon: FileText, href: proposalHref, external: true, empty: "Not built yet" },
@@ -68,6 +71,11 @@ export function ProjectButtons({
       <Link href={`/jobs/${jobId}/model`} className="text-xs font-medium text-primary hover:underline">
         3D job model
       </Link>
+      {pricingReport && (
+        <Link href={`/jobs/${jobId}/pricing-report`} className="text-xs font-medium text-primary hover:underline">
+          Pricing report
+        </Link>
+      )}
       {/* A walk-around video, for a 3D model and a top-down plan of the yard. */}
       <Link href={`/jobs/${jobId}/scan`} className="text-xs font-medium text-primary hover:underline">
         3D scan from a video (demo)

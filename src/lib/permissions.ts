@@ -109,6 +109,8 @@ export const TABS: readonly TabDefinition[] = [
   { key: "hiring", label: "Hiring", href: "/admin/hiring" },
   // The crew's pay and each service's production rate: what every forward price is worked out from.
   { key: "production-rates", label: "Production Rates", href: "/admin/production-rates" },
+  // Every internal number on one page: crew pay, commissions, capacity multipliers, the indirect pool, rates.
+  { key: "variables", label: "Variables", href: "/admin/variables" },
   // Bulk mulch, topsoil and stone suppliers near the work: prices, delivery fees and minimums.
   { key: "suppliers", label: "Bulk Suppliers", href: "/admin/suppliers" },
   // The company shirts: the designs, and ordering them by design, colour and size.
@@ -269,6 +271,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "The finished site map for one job, read only: each area, what it gets, its materials and, for " +
     "people who may see job money, what it costs. Guarded by requireJobAccess like the job page, and " +
     "the prices are left off for anybody the job page would hide them from.",
+  "/jobs/[jobId]/pricing-report":
+    "One job's one-page pricing report and the office's input to it: areas, tasks, conditions, materials " +
+    "to order and each person's hours and pay. Guarded by requireJobAccess like the job page, and shown " +
+    "only to people who may see job money; anybody else is sent back to the job.",
   "/jobs/[jobId]/photos":
     "The progress photos for one job, befores, durings and afters by area. Guarded by " +
     "requireJobAccess like the job page, which already shows the same photos.",
