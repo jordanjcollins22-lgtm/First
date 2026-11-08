@@ -20,7 +20,7 @@ function zone(overrides: Partial<WorkZone> = {}): WorkZone {
   return {
     id: "z1",
     name: "Front bed",
-    color: "#2f6d3c",
+    color: "#0f766e",
     points: [
       { x: 100, y: 100 },
       { x: 200, y: 100 },

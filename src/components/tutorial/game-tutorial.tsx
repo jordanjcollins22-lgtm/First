@@ -102,7 +102,7 @@ export function GameTutorial({ steps, autoStart, onDone }: { steps: TutorialStep
             setIndex(0);
             setOpen(true);
           }}
-          className="fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-[#2f6d3c] text-xl font-black text-white shadow-lg shadow-black/25 ring-2 ring-white hover:bg-[#25572f]"
+          className="fixed bottom-4 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-[#0f766e] text-xl font-black text-white shadow-lg shadow-black/25 ring-2 ring-white hover:bg-[#25572f]"
           aria-label="How it works: open the tutorial"
           title="How it works"
         >
@@ -139,16 +139,16 @@ export function GameTutorial({ steps, autoStart, onDone }: { steps: TutorialStep
             style={card ?? { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
           >
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2f6d3c]">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0f766e]">
                 <Image src="/logo-mark.png" alt="" width={24} height={24} className="h-6 w-6" priority />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-bold uppercase tracking-wide text-[#2f6d3c]">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#0f766e]">
                   Step {index + 1} of {steps.length}
                 </p>
                 <div className="mt-1 flex gap-1">
                   {steps.map((s, i) => (
-                    <span key={s.key} className={`h-1.5 flex-1 rounded-full ${i <= index ? "bg-[#2f6d3c]" : "bg-[#cfe3d2]"}`} />
+                    <span key={s.key} className={`h-1.5 flex-1 rounded-full ${i <= index ? "bg-[#0f766e]" : "bg-[#cfe3d2]"}`} />
                   ))}
                 </div>
               </div>
@@ -173,7 +173,7 @@ export function GameTutorial({ steps, autoStart, onDone }: { steps: TutorialStep
               <button
                 type="button"
                 onClick={next}
-                className="flex h-10 items-center gap-1 rounded-lg bg-[#2f6d3c] px-4 text-sm font-bold text-white hover:bg-[#25572f]"
+                className="flex h-10 items-center gap-1 rounded-lg bg-[#0f766e] px-4 text-sm font-bold text-white hover:bg-[#25572f]"
               >
                 {last ? "Let's go" : index === 0 ? "Show me" : "Next"} {!last && <ChevronRight className="h-4 w-4" />}
               </button>

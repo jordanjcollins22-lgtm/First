@@ -31,7 +31,7 @@ export function SiteAreaView({
   return (
     <div className="@container bg-white text-stone-900">
       <header className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-3">
-        <a href={links.site} {...target} className="truncate text-lg font-extrabold text-[#2f6d3c]">
+        <a href={links.site} {...target} className="truncate text-lg font-extrabold text-[#0f766e]">
           {c.businessName}
         </a>
         <div className="flex items-center gap-3">
@@ -40,13 +40,13 @@ export function SiteAreaView({
               <Phone className="h-4 w-4" /> {c.phone}
             </a>
           )}
-          <a href={links.book} {...target} className="rounded-lg bg-[#2f6d3c] px-3 py-2 text-sm font-bold text-white hover:bg-[#25582f]">
+          <a href={links.book} {...target} className="rounded-lg bg-[#0f766e] px-3 py-2 text-sm font-bold text-white hover:bg-[#25582f]">
             Book now
           </a>
         </div>
       </header>
 
-      <section className="bg-gradient-to-br from-[#2f6d3c] to-[#1f4a29] px-5 py-12 text-white @3xl:px-12 @3xl:py-20">
+      <section className="bg-gradient-to-br from-[#0f766e] to-[#1f4a29] px-5 py-12 text-white @3xl:px-12 @3xl:py-20">
         <p className="flex items-center gap-1.5 text-sm font-semibold text-white/80">
           <MapPin className="h-4 w-4" /> {area.town}, Maryland
         </p>
@@ -55,7 +55,7 @@ export function SiteAreaView({
         </h1>
         <p className="mt-4 max-w-2xl text-base text-white/85 @3xl:text-lg">{intro}</p>
         <div className="mt-7 flex flex-wrap gap-3">
-          <a href={links.book} {...target} className="rounded-xl bg-white px-5 py-3 font-bold text-[#2f6d3c] shadow hover:bg-stone-100">
+          <a href={links.book} {...target} className="rounded-xl bg-white px-5 py-3 font-bold text-[#0f766e] shadow hover:bg-stone-100">
             {c.ctaLabel}
           </a>
           {c.phone && (
@@ -88,7 +88,7 @@ export function SiteAreaView({
           <ul className="mt-5 grid gap-2.5 @lg:grid-cols-2">
             {c.whyUs.map((r) => (
               <li key={r} className="flex items-start gap-2">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#2f6d3c]" /> <span>{r}</span>
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#0f766e]" /> <span>{r}</span>
               </li>
             ))}
           </ul>
@@ -103,7 +103,7 @@ export function SiteAreaView({
           <ul className="mt-3 flex flex-wrap gap-2">
             {others.map((a) => (
               <li key={a.town}>
-                <a href={areaHref(orgSlug, a.town)} {...target} className="inline-flex min-h-10 items-center rounded-full border border-stone-300 px-4 text-sm font-semibold hover:border-[#2f6d3c] hover:text-[#2f6d3c]">
+                <a href={areaHref(orgSlug, a.town)} {...target} className="inline-flex min-h-10 items-center rounded-full border border-stone-300 px-4 text-sm font-semibold hover:border-[#0f766e] hover:text-[#0f766e]">
                   {a.town}
                 </a>
               </li>
@@ -112,10 +112,10 @@ export function SiteAreaView({
         </section>
       )}
 
-      <section className="bg-[#2f6d3c] px-5 py-12 text-center text-white @3xl:px-12">
+      <section className="bg-[#0f766e] px-5 py-12 text-center text-white @3xl:px-12">
         <h2 className="text-2xl font-extrabold">Free evaluation in {area.town}</h2>
         <p className="mt-2 text-white/85">Pick a time that works and we&apos;ll come take a look. No cost, no pressure.</p>
-        <a href={links.book} {...target} className="mt-6 inline-block rounded-xl bg-white px-6 py-3 font-bold text-[#2f6d3c] hover:bg-stone-100">
+        <a href={links.book} {...target} className="mt-6 inline-block rounded-xl bg-white px-6 py-3 font-bold text-[#0f766e] hover:bg-stone-100">
           {c.ctaLabel}
         </a>
       </section>

@@ -37,7 +37,7 @@ export async function createCalendar(name: string, color: string, description: s
     const { error } = await supabase.from("calendars").insert({
       organization_id: organizationId,
       name: trimmed,
-      color: color.trim() || "#2f6d3c",
+      color: color.trim() || "#0f766e",
       description: description.trim() || null,
     });
     if (error) return { ok: false, message: `${error.message}${error.code ? ` (${error.code})` : ""}` };
@@ -67,7 +67,7 @@ export async function updateCalendar(
       .from("calendars")
       .update({
         name: trimmed,
-        color: input.color.trim() || "#2f6d3c",
+        color: input.color.trim() || "#0f766e",
         description: input.description.trim() || null,
       })
       .eq("id", id);

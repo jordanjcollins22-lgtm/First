@@ -80,7 +80,7 @@ export function JobRecordDocument({ record }: { record: JobRecord }) {
 function Letterhead({ record }: { record: JobRecord }) {
   const lines = addressLines({ address: record.business.address });
   return (
-    <header className="flex flex-col gap-3 border-b-4 border-[#2f6d3c] px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-10 print:flex-row print:px-0">
+    <header className="flex flex-col gap-3 border-b-4 border-[#0f766e] px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-10 print:flex-row print:px-0">
       <div>
         <p className="text-lg font-bold leading-tight">{record.business.name}</p>
         <p className="text-xs uppercase tracking-wide text-[#5b6660]">
@@ -357,7 +357,7 @@ function Communications({ record }: { record: JobRecord }) {
 function MessageCard({ message }: { message: RecordMessage }) {
   const who = message.from === "client" ? message.name : message.from === "system" ? "Sent automatically" : message.name;
   return (
-    <div className={`rounded-lg border px-3 py-2 text-sm [break-inside:avoid] ${message.from === "client" ? "border-[#2f6d3c]/40 bg-[#f3f8f4]" : "border-[#e3e7e2]"}`}>
+    <div className={`rounded-lg border px-3 py-2 text-sm [break-inside:avoid] ${message.from === "client" ? "border-[#0f766e]/40 bg-[#f0fdfa]" : "border-[#e3e7e2]"}`}>
       <p className="text-xs text-[#5b6660]">
         {whenLine(message.at)} · <span className="font-medium text-[#14181a]">{who}</span> · {message.channel}
         {message.reference && ` · about ${message.reference}`}
@@ -647,13 +647,13 @@ function Section({
 }) {
   const frame =
     tone === "attention"
-      ? "rounded-lg border border-[#2f6d3c] bg-[#f3f8f4] p-4"
+      ? "rounded-lg border border-[#0f766e] bg-[#f0fdfa] p-4"
       : tone === "rule"
         ? "rounded-lg border border-[#e3e7e2] bg-[#fafbfa] p-4"
         : "";
   return (
     <section className={`mt-7 ${frame}`}>
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b-2 border-[#2f6d3c] pb-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 border-b-2 border-[#0f766e] pb-1">
         <h2 className="text-lg font-bold">{title}</h2>
         {hint && <p className="text-xs text-[#5b6660]">{hint}</p>}
       </div>
@@ -664,7 +664,7 @@ function Section({
 
 function Quote({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <blockquote className="mt-3 rounded-lg border-l-4 border-[#2f6d3c] bg-[#f3f8f4] px-3 py-2 text-sm [break-inside:avoid]">
+    <blockquote className="mt-3 rounded-lg border-l-4 border-[#0f766e] bg-[#f0fdfa] px-3 py-2 text-sm [break-inside:avoid]">
       <p className="text-xs text-[#5b6660]">{label}</p>
       <p className="mt-0.5 whitespace-pre-wrap">{children}</p>
     </blockquote>

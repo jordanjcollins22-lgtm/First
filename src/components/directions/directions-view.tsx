@@ -230,10 +230,10 @@ export function DirectionsView({
         type: "line",
         source: "route",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": "#2f6d3c", "line-width": 5 },
+        paint: { "line-color": "#0f766e", "line-width": 5 },
       });
 
-      new mapboxgl.Marker({ color: "#2f6d3c" })
+      new mapboxgl.Marker({ color: "#0f766e" })
         .setLngLat(route.coordinates[route.coordinates.length - 1])
         .addTo(map);
 

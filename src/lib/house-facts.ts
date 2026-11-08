@@ -109,7 +109,7 @@ export function renderHouseCard(facts: HouseFacts): string {
   const people = facts.contacts
     .map((c) => {
       const name = escapeHtml(c.name ?? "Unnamed");
-      const link = `<a href="/clients/${escapeHtml(c.id)}" style="color:#2f6d3c;text-decoration:underline">${name}</a>`;
+      const link = `<a href="/clients/${escapeHtml(c.id)}" style="color:#0f766e;text-decoration:underline">${name}</a>`;
       const bits = [c.role ? escapeHtml(c.role) : null, c.phone ? escapeHtml(c.phone) : null, c.doNotContact ? `<span style="color:#b91c1c">do not contact</span>` : null].filter(Boolean);
       return `${link}${bits.length ? ` <span style="color:#666">(${bits.join(", ")})</span>` : ""}`;
     })
@@ -148,7 +148,7 @@ export function renderHouseCard(facts: HouseFacts): string {
             ? `<div data-owner-for="${escapeHtml(facts.id)}" style="color:#666">Looking up the owner's name…</div>`
             : "") +
         (ownerBits.length ? `<div style="color:#666">${ownerBits.join(" · ")}</div>` : "") +
-        (link ? `<a href="${link}" target="_blank" rel="noopener" style="color:#2f6d3c;text-decoration:underline">State record</a>` : "")
+        (link ? `<a href="${link}" target="_blank" rel="noopener" style="color:#0f766e;text-decoration:underline">State record</a>` : "")
     )
   );
 

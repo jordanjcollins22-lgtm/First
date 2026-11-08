@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#2f6d3c",
+  themeColor: "#0f766e",
   width: "device-width",
   initialScale: 1,
   // Zoom left available: a client reading a price and a scope on a phone in

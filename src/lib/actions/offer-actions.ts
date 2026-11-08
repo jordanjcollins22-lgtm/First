@@ -114,7 +114,7 @@ export async function bookOffer(input: { code: string; timing: string; notes: st
           .join(" "),
         photoPaths: [],
         points: [],
-        color: "#2f6d3c",
+        color: "#0f766e",
         priceCents: totalCents,
       },
     ],

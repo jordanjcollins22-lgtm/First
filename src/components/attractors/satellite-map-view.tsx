@@ -412,7 +412,7 @@ function zoneCard(props: ZoneProperties): string {
     `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
     `<button type="button" data-act="walk" style="padding:4px 8px;border-radius:6px;background:#1d4ed8;color:#fff;font:500 12px system-ui">Show the walk</button>` +
     (props.waveId
-      ? `<a href="/api/waves/${escapeHtml(props.waveId)}/door-list" style="padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui;text-decoration:none">Door list</a>`
+      ? `<a href="/api/waves/${escapeHtml(props.waveId)}/door-list" style="padding:4px 8px;border-radius:6px;background:#0f766e;color:#fff;font:500 12px system-ui;text-decoration:none">Door list</a>`
       : "") +
     `</div></div>`
   );
@@ -1050,7 +1050,7 @@ export function SatelliteMapView({
           .setHTML(
             `<div style="font:500 13px system-ui"><div>${escapeHtml(name)}</div>` +
               `<div style="color:#666;font-weight:400">${escapeHtml(address)}</div>` +
-              `<a href="/clients/${customerId}" style="color:#2f6d3c;text-decoration:underline">Open contact</a></div>`
+              `<a href="/clients/${customerId}" style="color:#0f766e;text-decoration:underline">Open contact</a></div>`
           )
           .addTo(map);
       });
@@ -1289,7 +1289,7 @@ export function SatelliteMapView({
               `<div id="eddm-ours" style="color:#666;font-weight:400">Counting our houses…</div>` +
               `<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">` +
               `<button type="button" data-act="mail" style="padding:4px 8px;border-radius:6px;background:${inMailing ? "#b45309" : "#1d4ed8"};color:#fff;font:500 12px system-ui">${inMailing ? "Remove from mailing" : "Add to mailing"}</button>` +
-              `<button type="button" data-act="wave" style="padding:4px 8px;border-radius:6px;background:#2f6d3c;color:#fff;font:500 12px system-ui">Use as a wave area</button>` +
+              `<button type="button" data-act="wave" style="padding:4px 8px;border-radius:6px;background:#0f766e;color:#fff;font:500 12px system-ui">Use as a wave area</button>` +
               `</div></div>`
           )
           .addTo(map);

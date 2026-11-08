@@ -83,7 +83,7 @@ export function ReceiptDocument({ receipt }: { receipt: Receipt }) {
                 <td className="pr-4 pt-4 text-right text-xs uppercase tracking-wide text-[#5b6660]">
                   Total received
                 </td>
-                <td className="whitespace-nowrap pt-4 text-right text-2xl font-bold tabular-nums text-[#2f6d3c]">
+                <td className="whitespace-nowrap pt-4 text-right text-2xl font-bold tabular-nums text-[#0f766e]">
                   {money(receipt.amountCents)}
                 </td>
               </tr>
@@ -120,7 +120,7 @@ function Letterhead({ receipt }: { receipt: Receipt }) {
   const hasContact = lines.length > 0 || phone || email || website;
 
   return (
-    <header className="flex flex-col gap-4 border-b-4 border-[#2f6d3c] px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-10 print:flex-row print:px-[0.7in] print:pt-[0.6in]">
+    <header className="flex flex-col gap-4 border-b-4 border-[#0f766e] px-6 py-6 sm:flex-row sm:items-start sm:justify-between sm:px-10 print:flex-row print:px-[0.7in] print:pt-[0.6in]">
       <div className="flex items-center gap-3">
         {logoUrl ? (
           // Plain img on purpose: a logo path may be an external URL and this
@@ -128,7 +128,7 @@ function Letterhead({ receipt }: { receipt: Receipt }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={logoUrl} alt="" className="h-14 w-auto max-w-[200px] object-contain" />
         ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#2f6d3c] text-xl font-bold text-white">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#0f766e] text-xl font-bold text-white">
             {initials(receipt.businessName)}
           </div>
         )}
@@ -160,7 +160,7 @@ function Letterhead({ receipt }: { receipt: Receipt }) {
 function Stamp() {
   return (
     <div
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border-2 border-[#2f6d3c] px-3 py-1.5 text-sm font-bold uppercase tracking-widest text-[#2f6d3c]"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-md border-2 border-[#0f766e] px-3 py-1.5 text-sm font-bold uppercase tracking-widest text-[#0f766e]"
       style={{ transform: "rotate(-4deg)" }}
     >
       <CheckCircle2 className="h-4 w-4" />
@@ -191,7 +191,7 @@ function Balance({ receipt }: { receipt: Receipt }) {
   return (
     <p
       className={`mt-6 rounded-lg border px-4 py-3 text-sm ${
-        settled ? "border-[#2f6d3c]/40 bg-[#2f6d3c]/5" : "border-[#e3e7e2] bg-[#f7f8f6]"
+        settled ? "border-[#0f766e]/40 bg-[#0f766e]/5" : "border-[#e3e7e2] bg-[#f7f8f6]"
       } print:bg-transparent`}
     >
       {line}

@@ -117,7 +117,7 @@ export function MowForm({
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-5 px-4 py-6">
       <header className="flex items-center gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#2f6d3c]">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0f766e]">
           <Image src="/logo-mark.png" alt="" width={28} height={28} className="h-7 w-7" priority />
         </span>
         <div>

@@ -44,7 +44,7 @@ const CARDS = [
 export default function StartPage() {
   return (
     <main className="flex flex-1 flex-col bg-white">
-      <section className="relative overflow-hidden bg-[#2f6d3c] px-4 pb-16 pt-14 text-white sm:pb-20 sm:pt-20">
+      <section className="relative overflow-hidden bg-[#0f766e] px-4 pb-16 pt-14 text-white sm:pb-20 sm:pt-20">
         {/* The work, at the edges, the way the food sits round a menu. */}
         <Photo src="/booking-work/front-bed-mulch-trim.jpg" className="-left-10 -top-10 h-72 w-72 rotate-[-8deg]" />
         <Photo src="/booking-work/bed-edging-mulch.jpg" className="-bottom-16 -left-20 h-64 w-64 rotate-[6deg]" />
@@ -69,11 +69,11 @@ export default function StartPage() {
         {CARDS.map(({ icon: Icon, title, body, cta, href }) => (
           <div key={title} className="flex flex-col items-center text-center">
             <span className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-50">
-              <Icon className="h-11 w-11 text-[#2f6d3c]" strokeWidth={1.6} />
+              <Icon className="h-11 w-11 text-[#0f766e]" strokeWidth={1.6} />
             </span>
             <h2 className="mt-4 text-2xl font-extrabold leading-tight text-neutral-900">{title}</h2>
             <p className="mt-2 max-w-[17rem] text-sm text-neutral-700">{body}</p>
-            <Link href={href} className="mt-3 text-sm font-bold text-[#2f6d3c] hover:underline">
+            <Link href={href} className="mt-3 text-sm font-bold text-[#0f766e] hover:underline">
               {cta} →
             </Link>
           </div>
