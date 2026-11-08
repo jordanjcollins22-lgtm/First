@@ -49,6 +49,36 @@ export function ReviewChecklist() {
     setTicks(read<boolean[]>(TICKS_KEY) ?? []);
   }, []);
 
+  // Outline the spot the step is about: a review link's #hash names the element to look at.
+  useEffect(() => {
+    if (!list) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const mark = () => {
+      document.querySelectorAll("[data-review-outline]").forEach((el) => el.removeAttribute("data-review-outline"));
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      const el = document.getElementById(id);
+      if (!el) {
+        // The spot may still be loading: look again for a few seconds.
+        if (tries++ < 10) timer = setTimeout(mark, 400);
+        return;
+      }
+      el.setAttribute("data-review-outline", "");
+      el.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
+    timer = setTimeout(mark, 300);
+    const onHash = () => {
+      tries = 0;
+      mark();
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, [list]);
+
   if (!list) return null;
   const done = list.steps.filter((_, i) => ticks[i]).length;
   const toggle = (i: number) => {
@@ -64,6 +94,8 @@ export function ReviewChecklist() {
   };
 
   return (
+    <>
+    <style>{"[data-review-outline]{outline:3px solid #f59e0b;outline-offset:4px;border-radius:8px;box-shadow:0 0 0 8px rgba(245,158,11,.18)}"}</style>
     <aside className="fixed bottom-3 right-3 z-50 w-[min(22rem,calc(100vw-1.5rem))] rounded-xl border border-border bg-card/95 shadow-xl backdrop-blur" aria-label="Review checklist">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <CheckCircle2 className="h-4 w-4 text-primary" />
@@ -102,5 +134,6 @@ export function ReviewChecklist() {
         </ol>
       )}
     </aside>
+    </>
   );
 }

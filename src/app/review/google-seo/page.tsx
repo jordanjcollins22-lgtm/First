@@ -50,7 +50,7 @@ export default async function ReviewGoogleSeoPage() {
         </p>
       </header>
 
-      <section>
+      <section id="seo-pages">
         <h2 className="text-lg font-bold">1. A page for every service in every town</h2>
         <p className="mt-1 text-stone-600">
           The website now has {pageCount} pages for Google to rank: home, {c.areas.length} town pages, {c.services.length} service pages, and{" "}
@@ -133,7 +133,7 @@ export default async function ReviewGoogleSeoPage() {
         </div>
       </section>
 
-      <section>
+      <section id="seo-reviews">
         <h2 className="text-lg font-bold">2. Google reviews after every job</h2>
         <p className="mt-1 text-stone-600">
           Already built: when a client approves the before and afters or pays, they get a text (or email) with a one-tap 1 to 5 rating. Fives go
@@ -150,7 +150,7 @@ export default async function ReviewGoogleSeoPage() {
         </ul>
       </section>
 
-      <section>
+      <section id="seo-posts">
         <h2 className="text-lg font-bold">3. Google Business Profile, every week</h2>
         <ul className="mt-3 space-y-1.5">
           <Check ok={s.gbpConnected}>
