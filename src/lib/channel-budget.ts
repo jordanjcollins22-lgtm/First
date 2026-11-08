@@ -112,3 +112,31 @@ export function affiliateSplit(leads: BudgetLead[], pct: number = CHANNEL_PCT): 
     sources: channelBudgets(leads, pct),
   };
 }
+
+export interface SourceFourPct {
+  /** 4% of what that source's jobs sold for, going back into its ads. */
+  ads: number;
+  /** 4% of what that source's jobs sold for, going to the people who brought them in. */
+  people: number;
+}
+
+/**
+ * Where each source's 4% goes, by the money its leads made: back into that
+ * source's ads, or to the person who brought the job in. Keyed by source group,
+ * so it sits next to the lead sources table.
+ */
+export function fourPctBySource(
+  leads: { source: LeadSource; sold: boolean; revenue: number; hasAffiliate: boolean }[],
+  pct: number = CHANNEL_PCT
+): Map<string, SourceFourPct> {
+  const by = new Map<string, SourceFourPct>();
+  for (const lead of leads) {
+    if (!lead.sold || !(lead.revenue > 0)) continue;
+    const row = by.get(lead.source.group) ?? { ads: 0, people: 0 };
+    const cut = (lead.revenue * pct) / 100;
+    if (lead.hasAffiliate) row.people = round2(row.people + cut);
+    else row.ads = round2(row.ads + cut);
+    by.set(lead.source.group, row);
+  }
+  return by;
+}

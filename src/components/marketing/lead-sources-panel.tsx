@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { summariseSources } from "@/lib/lead-sources";
-import { CHANNEL_PCT, COMMISSIONS_FROM, affiliateSplit } from "@/lib/channel-budget";
+import { CHANNEL_PCT, COMMISSIONS_FROM, affiliateSplit, fourPctBySource } from "@/lib/channel-budget";
 import { CONTENT_POOL_PCT, contentPool } from "@/lib/content-pool";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 import { tagCheck } from "@/lib/ghl/affiliate-tag";
@@ -38,10 +38,14 @@ export function LeadSourcesPanel({
 }) {
   const [days, setDays] = useState(90);
   const [open, setOpen] = useState<string | null>(null);
-  const rows = useMemo(() => {
+  const inPeriod = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
-    return summariseSources(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
+    return leads.filter((l) => new Date(l.createdAt).getTime() >= since);
   }, [leads, days, now]);
+  const rows = useMemo(() => summariseSources(inPeriod), [inPeriod]);
+  const fourPct = useMemo(() => fourPctBySource(inPeriod), [inPeriod]);
+  const adsTotal = [...fourPct.values()].reduce((n, f) => n + f.ads, 0);
+  const toPeopleTotal = [...fourPct.values()].reduce((n, f) => n + f.people, 0);
   const total = rows.reduce((n, r) => n + r.leads, 0);
   const sold = rows.reduce((n, r) => n + r.sold, 0);
   const revenue = rows.reduce((n, r) => n + r.revenue, 0);
@@ -72,7 +76,10 @@ export function LeadSourcesPanel({
         <div>
           <h2 className="text-lg font-bold">Where leads come from</h2>
           <p className="text-sm text-muted-foreground">
-            {total} {total === 1 ? "lead" : "leads"} · {sold} sold · {money(revenue)}
+            {total} {total === 1 ? "lead" : "leads"} · {sold} sold · {money(revenue)} made
+          </p>
+          <p className="text-sm text-muted-foreground">
+            The {CHANNEL_PCT}% on that: {money(adsTotal)} back into ads, {money(toPeopleTotal)} to the people who brought jobs in.
           </p>
         </div>
         <div className="flex gap-1">
@@ -93,9 +100,8 @@ export function LeadSourcesPanel({
               <tr className="text-left text-xs text-muted-foreground">
                 <th className="py-1 pr-2 font-medium">Source</th>
                 <th className="py-1 pr-2 font-medium">Leads</th>
-                <th className="py-1 pr-2 text-right font-medium">Sold</th>
-                <th className="py-1 pr-2 text-right font-medium">Close rate</th>
-                <th className="py-1 text-right font-medium">Sold for</th>
+                <th className="py-1 pr-2 text-right font-medium">Money made</th>
+                <th className="py-1 text-right font-medium">{CHANNEL_PCT}% goes to</th>
               </tr>
             </thead>
             <tbody>
@@ -116,15 +122,28 @@ export function LeadSourcesPanel({
                         <span className="text-xs text-muted-foreground">{Math.round((r.leads / total) * 100)}%</span>
                       </div>
                     </td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{r.sold}</td>
-                    <td className="py-2 pr-2 text-right tabular-nums">{r.leads ? `${Math.round((r.sold / r.leads) * 100)}%` : "–"}</td>
-                    <td className="py-2 text-right tabular-nums">{r.revenue ? money(r.revenue) : "–"}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">
+                      {r.revenue ? money(r.revenue) : "–"}
+                      {r.sold > 0 && <span className="block text-xs text-muted-foreground">{r.sold} sold</span>}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">
+                      {(() => {
+                        const f = fourPct.get(r.group);
+                        if (!f || (!f.ads && !f.people)) return "–";
+                        return (
+                          <>
+                            {f.ads > 0 && <span className="block font-semibold">{money(f.ads)} its ads</span>}
+                            {f.people > 0 && <span className="block text-xs text-muted-foreground">{money(f.people)} to the person</span>}
+                          </>
+                        );
+                      })()}
+                    </td>
                   </tr>
                   {open === r.group &&
                     r.details.map((d) => (
                       <tr key={`${r.group}:${d.name}`} className="text-xs text-muted-foreground">
                         <td className="py-1 pl-4 pr-2">{d.name}</td>
-                        <td className="py-1 pr-2 tabular-nums" colSpan={4}>
+                        <td className="py-1 pr-2 tabular-nums" colSpan={3}>
                           {d.leads} {d.leads === 1 ? "lead" : "leads"}
                         </td>
                       </tr>
@@ -135,7 +154,9 @@ export function LeadSourcesPanel({
           </table>
         </div>
       )}
-      <div className="mt-5" id="growth-budget">
+      <details className="mt-5 rounded-lg border border-border/60 p-3" id="affiliates">
+        <summary className="cursor-pointer text-base font-bold">Affiliates, their links and the content pool</summary>
+      <div className="mt-3" id="growth-budget">
         <h3 className="text-base font-bold">Affiliate {CHANNEL_PCT}%: people and other sources</h3>
         <p className="text-sm text-muted-foreground">
           Every job pays an affiliate {CHANNEL_PCT}% of what the client paid. If a person brought it in, it goes to that person. If it came from
@@ -314,6 +335,7 @@ export function LeadSourcesPanel({
           {pool.unpriced > 0 ? ` ${pool.unpriced} job${pool.unpriced === 1 ? "" : "s"} from content had no profit worked out, so ${pool.unpriced === 1 ? "it is" : "they are"} not in the pool.` : ""}
         </p>
       </div>
+      </details>
       <p className="mt-3 text-xs text-muted-foreground">
         A lead counts once, under its most specific clue: an ad click, then the tracked link it came through, then a team member&apos;s booking link,
         door hangers, a client referral, the quick mow page, the old calendar, or what was typed when it was added. &ldquo;Booked online, no

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { affiliateSplit, channelBudgets } from "./channel-budget";
+import { affiliateSplit, channelBudgets, fourPctBySource } from "./channel-budget";
 
 const src = (group: string) => ({ group, detail: null });
 
@@ -51,6 +51,19 @@ describe("affiliate 4% split", () => {
     expect(split.sourceLeads).toBe(2);
     expect(split.people).toEqual([{ name: "Jace", jobs: 2, collected: 2500, cut: 100 }]);
     expect(split.sources).toEqual([{ group: "Facebook ad", jobs: 1, collected: 1000, budget: 40 }]);
+  });
+});
+
+describe("4% by source", () => {
+  it("sends each source's 4% of what it sold for to its ads, or to the person who brought the job in", () => {
+    const by = fourPctBySource([
+      { source: src("Facebook ad"), sold: true, revenue: 1000, hasAffiliate: false },
+      { source: src("Facebook ad"), sold: false, revenue: 0, hasAffiliate: false },
+      { source: src("Facebook comment"), sold: true, revenue: 500, hasAffiliate: true },
+      { source: src("Facebook comment"), sold: true, revenue: 250, hasAffiliate: false },
+    ]);
+    expect(by.get("Facebook ad")).toEqual({ ads: 40, people: 0 });
+    expect(by.get("Facebook comment")).toEqual({ ads: 10, people: 20 });
   });
 });
 
