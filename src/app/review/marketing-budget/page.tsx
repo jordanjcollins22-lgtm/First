@@ -13,7 +13,6 @@ export default async function ReviewMarketingBudgetPage() {
   const [leads, team, ghlLinks] = await Promise.all([listLeadSources(365, scope), listMarketingTeam(scope), listGhlLinks(scope)]);
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <p className="mb-3 text-sm text-muted-foreground">Your real leads from the last year. On the real Marketing page this is under Attribution.</p>
       <LeadSourcesPanel leads={leads} team={team} ghlLinks={ghlLinks} now={new Date().toISOString()} />
     </div>
   );

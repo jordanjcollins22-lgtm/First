@@ -116,7 +116,7 @@ async function AttributionTab() {
     <>
       {owner && <AdDraftsPanel drafts={adDrafts} spend={adSpend} leads={leads} now={drawnAt} />}
       <GoogleAdsTracker spend={adSpend} leads={leads} now={drawnAt} />
-      <LeadSourcesPanel leads={leads} team={team} ghlLinks={ghlLinks} now={drawnAt} />
+      <LeadSourcesPanel leads={leads} team={team} ghlLinks={ghlLinks} now={drawnAt} showAffiliates />
     </>
   ) : null;
   const test = bookingTest ? <BookingTestCard test={bookingTest} /> : null;

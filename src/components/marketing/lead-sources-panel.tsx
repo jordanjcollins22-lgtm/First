@@ -27,6 +27,7 @@ export function LeadSourcesPanel({
   team = [],
   ghlLinks = [],
   now,
+  showAffiliates = false,
 }: {
   leads: LeadRecord[];
   /** The marketing team, by first name, who share the content profit pool. */
@@ -35,6 +36,8 @@ export function LeadSourcesPanel({
   ghlLinks?: { name: string; link: string | null }[];
   /** When the page was drawn, so the periods count back from one moment. */
   now: string;
+  /** Also show the affiliates drop-down (people, their links, the content pool). Off by default: Jordan wants only the decision table. */
+  showAffiliates?: boolean;
 }) {
   const [days, setDays] = useState(90);
   const [open, setOpen] = useState<string | null>(null);
@@ -42,14 +45,13 @@ export function LeadSourcesPanel({
     const since = new Date(now).getTime() - days * 86_400_000;
     return leads.filter((l) => new Date(l.createdAt).getTime() >= since);
   }, [leads, days, now]);
-  const rows = useMemo(() => summariseSources(inPeriod), [inPeriod]);
+  // Biggest money first: that's where the 4% goes, so it's what decisions are made on.
+  const rows = useMemo(() => summariseSources(inPeriod).sort((a, b) => b.revenue - a.revenue || b.leads - a.leads), [inPeriod]);
   const fourPct = useMemo(() => fourPctBySource(inPeriod), [inPeriod]);
   const adsTotal = [...fourPct.values()].reduce((n, f) => n + f.ads, 0);
   const toPeopleTotal = [...fourPct.values()].reduce((n, f) => n + f.people, 0);
   const total = rows.reduce((n, r) => n + r.leads, 0);
-  const sold = rows.reduce((n, r) => n + r.sold, 0);
   const revenue = rows.reduce((n, r) => n + r.revenue, 0);
-  const max = Math.max(1, ...rows.map((r) => r.leads));
   const split = useMemo(() => {
     const since = new Date(now).getTime() - days * 86_400_000;
     // Only jobs from the day commissions started being counted here.
@@ -76,10 +78,8 @@ export function LeadSourcesPanel({
         <div>
           <h2 className="text-lg font-bold">Where leads come from</h2>
           <p className="text-sm text-muted-foreground">
-            {total} {total === 1 ? "lead" : "leads"} · {sold} sold · {money(revenue)} made
-          </p>
-          <p className="text-sm text-muted-foreground">
-            The {CHANNEL_PCT}% on that: {money(adsTotal)} back into ads, {money(toPeopleTotal)} to the people who brought jobs in.
+            {total} {total === 1 ? "lead" : "leads"} · {money(revenue)} made · {money(adsTotal)} back into ads
+            {toPeopleTotal > 0 ? ` · ${money(toPeopleTotal)} to people` : ""}
           </p>
         </div>
         <div className="flex gap-1">
@@ -101,7 +101,7 @@ export function LeadSourcesPanel({
                 <th className="py-1 pr-2 font-medium">Source</th>
                 <th className="py-1 pr-2 font-medium">Leads</th>
                 <th className="py-1 pr-2 text-right font-medium">Money made</th>
-                <th className="py-1 text-right font-medium">{CHANNEL_PCT}% goes to</th>
+                <th className="py-1 text-right font-medium">{CHANNEL_PCT}% for its ads</th>
               </tr>
             </thead>
             <tbody>
@@ -117,14 +117,11 @@ export function LeadSourcesPanel({
                     </td>
                     <td className="py-2 pr-2">
                       <div className="flex items-center gap-2">
-                        <div className="h-2 rounded-full bg-primary" style={{ width: `${Math.max(4, (r.leads / max) * 160)}px` }} />
                         <span className="tabular-nums">{r.leads}</span>
-                        <span className="text-xs text-muted-foreground">{Math.round((r.leads / total) * 100)}%</span>
                       </div>
                     </td>
                     <td className="py-2 pr-2 text-right tabular-nums">
                       {r.revenue ? money(r.revenue) : "–"}
-                      {r.sold > 0 && <span className="block text-xs text-muted-foreground">{r.sold} sold</span>}
                     </td>
                     <td className="py-2 text-right tabular-nums">
                       {(() => {
@@ -132,7 +129,7 @@ export function LeadSourcesPanel({
                         if (!f || (!f.ads && !f.people)) return "–";
                         return (
                           <>
-                            {f.ads > 0 && <span className="block font-semibold">{money(f.ads)} its ads</span>}
+                            {f.ads > 0 && <span className="block font-semibold">{money(f.ads)}</span>}
                             {f.people > 0 && <span className="block text-xs text-muted-foreground">{money(f.people)} to the person</span>}
                           </>
                         );
@@ -154,6 +151,7 @@ export function LeadSourcesPanel({
           </table>
         </div>
       )}
+      {showAffiliates && (
       <details className="mt-5 rounded-lg border border-border/60 p-3" id="affiliates">
         <summary className="cursor-pointer text-base font-bold">Affiliates, their links and the content pool</summary>
       <div className="mt-3" id="growth-budget">
@@ -336,11 +334,7 @@ export function LeadSourcesPanel({
         </p>
       </div>
       </details>
-      <p className="mt-3 text-xs text-muted-foreground">
-        A lead counts once, under its most specific clue: an ad click, then the tracked link it came through, then a team member&apos;s booking link,
-        door hangers, a client referral, the quick mow page, the old calendar, or what was typed when it was added. &ldquo;Booked online, no
-        trail&rdquo; means it came in with none of those.
-      </p>
+      )}
     </section>
   );
 }
