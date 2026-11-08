@@ -24,10 +24,11 @@ export const canReadGhlFunnels = () => Boolean(env.ghlApiKey && env.ghlLocationI
 
 /**
  * The GoHighLevel booking page a person's tagged link opens: GHL_BOOKING_URL
- * when set, else the evaluation calendar's own booking widget.
+ * when set, else the "get project evaluated" booking widget most GoHighLevel
+ * bookings come through (19 of the last 26, Nov 2026).
  */
-export const ghlBookingBase = () =>
-  process.env.GHL_BOOKING_URL?.trim() || (env.ghlCalendarId ? `https://links.jslandscapingmd.com/widget/booking/${env.ghlCalendarId}` : "");
+const GHL_BOOKING_DEFAULT = "https://links.jslandscapingmd.com/widget/booking/OitFX5dol8Mv1hNZRCCY";
+export const ghlBookingBase = () => process.env.GHL_BOOKING_URL?.trim() || GHL_BOOKING_DEFAULT;
 
 /** Each contact's funnel and affiliate tag, for those that have either. */
 export async function ghlContactClues(contactIds: string[]): Promise<Map<string, GhlClues>> {
