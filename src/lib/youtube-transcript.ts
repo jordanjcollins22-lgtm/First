@@ -18,6 +18,9 @@ interface PlayerResponse {
   captions?: { playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] } };
 }
 
+/** What each step saw, for the preview check. */
+export const trace: string[] = [];
+
 async function fromPlayer(id: string): Promise<PlayerResponse | null> {
   try {
     const r = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
@@ -26,7 +29,11 @@ async function fromPlayer(id: string): Promise<PlayerResponse | null> {
       body: JSON.stringify({ videoId: id, context: { client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 34, hl: "en", gl: "US" } } }),
       cache: "no-store",
     });
-    return r.ok ? ((await r.json()) as PlayerResponse) : null;
+    trace.push(`player ${r.status}`);
+    if (!r.ok) return null;
+    const j = (await r.json()) as PlayerResponse;
+    trace.push(`player status ${j.playabilityStatus?.status} ${j.playabilityStatus?.reason ?? ""} tracks ${j.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length ?? 0}`);
+    return j;
   } catch {
     return null;
   }
@@ -35,8 +42,10 @@ async function fromPlayer(id: string): Promise<PlayerResponse | null> {
 async function fromWatchPage(id: string): Promise<PlayerResponse | null> {
   try {
     const r = await fetch(`https://www.youtube.com/watch?v=${id}&hl=en`, { headers: { "user-agent": UA, "accept-language": "en-US,en" }, cache: "no-store" });
+    trace.push(`watch ${r.status}`);
     if (!r.ok) return null;
     const html = await r.text();
+    trace.push(`watch html ${html.length} consent ${/consent\.youtube|before you continue/i.test(html)}`);
     const m = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\})\s*;\s*(?:var\s|<\/script)/);
     return m ? (JSON.parse(m[1]) as PlayerResponse) : null;
   } catch {
@@ -49,8 +58,10 @@ async function captionText(track: CaptionTrack): Promise<string> {
     const url = new URL(track.baseUrl.startsWith("http") ? track.baseUrl : `https://www.youtube.com${track.baseUrl}`);
     url.searchParams.set("fmt", "json3");
     const r = await fetch(url, { headers: { "user-agent": UA }, cache: "no-store" });
+    trace.push(`captions ${r.status}`);
     if (!r.ok) return "";
     const body = await r.text();
+    trace.push(`captions body ${body.length}`);
     if (body.trimStart().startsWith("{")) return textFromJson3(JSON.parse(body));
     return textFromXml(body);
   } catch {
