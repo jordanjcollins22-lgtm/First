@@ -64,6 +64,10 @@ export function ProjectButtons({
       )}
     </div>
     <div className="flex flex-wrap justify-end gap-x-4 gap-y-1">
+      {/* The beds, plants and order of work on a 3D map: the crew's walk-through. */}
+      <Link href={`/jobs/${jobId}/model`} className="text-xs font-medium text-primary hover:underline">
+        3D job model
+      </Link>
       {/* A walk-around video, for a 3D model and a top-down plan of the yard. */}
       <Link href={`/jobs/${jobId}/scan`} className="text-xs font-medium text-primary hover:underline">
         3D scan from a video (demo)

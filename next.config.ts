@@ -43,6 +43,8 @@ const nextConfig: NextConfig = {
   // disk, which the bundler cannot see on its own.
   outputFileTracingIncludes: {
     "/api/social/card/*": ["./assets/fonts/**", "./public/logo-mark.png"],
+    // The review page's sample before photos, read for the plant suggestions.
+    "/review/job-model": ["./public/booking-work/front-bed-mulch-trim.jpg", "./public/booking-work/overgrowth-removal-mulch.jpg"],
   },
   images: {
     remotePatterns: imageHosts(),

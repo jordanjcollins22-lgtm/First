@@ -423,6 +423,26 @@ export function groundToBoard(point: LngLat, geo: ImageGeo, image: BoardImage): 
   return { x: image.x + ex * Math.cos(r) - ey * Math.sin(r), y: image.y + ex * Math.sin(r) + ey * Math.cos(r) };
 }
 
+/**
+ * A point on the board back to the ground: groundToBoard undone, so an area
+ * drawn on the site map can be put on a real map (the 3D job model).
+ */
+export function boardToGround(point: { x: number; y: number }, geo: ImageGeo, image: BoardImage): LngLat {
+  const r = (image.rotation * Math.PI) / 180;
+  const bx = point.x - image.x;
+  const by = point.y - image.y;
+  // Undo the board's turn, then its scale.
+  const ex = bx * Math.cos(r) + by * Math.sin(r);
+  const ey = -bx * Math.sin(r) + by * Math.cos(r);
+  const ratio = image.elementWidth / geo.request;
+  const mx = ex / (ratio * image.scale);
+  const my = ey / (ratio * image.scale);
+  // Undo the map's bearing.
+  const [dx, dy] = turnForBearing([mx, my], -geo.bearing);
+  const c = worldPx([geo.lng, geo.lat], geo.zoom);
+  return fromWorldPx([c[0] + dx, c[1] + dy], geo.zoom);
+}
+
 /* --------------------------------------------- the parts, on the ground */
 
 /** Clips a polygon to a convex one (Sutherland-Hodgman). */
