@@ -9,6 +9,10 @@ export interface ReviewStep {
   how?: string;
   /** Where in the app to look, e.g. "/practice/crew#area-full". */
   path?: string;
+  /** The Flow Board task (card id) this step belongs to, so a Yes or No goes back to that task. */
+  card?: string;
+  /** That task's name, shown above its steps. */
+  task?: string;
 }
 
 export interface ReviewList {
@@ -38,10 +42,16 @@ export function decodeReview(raw: string | null | undefined): ReviewList | null 
     const data = JSON.parse(json) as { title?: unknown; steps?: unknown };
     if (!Array.isArray(data.steps)) return null;
     const steps = data.steps
-      .map((s) => s as { step?: unknown; how?: unknown; path?: unknown })
+      .map((s) => s as { step?: unknown; how?: unknown; path?: unknown; card?: unknown; task?: unknown })
       .filter((s) => clean(s.step, 200))
       .slice(0, 30)
-      .map((s) => ({ step: clean(s.step, 200), how: clean(s.how, 500) || undefined, path: safePath(s.path) }));
+      .map((s) => ({
+        step: clean(s.step, 200),
+        how: clean(s.how, 500) || undefined,
+        path: safePath(s.path),
+        card: /^[A-Za-z0-9_-]{1,200}$/.test(clean(s.card, 200)) ? clean(s.card, 200) : undefined,
+        task: clean(s.task, 200) || undefined,
+      }));
     return steps.length ? { title: clean(data.title, 200) || "Check this change", steps } : null;
   } catch {
     return null;
