@@ -122,6 +122,9 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/learn":
+    "Video notes: the owner pastes a YouTube link and gets the key points. The owner's own tool, not a business area: " +
+    "the page and its action both check the signed-in account is owner-level, and it reads no business data.",
   "/snow":
     "Storm-day stop logging for whoever is on the salt or plow route: salt used, photos, surface temperature. " +
     "Shows only the business's own active snow event, and every save checks the person is staff of that business.",
