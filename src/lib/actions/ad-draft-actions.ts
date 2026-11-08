@@ -105,12 +105,15 @@ export async function launchAdDraft(id: string, dailyBudgetCents: number, estima
   });
 }
 
-export async function skipAdDraft(id: string): Promise<Result> {
+/** The owner says no to an ad, and why, so the reason stays with it. */
+export async function skipAdDraft(id: string, reason: string): Promise<Result> {
   return guard("skipAdDraft", async () => {
+    const why = reason.trim().slice(0, 500);
+    if (!why) throw new Error("Say why not, so the next ads can avoid it.");
     const me = await owner();
     await service()
       .from("ad_drafts")
-      .update({ status: "skipped", decided_by: me.id, decided_at: new Date().toISOString() })
+      .update({ status: "skipped", no_reason: why, decided_by: me.id, decided_at: new Date().toISOString() })
       .eq("id", id)
       .eq("organization_id", me.organization_id)
       .eq("status", "draft");

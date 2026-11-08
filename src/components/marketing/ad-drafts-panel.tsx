@@ -10,6 +10,9 @@ import type { DatedAdSpend } from "@/lib/data/ads-tracker";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 import { BUDGET_STEPS_CENTS, estimateReturn, performanceFrom, suggestBudgetCents } from "@/lib/marketing/ad-draft";
 
+/** One-tap reasons for saying no to an ad; the owner can also type their own. */
+const NO_REASONS = ["Bad photo", "Wrong words", "Wrong town or service", "Not now, too busy"];
+
 const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 /**
@@ -119,6 +122,8 @@ function DraftCard({
   start: (fn: () => Promise<void>) => void;
 }) {
   const [budget, setBudget] = useState(suggested);
+  const [askingWhy, setAskingWhy] = useState(false);
+  const [why, setWhy] = useState("");
   const est = estimateReturn(budget, performance);
   return (
     <div className="grid gap-3 rounded-lg border border-border/60 p-3 sm:grid-cols-[200px_1fr]">
@@ -172,22 +177,44 @@ function DraftCard({
           >
             Approve and launch
           </Button>
-          <Button
-            variant="outline"
-            disabled={pending}
-            onClick={() =>
-              demo
-                ? onDone("Skipped.")
-                : start(async () => {
-                    const r = await skipAdDraft(draft.id);
-                    if (r.ok) onDone("Skipped.");
-                    else onError(r.error);
-                  })
-            }
-          >
-            Skip
+          <Button variant="outline" disabled={pending} onClick={() => setAskingWhy(!askingWhy)} aria-expanded={askingWhy}>
+            No
           </Button>
         </div>
+        {askingWhy && (
+          <div id={`ad-no-why-${draft.id}`} className="mt-2 space-y-2 rounded-md border border-border p-2">
+            <p className="text-sm font-medium">Why not?</p>
+            <div className="flex flex-wrap gap-1">
+              {NO_REASONS.map((r) => (
+                <Button key={r} size="sm" variant={why === r ? "default" : "outline"} onClick={() => setWhy(r)}>
+                  {r}
+                </Button>
+              ))}
+            </div>
+            <textarea
+              className="w-full rounded-md border border-border bg-background p-2 text-sm"
+              rows={2}
+              value={why}
+              onChange={(e) => setWhy(e.target.value)}
+              placeholder="Or say why in your own words"
+            />
+            <Button
+              size="sm"
+              disabled={pending || !why.trim()}
+              onClick={() =>
+                demo
+                  ? onDone(`Not launched. Why: ${why.trim()}`)
+                  : start(async () => {
+                      const r = await skipAdDraft(draft.id, why);
+                      if (r.ok) onDone(`Not launched. Why: ${why.trim()}`);
+                      else onError(r.error);
+                    })
+              }
+            >
+              Send no
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -24,6 +24,8 @@ create table if not exists public.ad_drafts (
   estimate jsonb,
   google_campaign text,
   error text,
+  -- Why the owner said no, so the next ads can avoid it.
+  no_reason text,
   decided_by uuid references profiles(id) on delete set null,
   decided_at timestamptz,
   created_at timestamptz not null default now(),
