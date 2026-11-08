@@ -45,7 +45,7 @@ export function VideoNotes() {
           <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2 · K: what you already know (optional)</p>
           <Textarea className="mt-1" rows={2} value={know} onChange={(e) => setKnow(e.target.value)} placeholder="So it skips what you know. e.g. I already run Google ads but don't track them." />
         </div>
-        <div>
+        <div id="vn-want">
           <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">3 · W: what you want to get out of it</p>
           <div className="mt-1 flex flex-wrap gap-2">
             {GOALS.map((g) => {
@@ -60,7 +60,7 @@ export function VideoNotes() {
           <Textarea className="mt-2" rows={2} value={own} onChange={(e) => setOwn(e.target.value)} placeholder="Or your own questions, one per line. e.g. What budget does he start with?" />
         </div>
         {showPaste && (
-          <div>
+          <div id="vn-transcript">
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">4 · The transcript</p>
             <p className="text-sm text-muted-foreground">YouTube blocks apps from pulling it, so copy it in: on YouTube, open the description, tap Show transcript, select it all, copy, paste here.</p>
             <Textarea className="mt-1" rows={5} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Paste the transcript here" />
@@ -90,7 +90,7 @@ export function VideoNotes() {
             </p>
             {result.notes.gist && <p className="mt-1">{result.notes.gist}</p>}
           </div>
-          <div>
+          <div id="vn-fundamentals">
             <h3 className="font-bold">Key fundamentals</h3>
             <ol className="mt-1 list-decimal space-y-2 pl-5">
               {result.notes.fundamentals.map((f, i) => (
