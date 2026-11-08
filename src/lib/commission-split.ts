@@ -4,9 +4,10 @@
  * and collects; 4% to the evaluator, whose site map is the price; 4% to the
  * affiliate, who brought the lead.
  *
- * A share nobody earned -- no affiliate on a job booked from the website, say
- * -- stays with the business: prices are always set with the whole 15% in
- * them. One person can earn more than one share: whoever answers the post,
+ * A share nobody earned stays with the business: prices are always set with
+ * the whole 15% in them. The affiliate's 4% on a job nobody brought in (an
+ * ad, a flyer, the website) goes to that channel's growth budget instead
+ * (channel-budget.ts). One person can earn more than one share: whoever answers the post,
  * walks the property and manages the job earns all 15%. The owner earns none;
  * a share the owner filled stays with the business too.
  *

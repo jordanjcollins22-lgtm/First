@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { summariseSources } from "@/lib/lead-sources";
+import { CHANNEL_PCT, channelBudgets } from "@/lib/channel-budget";
 import type { LeadRecord } from "@/lib/data/lead-sources";
 
 const PERIODS = [
@@ -30,6 +31,11 @@ export function LeadSourcesPanel({ leads, now }: { leads: LeadRecord[]; /** When
   const sold = rows.reduce((n, r) => n + r.sold, 0);
   const revenue = rows.reduce((n, r) => n + r.revenue, 0);
   const max = Math.max(1, ...rows.map((r) => r.leads));
+  const budgets = useMemo(() => {
+    const since = new Date(now).getTime() - days * 86_400_000;
+    return channelBudgets(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
+  }, [leads, days, now]);
+  const budgetTotal = budgets.reduce((n, b) => n + b.budget, 0);
 
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
@@ -100,6 +106,43 @@ export function LeadSourcesPanel({ leads, now }: { leads: LeadRecord[]; /** When
           </table>
         </div>
       )}
+      <div className="mt-5" id="growth-budget">
+        <h3 className="text-base font-bold">Growth budget by channel</h3>
+        <p className="text-sm text-muted-foreground">
+          The affiliate&apos;s {CHANNEL_PCT}% of what the client paid goes to the person who brought the job in. When nobody did, it goes here,
+          to spend growing the channel the job came from.
+        </p>
+        {budgets.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">No paid jobs without an affiliate in this period.</p>
+        ) : (
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Channel</th>
+                  <th className="py-1 pr-2 text-right font-medium">Paid jobs</th>
+                  <th className="py-1 pr-2 text-right font-medium">Clients paid</th>
+                  <th className="py-1 text-right font-medium">Budget ({CHANNEL_PCT}%)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {budgets.map((b) => (
+                  <tr key={b.group} className="border-t border-border/60">
+                    <td className="py-2 pr-2 font-medium">{b.group}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{b.jobs}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{money(b.collected)}</td>
+                    <td className="py-2 text-right font-semibold tabular-nums">{money(b.budget)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-border">
+                  <td className="py-2 pr-2 font-semibold" colSpan={3}>Total to spend</td>
+                  <td className="py-2 text-right font-bold tabular-nums">{money(budgetTotal)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
       <p className="mt-3 text-xs text-muted-foreground">
         A lead counts once, under its most specific clue: an ad click, then the tracked link it came through, then a team member&apos;s booking link,
         door hangers, a client referral, the quick mow page, the old calendar, or what was typed when it was added. &ldquo;Booked online, no

@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
+import { loadMoney } from "@/lib/data/commission";
+import { isOwnerLevel } from "@/lib/roles";
 
 export interface LeadRecord {
   /** The job the lead is, so other reports can join on it. */
@@ -9,6 +11,14 @@ export interface LeadRecord {
   source: LeadSource;
   sold: boolean;
   revenue: number;
+  /** What the client actually paid on the job so far. */
+  collected: number;
+  /**
+   * Whether a person who earns the affiliate share brought it in: whoever's
+   * booking link or tracked link it came through, unless that is an owner.
+   * When nobody did, the affiliate's 4% goes to the channel's growth budget.
+   */
+  hasAffiliate: boolean;
 }
 
 /**
@@ -60,9 +70,24 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
   const people = Array.from(
     new Set([...(links ?? []).map((l) => l.profile_id), ...rows.map((j) => j.referred_by_profile_id)].filter((p): p is string => Boolean(p)))
   );
-  const { data: profiles } = people.length
-    ? await supabase.from("profiles").select("id, full_name, first_name, email").in("id", people)
-    : { data: [] as { id: string; full_name: string | null; first_name: string | null; email: string }[] };
+  const soldIds = rows.filter((j) => {
+    const p = Array.isArray(j.job_proposals) ? j.job_proposals[0] : j.job_proposals;
+    return Boolean(p && (p.status === "accepted" || p.paid_at));
+  }).map((j) => j.id);
+  const [{ data: profiles }, { data: personRoles }, money] = await Promise.all([
+    people.length
+      ? supabase.from("profiles").select("id, full_name, first_name, email").in("id", people)
+      : Promise.resolve({ data: [] as { id: string; full_name: string | null; first_name: string | null; email: string }[] }),
+    people.length
+      ? supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", people)
+      : Promise.resolve({ data: [] as { profile_id: string; role_name: string }[] }),
+    // What clients actually paid, for the channel growth budget. Only sold
+    // jobs can have money in, so only they are asked about.
+    loadMoney(soldIds).catch(() => null),
+  ]);
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (personRoles ?? []) as { profile_id: string; role_name: string }[]) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  const earnsShare = (id: string | null | undefined) => Boolean(id && !isOwnerLevel(rolesOf.get(id) ?? []));
   const nameOf = new Map((profiles ?? []).map((p) => [p.id, (p.first_name || p.full_name || p.email || "").split(" ")[0] || null]));
   const clickBy = new Map((clicks ?? []).map((c) => [c.job_id, c]));
   const linkBy = new Map((links ?? []).map((l) => [l.code, l]));
@@ -81,11 +106,15 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
       : mowSold
         ? Number(mow?.amount_cents ?? 0) / 100
         : 0;
+    // A quick mow paid by card can land in payments too, so the larger of the two, never both.
+    const collected = Math.max(money?.collected.get(j.id) ?? 0, mow?.paid_at ? Number(mow.amount_cents ?? 0) / 100 : 0);
     return {
       jobId: j.id,
       createdAt: j.created_at,
       sold: proposalSold || mowSold,
       revenue,
+      collected,
+      hasAffiliate: earnsShare(j.referred_by_profile_id ?? link?.profile_id),
       source: leadSource({
         adSource: click?.utm_source ?? null,
         adCampaign: click?.utm_campaign ?? null,
