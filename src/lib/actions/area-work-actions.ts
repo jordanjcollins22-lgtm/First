@@ -8,7 +8,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCanvasCatalog } from "@/lib/data/canvas-catalog";
 import { getCanvasDesignForJob } from "@/lib/data/canvas-design";
 import { loadAreaBoard } from "@/lib/data/area-board";
-import { canTick, stepsFor } from "@/lib/area-work";
+import { AREA_CREW_LIMIT, LEAVE_LOCKED, canTick, fullReason, stepsFor } from "@/lib/area-work";
 import type { WorkZone } from "@/components/canvas/types";
 
 export type AreaResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -51,6 +51,10 @@ export async function startArea(jobId: string, zoneId: string): Promise<AreaResu
   // Prepped and waiting on the rest: the next thing to do is somewhere else.
   if (state.prepped && !fresh.board.allPrepped) return { ok: false, message: "This area is prepped. Prep the next one: the install starts once every area is prepped." };
   if (fresh.board.myZoneId === zoneId) return { ok: true };
+  // You stay in the area you started until its photo is in.
+  if (fresh.board.myZoneId && !fresh.board.canLeaveFreely) return { ok: false, message: LEAVE_LOCKED };
+  const full = fullReason(state, fresh.board.limits?.[zoneId] ?? AREA_CREW_LIMIT, profile.id);
+  if (full) return { ok: false, message: full };
 
   const supabase = await createClient();
   const now = new Date().toISOString();
@@ -97,10 +101,15 @@ async function recordArrivalIfSkipped(organizationId: string, profileId: string,
   }
 }
 
-/** Step out of the area you are in, and give back its kits if you were the last one there. */
+/**
+ * Step out of the area you are in, and give back its kits if you were the last one there.
+ * Only whoever runs the job can: everybody else stays until the area's photo is in.
+ */
 export async function leaveArea(jobId: string): Promise<AreaResult> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, message: "Sign in first." };
+  const fresh = await freshBoard(jobId);
+  if (fresh?.board.myZoneId && !fresh.board.canLeaveFreely) return { ok: false, message: LEAVE_LOCKED };
   const supabase = await createClient();
   await supabase.from("job_area_work").update({ left_at: new Date().toISOString() }).eq("job_id", jobId).eq("profile_id", profile.id).is("left_at", null);
   refresh(jobId);

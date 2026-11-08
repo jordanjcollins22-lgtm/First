@@ -233,6 +233,28 @@ export interface WorkRow {
 
 export type AreaStatus = "done" | "working" | "open" | "waiting";
 
+/** How many people may work in one area at once, unless its zone on the site map sets its own. */
+export const AREA_CREW_LIMIT = 2;
+
+export function crewLimitOf(zone: { maxCrew?: number | null }): number {
+  const n = Number(zone.maxCrew);
+  return Number.isInteger(n) && n > 0 ? n : AREA_CREW_LIMIT;
+}
+
+/** Why somebody can't join this area because it is full, or null when there is room. */
+export function fullReason(state: Pick<AreaState, "people">, limit: number, meId: string | null): string | null {
+  const others = state.people.filter((p) => p.profileId !== meId).length;
+  if (others < limit) return null;
+  return `This area is full: ${others} ${others === 1 ? "person is" : "people are"} already in it. Pick another area.`;
+}
+
+/**
+ * Once you start an area you stay in it until its photo is in: the photo is
+ * what frees everybody in it. Whoever runs the job can still move people.
+ */
+export const LEAVE_LOCKED =
+  "Take this area's photo to finish it first. You can't leave or switch areas until the photo is in. If you need to move, ask whoever is running the job.";
+
 export interface AreaState {
   zoneId: string;
   status: AreaStatus;

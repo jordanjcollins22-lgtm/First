@@ -13,7 +13,7 @@ import { PREVIEW, THUMBNAIL } from "@/lib/storage-image-url";
 import { leaveArea, startArea, tickAreaStep } from "@/lib/actions/area-work-actions";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { useWaiting, WaitingPhotos } from "@/components/offline/waiting-photos";
-import { canTick, type AreaState, type Phase } from "@/lib/area-work";
+import { AREA_CREW_LIMIT, LEAVE_LOCKED, canTick, fullReason, type AreaState, type Phase } from "@/lib/area-work";
 import type { AreaBoardData } from "@/lib/data/area-board";
 import type { WorkOrderZone } from "@/lib/work-order";
 
@@ -119,6 +119,7 @@ export function AreaBoard({
             pending={pending}
             onTick={(key, value) => run(() => act.tick(myZone.id, key, value))}
             onLeave={() => run(() => act.leave())}
+            canLeave={Boolean(board.canLeaveFreely)}
             demoPhoto={act.photo ? (kind) => run(() => act.photo!(myZone.id, kind)) : null}
             onPhoto={() => {
               setPicked(undefined);
@@ -175,7 +176,7 @@ export function AreaBoard({
                         <>
                           <Scope zone={zone} tools={board.tools[zone.id] ?? []} state={state} todo={zone.todo} />
                           <div className="sticky bottom-2 z-10">
-                            <StartButton previous state={state} stage={stage} pending={pending} onStart={() => run(() => act.start(zone.id))} />
+                            <StartButton previous full={fullReason(state, board.limits?.[zone.id] ?? AREA_CREW_LIMIT, board.meId)} state={state} stage={stage} pending={pending} onStart={() => run(() => act.start(zone.id))} />
                           </div>
                         </>
                       ) : (
@@ -184,6 +185,7 @@ export function AreaBoard({
                               next one: whoever taps it knows which area they started. */}
                           <StartButton
                             area={`${numberOf.get(zone.id)!} · ${zone.name}`}
+                            full={fullReason(state, board.limits?.[zone.id] ?? AREA_CREW_LIMIT, board.meId)}
                             state={state}
                             stage={stage}
                             pending={pending}
@@ -272,6 +274,7 @@ function Scope({ zone, tools, state, todo }: { zone: WorkOrderZone; tools: strin
 /** The one button on an area that is not yours yet, or why there isn't one. Says which area it starts. */
 function StartButton({
   area,
+  full = null,
   previous = false,
   state,
   stage,
@@ -279,6 +282,8 @@ function StartButton({
   onStart,
 }: {
   area?: string;
+  /** Why it can't be joined: it already has as many people as it allows. */
+  full?: string | null;
   /** The sheet a job already under way started on: floating, and not naming the area. */
   previous?: boolean;
   state: AreaState;
@@ -289,6 +294,7 @@ function StartButton({
   if (state.status === "done") return <PhotoDone label="Done. After photo in." />;
   if (stage === "prep" && state.prepped) return <PhotoDone label="Prepped. The install starts once every area is prepped." />;
   if (state.status === "waiting") return <p className="text-sm text-amber-700">{state.waitingReason} Pick another area for now.</p>;
+  if (full) return <p className="text-sm text-amber-700">{full}</p>;
   if (previous) {
     const was =
       state.status === "working" ? `Join ${state.people.map((p) => p.name).join(" and ")} here` : stage === "prep" ? "Start prep here" : "Start the install";
@@ -350,6 +356,7 @@ function InArea({
   pending,
   onTick,
   onLeave,
+  canLeave,
   onPhoto,
   onError,
   demoPhoto,
@@ -367,6 +374,8 @@ function InArea({
   pending: boolean;
   onTick: (key: string, value: boolean) => void;
   onLeave: () => void;
+  /** Whoever runs the job. Everybody else stays in the area until its photo is in. */
+  canLeave: boolean;
   onPhoto: () => void;
   onError: (message: string | null) => void;
   demoPhoto: ((kind: "during" | "after") => void) | null;
@@ -462,9 +471,13 @@ function InArea({
         </details>
       )}
 
-      <button type="button" onClick={onLeave} disabled={pending} className="self-start text-xs text-muted-foreground hover:text-primary">
-        Leave this area
-      </button>
+      {canLeave ? (
+        <button type="button" onClick={onLeave} disabled={pending} className="self-start text-xs text-muted-foreground hover:text-primary">
+          Leave this area
+        </button>
+      ) : (
+        <p className="text-xs text-muted-foreground">{LEAVE_LOCKED}</p>
+      )}
     </div>
   );
 }
