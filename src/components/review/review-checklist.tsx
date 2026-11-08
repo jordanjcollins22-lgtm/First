@@ -183,7 +183,7 @@ export function ReviewChecklist() {
                   <p className={ticks[i] ? "text-muted-foreground line-through" : "font-medium"}>{s.step}</p>
                   {s.how && <p className="text-xs text-muted-foreground">{s.how}</p>}
                   {s.path && <p className="text-xs font-medium text-primary">{active === i && box ? "Outlined on the page" : "Show me where"}</p>}
-                  {active === i && missing && <p className="text-xs text-amber-700 dark:text-amber-300">This spot isn&apos;t on this screen.</p>}
+                  {active === i && missing && <p className="text-xs text-amber-700 dark:text-amber-300">Not on the screen yet. ItThis spot isn&apos;t on this screen.apos;s outlined once it shows up.</p>}
                 </button>
               </li>
             ))}
