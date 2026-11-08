@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
 import type { DataScope } from "@/lib/data/review-scope";
-import { ghlFunnels } from "@/lib/data/ghl-funnel";
+import { ghlBookingBase, ghlContactClues, type GhlClues } from "@/lib/data/ghl-funnel";
+import { creditTag, ghlBookingLink, type LeadTag, type TagPerson } from "@/lib/ghl/affiliate-tag";
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
 import { loadMoney } from "@/lib/data/commission";
 import { isOwnerLevel } from "@/lib/roles";
@@ -27,6 +28,8 @@ export interface LeadRecord {
   fromContent: boolean;
   /** The job's profit in dollars, as its estimate worked it out, or null when it has none. */
   profit: number | null;
+  /** The tag GoHighLevel recorded from the link it was booked through (am_id or ref), and whose it is. */
+  ghlTag: LeadTag | null;
 }
 
 /**
@@ -129,6 +132,7 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
         : null,
       fromContent: link?.kind === "post",
       profit: proposalSold && typeof proposal?.estimate?.grossCents === "number" ? proposal.estimate.grossCents / 100 : null,
+      ghlTag: null as LeadTag | null,
       source: leadSource({
         adSource: click?.utm_source ?? null,
         adCampaign: click?.utm_campaign ?? null,
@@ -146,18 +150,71 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
       }),
     };
   });
-  // Leads that only say they came through GoHighLevel (or left no trail) are split by the
-  // funnel field GoHighLevel keeps on the contact, when GoHighLevel can be read.
+  // GoHighLevel is asked about two kinds of lead: one that only says it came
+  // through GoHighLevel (or left no trail), split by the funnel field it keeps
+  // on the contact; and one nobody is credited with yet, in case it was booked
+  // through a person's GoHighLevel link (lib/ghl/affiliate-tag.ts).
   const vague = new Set(["GoHighLevel calendar", "Booked online, no trail"]);
   const contactOf = new Map(rows.map((j) => [j.id, j.properties?.customers?.ghl_contact_id ?? null]));
-  const ask = records.filter((r) => vague.has(r.source.group) && !r.source.detail).map((r) => contactOf.get(r.jobId)).filter((c): c is string => Boolean(c));
-  const funnels = await ghlFunnels(ask).catch(() => new Map<string, string>());
+  const codeOf = new Map(rows.map((j) => [j.id, j.referral_code]));
+  const isVague = (r: LeadRecord) => vague.has(r.source.group) && !r.source.detail;
+  const uncredited = (r: LeadRecord) => !r.hasAffiliate && !codeOf.get(r.jobId) && !r.fromContent;
+  const ask = records.filter((r) => isVague(r) || uncredited(r)).map((r) => contactOf.get(r.jobId)).filter((c): c is string => Boolean(c));
+  const clues = await ghlContactClues(ask).catch(() => new Map<string, GhlClues>());
+  const tags = [...new Set([...clues.values()].map((c) => c.tag).filter((t): t is string => Boolean(t)))];
+  const { people: tagPeople, linkOwners } = tags.length ? await tagOwners(supabase, organizationId, tags) : { people: [], linkOwners: new Map<string, string>() };
   for (const r of records) {
     const contact = contactOf.get(r.jobId);
-    const funnel = contact ? funnels.get(contact) : undefined;
-    if (funnel && vague.has(r.source.group) && !r.source.detail) r.source = { ...r.source, detail: funnel };
+    const c = contact ? clues.get(contact) : undefined;
+    if (!c) continue;
+    if (c.tag && uncredited(r)) {
+      const credit = creditTag(c.tag, tagPeople, linkOwners);
+      r.ghlTag = { tag: c.tag, person: credit?.name ?? null, owner: Boolean(credit && !credit.earns) };
+      if (credit) {
+        r.source = { group: "Affiliate's GoHighLevel link", detail: credit.name };
+        if (credit.earns) {
+          r.hasAffiliate = true;
+          r.affiliate = credit.name;
+        }
+        continue;
+      }
+    }
+    if (c.funnel && isVague(r)) r.source = { ...r.source, detail: c.funnel };
   }
   return records;
+}
+
+/** Everybody in the business a GoHighLevel tag could belong to, and the tracked link codes among the tags. */
+async function tagOwners(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  organizationId: string,
+  tags: string[]
+): Promise<{ people: TagPerson[]; linkOwners: Map<string, string> }> {
+  const [{ data: profiles }, { data: links }] = await Promise.all([
+    supabase.from("profiles").select("id, first_name, last_name, full_name, affiliate_slug").eq("organization_id", organizationId).limit(2000),
+    tags.length
+      ? supabase.from("outreach_links").select("code, profile_id").eq("organization_id", organizationId).in("code", tags)
+      : Promise.resolve({ data: [] }),
+  ]);
+  type P = { id: string; first_name: string | null; last_name: string | null; full_name: string | null; affiliate_slug: string | null };
+  const list = (profiles ?? []) as P[];
+  const { data: roles } = list.length
+    ? await supabase.from("profile_roles").select("profile_id, role_name").in("profile_id", list.map((p) => p.id))
+    : { data: [] };
+  const rolesOf = new Map<string, string[]>();
+  for (const r of (roles ?? []) as { profile_id: string; role_name: string }[]) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);
+  return {
+    people: list.map((p) => ({
+      id: p.id,
+      firstName: p.first_name,
+      lastName: p.last_name,
+      fullName: p.full_name,
+      affiliateSlug: p.affiliate_slug,
+      isOwner: isOwnerLevel(rolesOf.get(p.id) ?? []),
+    })),
+    linkOwners: new Map(((links ?? []) as { code: string; profile_id: string }[]).map((l) => [l.code.toLowerCase(), l.profile_id])),
+  };
 }
 
 /**
@@ -181,4 +238,25 @@ export async function listMarketingTeam(scope?: DataScope): Promise<string[]> {
     .filter((p) => !isOwnerLevel(rolesOf.get(p.id) ?? []))
     .map((p) => (p.first_name || p.full_name || p.email || "").split(" ")[0] || "Someone")
     .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Each team member's tagged GoHighLevel booking link (lib/ghl/affiliate-tag.ts),
+ * for the owner to hand out. Anybody but an owner who has an app affiliate
+ * code; a booking through it is credited to them.
+ */
+export async function listGhlLinks(scope?: DataScope): Promise<{ name: string; link: string }[]> {
+  const base = ghlBookingBase();
+  if (!base) return [];
+  const supabase = scope?.client ?? (await createClient());
+  const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
+  const { people } = await tagOwners(supabase, organizationId, []);
+  return people
+    .filter((p) => !p.isOwner && p.affiliateSlug)
+    .map((p) => ({
+      name: [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || "A team member",
+      link: ghlBookingLink(base, p.affiliateSlug) as string,
+    }))
+    .filter((r) => r.link)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

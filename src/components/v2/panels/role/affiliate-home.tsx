@@ -8,6 +8,8 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import type { BroughtInRow } from "@/lib/brought-in";
 import { getBroughtIn, myBookingLink } from "@/lib/data/brought-in";
 import { getCommissionFor } from "@/lib/data/commission";
+import { ghlBookingBase } from "@/lib/data/ghl-funnel";
+import { ghlBookingLink } from "@/lib/ghl/affiliate-tag";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { answeredToday, getPostBoard } from "@/lib/data/post-board";
 import { sweepPosts } from "@/lib/data/post-sweep";
@@ -57,6 +59,8 @@ export async function AffiliateHomePanel() {
     }),
   ]);
   const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
+  // The same code on the GoHighLevel booking page, for anyone who shares that instead.
+  const ghlLink = link ? ghlBookingLink(ghlBookingBase(), refOf(link)) : null;
   // As Posts to Answer does: anything the finder brought in that is not
   // sorted or written yet is, after this page is sent, so it is here next look.
   after(() => sweepPosts(org).then(() => undefined));
@@ -84,6 +88,14 @@ export async function AffiliateHomePanel() {
         <Card>
           <AffiliateLinkCard link={link} qrSvg={qr} />
         </Card>
+        {ghlLink && (
+          <div className="mt-3">
+            <Card>
+              <p className="mb-2 text-sm text-muted-foreground">Sharing the GoHighLevel booking page instead? Use this one, so the booking is yours.</p>
+              <AffiliateLinkCard link={ghlLink} qrSvg={null} />
+            </Card>
+          </div>
+        )}
       </section>
 
       <section data-tour="affiliate-results" aria-labelledby="aff-results">
@@ -186,4 +198,13 @@ function ProjectRow({ row }: { row: BroughtInRow }) {
       <p className="mt-0.5 text-xs text-muted-foreground">{row.label}</p>
     </li>
   );
+}
+
+/** The affiliate code on their app booking link (/book?ref=<code>). */
+function refOf(link: string): string | null {
+  try {
+    return new URL(link).searchParams.get("ref");
+  } catch {
+    return null;
+  }
 }

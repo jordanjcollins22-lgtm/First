@@ -1,37 +1,61 @@
 import { env } from "@/lib/env";
 import { getContactRecord, listContactFields } from "@/lib/ghl/client";
 import { funnelField, funnelOf } from "@/lib/ghl/funnel";
+import { ghlAffiliateTag } from "@/lib/ghl/affiliate-tag";
 
 /**
- * Each GoHighLevel contact's funnel (lib/ghl/funnel.ts), for the lead
+ * Each GoHighLevel contact's funnel (lib/ghl/funnel.ts) and affiliate tag
+ * (lib/ghl/affiliate-tag.ts), for the lead
  * sources report. Read live from GoHighLevel, at most MAX contacts a time
  * and a few at once, and kept for ten minutes so changing the period on the
  * page doesn't ask again. Nothing when GoHighLevel isn't connected.
  */
 const MAX = 250;
 const KEEP_MS = 10 * 60_000;
-const seen = new Map<string, { at: number; funnel: string | null }>();
-let fieldCache: { at: number; id: string | null } | null = null;
+export interface GhlClues {
+  funnel: string | null;
+  /** Whose tagged link it came through (lib/ghl/affiliate-tag.ts), when one. */
+  tag: string | null;
+}
+const seen = new Map<string, { at: number; clues: GhlClues }>();
+let fieldCache: { at: number; id: string | null; affiliateId: string | null } | null = null;
 
 export const canReadGhlFunnels = () => Boolean(env.ghlApiKey && env.ghlLocationId);
 
-export async function ghlFunnels(contactIds: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+/**
+ * The GoHighLevel booking page a person's tagged link opens: GHL_BOOKING_URL
+ * when set, else the evaluation calendar's own booking widget.
+ */
+export const ghlBookingBase = () =>
+  process.env.GHL_BOOKING_URL?.trim() || (env.ghlCalendarId ? `https://links.jslandscapingmd.com/widget/booking/${env.ghlCalendarId}` : "");
+
+/** Each contact's funnel and affiliate tag, for those that have either. */
+export async function ghlContactClues(contactIds: string[]): Promise<Map<string, GhlClues>> {
+  const out = new Map<string, GhlClues>();
   if (!canReadGhlFunnels() || contactIds.length === 0) return out;
   const now = Date.now();
   if (!fieldCache || now - fieldCache.at > KEEP_MS) {
-    fieldCache = { at: now, id: funnelField(await listContactFields(), process.env.GHL_FUNNEL_FIELD)?.id ?? null };
+    const fields = await listContactFields();
+    const affiliate = fields.find((f) => {
+      const want = process.env.GHL_AFFILIATE_FIELD?.trim().toLowerCase();
+      return want ? f.name.toLowerCase() === want || (f.fieldKey ?? "").toLowerCase() === want : /affiliate source/i.test(f.name);
+    });
+    fieldCache = { at: now, id: funnelField(fields, process.env.GHL_FUNNEL_FIELD)?.id ?? null, affiliateId: affiliate?.id ?? null };
   }
-  const fieldId = fieldCache.id;
+  const { id: fieldId, affiliateId } = fieldCache;
   const todo = [...new Set(contactIds)].slice(0, MAX);
   let next = 0;
   async function worker() {
     while (next < todo.length) {
       const id = todo[next++];
       const kept = seen.get(id);
-      const funnel = kept && now - kept.at < KEEP_MS ? kept.funnel : funnelOf(await getContactRecord(id), fieldId);
-      seen.set(id, { at: now, funnel });
-      if (funnel) out.set(id, funnel);
+      let clues = kept && now - kept.at < KEEP_MS ? kept.clues : null;
+      if (!clues) {
+        const record = await getContactRecord(id);
+        clues = { funnel: funnelOf(record, fieldId), tag: ghlAffiliateTag(record, affiliateId) };
+      }
+      seen.set(id, { at: now, clues });
+      if (clues.funnel || clues.tag) out.set(id, clues);
     }
   }
   await Promise.all(Array.from({ length: 6 }, worker));

@@ -7,6 +7,7 @@ import { summariseSources } from "@/lib/lead-sources";
 import { CHANNEL_PCT, COMMISSIONS_FROM, affiliateSplit } from "@/lib/channel-budget";
 import { CONTENT_POOL_PCT, contentPool } from "@/lib/content-pool";
 import type { LeadRecord } from "@/lib/data/lead-sources";
+import { tagCheck } from "@/lib/ghl/affiliate-tag";
 
 const PERIODS = [
   { days: 30, label: "30 days" },
@@ -24,11 +25,14 @@ const money = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 export function LeadSourcesPanel({
   leads,
   team = [],
+  ghlLinks = [],
   now,
 }: {
   leads: LeadRecord[];
   /** The marketing team, by first name, who share the content profit pool. */
   team?: string[];
+  /** Each team member's tagged GoHighLevel booking link, to hand out. */
+  ghlLinks?: { name: string; link: string }[];
   /** When the page was drawn, so the periods count back from one moment. */
   now: string;
 }) {
@@ -56,6 +60,11 @@ export function LeadSourcesPanel({
     const since = new Date(now).getTime() - days * 86_400_000;
     return contentPool(leads.filter((l) => new Date(l.createdAt).getTime() >= since), team);
   }, [leads, team, days, now]);
+
+  const tags = useMemo(() => {
+    const since = new Date(now).getTime() - days * 86_400_000;
+    return tagCheck(leads.filter((l) => new Date(l.createdAt).getTime() >= since));
+  }, [leads, days, now]);
 
   return (
     <section className="rounded-xl border border-white/60 bg-card/60 p-4 backdrop-blur-md">
@@ -216,6 +225,59 @@ export function LeadSourcesPanel({
             </table>
           </div>
         )}
+      </div>
+      <div className="mt-5" id="ghl-links">
+        <h3 className="text-base font-bold">GoHighLevel links</h3>
+        <p className="text-sm text-muted-foreground">
+          A booking made through a person&apos;s GoHighLevel link is credited to them: GoHighLevel keeps the page it was booked on, and the
+          tag on it (ref= on the links below, or am_id= on a GoHighLevel affiliate link) says whose it was. Hand each person their link.
+        </p>
+        {ghlLinks.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">No tagged links yet: a person gets one once they have a booking link in the app.</p>
+        ) : (
+          <ul className="mt-2 grid gap-1 text-sm">
+            {ghlLinks.map((g) => (
+              <li key={g.link} className="rounded-lg border border-border/60 p-2">
+                <span className="font-medium">{g.name}</span>
+                <span className="block select-all break-all font-mono text-xs text-muted-foreground">{g.link}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <h4 className="mt-4 text-sm font-semibold">Monthly check: tags GoHighLevel recorded in this period</h4>
+        {tags.length === 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">No bookings came through a tagged GoHighLevel link in this period.</p>
+        ) : (
+          <div className="mt-1 overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="py-1 pr-2 font-medium">Tag</th>
+                  <th className="py-1 pr-2 font-medium">Credited to</th>
+                  <th className="py-1 pr-2 text-right font-medium">Leads</th>
+                  <th className="py-1 pr-2 text-right font-medium">Sold</th>
+                  <th className="py-1 text-right font-medium">Clients paid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tags.map((t) => (
+                  <tr key={t.tag} className="border-t border-border/60">
+                    <td className="py-2 pr-2 font-mono text-xs">{t.tag}</td>
+                    <td className="py-2 pr-2">
+                      {t.person ? (t.owner ? `${t.person} (owner, not paid)` : t.person) : <span className="text-destructive">Nobody matched: not paid</span>}
+                    </td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{t.leads}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{t.sold}</td>
+                    <td className="py-2 text-right tabular-nums">{t.collected ? money(t.collected) : "–"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-1 text-xs text-muted-foreground">
+          Each tagged lead is also counted under &ldquo;Affiliate&apos;s GoHighLevel link&rdquo; above and, from {startedOn}, in that person&apos;s {CHANNEL_PCT}%.
+        </p>
       </div>
       <div className="mt-5" id="content-pool">
         <h3 className="text-base font-bold">Content profit pool</h3>
