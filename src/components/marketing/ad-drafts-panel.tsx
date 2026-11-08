@@ -148,13 +148,16 @@ function DraftCard({
             </Button>
           ))}
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <p className="mt-3 text-xs font-medium text-muted-foreground">
+          If you run it at ${budget / 100} a day, over the next 30 days we expect (a guess from how your Google ads have done):
+        </p>
+        <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
           {[
-            ["Spend / 30 days", money(est.spend)],
-            ["Leads", String(est.leads)],
-            ["Jobs", String(est.jobs)],
-            ["Revenue", money(est.revenue)],
-            ["Back per $1", `$${est.returnPerDollar.toFixed(2)}`],
+            ["You spend on the ad", money(est.spend)],
+            ["People who reach out", String(est.leads)],
+            ["Of those, jobs booked", String(est.jobs)],
+            ["Money from those jobs", money(est.revenue)],
+            ["Back for every $1 spent", `$${est.returnPerDollar.toFixed(2)}`],
           ].map(([label, value]) => (
             <div key={label} className="rounded-md bg-muted/50 p-2">
               <p className="text-xs text-muted-foreground">{label}</p>
