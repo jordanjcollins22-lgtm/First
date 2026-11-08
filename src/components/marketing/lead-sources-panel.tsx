@@ -77,7 +77,7 @@ export function LeadSourcesPanel({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold">Where leads come from</h2>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" id="lead-totals">
             {total} {total === 1 ? "lead" : "leads"} · {money(revenue)} made · {money(adsTotal)} back into ads
             {toPeopleTotal > 0 ? ` · ${money(toPeopleTotal)} to people` : ""}
           </p>
@@ -95,7 +95,7 @@ export function LeadSourcesPanel({
         <p className="mt-3 text-sm text-muted-foreground">No leads in this period.</p>
       ) : (
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[520px] text-sm">
+          <table className="w-full min-w-[520px] text-sm" id="lead-sources-table">
             <thead>
               <tr className="text-left text-xs text-muted-foreground">
                 <th className="py-1 pr-2 font-medium">Source</th>
@@ -108,6 +108,7 @@ export function LeadSourcesPanel({
               {rows.map((r) => (
                 <Fragment key={r.group}>
                   <tr
+                    id={`source-${r.group.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`}
                     className={`border-t border-border/60 ${r.details.length ? "cursor-pointer hover:bg-muted/40" : ""}`}
                     onClick={() => r.details.length && setOpen(open === r.group ? null : r.group)}
                   >
