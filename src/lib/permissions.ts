@@ -252,6 +252,10 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/jobs/[jobId]/scan":
     "A walk-around video of the property, uploaded as stills for a 3D model (demo). Guarded by " +
     "requireJobAccess like the job page: it is pictures of the same property the job already shows.",
+  "/jobs/[jobId]/model":
+    "The job in 3D: its beds, plants and order of work on the satellite map, for the crew to walk " +
+    "through. Guarded by requireJobAccess like the crew sheet; only whoever runs jobs can change it, " +
+    "checked again by the save action. No money.",
   "/jobs/[jobId]/crew-demo":
     "A job's crew sheet as a demo to click through, from the shop to asking for the walkthrough. Every " +
     "tap changes the screen only: nothing is recorded, uploaded or sent. Guarded by requireJobAccess like the crew sheet.",
