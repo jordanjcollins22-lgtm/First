@@ -4,46 +4,14 @@ import { GoogleAdsTracker } from "@/components/marketing/google-ads-tracker";
 import { AdDraftsPanel } from "@/components/marketing/ad-drafts-panel";
 import type { AdDraft } from "@/lib/data/ad-drafts";
 import { adCopy } from "@/lib/marketing/ad-draft";
-import type { DatedAdSpend } from "@/lib/data/ads-tracker";
-import type { LeadRecord } from "@/lib/data/lead-sources";
+import { listGoogleAdsSpend } from "@/lib/data/ads-tracker";
+import { listLeadSources } from "@/lib/data/lead-sources";
+import { reviewScope } from "@/lib/data/review-scope";
 
 /** The ads to approve and the Google Ads tracker on sample campaigns, for reviewing a preview from the Flow Board. */
 export const dynamic = "force-dynamic";
 
 const NOW = "2026-11-08T12:00:00.000Z";
-const day = (n: number) => new Date(Date.parse(NOW) - n * 86_400_000).toISOString();
-
-const SPEND: DatedAdSpend[] = [
-  { day: day(5).slice(0, 10), campaign: "Spring cleanups", amountCents: 42000, clicks: 180 },
-  { day: day(20).slice(0, 10), campaign: "Spring cleanups", amountCents: 38000, clicks: 150 },
-  { day: day(9).slice(0, 10), campaign: "Mulch and beds", amountCents: 25000, clicks: 95 },
-  { day: day(14).slice(0, 10), campaign: "Snow removal", amountCents: 18000, clicks: 60 },
-];
-
-function lead(id: number, campaign: string | null, paid: number, ago: number): LeadRecord {
-  return {
-    jobId: `sample-${id}`,
-    createdAt: day(ago),
-    source: { group: "Google ad", detail: campaign },
-    sold: paid > 0,
-    revenue: paid,
-    collected: paid,
-    hasAffiliate: false,
-    fromContent: false,
-    profit: null,
-  };
-}
-
-const LEADS: LeadRecord[] = [
-  lead(1, "Spring cleanups", 2400, 4),
-  lead(2, "Spring cleanups", 1850, 11),
-  lead(3, "Spring cleanups", 0, 15),
-  lead(4, "Spring cleanups", 0, 22),
-  lead(5, "Mulch and beds", 950, 8),
-  lead(6, "Mulch and beds", 0, 12),
-  lead(7, "Snow removal", 0, 13),
-  lead(8, null, 600, 18),
-];
 
 const DRAFTS: AdDraft[] = [
   {
@@ -58,14 +26,19 @@ const DRAFTS: AdDraft[] = [
   },
 ];
 
-export default function ReviewGoogleAdsPage() {
+export default async function ReviewGoogleAdsPage() {
   if (!reviewPagesEnabled()) notFound();
+  // The tracker shows your real Google Ads spend and leads. The ad to approve stays a sample until its table exists (it is added on Approve).
+  const scope = await reviewScope();
+  const [spend, allLeads] = await Promise.all([listGoogleAdsSpend(365, scope), listLeadSources(365, scope)]);
+  const leads = allLeads.filter((l) => l.source.group === "Google ad");
+  const now = new Date().toISOString();
   return (
     <div className="mx-auto max-w-4xl px-4 py-6">
-      <p className="mb-3 text-sm text-muted-foreground">Sample campaigns. On the real Marketing page this is at the top of Attribution.</p>
+      <p className="mb-3 text-sm text-muted-foreground">The ad below is a sample (real ones are made from crew photos once this is approved). The tracker under it is your real Google Ads data. On the real Marketing page both are at the top of Attribution.</p>
       <div className="space-y-6">
-        <AdDraftsPanel drafts={DRAFTS} spend={SPEND} leads={LEADS} now={NOW} demo />
-        <GoogleAdsTracker spend={SPEND} leads={LEADS} now={NOW} />
+        <AdDraftsPanel drafts={DRAFTS} spend={spend} leads={leads} now={now} demo />
+        <GoogleAdsTracker spend={spend} leads={leads} now={now} />
       </div>
     </div>
   );

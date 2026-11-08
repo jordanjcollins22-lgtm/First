@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import type { DataScope } from "@/lib/data/review-scope";
 import type { AdSpend } from "@/lib/ads-tracker";
 
 export interface DatedAdSpend extends AdSpend {
@@ -7,9 +8,9 @@ export interface DatedAdSpend extends AdSpend {
 }
 
 /** Google Ads spend per campaign per day for the last year, as the daily import (or a CSV) recorded it. */
-export async function listGoogleAdsSpend(days = 365): Promise<DatedAdSpend[]> {
-  const supabase = await createClient();
-  const organizationId = await getCurrentOrganizationId();
+export async function listGoogleAdsSpend(days = 365, scope?: DataScope): Promise<DatedAdSpend[]> {
+  const supabase = scope?.client ?? (await createClient());
+  const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from("marketing_spend")

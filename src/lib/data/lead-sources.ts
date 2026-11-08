@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrganizationId } from "@/lib/data/organizations";
+import type { DataScope } from "@/lib/data/review-scope";
 import { leadSource, type LeadSource } from "@/lib/lead-sources";
 import { loadMoney } from "@/lib/data/commission";
 import { isOwnerLevel } from "@/lib/roles";
@@ -31,9 +32,9 @@ export interface LeadRecord {
  * whether and for how much it sold. Grouped and counted on the page, so the
  * period can change without asking again.
  */
-export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
-  const supabase = await createClient();
-  const organizationId = await getCurrentOrganizationId();
+export async function listLeadSources(days = 365, scope?: DataScope): Promise<LeadRecord[]> {
+  const supabase = scope?.client ?? (await createClient());
+  const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
 
   const { data: jobs, error } = await supabase
@@ -145,9 +146,9 @@ export async function listLeadSources(days = 365): Promise<LeadRecord[]> {
  * The marketing team, for the content profit pool: everybody who hands out
  * tracked links, by first name, the owner aside.
  */
-export async function listMarketingTeam(): Promise<string[]> {
-  const supabase = await createClient();
-  const organizationId = await getCurrentOrganizationId();
+export async function listMarketingTeam(scope?: DataScope): Promise<string[]> {
+  const supabase = scope?.client ?? (await createClient());
+  const organizationId = scope?.organizationId ?? (await getCurrentOrganizationId());
   const { data: links, error } = await supabase.from("outreach_links").select("profile_id").eq("organization_id", organizationId).limit(5000);
   if (error) throw error;
   const ids = Array.from(new Set((links ?? []).map((l) => l.profile_id as string | null).filter((p): p is string => Boolean(p))));
