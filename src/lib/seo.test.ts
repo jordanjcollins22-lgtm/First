@@ -54,6 +54,7 @@ describe("gbpWeeklyPlan", () => {
     expect(new Set(plan.map((w) => w.post.kind)).size).toBe(4);
     expect(plan.every((w) => /Bel Air|Abingdon/.test(w.post.body))).toBe(true);
     expect(plan[0].checklist.length).toBeGreaterThan(0);
+    expect(plan.find((w) => w.post.kind === "offer")?.post.title).toMatch(/^Book now: .+ this fall$/);
   });
 
   it("gives the same week the same post whenever it is read", () => {

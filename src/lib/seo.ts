@@ -145,7 +145,7 @@ function postFor(kind: GbpWeek["post"]["kind"], service: string, town: string, s
     case "offer":
       return {
         kind,
-        title: `${season[0].toUpperCase()}${season.slice(1)} ${s}: book now`,
+        title: `Book now: ${s} this ${season}`,
         body: `An offer post for ${s} this ${season}: what's included, the window it's best done in, and "free evaluation, written price". Mention ${town} and nearby towns. Button: Book.`,
       };
     case "update":
