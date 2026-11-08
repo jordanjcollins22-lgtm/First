@@ -109,3 +109,16 @@ export async function fetchTranscript(id: string): Promise<Transcript> {
   }
   return { ok: false, error: "Couldn't get this video's transcript from YouTube. Paste it in instead: on YouTube, open the video's description, tap Show transcript, copy it all." };
 }
+
+/** A video's title and channel from YouTube's oEmbed, which works even where the player is blocked. */
+export async function fetchTitle(id: string): Promise<{ title: string; author: string }> {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}`, { cache: "no-store" });
+    trace.push(`oembed ${r.status}`);
+    if (!r.ok) return { title: "", author: "" };
+    const j = (await r.json()) as { title?: string; author_name?: string };
+    return { title: j.title ?? "", author: j.author_name ?? "" };
+  } catch {
+    return { title: "", author: "" };
+  }
+}

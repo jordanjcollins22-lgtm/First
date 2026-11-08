@@ -19,7 +19,7 @@ export function VideoNotes() {
   const [goals, setGoals] = useState<string[]>([]);
   const [own, setOwn] = useState("");
   const [pasted, setPasted] = useState("");
-  const [showPaste, setShowPaste] = useState(false);
+  const [showPaste, setShowPaste] = useState(true);
   const [result, setResult] = useState<NotesResult | null>(null);
   const [pending, start] = useTransition();
   const valid = Boolean(youtubeId(link)) || pasted.trim().length > 200;
@@ -61,8 +61,9 @@ export function VideoNotes() {
         </div>
         {showPaste && (
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Transcript</p>
-            <Textarea className="mt-1" rows={5} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="On YouTube: open the description, tap Show transcript, select it all, copy, and paste it here." />
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">4 · The transcript</p>
+            <p className="text-sm text-muted-foreground">YouTube blocks apps from pulling it, so copy it in: on YouTube, open the description, tap Show transcript, select it all, copy, paste here.</p>
+            <Textarea className="mt-1" rows={5} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Paste the transcript here" />
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3">

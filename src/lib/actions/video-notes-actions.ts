@@ -7,7 +7,7 @@ import { env, isAnthropicConfigured } from "@/lib/env";
 import { reviewPagesEnabled } from "@/lib/review-pages";
 import { isOwnerLevel } from "@/lib/roles";
 import { MAX_TRANSCRIPT_CHARS, notesPrompt, parseNotes, youtubeId, type VideoNotes } from "@/lib/video-notes";
-import { fetchTranscript } from "@/lib/youtube-transcript";
+import { fetchTitle, fetchTranscript } from "@/lib/youtube-transcript";
 
 /**
  * Reads a YouTube video for the owner and sends back the notes (video-notes.ts).
@@ -31,6 +31,8 @@ export async function readVideo(input: { link: string; know: string; want: strin
     let author = "";
     let seconds = 0;
     let transcript = pasted;
+    const linkId = youtubeId(input.link);
+    if (transcript && linkId) ({ title, author } = await fetchTitle(linkId));
     if (!transcript) {
       const id = youtubeId(input.link);
       if (!id) return { ok: false, error: "That doesn't look like a YouTube link." };
