@@ -26,6 +26,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <Link href="/check-ins" className="hover:text-primary">
                 Check-ins
               </Link>
+              <Link href="/accounting" className="hover:text-primary">
+                Books
+              </Link>
               <Link href="/videos" className="hover:text-primary">
                 Videos
               </Link>

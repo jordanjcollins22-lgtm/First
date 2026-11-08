@@ -21,7 +21,15 @@ export const serverEnv = {
   ghlWebhookSecret: process.env.GHL_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  plaidClientId: process.env.PLAID_CLIENT_ID ?? "",
+  plaidSecret: process.env.PLAID_SECRET ?? "",
+  /** "sandbox" (test banks) or "production". */
+  plaidEnv: process.env.PLAID_ENV === "production" ? "production" : "sandbox",
 };
+
+export function isPlaidConfigured() {
+  return Boolean(serverEnv.plaidClientId && serverEnv.plaidSecret && serverEnv.supabaseServiceRoleKey);
+}
 
 export function isGhlConfigured() {
   return Boolean(serverEnv.ghlApiKey && serverEnv.ghlLocationId);

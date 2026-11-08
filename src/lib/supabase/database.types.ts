@@ -380,6 +380,156 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["detailing_leads"]["Row"]>;
         Relationships: [];
       };
+      bank_connections: {
+        Row: {
+          id: string;
+          provider: "plaid";
+          item_id: string;
+          institution_name: string | null;
+          status: "active" | "error" | "disconnected";
+          last_synced_at: string | null;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bank_connections"]["Row"]> & { item_id: string };
+        Update: Partial<Database["public"]["Tables"]["bank_connections"]["Row"]>;
+        Relationships: [];
+      };
+      bank_connection_secrets: {
+        Row: {
+          connection_id: string;
+          access_token: string;
+          sync_cursor: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["bank_connection_secrets"]["Row"]> & {
+          connection_id: string;
+          access_token: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["bank_connection_secrets"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "bank_connection_secrets_connection_id_fkey";
+            columns: ["connection_id"];
+            referencedRelation: "bank_connections";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      accounting_accounts: {
+        Row: {
+          id: string;
+          name: string;
+          kind: "checking" | "savings" | "credit_card" | "other";
+          source: "csv" | "plaid";
+          institution: string | null;
+          mask: string | null;
+          connection_id: string | null;
+          plaid_account_id: string | null;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["accounting_accounts"]["Row"]> & { name: string };
+        Update: Partial<Database["public"]["Tables"]["accounting_accounts"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "accounting_accounts_connection_id_fkey";
+            columns: ["connection_id"];
+            referencedRelation: "bank_connections";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      accounting_transactions: {
+        Row: {
+          id: string;
+          account_id: string;
+          external_id: string;
+          posted_on: string;
+          description: string;
+          merchant_name: string | null;
+          amount: number;
+          category: string;
+          category_source: "default" | "rule" | "user_rule" | "ai" | "manual";
+          confidence: number | null;
+          needs_review: boolean;
+          categorization_reason: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["accounting_transactions"]["Row"]> & {
+          account_id: string;
+          external_id: string;
+          posted_on: string;
+          description: string;
+          amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["accounting_transactions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "accounting_transactions_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "accounting_accounts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      accounting_rules: {
+        Row: {
+          id: string;
+          match_text: string;
+          category: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["accounting_rules"]["Row"]> & {
+          match_text: string;
+          category: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["accounting_rules"]["Row"]>;
+        Relationships: [];
+      };
+      accounting_year_settings: {
+        Row: {
+          tax_year: number;
+          beginning_inventory: number;
+          ending_inventory: number;
+          sales_tax_rate: number;
+          sales_tax_paid_on_materials: boolean;
+          plant_markup: number;
+          federal_marginal_rate: number;
+          state_income_rate: number;
+          qbi_deduction: boolean;
+          plant_treatment: "sell" | "install" | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["accounting_year_settings"]["Row"]> & { tax_year: number };
+        Update: Partial<Database["public"]["Tables"]["accounting_year_settings"]["Row"]>;
+        Relationships: [];
+      };
+      accounting_imports: {
+        Row: {
+          id: string;
+          account_id: string;
+          filename: string | null;
+          row_count: number;
+          inserted_count: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["accounting_imports"]["Row"]> & { account_id: string };
+        Update: Partial<Database["public"]["Tables"]["accounting_imports"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "accounting_imports_account_id_fkey";
+            columns: ["account_id"];
+            referencedRelation: "accounting_accounts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

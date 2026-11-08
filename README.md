@@ -89,6 +89,65 @@ Scheduled text check-ins with crew members so delays surface early.
    endpoint instead, for example Supabase `pg_cron` + `pg_net` or
    cron-job.org. Send the header `Authorization: Bearer <CRON_SECRET>`.
 
+## Books (Schedule C accounting)
+
+**/accounting** turns bank activity into a Schedule C. Every transaction gets
+one category, and every category maps to one Schedule C line
+(`src/lib/accounting/schedule-c.ts` is the only place that mapping lives).
+
+**Getting transactions in**
+
+- **Upload a statement CSV** from any bank or card. The parser finds the
+  date / description / amount (or debit / credit) columns by header name.
+  Re-uploading overlapping dates is safe; duplicates are skipped.
+- **Automatic bank feed (optional, Plaid).** Set `PLAID_CLIENT_ID`,
+  `PLAID_SECRET`, `PLAID_ENV` and `SUPABASE_SERVICE_ROLE_KEY`, then press
+  "Connect a bank or card". `/api/cron/bank-sync` pulls new transactions
+  daily (same `CRON_SECRET` as check-ins). Access tokens live in
+  `bank_connection_secrets`, which has no RLS policy, so only the service
+  role can read them. Use `PLAID_ENV=sandbox` with `user_good` / `pass_good`
+  to try it with a fake bank.
+
+**Categorizing**
+
+1. Your saved merchant rules ("Always use for this merchant").
+2. Built-in keyword rules for landscaping vendors and common merchants
+   (`src/lib/accounting/rules.ts`). Ambiguous merchants (Home Depot, gas
+   stations, restaurants, Zelle) are guessed but flagged for review.
+3. Optional: "Ask Claude to suggest categories" (needs `ANTHROPIC_API_KEY`).
+   Suggestions are always left for a person to approve.
+
+Anything in **Needs review** isn't counted on the return. Unknown expenses
+are never guessed into a deduction.
+
+**Plants: sell vs. install.** Plants, mulch, soil and stone go in the "Job
+materials" category. On the Schedule C page the app compares:
+
+- **Install** (materials used in a service): line 22. You pay sales tax on
+  materials (or owe use tax).
+- **Sell** (retail, inventory): Part III line 36 with Dec 31 inventory on
+  line 41. You buy tax-free with a resale certificate and charge customers
+  sales tax on the plants.
+
+With honest year-end inventory counts, federal net profit is the same either
+way. The real difference is sales tax, so the app recommends whichever
+leaves the business with the lower total of income tax + self-employment tax
++ sales/use tax, and lists what you have to do (invoicing, permits, filings)
+for that choice to hold up. Lock the choice in per year; switching should be
+a real change in how you invoice, ideally at the start of a year.
+
+**Audit-risk check.** The Schedule C page flags unreviewed items,
+personal-looking merchants marked as business, high meals/vehicle/"other"
+totals, items over $2,500 expensed instead of depreciated, round-dollar
+amounts, cash withdrawals, contractors who need a 1099-NEC, and inventory
+that doesn't carry over from last year. "Download CSV for your CPA" exports
+every transaction with its line.
+
+Setup: run `supabase/migrations/0006_accounting.sql`.
+
+This organizes the books and estimates tax at rates you enter. It isn't a
+filed return or tax advice; have a CPA review it.
+
 ## Architecture notes
 
 - **Single source of truth for measurements**: `src/lib/measurement.ts` is
