@@ -44,7 +44,8 @@ export function funnelOf(contact: Record<string, unknown> | null, fieldId: strin
   }
   for (const key of ["attributionSource", "lastAttributionSource"]) {
     const a = contact[key] as Record<string, unknown> | undefined;
-    const value = a && tidy(a.utmSource ?? a.campaign ?? a.medium ?? a.sessionSource);
+    // Only a real ad tag; its medium and session source are filled in automatically (other, calendar, direct traffic).
+    const value = a && tidy(a.utmSource ?? a.utmCampaign ?? a.campaign);
     if (value) return value;
   }
   return null;
