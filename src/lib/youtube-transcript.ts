@@ -21,20 +21,32 @@ interface PlayerResponse {
 /** What each step saw, for the preview check. */
 export const trace: string[] = [];
 
-async function fromPlayer(id: string): Promise<PlayerResponse | null> {
+const CLIENTS = [
+  { name: "ANDROID", ua: "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip", client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 34 } },
+  { name: "IOS", ua: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)", client: { clientName: "IOS", clientVersion: "20.10.4", deviceMake: "Apple", deviceModel: "iPhone16,2", osName: "iPhone", osVersion: "18.3.2.22D82" } },
+  { name: "TV", ua: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version", client: { clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", clientVersion: "2.0" }, embed: true },
+  { name: "WEB_EMBED", ua: UA, client: { clientName: "WEB_EMBEDDED_PLAYER", clientVersion: "1.20250310.01.00" }, embed: true },
+  { name: "MWEB", ua: UA, client: { clientName: "MWEB", clientVersion: "2.20250311.03.00" } },
+];
+
+async function fromClient(id: string, c: (typeof CLIENTS)[number]): Promise<PlayerResponse | null> {
   try {
     const r = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
       method: "POST",
-      headers: { "content-type": "application/json", "user-agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14) gzip" },
-      body: JSON.stringify({ videoId: id, context: { client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 34, hl: "en", gl: "US" } } }),
+      headers: { "content-type": "application/json", "user-agent": c.ua },
+      body: JSON.stringify({
+        videoId: id,
+        context: { client: { ...c.client, hl: "en", gl: "US" }, ...(c.embed ? { thirdParty: { embedUrl: "https://www.youtube.com/" } } : {}) },
+      }),
       cache: "no-store",
     });
-    trace.push(`player ${r.status}`);
+    trace.push(`${c.name} ${r.status}`);
     if (!r.ok) return null;
     const j = (await r.json()) as PlayerResponse;
-    trace.push(`player status ${j.playabilityStatus?.status} ${j.playabilityStatus?.reason ?? ""} tracks ${j.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length ?? 0}`);
+    trace.push(`${c.name} status ${j.playabilityStatus?.status} ${j.playabilityStatus?.reason ?? ""} tracks ${j.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length ?? 0}`);
     return j;
-  } catch {
+  } catch (e) {
+    trace.push(`${c.name} threw ${String(e).slice(0, 80)}`);
     return null;
   }
 }
@@ -47,7 +59,9 @@ async function fromWatchPage(id: string): Promise<PlayerResponse | null> {
     const html = await r.text();
     trace.push(`watch html ${html.length} consent ${/consent\.youtube|before you continue/i.test(html)}`);
     const m = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\})\s*;\s*(?:var\s|<\/script)/);
-    return m ? (JSON.parse(m[1]) as PlayerResponse) : null;
+    const j = m ? (JSON.parse(m[1]) as PlayerResponse) : null;
+    trace.push(`watch match ${Boolean(m)} status ${j?.playabilityStatus?.status} tracks ${j?.captions?.playerCaptionsTracklistRenderer?.captionTracks?.length ?? 0}`);
+    return j;
   } catch {
     return null;
   }
@@ -71,8 +85,10 @@ async function captionText(track: CaptionTrack): Promise<string> {
 
 export async function fetchTranscript(id: string): Promise<Transcript> {
   let details: PlayerResponse["videoDetails"] | undefined;
-  for (const get of [fromPlayer, fromWatchPage]) {
-    const player = await get(id);
+  trace.length = 0;
+  const steps = [...CLIENTS.map((c) => () => fromClient(id, c)), () => fromWatchPage(id)];
+  for (const get of steps) {
+    const player = await get();
     if (!player) continue;
     details ??= player.videoDetails;
     if (player.playabilityStatus?.status && player.playabilityStatus.status !== "OK" && !player.captions) {
