@@ -89,7 +89,7 @@ export async function listLeadSources(days = 365, scope?: DataScope): Promise<Le
       : Promise.resolve({ data: [] as { profile_id: string; role_name: string }[] }),
     // What clients actually paid, for the channel growth budget. Only sold
     // jobs can have money in, so only they are asked about.
-    loadMoney(soldIds).catch(() => null),
+    loadMoney(soldIds, scope?.client).catch(() => null),
   ]);
   const rolesOf = new Map<string, string[]>();
   for (const r of (personRoles ?? []) as { profile_id: string; role_name: string }[]) rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role_name]);

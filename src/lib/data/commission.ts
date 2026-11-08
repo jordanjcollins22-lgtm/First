@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
@@ -52,7 +53,10 @@ export interface JobMoney {
  * Fetched for every job at once rather than per manager, so adding a fifth
  * account manager does not add four more round trips.
  */
-export async function loadMoney(jobIds: string[]): Promise<JobMoney> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function loadMoney(jobIds: string[], client?: SupabaseClient<any>): Promise<JobMoney> {
+  // A review page reads with its own (read-only) client, outside the per-request cache.
+  if (client) return readMoney([...new Set(jobIds)], client);
   // Once per page for the same jobs: the commission and the advances on
   // My Day both ask.
   return loadMoneyFor([...new Set(jobIds)].sort().join(","));
@@ -62,7 +66,8 @@ const loadMoneyFor = cache(async function loadMoneyFor(key: string): Promise<Job
   return readMoney(key ? key.split(",") : []);
 });
 
-async function readMoney(jobIds: string[]): Promise<JobMoney> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readMoney(jobIds: string[], client?: SupabaseClient<any>): Promise<JobMoney> {
   const empty: JobMoney = {
     collected: new Map(),
     paidByClient: new Map(),
@@ -77,7 +82,7 @@ async function readMoney(jobIds: string[]): Promise<JobMoney> {
   };
   if (jobIds.length === 0) return empty;
 
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const [invoices, ledger, proposals, tickets, payouts, payments] = await Promise.all([
     safe(supabase.from("invoices").select("id, job_id, amount, status, paid_at, stripe_invoice_id").in("job_id", jobIds)),
     safe(
