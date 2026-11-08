@@ -834,7 +834,7 @@ function practiceFromZones(zones: InternalZoneBreakdown[], previous: JobProposal
       scopeText: z.notes,
       photoPaths: [],
       points: [],
-      color: "#2f6d3c",
+      color: "#0f766e",
       priceCents: z.priceCents,
       priceDerived: true,
     })),

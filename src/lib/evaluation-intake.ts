@@ -248,7 +248,7 @@ export const INTAKE_QUESTIONS: IntakeQuestion[] = [
     help: "There is no wrong answer. Not sure is a real answer and we will bring options.",
     kind: "multi",
     options: [
-      { value: "classic", label: "Greens and whites, classic", swatches: ["#2f6d3c", "#7fae6a", "#e9efe4", "#ffffff"] },
+      { value: "classic", label: "Greens and whites, classic", swatches: ["#0f766e", "#7fae6a", "#e9efe4", "#ffffff"] },
       { value: "cool", label: "Purples and blues", swatches: ["#4b2e83", "#8b6fc9", "#3a6fb5", "#a9cbea"] },
       { value: "warm", label: "Reds, oranges and yellows", swatches: ["#b3261e", "#e0662a", "#f2a33a", "#f6d65a"] },
       { value: "native", label: "Natural, native plants", swatches: ["#6f7f3f", "#b99a4a", "#8a5a3b", "#d8c9a0"] },

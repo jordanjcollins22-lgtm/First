@@ -21,7 +21,7 @@ export const maxDuration = 30;
 
 const W = CARD.width;
 const H = CARD.height;
-const GREEN = "#2f6d3c";
+const GREEN = "#0f766e";
 const DARK = "#14261a";
 
 /**

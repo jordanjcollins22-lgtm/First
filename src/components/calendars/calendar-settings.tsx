@@ -26,7 +26,7 @@ interface TeamMember {
 
 function NewCalendarForm() {
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#2f6d3c");
+  const [color, setColor] = useState("#0f766e");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -40,7 +40,7 @@ function NewCalendarForm() {
         return;
       }
       setName("");
-      setColor("#2f6d3c");
+      setColor("#0f766e");
       setDescription("");
     });
   }

@@ -43,7 +43,7 @@ export const PRACTICE_ZONES: PracticeZone[] = [
     service: "Landscape Bed",
     location: "Either side of the front steps",
     sizeLabel: "24 × 6 ft",
-    color: "#2f6d3c",
+    color: "#0f766e",
     points: [
       { x: 120, y: 190 },
       { x: 280, y: 190 },

@@ -43,7 +43,7 @@ export function initialsFor(name: string): string {
  * half of them unreadable.
  */
 const DISCS: { bg: string; text: string }[] = [
-  { bg: "#2f6d3c", text: "#ffffff" },
+  { bg: "#0f766e", text: "#ffffff" },
   { bg: "#3a8d7a", text: "#ffffff" },
   { bg: "#4a6fa5", text: "#ffffff" },
   { bg: "#7a5ea8", text: "#ffffff" },

@@ -23,7 +23,7 @@ export const LAYER_LABELS: Record<CalendarLayer, string> = {
 
 /** Matches the Jobs calendar's colour so the two agree wherever they appear. */
 export const LAYER_COLORS: Record<CalendarLayer, string> = {
-  evaluations: "#2f6d3c",
+  evaluations: "#0f766e",
   jobs: "#b45309",
 };
 

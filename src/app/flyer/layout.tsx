@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#2f6d3c",
+  themeColor: "#0f766e",
   width: "device-width",
   initialScale: 1,
   // Zoom left available: somebody checking their own artwork on a phone

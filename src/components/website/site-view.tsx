@@ -30,24 +30,24 @@ export function SiteView({
   return (
     <div className="@container bg-white text-stone-900">
       <header className="flex items-center justify-between gap-3 border-b border-stone-200 px-5 py-3">
-        <span className="truncate text-lg font-extrabold text-[#2f6d3c]">{c.businessName}</span>
+        <span className="truncate text-lg font-extrabold text-[#0f766e]">{c.businessName}</span>
         <div className="flex items-center gap-3">
           {c.phone && (
             <a href={`tel:${tel}`} className="hidden items-center gap-1.5 text-sm font-semibold @md:inline-flex">
               <Phone className="h-4 w-4" /> {c.phone}
             </a>
           )}
-          <a href={links.book} {...target} className="rounded-lg bg-[#2f6d3c] px-3 py-2 text-sm font-bold text-white hover:bg-[#25582f]">
+          <a href={links.book} {...target} className="rounded-lg bg-[#0f766e] px-3 py-2 text-sm font-bold text-white hover:bg-[#25582f]">
             Book now
           </a>
         </div>
       </header>
 
-      <section className="bg-gradient-to-br from-[#2f6d3c] to-[#1f4a29] px-5 py-14 text-white @3xl:px-12 @3xl:py-24">
+      <section className="bg-gradient-to-br from-[#0f766e] to-[#1f4a29] px-5 py-14 text-white @3xl:px-12 @3xl:py-24">
         <h1 className="max-w-3xl text-3xl font-extrabold leading-tight tracking-tight @3xl:text-5xl">{c.heroHeadline}</h1>
         {c.heroSub && <p className="mt-4 max-w-2xl text-base text-white/85 @3xl:text-lg">{c.heroSub}</p>}
         <div className="mt-7 flex flex-wrap gap-3">
-          <a href={links.book} {...target} className="rounded-xl bg-white px-5 py-3 font-bold text-[#2f6d3c] shadow hover:bg-stone-100">
+          <a href={links.book} {...target} className="rounded-xl bg-white px-5 py-3 font-bold text-[#0f766e] shadow hover:bg-stone-100">
             {c.ctaLabel}
           </a>
           {c.phone && (
@@ -76,7 +76,7 @@ export function SiteView({
         <section className="grid gap-3 px-5 pb-12 @lg:grid-cols-2 @3xl:px-12">
           {c.showQuickMow && (
             <a href={links.mow} {...target} className="rounded-xl bg-[#eef6ef] p-5 hover:bg-[#e2efe4]">
-              <span className="block text-lg font-extrabold text-[#2f6d3c]">Just need a mow?</span>
+              <span className="block text-lg font-extrabold text-[#0f766e]">Just need a mow?</span>
               <span className="text-sm text-stone-700">Type your address, see your price in seconds, and book your first cut. →</span>
             </a>
           )}
@@ -97,7 +97,7 @@ export function SiteView({
             <ul className="mt-5 grid gap-2.5 @lg:grid-cols-2">
               {c.whyUs.map((r) => (
                 <li key={r} className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#2f6d3c]" /> <span>{r}</span>
+                  <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-[#0f766e]" /> <span>{r}</span>
                 </li>
               ))}
             </ul>
@@ -110,7 +110,7 @@ export function SiteView({
       {(c.serviceArea || c.areas.length > 0) && (
         <section className="px-5 py-12 @3xl:px-12">
           <h2 className="flex items-center gap-2 text-2xl font-extrabold">
-            <MapPin className="h-6 w-6 text-[#2f6d3c]" /> Where we work
+            <MapPin className="h-6 w-6 text-[#0f766e]" /> Where we work
           </h2>
           {c.serviceArea && <p className="mt-3 max-w-3xl text-stone-700">{c.serviceArea}</p>}
           {c.areas.length > 0 && (
@@ -120,7 +120,7 @@ export function SiteView({
                   <a
                     href={areaHref(orgSlug, a.town)}
                     {...target}
-                    className="inline-flex min-h-10 items-center rounded-full border border-stone-300 px-4 text-sm font-semibold text-stone-800 hover:border-[#2f6d3c] hover:text-[#2f6d3c]"
+                    className="inline-flex min-h-10 items-center rounded-full border border-stone-300 px-4 text-sm font-semibold text-stone-800 hover:border-[#0f766e] hover:text-[#0f766e]"
                   >
                     {a.town}
                   </a>
@@ -131,10 +131,10 @@ export function SiteView({
         </section>
       )}
 
-      <section className="bg-[#2f6d3c] px-5 py-12 text-center text-white @3xl:px-12">
+      <section className="bg-[#0f766e] px-5 py-12 text-center text-white @3xl:px-12">
         <h2 className="text-2xl font-extrabold">Ready when you are.</h2>
         <p className="mt-2 text-white/85">Pick a time that works and we&apos;ll come take a look. No cost, no pressure.</p>
-        <a href={links.book} {...target} className="mt-6 inline-block rounded-xl bg-white px-6 py-3 font-bold text-[#2f6d3c] hover:bg-stone-100">
+        <a href={links.book} {...target} className="mt-6 inline-block rounded-xl bg-white px-6 py-3 font-bold text-[#0f766e] hover:bg-stone-100">
           {c.ctaLabel}
         </a>
       </section>
