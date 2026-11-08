@@ -11,8 +11,8 @@ export interface GhlFieldDef {
   fieldKey?: string | null;
 }
 
-/** Words that mark the funnel field, best first. */
-const FUNNEL_WORDS = [/funnel/i, /lead ?source/i, /how did you (hear|find)/i, /\bsource\b/i, /referr/i, /campaign/i];
+/** Words that mark the funnel field, best first. "How did you hear about us?" is the one clients pick themselves on the booking form. */
+const FUNNEL_WORDS = [/how did you (hear|find)/i, /funnel/i, /lead ?source/i, /\bsource\b/i, /referr/i, /campaign/i];
 
 /** The custom field that tracks the booking funnel, or null when none looks like it. A name set in GHL_FUNNEL_FIELD wins. */
 export function funnelField(fields: GhlFieldDef[], preferred?: string | null): GhlFieldDef | null {
@@ -28,7 +28,7 @@ export function funnelField(fields: GhlFieldDef[], preferred?: string | null): G
   return null;
 }
 
-/** One contact's funnel, from its custom field, else GoHighLevel's own attribution, else its source. Tidied for a table. */
+/** One contact's funnel, from its custom field, else GoHighLevel's own ad attribution. Its "source" is filled in automatically (the app, a calendar), so it is left out. */
 export function funnelOf(contact: Record<string, unknown> | null, fieldId: string | null): string | null {
   if (!contact) return null;
   const tidy = (v: unknown) => {
@@ -47,5 +47,5 @@ export function funnelOf(contact: Record<string, unknown> | null, fieldId: strin
     const value = a && tidy(a.utmSource ?? a.campaign ?? a.medium ?? a.sessionSource);
     if (value) return value;
   }
-  return tidy(contact.source);
+  return null;
 }
