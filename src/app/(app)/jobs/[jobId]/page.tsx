@@ -729,6 +729,7 @@ export default async function JobPage({
         hasSiteMap={photoZones.length > 0}
         photoCount={photos.filter((photo) => photo.kind !== "issue").length}
         managerView={!!viewer && canRunJobs(viewer.roles)}
+        pricingReport={seen.jobMoney}
       />
 
       <ProjectTimeline milestones={milestones} timeZone={organization.reminder_time_zone} />
