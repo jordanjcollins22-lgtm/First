@@ -104,6 +104,11 @@ describe("routes a customer opens", () => {
 
   // Somebody answering a job ad has no account. A sign-in screen in front of
   // the apply form is an ad nobody can answer.
+  it("lets our lawyer open a shared files link", () => {
+    expect(isPublic("/files/m5bcsfEwp2ZaMUP0LfEt8B75")).toBe(true);
+    expect(needsAuthCheck("/files/m5bcsfEwp2ZaMUP0LfEt8B75")).toBe(false);
+  });
+
   it("lets somebody from a post buy a mow without an account", () => {
     expect(isPublic("/mow")).toBe(true);
     expect(needsAuthCheck("/mow/done/abc")).toBe(false);
