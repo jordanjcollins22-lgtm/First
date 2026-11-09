@@ -68,3 +68,51 @@ export function formatFileSize(bytes: number | null): string {
 export function isCaseFilesToken(token: string): boolean {
   return /^[A-Za-z0-9_-]{16,64}$/.test(token);
 }
+
+/**
+ * layout.json in the folder turns the page into one document: a single
+ * download button and sections the reader scrolls through, each showing only
+ * the files named in it, in that order. Anything not named stays off the
+ * page. Files named but missing from the folder are skipped.
+ */
+export type CaseLayoutSection = { title: string; note?: string; files: CaseFile[] };
+export type CaseLayout = {
+  title?: string;
+  subtitle?: string;
+  download?: { file: CaseFile; label: string };
+  sections: CaseLayoutSection[];
+};
+
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
+
+export function parseCaseLayout(raw: unknown, objects: { name: string; size?: number | null }[]): CaseLayout | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const byName = new Map(objects.map((o) => [o.name, o]));
+  const toFile = (name: unknown): CaseFile | null => {
+    const n = str(name);
+    const o = n ? byName.get(n) : undefined;
+    return o ? { name: o.name, label: caseFileLabel(o.name), kind: caseFileKind(o.name), size: o.size ?? null } : null;
+  };
+
+  const sections = (Array.isArray(r.sections) ? r.sections : [])
+    .map((s): CaseLayoutSection | null => {
+      if (!s || typeof s !== "object") return null;
+      const sec = s as Record<string, unknown>;
+      const title = str(sec.title);
+      const files = (Array.isArray(sec.files) ? sec.files : []).map(toFile).filter((f): f is CaseFile => f !== null);
+      return title && files.length ? { title, note: str(sec.note), files } : null;
+    })
+    .filter((s): s is CaseLayoutSection => s !== null);
+
+  const d = r.download && typeof r.download === "object" ? (r.download as Record<string, unknown>) : null;
+  const dFile = d ? toFile(d.file) : null;
+  if (sections.length === 0 && !dFile) return null;
+
+  return {
+    title: str(r.title),
+    subtitle: str(r.subtitle),
+    download: dFile ? { file: dFile, label: str(d?.label) ?? "Download" } : undefined,
+    sections,
+  };
+}
