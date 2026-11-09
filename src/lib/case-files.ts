@@ -75,7 +75,7 @@ export function isCaseFilesToken(token: string): boolean {
  * the files named in it, in that order. Anything not named stays off the
  * page. Files named but missing from the folder are skipped.
  */
-export type CaseLayoutSection = { title: string; note?: string; files: CaseFile[] };
+export type CaseLayoutSection = { title: string; note?: string; columns: 1 | 2; files: CaseFile[] };
 export type CaseLayout = {
   title?: string;
   subtitle?: string;
@@ -101,7 +101,7 @@ export function parseCaseLayout(raw: unknown, objects: { name: string; size?: nu
       const sec = s as Record<string, unknown>;
       const title = str(sec.title);
       const files = (Array.isArray(sec.files) ? sec.files : []).map(toFile).filter((f): f is CaseFile => f !== null);
-      return title && files.length ? { title, note: str(sec.note), files } : null;
+      return title && files.length ? { title, note: str(sec.note), columns: sec.columns === 2 ? 2 : 1, files } : null;
     })
     .filter((s): s is CaseLayoutSection => s !== null);
 
@@ -115,4 +115,19 @@ export function parseCaseLayout(raw: unknown, objects: { name: string; size?: nu
     download: dFile ? { file: dFile, label: str(d?.label) ?? "Download" } : undefined,
     sections,
   };
+}
+
+/**
+ * The layout file to use: the highest-numbered of layout.json, layout-2.json,
+ * layout-3.json... Uploads can't overwrite, so a new layout is a new number.
+ */
+export function pickLayoutFile(names: Iterable<string>): string | null {
+  let best: { name: string; n: number } | null = null;
+  for (const name of names) {
+    const m = /^layout(?:-(\d+))?\.json$/.exec(name);
+    if (!m) continue;
+    const n = m[1] ? Number(m[1]) : 1;
+    if (!best || n > best.n) best = { name, n };
+  }
+  return best?.name ?? null;
 }

@@ -8,6 +8,7 @@ import {
   formatFileSize,
   isCaseFilesToken,
   parseCaseLayout,
+  pickLayoutFile,
 } from "@/lib/case-files";
 
 /**
@@ -43,8 +44,9 @@ export default async function SharedFilesPage({ params }: { params: Promise<{ to
   const url = (name: string, download = false) =>
     storage.getPublicUrl(`${token}/${name}`, download ? { download: name } : undefined).data.publicUrl;
 
-  if (names.has("layout.json")) {
-    const layout = parseCaseLayout(await readJson(storage, token, "layout.json"), objects);
+  const layoutFile = pickLayoutFile(names);
+  if (layoutFile) {
+    const layout = parseCaseLayout(await readJson(storage, token, layoutFile), objects);
     if (layout) return <DocumentView layout={layout} url={url} />;
   }
 
@@ -89,7 +91,7 @@ function DocumentView({ layout, url }: { layout: CaseLayout; url: (name: string,
         <section key={section.title} id={`s${i + 1}`} className="mt-8 scroll-mt-4">
           <h2 className="text-lg font-bold tracking-tight">{section.title}</h2>
           {section.note && <p className="mt-1 text-sm text-[#5b6660]">{section.note}</p>}
-          <div className="mt-3 flex flex-col gap-4">
+          <div className={section.columns === 2 ? "mt-3 grid items-start gap-4 sm:grid-cols-2" : "mt-3 flex flex-col gap-4"}>
             {section.files.map((file) => (
               <div key={file.name} className="overflow-hidden rounded-xl border border-[#e3e7e2] bg-white shadow-sm">
                 <FilePreview file={file} src={url(file.name)} full />

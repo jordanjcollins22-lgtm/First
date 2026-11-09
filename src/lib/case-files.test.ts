@@ -7,6 +7,7 @@ import {
   formatFileSize,
   isCaseFilesToken,
   parseCaseLayout,
+  pickLayoutFile,
 } from "./case-files";
 
 describe("case files", () => {
@@ -80,6 +81,7 @@ describe("case file layout", () => {
       ["Video", ["clip.mp4"]],
     ]);
     expect(layout?.sections[1].files[0].kind).toBe("video");
+    expect(layout?.sections[0].columns).toBe(1);
   });
 
   it("skips files that are not in the folder and sections left empty", () => {
@@ -93,5 +95,18 @@ describe("case file layout", () => {
     expect(parseCaseLayout({ sections: [{ title: "x", files: ["missing"] }] }, objects)).toBeNull();
     expect(parseCaseLayout("nonsense", objects)).toBeNull();
     expect(parseCaseLayout(null, objects)).toBeNull();
+  });
+});
+
+describe("picking the layout file", () => {
+  it("uses the newest numbered layout", () => {
+    expect(pickLayoutFile(["a.jpg", "layout.json", "layout-2.json", "layout-10.json", "layout-3.json"])).toBe("layout-10.json");
+    expect(pickLayoutFile(["layout.json"])).toBe("layout.json");
+    expect(pickLayoutFile(["meta.json"])).toBeNull();
+  });
+
+  it("reads a two-column section", () => {
+    const layout = parseCaseLayout({ sections: [{ title: "Pages", columns: 2, files: ["p.jpg"] }] }, [{ name: "p.jpg" }]);
+    expect(layout?.sections[0].columns).toBe(2);
   });
 });
