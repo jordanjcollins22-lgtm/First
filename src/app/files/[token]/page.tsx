@@ -47,7 +47,7 @@ export default async function SharedFilesPage({ params }: { params: Promise<{ to
         <header className="overflow-hidden rounded-2xl border border-[#e3e7e2] bg-white shadow-sm">
           <div className="flex items-center gap-3 border-b-4 border-[#2f6d3c] px-5 py-5 sm:px-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-mark.png" alt="" className="h-12 w-12 rounded-lg object-contain" />
+            <img src="/logo-mark.png" alt="" className="h-12 w-12 rounded-lg bg-[#2f6d3c] object-contain p-1" />
             <div>
               <p className="text-lg font-bold leading-tight">JS Landscaping</p>
               <p className="text-xs uppercase tracking-wide text-[#5b6660]">Shared files</p>
