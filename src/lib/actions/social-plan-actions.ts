@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/team";
@@ -11,15 +12,16 @@ import { trackedLink } from "@/lib/outreach-links";
 import { cleanHashtags, composePlanCaption, planProblems, planSlot, type CardStyle, type PlanText } from "@/lib/social-plan";
 import { tidyCrop, type Crop } from "@/lib/social-crop";
 import { tidyLayout, type Layout } from "@/lib/social-layout";
+import { DENIABLE_STATUSES, denyUpdate, isDenyNotReady, undoDenyUpdate } from "@/lib/social/review-decision";
 
 export type PlanResult = { ok: true; message: string } | { ok: false; message: string };
 
-async function owner(): Promise<{ id: string } | { refused: string }> {
+async function owner(): Promise<{ id: string; organizationId: string } | { refused: string }> {
   await refuseInDemo();
   const profile = await getCurrentProfile();
   if (!profile) return { refused: "Sign in first." };
   if (!isOwnerLevel(profile.roles) && !profile.roles.includes("admin")) return { refused: "Only an owner or admin can approve posts." };
-  return { id: profile.id };
+  return { id: profile.id, organizationId: profile.organization_id };
 }
 
 function tidy(text: PlanText): PlanText {
@@ -141,6 +143,47 @@ export async function skipPlanPost(id: string): Promise<PlanResult> {
   if (error) return { ok: false, message: "Couldn't skip it. Try again." };
   revalidate();
   return { ok: true, message: "Skipped." };
+}
+
+/**
+ * Deny it: a no, kept with an optional short reason. A denied post stays in
+ * the week plan marked Denied, and the posting job never sends it.
+ */
+export async function denyPlanPost(id: string, reason?: string | null): Promise<PlanResult> {
+  const who = await owner();
+  if ("refused" in who) return { ok: false, message: who.refused };
+  // The denied_* columns arrive with 0374, ahead of the generated types.
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  const { data, error } = await supabase
+    .from("social_posts")
+    .update(denyUpdate({ reason, userId: who.id, now: new Date() }))
+    .eq("id", id)
+    .eq("organization_id", who.organizationId)
+    .in("status", [...DENIABLE_STATUSES])
+    .select("id");
+  if (isDenyNotReady(error)) return { ok: false, message: "Apply migration 0374_social_autopost.sql first." };
+  if (error) return { ok: false, message: "Couldn't deny it. Try again." };
+  if (!data?.length) return { ok: false, message: "That one can't be denied: it has already gone out or was denied." };
+  revalidate();
+  return { ok: true, message: "Denied. It won't be posted." };
+}
+
+/** Undo a denial: back to a draft, waiting for approval. */
+export async function undoDenyPlanPost(id: string): Promise<PlanResult> {
+  const who = await owner();
+  if ("refused" in who) return { ok: false, message: who.refused };
+  // The denied_* columns arrive with 0374, ahead of the generated types.
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  const { error } = await supabase
+    .from("social_posts")
+    .update(undoDenyUpdate(new Date()))
+    .eq("id", id)
+    .eq("organization_id", who.organizationId)
+    .eq("status", "denied");
+  if (isDenyNotReady(error)) return { ok: false, message: "Apply migration 0374_social_autopost.sql first." };
+  if (error) return { ok: false, message: "Couldn't undo it. Try again." };
+  revalidate();
+  return { ok: true, message: "Back to a draft, waiting for approval." };
 }
 
 /** Back to waiting, for a post approved by mistake before it has gone out. */

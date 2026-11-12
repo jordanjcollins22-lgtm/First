@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { Ban, Plus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { loadStarterDrafts, retrySocialPost, saveSocialCadence, type AutopostResult } from "@/lib/actions/social-autopost-actions";
+import { denyPlanPost } from "@/lib/actions/social-plan-actions";
+import { canDeny } from "@/lib/social/review-decision";
 import { MAX_PER_WEEK, cadenceProblems, slotLabel, tidyCadence, type CadenceSlot, type SocialCadence } from "@/lib/social/cadence";
 import type { Health } from "@/lib/social/autopost";
 import type { UpcomingPost } from "@/lib/data/social-autopost";
@@ -61,9 +63,13 @@ export function SocialAutopostPanel(props: { health: Health; cadence: SocialCade
         <UpcomingList
           posts={props.upcoming}
           actions={(p) =>
-            props.canManage && p.status === "failed" ? (
+            !props.canManage ? null : p.status === "failed" ? (
               <Button size="sm" variant="outline" disabled={pending} onClick={() => run(() => retrySocialPost(p.id))}>
                 Try again
+              </Button>
+            ) : canDeny(p.status) ? (
+              <Button size="sm" variant="destructive" disabled={pending} onClick={() => run(() => denyPlanPost(p.id))}>
+                <Ban className="size-4" /> Deny
               </Button>
             ) : null
           }

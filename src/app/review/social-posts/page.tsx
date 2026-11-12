@@ -7,6 +7,7 @@ import { reviewPagesEnabled } from "@/lib/review-pages";
 import { loadPostingStatus } from "@/lib/data/social-autopost";
 import { publishTargets } from "@/lib/social/facebook";
 import { PostingHealthCard } from "@/components/marketing/social-autopost-status";
+import { ReviewDecisionCount, ReviewDecisions, ReviewDraftCard } from "@/components/marketing/social-review-decisions";
 import { SEED_DRAFTS, SEED_TOPIC_LABEL, seedCta, seedSlot } from "@/lib/social/seed-drafts";
 import { composePlanCaption, cleanHashtags, planProblems } from "@/lib/social-plan";
 import { DEFAULT_SOCIAL_CADENCE, PLATFORM_LABEL, slotLabel, SOCIAL_PLATFORMS, upcomingSlotsFor } from "@/lib/social/cadence";
@@ -18,7 +19,8 @@ import { outboundBaseUrl } from "@/lib/base-url";
  * Social posts, for reviewing on a preview without signing in: whether
  * automatic posting works and why not, the cadence, and the twelve starter
  * drafts for the next three weeks. JS Landscaping's real data, read only.
- * Nothing on this page publishes or writes anything.
+ * Nothing on this page publishes or writes anything: its Approve and Deny
+ * buttons only mark the cards here, in the browser.
  */
 export const dynamic = "force-dynamic";
 
@@ -114,38 +116,41 @@ export default async function ReviewSocialPostsPage() {
         </table>
       </section>
 
-      <section id="sp-drafts">
-        <h2 className="text-lg font-bold">3. Twelve drafts for the next three weeks</h2>
-        <p className="mt-1 text-stone-600">
-          Ready to approve. Load them from Admin › Social (Load the starter posts), edit anything in the week plan, and approve: each goes out on its slot to Facebook
-          and Instagram.
-        </p>
-        <ol className="mt-4 grid gap-4 sm:grid-cols-2">
-          {SEED_DRAFTS.map((d, i) => {
-            const caption = composePlanCaption({ hook: d.hook, body: d.body, cta: seedCta(d, link), hashtags: d.hashtags }, null);
-            const problems = planProblems({ hook: d.hook, body: d.body, cta: d.cta, hashtags: d.hashtags });
-            const url = d.photo ? photoUrl.get(d.photo.afterPhotoId) : null;
-            return (
-              <li key={d.key} id={`sp-draft-${i + 1}`} className="flex flex-col overflow-hidden rounded-lg border border-stone-200">
-                {url ? (
-                  <img src={url} alt={`After photo, ${d.photo?.town}`} className="aspect-square w-full object-cover" />
-                ) : (
-                  <div className="flex aspect-square w-full items-center justify-center bg-[#0f766e] p-6 text-center text-lg font-extrabold text-white">{d.hook}</div>
-                )}
-                <div className="space-y-2 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-                    {i + 1}. {SEED_TOPIC_LABEL[d.topic]} · {shortWhen(seedSlot(d))} · {d.platforms.map((p) => PLATFORM_LABEL[p]).join(" + ")}
-                  </p>
-                  <p className="whitespace-pre-line">{caption}</p>
-                  <p className="text-xs text-stone-500">Hashtags: {cleanHashtags(d.hashtags).join(" ")}</p>
-                  <p className="text-xs text-stone-500">Photo: {d.photoHint}</p>
-                  {problems.length > 0 && <p className="text-xs text-red-700">{problems.join(" ")}</p>}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+      <ReviewDecisions total={SEED_DRAFTS.length}>
+        <section id="sp-drafts">
+          <h2 className="text-lg font-bold">3. Twelve drafts for the next three weeks</h2>
+          <p className="mt-1 text-stone-600">
+            Ready to approve. Load them from Admin › Social (Load the starter posts), edit anything in the week plan, and approve: each goes out on its slot to Facebook
+            and Instagram.
+          </p>
+          <ReviewDecisionCount />
+          <ol className="mt-4 grid gap-4 sm:grid-cols-2">
+            {SEED_DRAFTS.map((d, i) => {
+              const caption = composePlanCaption({ hook: d.hook, body: d.body, cta: seedCta(d, link), hashtags: d.hashtags }, null);
+              const problems = planProblems({ hook: d.hook, body: d.body, cta: d.cta, hashtags: d.hashtags });
+              const url = d.photo ? photoUrl.get(d.photo.afterPhotoId) : null;
+              return (
+                <ReviewDraftCard key={d.key} n={i + 1}>
+                  {url ? (
+                    <img src={url} alt={`After photo, ${d.photo?.town}`} className="aspect-square w-full object-cover" />
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center bg-[#0f766e] p-6 text-center text-lg font-extrabold text-white">{d.hook}</div>
+                  )}
+                  <div className="space-y-2 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                      {i + 1}. {SEED_TOPIC_LABEL[d.topic]} · {shortWhen(seedSlot(d))} · {d.platforms.map((p) => PLATFORM_LABEL[p]).join(" + ")}
+                    </p>
+                    <p className="whitespace-pre-line">{caption}</p>
+                    <p className="text-xs text-stone-500">Hashtags: {cleanHashtags(d.hashtags).join(" ")}</p>
+                    <p className="text-xs text-stone-500">Photo: {d.photoHint}</p>
+                    {problems.length > 0 && <p className="text-xs text-red-700">{problems.join(" ")}</p>}
+                  </div>
+                </ReviewDraftCard>
+              );
+            })}
+          </ol>
+        </section>
+      </ReviewDecisions>
     </main>
   );
 }

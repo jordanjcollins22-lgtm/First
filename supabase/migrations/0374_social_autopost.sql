@@ -5,7 +5,10 @@
 --    answered, how many times it has been tried, why the last try failed and
 --    when it will be tried next. 'failed' joins the statuses: a post Meta
 --    keeps refusing stops at 'failed' with its reason instead of retrying for
---    ever or silently waiting.
+--    ever or silently waiting. 'denied' joins them too: a draft the owner
+--    said no to, with an optional short reason. The posting job never sends
+--    it (it only reads 'scheduled' and 'approved'), and Undo puts it back
+--    to 'draft'.
 -- 2. social_cadence: posts a week per account and the best-time slots the
 --    scheduler fills from approved drafts (default 4 on Facebook and 4 on
 --    Instagram), and the posting job's last run, for the status line on
@@ -26,10 +29,13 @@ alter table public.social_posts add column if not exists last_attempt_at timesta
 alter table public.social_posts add column if not exists next_attempt_at timestamptz;
 alter table public.social_posts add column if not exists photo_hint text;
 alter table public.social_posts add column if not exists seed_key text;
+alter table public.social_posts add column if not exists denied_reason text;
+alter table public.social_posts add column if not exists denied_by uuid references public.profiles(id) on delete set null;
+alter table public.social_posts add column if not exists denied_at timestamptz;
 
 alter table public.social_posts drop constraint if exists social_posts_status_check;
 alter table public.social_posts add constraint social_posts_status_check
-  check (status in ('draft', 'approved', 'scheduled', 'posted', 'skipped', 'failed'));
+  check (status in ('draft', 'approved', 'scheduled', 'posted', 'skipped', 'failed', 'denied'));
 
 alter table public.social_posts drop constraint if exists social_posts_platforms_check;
 alter table public.social_posts add constraint social_posts_platforms_check
