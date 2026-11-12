@@ -22,6 +22,7 @@ import { MHIC_DEPOSIT_CAP } from "@/lib/sales/mhic";
 import { DEFAULT_PHOTO_QUOTE_LINE } from "@/lib/photo-quote";
 import { DEFAULT_TARGETS } from "@/lib/ops";
 import { AREA_CREW_LIMIT } from "@/lib/area-work";
+import { LEAD_FINDER_LEAD_SCORE, LEAD_FINDER_LETTER_SCORE, LEAD_FINDER_MIN_ACRES, LEAD_FINDER_WEEKLY_COUNT, LEAD_FINDER_ZIPS } from "@/lib/lead-finder";
 import { DEFAULT_SOCIAL_CADENCE, slotLabel } from "@/lib/social/cadence";
 import { MAX_ATTEMPTS, RETRY_MINUTES, STALE_HOURS } from "@/lib/social/autopost";
 
@@ -78,6 +79,27 @@ export function otherVariables(): RegisteredVariable[] {
     { group: "Operations", label: "Weeks booked ahead / evaluations a week / close rate", value: `${DEFAULT_TARGETS.weeksBookedAhead} / ${DEFAULT_TARGETS.evaluationsPerWeek} / ${pct(DEFAULT_TARGETS.closeRate)}`, where: "src/lib/ops.ts DEFAULT_TARGETS → ops_targets", editAt: "Operations autopilot" },
     { group: "Operations", label: "Marketing share", value: pct(DEFAULT_TARGETS.marketingShare), where: "src/lib/ops.ts DEFAULT_TARGETS → ops_targets", editAt: "Operations autopilot" },
     { group: "Operations", label: "Most crew on one area", value: String(AREA_CREW_LIMIT), where: "src/lib/area-work.ts AREA_CREW_LIMIT", editAt: null },
+    {
+      group: "Marketing",
+      label: "Lead finder: properties to look at each week",
+      value: String(LEAD_FINDER_WEEKLY_COUNT),
+      where: "src/lib/lead-finder.ts LEAD_FINDER_WEEKLY_COUNT",
+      editAt: null,
+    },
+    {
+      group: "Marketing",
+      label: "Lead finder: score for a lead (walk-in) / for a letter",
+      value: `${LEAD_FINDER_LEAD_SCORE}+ / ${LEAD_FINDER_LETTER_SCORE}+ of 10`,
+      where: "src/lib/lead-finder.ts LEAD_FINDER_LEAD_SCORE, LEAD_FINDER_LETTER_SCORE",
+      editAt: null,
+    },
+    {
+      group: "Marketing",
+      label: "Lead finder: smallest lot / ZIPs pulled from the State roll",
+      value: `${LEAD_FINDER_MIN_ACRES} ac / ${LEAD_FINDER_ZIPS.join(", ")}`,
+      where: "src/lib/lead-finder.ts LEAD_FINDER_MIN_ACRES, LEAD_FINDER_ZIPS",
+      editAt: null,
+    },
     {
       group: "Marketing",
       label: "Social posts a week: Facebook / Instagram",
