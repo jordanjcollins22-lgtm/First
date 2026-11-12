@@ -1,135 +1,50 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { env, isFacebookConfigured, isSupabaseAdminConfigured } from "@/lib/env";
-import { anyPostingPage } from "@/lib/data/meta";
-import { canPublishToFacebook, publishPhotoToPage } from "@/lib/social/facebook";
+import { isSupabaseAdminConfigured } from "@/lib/env";
 import { log } from "@/lib/log";
-import { authorizeCron } from "@/lib/cron-auth";
+import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { outboundBaseUrl } from "@/lib/base-url";
+import { recordRun, runSocialPosting, type PostingRun } from "@/lib/data/social-posting-run";
 
 /**
- * Sends the posts whose time has come.
+ * Sends the posts whose time has come, for every business, to Facebook and
+ * Instagram (and SOCIAL_WEBHOOK_URL when set), after giving approved posts
+ * their slots under the cadence. The rules (retries, re-slotting missed
+ * posts, what counts as failed) are in lib/data/social-posting-run.ts and
+ * lib/social/autopost.ts.
  *
- * Meant to be hit on a schedule. What it actually does with a post depends on
- * whether there is anywhere to send it: with SOCIAL_WEBHOOK_URL set it hands
- * the image and the caption to whatever is on the other end — Zapier, Make,
- * Buffer, a Meta app — and marks it posted when that succeeds. Without it,
- * posts keep their times and wait for somebody to press send in the studio,
- * which is a queue that works rather than a queue that silently does nothing.
- *
- * vercel.json runs this once a day at 10am local, because the Hobby plan
- * rejects anything more frequent. A post therefore goes out at the first run
- * after its slot: morning slots land on time, evening slots land the next
- * morning. On a paid plan change the schedule to "0 * * * *" and every slot
- * becomes exact.
- *
- * Safe to run more often than needed: a post leaves the 'scheduled' state the
- * moment it is handed off, so two runs at once cannot send it twice.
+ * Called at five past every hour by the database's timer
+ * (0374_social_autopost.sql, x-scheduler-token), and once a day by Vercel's
+ * cron (vercel.json, CRON_SECRET) as the fallback. Safe to run more often
+ * than needed: a post is claimed before it is sent.
  */
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
 export async function GET(request: NextRequest) {
   if (!isSupabaseAdminConfigured) {
     return NextResponse.json({ error: "Supabase admin isn't configured." }, { status: 503 });
   }
 
-  const refused = authorizeCron(request, "social-posts");
+  const refused = await authorizeScheduledCall(request, "social-posts");
   if (refused) return refused;
 
   const admin = createAdminClient();
-
-  const { data: due, error } = await admin
-    .from("social_posts")
-    .select("id, organization_id, caption, image_path, job_id, plan_day")
-    .eq("status", "scheduled")
-    // Group posts are posted by hand; only the page is published to.
-    .neq("placement", "group")
-    .lte("scheduled_for", new Date().toISOString())
-    .limit(20);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!due || due.length === 0) return NextResponse.json({ due: 0, sent: 0 });
-
-  const webhook = env.socialWebhookUrl;
-  if (!webhook && !isFacebookConfigured && !(await anyPostingPage())) {
-    // Nothing to send to. Say so plainly rather than marking them posted.
-    log.warn("cron.social_posts.nowhere", { due: due.length });
-    return NextResponse.json({
-      due: due.length,
-      sent: 0,
-      waiting: "Connect a page in Admin → Facebook & Instagram and tick Posting, or set SOCIAL_WEBHOOK_URL, to publish automatically.",
-    });
+  const appBase = (await outboundBaseUrl()).replace(/\/$/, "");
+  const { data: orgs } = await admin.from("organizations").select("id");
+  const runs: PostingRun[] = [];
+  for (const { id } of orgs ?? []) {
+    try {
+      const run = await runSocialPosting(admin, id, appBase);
+      await recordRun(admin, run).catch((err) => log.error("cron.social_posts.record", err, { org: id }));
+      runs.push(run);
+    } catch (err) {
+      log.error("cron.social_posts", err, { org: id });
+      runs.push({ organizationId: id, reslotted: 0, filled: 0, due: 0, sent: 0, retrying: 0, failed: 0, waiting: 0, error: err instanceof Error ? err.message : String(err) });
+    }
   }
-
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  let sent = 0;
-
-  // A planned post's picture is drawn by the app at its own address.
-  const appBase = await outboundBaseUrl();
-  for (const post of due as { id: string; organization_id: string; caption: string | null; image_path: string | null; job_id: string | null; plan_day: string | null }[]) {
-    const imageUrl = post.image_path
-      ? `${base}/storage/v1/object/public/social-posts/${post.image_path}`
-      : post.plan_day
-        ? `${appBase.replace(/\/$/, "")}/api/social/card/${post.id}`
-        : null;
-    if (!imageUrl) continue;
-
-    // Claimed before it goes anywhere, so two runs at once cannot both post
-    // it. The claim is the channel column, because the status column only
-    // knows scheduled and posted.
-    const { data: claimed } = await admin
-      .from("social_posts")
-      .update({ channel: "posting", updated_at: new Date().toISOString() })
-      .eq("id", post.id)
-      .eq("status", "scheduled")
-      .or("channel.is.null,channel.neq.posting")
-      .select("id")
-      .maybeSingle();
-    if (!claimed) continue;
-
-    const channels: string[] = [];
-
-    // Facebook first, straight to the Page. Nextdoor has no way in from
-    // here, so those stay copy-and-paste from the studio.
-    if (await canPublishToFacebook(post.organization_id)) {
-      const result = await publishPhotoToPage({ organizationId: post.organization_id, imageUrl, caption: post.caption ?? "" });
-      if (result.ok) channels.push("facebook");
-    }
-
-    // Then the hand-off, for anything wired up behind it: Zapier, Make, Buffer.
-    if (webhook) {
-      try {
-        const response = await fetch(webhook, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ id: post.id, imageUrl, caption: post.caption ?? "" }),
-        });
-        if (response.ok) channels.push("webhook");
-        else log.warn("social_post.handoff.refused", { postId: post.id, status: response.status });
-      } catch (err) {
-        log.error("social_post.handoff.failed", err, { postId: post.id });
-      }
-    }
-
-    if (channels.length === 0) {
-      // Nothing took it. Unclaimed, to try again next run.
-      await admin.from("social_posts").update({ channel: null, updated_at: new Date().toISOString() }).eq("id", post.id);
-      log.warn("social_post.unpublished", { postId: post.id });
-      continue;
-    }
-
-    await admin
-      .from("social_posts")
-      .update({
-        status: "posted",
-        posted_at: new Date().toISOString(),
-        channel: channels.join("+"),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", post.id);
-    log.info("social_post.published", { postId: post.id, channels });
-    sent++;
-  }
-
-  log.info("cron.social_posts", { due: due.length, sent });
-  return NextResponse.json({ due: due.length, sent });
+  const total = (k: "due" | "sent" | "failed" | "waiting" | "filled" | "reslotted") => runs.reduce((n, r) => n + r[k], 0);
+  log.info("cron.social_posts", { due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled") });
+  return NextResponse.json({ due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled"), reslotted: total("reslotted"), runs });
 }

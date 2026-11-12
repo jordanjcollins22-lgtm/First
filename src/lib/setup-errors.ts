@@ -10,6 +10,7 @@
 
 /** Which migration file creates what. Keep in step with supabase/migrations. */
 const TABLE_MIGRATIONS: Record<string, string> = {
+  social_cadence: "0374_social_autopost.sql",
   lead_prospects: "0076_lead_prospects.sql",
   ledger_entries: "0077_job_lifecycle_and_ledger.sql",
   job_photos: "0078_job_completion_photos.sql",
@@ -92,6 +93,10 @@ const COLUMN_MIGRATIONS: { column: string; table?: string; migration: string }[]
   { column: "duration_hours", table: "knowledge_nodes", migration: "0102_node_time_and_rate.sql" },
   { column: "hourly_rate", table: "knowledge_nodes", migration: "0102_node_time_and_rate.sql" },
   { column: "category", table: "materials", migration: "0096_knowledge_inventory_link.sql" },
+  { column: "seed_key", table: "social_posts", migration: "0374_social_autopost.sql" },
+  { column: "next_attempt_at", table: "social_posts", migration: "0374_social_autopost.sql" },
+  { column: "photo_hint", table: "social_posts", migration: "0374_social_autopost.sql" },
+  { column: "platforms", table: "social_posts", migration: "0374_social_autopost.sql" },
 ];
 
 interface DbError {

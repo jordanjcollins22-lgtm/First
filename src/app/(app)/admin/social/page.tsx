@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { env, isSupabaseConfigured } from "@/lib/env";
-import { canPublishToFacebook } from "@/lib/social/facebook";
+import { publishTargets } from "@/lib/social/facebook";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/data/team";
+import { isOwnerLevel } from "@/lib/roles";
+import { loadPostingStatus } from "@/lib/data/social-autopost";
+import { SocialAutopostPanel } from "@/components/marketing/social-autopost-panel";
+import { SEED_DRAFTS } from "@/lib/social/seed-drafts";
 import { checkTabAccess } from "@/lib/data/access";
 import {
   listJobsMissingBeforeAfter,
@@ -22,7 +28,7 @@ export default async function SocialPage() {
   if (!allowed) redirect("/dashboard");
 
   const organizationId = await getCurrentOrganizationId();
-  const [candidates, posts, missing, plan, facebook] = await Promise.all([
+  const [candidates, posts, missing, plan, targets, profile, client] = await Promise.all([
     listPostCandidates().catch(() => []),
     listSocialPosts().catch(() => []),
     listJobsMissingBeforeAfter().catch(() => []),
@@ -30,15 +36,28 @@ export default async function SocialPage() {
       console.error("Planned posts failed to load:", err);
       return [];
     }),
-    canPublishToFacebook(organizationId).catch(() => false),
+    publishTargets(organizationId).catch(() => ({ facebook: false, instagram: false })),
+    getCurrentProfile(),
+    createClient(),
   ]);
+  const status = await loadPostingStatus({ client, organizationId }, targets);
+  const canManage = Boolean(profile && (isOwnerLevel(profile.roles) || profile.roles.includes("admin")));
 
   const publishesTo = [
-    ...(facebook ? ["Facebook"] : []),
+    ...(targets.facebook ? ["Facebook"] : []),
+    ...(targets.instagram ? ["Instagram"] : []),
     ...(env.socialWebhookUrl ? ["the posting hand-off"] : []),
   ];
   return (
     <>
+      <SocialAutopostPanel
+        health={status.health}
+        cadence={status.cadence.cadence}
+        cadenceReady={status.cadence.ready}
+        upcoming={status.upcoming}
+        canManage={canManage}
+        seedCount={SEED_DRAFTS.length}
+      />
       <WeekPlan posts={plan} publishesTo={publishesTo} />
       <SocialStudio candidates={candidates} posts={posts} missing={missing} publishesTo={publishesTo} />
     </>

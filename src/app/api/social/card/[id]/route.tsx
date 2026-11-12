@@ -168,10 +168,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     );
   }
 
-  return new ImageResponse(picture, {
+  const drawn = new ImageResponse(picture, {
     width: W,
     height: H,
     fonts: [{ name: "Montserrat", data: bold, weight: 800, style: "normal" }],
     headers: { "cache-control": "public, max-age=300, s-maxage=300" },
+  });
+  // Instagram takes JPEG only, so the posting job asks for ?format=jpg.
+  if (request.nextUrl.searchParams.get("format") !== "jpg") return drawn;
+  const sharp = (await import("sharp")).default;
+  const jpeg = await sharp(Buffer.from(await drawn.arrayBuffer())).flatten({ background: "#ffffff" }).jpeg({ quality: 90 }).toBuffer();
+  return new Response(new Uint8Array(jpeg), {
+    headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=300, s-maxage=300" },
   });
 }

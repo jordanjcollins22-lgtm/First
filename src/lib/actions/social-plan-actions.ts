@@ -61,7 +61,7 @@ export async function approvePlanPost(id: string, text: PlanText): Promise<PlanR
   const supabase = await createClient();
   const { data: post } = await supabase
     .from("social_posts")
-    .select("id, status, plan_day, placement, link:outreach_links(code)")
+    .select("id, status, plan_day, placement, scheduled_for, link:outreach_links(code)")
     .eq("id", id)
     .maybeSingle();
   if (!post?.plan_day) return { ok: false, message: "Couldn't find that post." };
@@ -72,7 +72,10 @@ export async function approvePlanPost(id: string, text: PlanText): Promise<PlanR
   const link = (Array.isArray(post.link) ? post.link[0] : post.link) as { code: string } | null;
   const url = link?.code ? trackedLink(await outboundBaseUrl(), link.code) : null;
   const now = new Date();
-  const at = planSlot(post.plan_day, now);
+  // A post that already carries a slot ahead (a starter post, or one the
+  // scheduler placed) keeps it; otherwise its day's posting time.
+  const kept = post.scheduled_for ? new Date(post.scheduled_for) : null;
+  const at = kept && kept.getTime() > now.getTime() ? kept : planSlot(post.plan_day, now);
   const { error } = await supabase
     .from("social_posts")
     .update({
