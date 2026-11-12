@@ -127,6 +127,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/learn":
     "Video notes: the owner pastes a YouTube link and gets the key points. The owner's own tool, not a business area: " +
     "the page and its action both check the signed-in account is owner-level, and it reads no business data.",
+  "/leads/finder":
+    "The lead finder, opened from Lead Generation: this week's commercial properties to score. Checks the leads tab " +
+    "itself, and every save checks it again and writes only the business's own rows.",
   "/snow":
     "Storm-day stop logging for whoever is on the salt or plow route: salt used, photos, surface temperature. " +
     "Shows only the business's own active snow event, and every save checks the person is staff of that business.",

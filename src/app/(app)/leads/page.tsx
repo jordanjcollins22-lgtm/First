@@ -106,6 +106,12 @@ export default async function LeadsPage() {
       <p className="mb-4 text-muted-foreground">
         Every way we know how to get an evaluation booked, written down so anybody can run it.
       </p>
+      <p className="mb-4 text-sm">
+        <Link href="/leads/finder" className="font-medium underline">
+          Lead finder
+        </Link>{" "}
+        <span className="text-muted-foreground">: this week&apos;s commercial, church, HOA and apartment properties to score from satellite and Street View.</span>
+      </p>
 
       <TargetMarketPanel
         markets={markets.markets}
