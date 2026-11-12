@@ -44,7 +44,15 @@ export default async function ConversationsPage({
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:py-8">
       <AccessDeniedNotice tab={denied} />
-      <h1 className="mb-1 text-2xl font-bold">Conversations</h1>
+      <div className="mb-1 flex items-center gap-3">
+        <h1 className="flex-1 text-2xl font-bold">Conversations</h1>
+        <Link
+          href="/conversations/board"
+          className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold hover:bg-accent/40"
+        >
+          Board
+        </Link>
+      </div>
       <p className="mb-6 text-muted-foreground">
         Internal team groups and notes, and every message sent to a client.
       </p>
