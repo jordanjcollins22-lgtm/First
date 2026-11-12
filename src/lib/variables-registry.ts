@@ -23,6 +23,8 @@ import { DEFAULT_PHOTO_QUOTE_LINE } from "@/lib/photo-quote";
 import { DEFAULT_TARGETS } from "@/lib/ops";
 import { AREA_CREW_LIMIT } from "@/lib/area-work";
 import { LEAD_FINDER_LEAD_SCORE, LEAD_FINDER_LETTER_SCORE, LEAD_FINDER_MIN_ACRES, LEAD_FINDER_WEEKLY_COUNT, LEAD_FINDER_ZIPS } from "@/lib/lead-finder";
+import { DEFAULT_SOCIAL_CADENCE, slotLabel } from "@/lib/social/cadence";
+import { MAX_ATTEMPTS, RETRY_MINUTES, STALE_HOURS } from "@/lib/social/autopost";
 
 export interface RegisteredVariable {
   group: "Pay" | "Commissions" | "Pricing" | "Sales" | "Operations" | "Marketing";
@@ -96,6 +98,27 @@ export function otherVariables(): RegisteredVariable[] {
       label: "Lead finder: smallest lot / ZIPs pulled from the State roll",
       value: `${LEAD_FINDER_MIN_ACRES} ac / ${LEAD_FINDER_ZIPS.join(", ")}`,
       where: "src/lib/lead-finder.ts LEAD_FINDER_MIN_ACRES, LEAD_FINDER_ZIPS",
+      editAt: null,
+    },
+    {
+      group: "Marketing",
+      label: "Social posts a week: Facebook / Instagram",
+      value: `${DEFAULT_SOCIAL_CADENCE.perWeek.facebook} / ${DEFAULT_SOCIAL_CADENCE.perWeek.instagram}`,
+      where: "src/lib/social/cadence.ts DEFAULT_SOCIAL_CADENCE → social_cadence (migration 0374)",
+      editAt: "Admin › Social › Automatic posting",
+    },
+    {
+      group: "Marketing",
+      label: "Social best-time slots (Eastern, best first)",
+      value: DEFAULT_SOCIAL_CADENCE.slots.map(slotLabel).join(", "),
+      where: "src/lib/social/cadence.ts DEFAULT_SOCIAL_CADENCE → social_cadence.slots",
+      editAt: "Admin › Social › Automatic posting",
+    },
+    {
+      group: "Marketing",
+      label: "Social posting retries / missed-slot cutoff",
+      value: `${MAX_ATTEMPTS} tries (after ${RETRY_MINUTES.join(", ")} min) / re-slotted after ${STALE_HOURS} h`,
+      where: "src/lib/social/autopost.ts",
       editAt: null,
     },
     { group: "Operations", label: "Late fee / days sales outstanding target", value: "1.5% after 15 days (off) / 30 days", where: "finance_settings (migration 0363)", editAt: "Money" },

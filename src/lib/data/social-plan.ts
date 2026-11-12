@@ -1,4 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
+import { isMissingColumn } from "@/lib/setup-errors";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { trackedLink } from "@/lib/outreach-links";
 import type { CardStyle, PlanKind, Placement } from "@/lib/social-plan";
@@ -28,21 +31,28 @@ export interface PlanPost {
   clicks: number;
   scheduledFor: string | null;
   postedAt: string | null;
+  /** Why it was denied, when it was and a reason was given. */
+  deniedReason: string | null;
 }
 
 /** The planned posts from a day on, in day order. */
 export async function listPlanPosts(organizationId: string, fromDay: string, limit = 21): Promise<PlanPost[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("social_posts")
-    .select("id, plan_day, kind, status, hook, body, cta, hashtags, card_style, job_id, before_photo_id, after_photo_id, before_crop, after_crop, layout, placement, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)")
-    .eq("organization_id", organizationId)
-    .not("plan_day", "is", null)
-    .gte("plan_day", fromDay)
-    .neq("status", "skipped")
-    .order("plan_day")
-    .order("placement", { ascending: false })
-    .limit(limit);
+  const columns = "id, plan_day, kind, status, hook, body, cta, hashtags, card_style, job_id, before_photo_id, after_photo_id, before_crop, after_crop, layout, placement, scheduled_for, posted_at, updated_at, link:outreach_links(code, click_count)";
+  const query = (select: string) =>
+    (supabase as unknown as SupabaseClient)
+      .from("social_posts")
+      .select(select)
+      .eq("organization_id", organizationId)
+      .not("plan_day", "is", null)
+      .gte("plan_day", fromDay)
+      .neq("status", "skipped")
+      .order("plan_day")
+      .order("placement", { ascending: false })
+      .limit(limit);
+  // denied_reason arrives with migration 0374; until then the plan reads without it.
+  let { data, error } = await query(`${columns}, denied_reason`);
+  if (isMissingColumn(error)) ({ data, error } = await query(columns));
   if (error) throw error;
   const base = await outboundBaseUrl();
   type Row = {
@@ -65,6 +75,7 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
     scheduled_for: string | null;
     posted_at: string | null;
     updated_at: string;
+    denied_reason?: string | null;
     link: { code: string; click_count: number } | { code: string; click_count: number }[] | null;
   };
   return ((data ?? []) as unknown as Row[]).map((r) => {
@@ -91,6 +102,7 @@ export async function listPlanPosts(organizationId: string, fromDay: string, lim
       clicks: link?.click_count ?? 0,
       scheduledFor: r.scheduled_for,
       postedAt: r.posted_at,
+      deniedReason: r.denied_reason ?? null,
     };
   });
 }

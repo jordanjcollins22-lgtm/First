@@ -199,7 +199,9 @@ function Setup(props: {
           Until Meta approves the app, only people with a role on it (you, and anyone added under App roles) get
           through. For everyone else: verify the business in Business Settings, then App Review → request advanced
           access to pages_messaging, pages_manage_metadata, pages_show_list, pages_read_engagement, pages_manage_posts,
-          instagram_basic and instagram_manage_messages, and switch the app to Live.
+          instagram_basic, instagram_content_publish and instagram_manage_messages, and switch the app to Live.
+          Posting to Instagram needs instagram_content_publish and an Instagram professional account linked to the
+          page; a connection made before it was asked for needs Connect again.
         </p>
       </section>
     </div>
