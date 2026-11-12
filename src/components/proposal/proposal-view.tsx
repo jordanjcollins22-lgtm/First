@@ -37,6 +37,7 @@ import { FocusableSiteMap } from "./focusable-site-map";
 import { MessageThread } from "@/components/job/message-thread";
 import type { PublicProposal } from "@/lib/data/public-proposal";
 import { displayLabel } from "@/lib/zone-scope";
+import { focusFrame } from "@/lib/zone-focus";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import { readOptions } from "@/lib/proposal-options";
 import { OptionCards } from "@/components/proposal/option-cards";
@@ -211,6 +212,14 @@ function ProposalBody({
             zones={proposal.scope_snapshot.map((zone, i) => ({ ...zone, number: i + 1 }))}
             markers
             numbered
+            // Framed on the work, not the whole neighbourhood, so the dots
+            // are far enough apart to tell which is which.
+            defaultFrame={focusFrame(
+              proposal.scope_snapshot.flatMap((zone) => zone.points ?? []),
+              proposal.site_image_transform.canvasWidth,
+              proposal.site_image_transform.canvasHeight,
+              { padding: 90 }
+            )}
           />
         </Watched>
       )}

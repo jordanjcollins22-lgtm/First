@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { drawnSize, looksResized, markerPoint } from "@/lib/site-map-geometry";
+import { drawnSize, looksResized, markerPoint, spreadMarkers } from "@/lib/site-map-geometry";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 /** Re-renders the property photo with the drawn work-area outlines on top —
@@ -143,6 +143,11 @@ export function SiteMapImage({
   const casingWidth = unit * 0.014;
   const strokeWidth = unit * 0.006;
 
+  // Markers are placed once for the whole set, so two areas drawn over the
+  // same ground get two dots side by side rather than one hiding the other.
+  const markerR = unit * 0.024;
+  const markerSpots = markers ? spreadMarkers(zonesWithOutlines.map(({ zone }) => markerPoint(zone.points)), markerR * 2.4) : [];
+
   const maskId = `zone-mask-${imagePath.replace(/[^a-z0-9]/gi, "")}`;
 
   return (
@@ -183,9 +188,9 @@ export function SiteMapImage({
         )}
         {markers &&
           zonesWithOutlines.map(({ zone, index }, i) => {
-            const at = markerPoint(zone.points);
+            const at = markerSpots[i];
             if (!at) return null;
-            const r = unit * 0.024;
+            const r = markerR;
             return (
               <g
                 key={i}

@@ -80,3 +80,22 @@ export function markerPoint(points: { x: number; y: number }[]): { x: number; y:
   }
   return { x: cx / (3 * a), y: cy / (3 * a) };
 }
+
+/**
+ * Marker positions for a set of zones, nudged apart where two would sit on
+ * top of each other (two areas drawn over the same back yard, say), so every
+ * number can be seen and tapped. `gap` is the closest two centres may be.
+ */
+export function spreadMarkers(points: ({ x: number; y: number } | null)[], gap: number): ({ x: number; y: number } | null)[] {
+  const placed: { x: number; y: number }[] = [];
+  return points.map((pt) => {
+    if (!pt) return null;
+    let at = { ...pt };
+    for (let step = 0; step < 12 && placed.some((q) => Math.hypot(q.x - at.x, q.y - at.y) < gap); step++) {
+      const angle = (step * Math.PI) / 3;
+      at = { x: pt.x + Math.cos(angle) * gap * (1 + Math.floor(step / 6)), y: pt.y + Math.sin(angle) * gap * (1 + Math.floor(step / 6)) };
+    }
+    placed.push(at);
+    return at;
+  });
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawnSize, looksResized, markerPoint } from "./site-map-geometry";
+import { drawnSize, looksResized, markerPoint, spreadMarkers } from "./site-map-geometry";
 
 // A satellite photo fetched at 1280 and served @2x, on a 1000x800 board.
 const NATURAL = { w: 2560, h: 2560 };
@@ -54,5 +54,19 @@ describe("markerPoint", () => {
   });
   it("has nothing to place without points", () => {
     expect(markerPoint([])).toBeNull();
+  });
+});
+
+describe("spreadMarkers", () => {
+  it("moves a marker off one already there", () => {
+    const [a, b] = spreadMarkers([{ x: 10, y: 10 }, { x: 10, y: 10 }], 5);
+    expect(a).toEqual({ x: 10, y: 10 });
+    expect(Math.hypot(b!.x - a!.x, b!.y - a!.y)).toBeGreaterThanOrEqual(5 - 1e-9);
+  });
+  it("leaves markers that are already apart where they are", () => {
+    expect(spreadMarkers([{ x: 0, y: 0 }, { x: 20, y: 0 }], 5)).toEqual([{ x: 0, y: 0 }, { x: 20, y: 0 }]);
+  });
+  it("keeps a missing marker missing", () => {
+    expect(spreadMarkers([null, { x: 1, y: 1 }], 5)).toEqual([null, { x: 1, y: 1 }]);
   });
 });
