@@ -1,6 +1,7 @@
 /**
- * Google Ads and Local Services Ads, read only: what was spent each day and
- * which leads LSA charged for.
+ * Google Ads and Local Services Ads: what was spent each day and which leads
+ * LSA charged for, read; and, the one write, launching an ad the owner
+ * approved (mutate).
  *
  * Both come through the Google Ads API, which needs three things besides the
  * sign-in: a developer token (from the Ads account's API Center), the account
@@ -98,4 +99,35 @@ export function fetchLsaLeads(token: string, account: AdsAccount, since: string)
       "local_services_lead.contact_details, local_services_lead.lead_charged, local_services_lead.creation_date_time " +
       `FROM local_services_lead WHERE local_services_lead.creation_date_time >= '${since} 00:00:00'`
   );
+}
+
+/**
+ * Sends a set of changes to the Ads account in one request, all or nothing.
+ * The only write in this file: used to launch an ad the owner approved.
+ */
+export async function mutate(token: string, account: AdsAccount, mutateOperations: Record<string, unknown>[]): Promise<Result<string[]>> {
+  try {
+    const response = await fetch(`https://googleads.googleapis.com/${account.version}/customers/${account.customerId}/googleAds:mutate`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "developer-token": account.developerToken,
+        "content-type": "application/json",
+        ...(account.loginCustomerId ? { "login-customer-id": account.loginCustomerId } : {}),
+      },
+      body: JSON.stringify({ mutateOperations }),
+    });
+    const json = (await response.json().catch(() => ({}))) as {
+      mutateOperationResponses?: Record<string, { resourceName?: string }>[];
+      error?: { message?: string; details?: { errors?: { message?: string }[] }[] };
+    };
+    if (!response.ok || json.error) {
+      const detail = json.error?.details?.[0]?.errors?.[0]?.message;
+      return { ok: false, error: detail || json.error?.message || `Google Ads answered ${response.status}.` };
+    }
+    const names = (json.mutateOperationResponses ?? []).flatMap((r) => Object.values(r).map((v) => v?.resourceName ?? "")).filter(Boolean);
+    return { ok: true, value: names };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not reach Google Ads." };
+  }
 }

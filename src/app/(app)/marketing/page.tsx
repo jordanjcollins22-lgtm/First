@@ -17,7 +17,11 @@ import { getBookingTest } from "@/lib/data/booking-test";
 import { getCurrentProfile } from "@/lib/data/team";
 import { isOwnerLevel } from "@/lib/roles";
 import { LeadSourcesPanel } from "@/components/marketing/lead-sources-panel";
-import { listLeadSources } from "@/lib/data/lead-sources";
+import { listGhlLinks, listLeadSources, listMarketingTeam } from "@/lib/data/lead-sources";
+import { GoogleAdsTracker } from "@/components/marketing/google-ads-tracker";
+import { listGoogleAdsSpend } from "@/lib/data/ads-tracker";
+import { AdDraftsPanel } from "@/components/marketing/ad-drafts-panel";
+import { listAdDrafts } from "@/lib/data/ad-drafts";
 import { PropertyManagers } from "@/components/marketing/property-managers";
 import { getPmBoard } from "@/lib/data/pm-board";
 
@@ -86,7 +90,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
 async function AttributionTab() {
   const profile = await getCurrentProfile();
   const owner = isOwnerLevel(profile?.roles ?? []);
-  const [report, bookingTest, leads] = await Promise.all([
+  const [report, bookingTest, leads, team, adSpend, adDrafts, ghlLinks] = await Promise.all([
     attributionReport().catch((err) => {
       console.error("Attribution failed to load:", err);
       return null;
@@ -98,8 +102,23 @@ async function AttributionTab() {
       console.error("Lead sources failed to load:", err);
       return null;
     }),
+    // Who shares the content profit pool.
+    listMarketingTeam().catch(() => [] as string[]),
+    // Google Ads spend per campaign, for the ads tracker.
+    listGoogleAdsSpend().catch(() => []),
+    // Ads made from job photos, waiting for the owner's yes.
+    owner ? listAdDrafts().catch(() => []) : Promise.resolve([]),
+    // Each person's tagged GoHighLevel link, the owner's to hand out.
+    owner ? listGhlLinks().catch(() => []) : Promise.resolve([]),
   ]);
-  const sources = leads ? <LeadSourcesPanel leads={leads} now={new Date().toISOString()} /> : null;
+  const drawnAt = new Date().toISOString();
+  const sources = leads ? (
+    <>
+      {owner && <AdDraftsPanel drafts={adDrafts} spend={adSpend} leads={leads} now={drawnAt} />}
+      <GoogleAdsTracker spend={adSpend} leads={leads} now={drawnAt} />
+      <LeadSourcesPanel leads={leads} team={team} ghlLinks={ghlLinks} now={drawnAt} showAffiliates />
+    </>
+  ) : null;
   const test = bookingTest ? <BookingTestCard test={bookingTest} /> : null;
   if (!report) {
     return (
