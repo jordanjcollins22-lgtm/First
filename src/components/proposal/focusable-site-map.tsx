@@ -32,6 +32,7 @@ export function FocusableSiteMap({
   defaultFrame,
   numbered = false,
   dimSurroundings = false,
+  markers = false,
   className,
 }: {
   imagePath: string;
@@ -45,6 +46,8 @@ export function FocusableSiteMap({
   defaultFrame?: { x: number; y: number; width: number; height: number };
   numbered?: boolean;
   dimSurroundings?: boolean;
+  /** Numbered tap markers instead of outlines; see SiteMapImage. */
+  markers?: boolean;
   className?: string;
 }) {
   const [focused, setFocused] = useState<number | null>(null);
@@ -82,6 +85,7 @@ export function FocusableSiteMap({
         // map's own numbered list would only say the same thing twice.
         numbered={numbered && !worthPicking}
         dimSurroundings={dimSurroundings}
+        markers={markers}
         // The index is into whatever was passed as `zones`, which is every
         // zone until one is picked and just that one afterwards. So while
         // nothing is picked the index is already the one this component works

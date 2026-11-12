@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drawnSize, looksResized } from "./site-map-geometry";
+import { drawnSize, looksResized, markerPoint } from "./site-map-geometry";
 
 // A satellite photo fetched at 1280 and served @2x, on a 1000x800 board.
 const NATURAL = { w: 2560, h: 2560 };
@@ -36,5 +36,23 @@ describe("looksResized", () => {
     expect(looksResized({ w: 4000, h: 900 }, { scale: 0.5, canvasWidth: 1000, canvasHeight: 800 })).toBe(
       true
     );
+  });
+});
+
+describe("markerPoint", () => {
+  it("puts the marker in the middle of a square", () => {
+    expect(markerPoint([{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }])).toEqual({ x: 5, y: 5 });
+  });
+  it("weights by area, not by corners", () => {
+    // An L: the big arm pulls the marker toward it.
+    const p = markerPoint([{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 10 }, { x: 10, y: 10 }, { x: 10, y: 30 }, { x: 0, y: 30 }])!;
+    expect(p.x).toBeCloseTo(11, 0);
+    expect(p.y).toBeCloseTo(11, 0);
+  });
+  it("uses the average for a line", () => {
+    expect(markerPoint([{ x: 0, y: 0 }, { x: 10, y: 0 }])).toEqual({ x: 5, y: 0 });
+  });
+  it("has nothing to place without points", () => {
+    expect(markerPoint([])).toBeNull();
   });
 });

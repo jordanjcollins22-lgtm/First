@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { drawnSize, looksResized } from "@/lib/site-map-geometry";
+import { drawnSize, looksResized, markerPoint } from "@/lib/site-map-geometry";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 /** Re-renders the property photo with the drawn work-area outlines on top —
@@ -23,6 +23,7 @@ export function SiteMapImage({
   dimSurroundings = false,
   onZoneClick,
   showLegend = true,
+  markers = false,
   className,
 }: {
   imagePath: string;
@@ -57,6 +58,13 @@ export function SiteMapImage({
    * satellite photo into the only lit part of the picture, which is what a
    * crew need glancing at a phone in sunlight. */
   dimSurroundings?: boolean;
+  /**
+   * Draw each zone as a numbered tap marker at its centre instead of its
+   * outline. A client reading a proposal needs to know which spot each
+   * area is, not its exact edge, and a numbered dot is easier to tap on a
+   * phone than a thin bed outline.
+   */
+  markers?: boolean;
   className?: string;
 }) {
   // The original, at its own resolution, and deliberately not a resized copy.
@@ -147,7 +155,7 @@ export function SiteMapImage({
         }
         className={className ?? "w-full rounded-2xl border border-border bg-muted"}
       >
-        {dimSurroundings && (
+        {dimSurroundings && !markers && (
           <defs>
             <mask id={maskId}>
               <rect x={view.x} y={view.y} width={view.width} height={view.height} fill="white" />
@@ -162,7 +170,7 @@ export function SiteMapImage({
           <image href={url} x={-w / 2} y={-h / 2} width={w} height={h} preserveAspectRatio="none" />
         </g>
 
-        {dimSurroundings && (
+        {dimSurroundings && !markers && (
           <rect
             x={view.x}
             y={view.y}
@@ -173,7 +181,37 @@ export function SiteMapImage({
             mask={`url(#${maskId})`}
           />
         )}
-        {zonesWithOutlines.map(({ zone, index }, i) => {
+        {markers &&
+          zonesWithOutlines.map(({ zone, index }, i) => {
+            const at = markerPoint(zone.points);
+            if (!at) return null;
+            const r = unit * 0.024;
+            return (
+              <g
+                key={i}
+                onClick={onZoneClick ? () => onZoneClick(index) : undefined}
+                style={onZoneClick ? { cursor: "pointer" } : undefined}
+              >
+                {/* A bigger invisible circle, so the target is finger-sized
+                    even though the dot is small enough not to hide the bed. */}
+                <circle cx={at.x} cy={at.y} r={r * 1.9} fill="transparent" />
+                <circle cx={at.x} cy={at.y} r={r} fill={zone.color} stroke="#ffffff" strokeWidth={r * 0.28} />
+                <text
+                  x={at.x}
+                  y={at.y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={r * 1.1}
+                  fontWeight={700}
+                  fill="#ffffff"
+                  style={{ pointerEvents: "none", fontFamily: "system-ui, sans-serif" }}
+                >
+                  {zone.number ?? i + 1}
+                </text>
+              </g>
+            );
+          })}
+        {!markers && zonesWithOutlines.map(({ zone, index }, i) => {
           return (
             <g
               key={i}

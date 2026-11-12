@@ -206,7 +206,11 @@ function ProposalBody({
           <FocusableSiteMap
             imagePath={proposal.site_image_path}
             transform={proposal.site_image_transform}
-            zones={proposal.scope_snapshot}
+            // Numbered taps, not outlines: the client needs which spot, and
+            // the numbers match the buttons under the map.
+            zones={proposal.scope_snapshot.map((zone, i) => ({ ...zone, number: i + 1 }))}
+            markers
+            numbered
           />
         </Watched>
       )}

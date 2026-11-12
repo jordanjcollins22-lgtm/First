@@ -60,3 +60,23 @@ export function looksResized(
     drawn.width < transform.canvasWidth * slack || drawn.height < transform.canvasHeight * slack
   );
 }
+
+/**
+ * Where a zone's tap marker sits: the centre of its outline by area, so a
+ * long curved bed gets its marker inside the bed rather than at the average
+ * of its corners. Falls back to the average of the points for a line or a
+ * shape with no area.
+ */
+export function markerPoint(points: { x: number; y: number }[]): { x: number; y: number } | null {
+  if (points.length === 0) return null;
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i], q = points[(i + 1) % points.length];
+    const cross = p.x * q.y - q.x * p.y;
+    a += cross; cx += (p.x + q.x) * cross; cy += (p.y + q.y) * cross;
+  }
+  if (Math.abs(a) < 1e-9) {
+    return { x: points.reduce((s, p) => s + p.x, 0) / points.length, y: points.reduce((s, p) => s + p.y, 0) / points.length };
+  }
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}
