@@ -18,6 +18,7 @@ export const META_PERMISSIONS = [
   "pages_messaging",
   "pages_manage_posts",
   "instagram_basic",
+  "instagram_content_publish",
   "instagram_manage_messages",
   "business_management",
 ] as const;

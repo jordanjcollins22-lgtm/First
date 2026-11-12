@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, Download, ImageIcon, Loader2, Undo2, Users, X } from "lucide-react";
+import { Ban, Check, Download, ImageIcon, Loader2, Undo2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { approvePlanPost, markPlanPosted, savePlanPost, skipPlanPost, unapprovePlanPost, type PlanResult } from "@/lib/actions/social-plan-actions";
+import {
+  approvePlanPost,
+  denyPlanPost,
+  markPlanPosted,
+  savePlanPost,
+  unapprovePlanPost,
+  undoDenyPlanPost,
+  type PlanResult,
+} from "@/lib/actions/social-plan-actions";
+import { DENY_REASON_MAX, canDeny } from "@/lib/social/review-decision";
 import { PLAN_KIND_LABEL, cleanHashtags, composePlanCaption, planProblems } from "@/lib/social-plan";
 import type { PlanPost } from "@/lib/data/social-plan";
 import { PictureEditor } from "@/components/marketing/picture-editor";
@@ -19,7 +28,8 @@ const dayName = (day: string) =>
 /**
  * This week's posts, one a day, each with its picture, hook, main text,
  * call to action and hashtags, all editable. Approve and it goes out on its
- * day; nothing is posted without that.
+ * day; Deny and it never does (Undo puts it back to a draft). Nothing is
+ * posted without an approval.
  */
 export function WeekPlan({ posts, publishesTo }: { posts: PlanPost[]; publishesTo: string[] }) {
   const waiting = posts.filter((p) => p.status === "draft").length;
@@ -55,6 +65,8 @@ function PlanCard({ post }: { post: PlanPost }) {
   const [result, setResult] = useState<PlanResult | null>(null);
   const [copied, setCopied] = useState(false);
   const [editingPictures, setEditingPictures] = useState(false);
+  const [denying, setDenying] = useState(false);
+  const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
   const router = useRouter();
   const text = { hook, body, cta, hashtags: tags.split(/[\s,]+/).filter(Boolean) };
@@ -62,6 +74,8 @@ function PlanCard({ post }: { post: PlanPost }) {
   const problems = planProblems(text, post.placement);
   const approved = post.status === "scheduled";
   const posted = post.status === "posted";
+  const denied = post.status === "denied";
+  const locked = posted || denied;
   const act = (fn: () => Promise<PlanResult>) => start(async () => setResult(await fn()));
 
   async function copy() {
@@ -86,8 +100,8 @@ function PlanCard({ post }: { post: PlanPost }) {
           )}
           {post.kind && <Badge variant="outline">{PLAN_KIND_LABEL[post.kind]}</Badge>}
         </div>
-        <Badge variant={posted ? "default" : approved ? "secondary" : "outline"}>
-          {posted ? "Posted" : approved ? "Approved" : group ? "Post by hand" : "Waiting for you"}
+        <Badge variant={posted ? "default" : denied ? "destructive" : approved ? "secondary" : "outline"}>
+          {posted ? "Posted" : denied ? "Denied" : approved ? "Approved" : group ? "Post by hand" : "Waiting for you"}
         </Badge>
       </div>
       <div className="grid gap-4 p-4 sm:grid-cols-[240px_1fr]">
@@ -96,7 +110,7 @@ function PlanCard({ post }: { post: PlanPost }) {
             {/* eslint-disable-next-line @next/next/no-img-element -- drawn by the app's own picture route */}
             <img src={post.imageUrl} alt={`Picture for ${dayName(post.day)}`} className="w-full rounded-lg border" loading="lazy" />
           </a>
-          {!posted && !editingPictures && (
+          {!locked && !editingPictures && (
             <Button size="sm" variant="outline" onClick={() => setEditingPictures(true)}>
               <ImageIcon className="h-4 w-4" /> Change pictures and layout
             </Button>
@@ -115,19 +129,19 @@ function PlanCard({ post }: { post: PlanPost }) {
         <div className="flex flex-col gap-3 text-sm">
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-muted-foreground">Hook (first line, stops the scroll)</span>
-            <Input value={hook} onChange={(e) => setHook(e.target.value)} disabled={posted} />
+            <Input value={hook} onChange={(e) => setHook(e.target.value)} disabled={locked} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-muted-foreground">Main text</span>
-            <Textarea rows={Math.min(10, Math.max(3, body.split("\n").length + 1))} value={body} onChange={(e) => setBody(e.target.value)} disabled={posted} />
+            <Textarea rows={Math.min(10, Math.max(3, body.split("\n").length + 1))} value={body} onChange={(e) => setBody(e.target.value)} disabled={locked} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-muted-foreground">Call to action ({"{link}"} becomes the tracked link)</span>
-            <Input value={cta} onChange={(e) => setCta(e.target.value)} disabled={posted} />
+            <Input value={cta} onChange={(e) => setCta(e.target.value)} disabled={locked} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs font-semibold text-muted-foreground">{group ? "Hashtags (leave empty for groups)" : "Hashtags (3 to 5: service and town)"}</span>
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} disabled={posted} />
+            <Input value={tags} onChange={(e) => setTags(e.target.value)} disabled={locked} />
             <span className="text-xs text-muted-foreground">{cleanHashtags(text.hashtags).join(" ")}</span>
           </label>
           {post.link && (
@@ -135,8 +149,18 @@ function PlanCard({ post }: { post: PlanPost }) {
               Tracked link: {post.link} · {post.clicks} {post.clicks === 1 ? "click" : "clicks"}
             </p>
           )}
-          {problems.length > 0 && !posted && <p className="text-xs text-destructive">{problems.join(" ")}</p>}
-          {!posted && (
+          {problems.length > 0 && !locked && <p className="text-xs text-destructive">{problems.join(" ")}</p>}
+          {denied && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+              <p className="flex-1 text-sm">
+                Denied: this one won&apos;t be posted.{post.deniedReason ? ` Reason: ${post.deniedReason}` : ""}
+              </p>
+              <Button variant="outline" size="sm" disabled={pending} onClick={() => act(() => undoDenyPlanPost(post.id))}>
+                <Undo2 className="h-4 w-4" /> Undo deny
+              </Button>
+            </div>
+          )}
+          {!locked && (
             <div className="flex flex-wrap gap-2">
               {group ? (
                 <Button disabled={pending || problems.length > 0} onClick={() => act(() => markPlanPosted(post.id, text))}>
@@ -145,11 +169,20 @@ function PlanCard({ post }: { post: PlanPost }) {
                 </Button>
               ) : (
                 !approved && (
-                  <Button disabled={pending || problems.length > 0} onClick={() => act(() => approvePlanPost(post.id, text))}>
+                  <Button
+                    className="bg-emerald-600 text-white hover:bg-emerald-700"
+                    disabled={pending || problems.length > 0}
+                    onClick={() => act(() => approvePlanPost(post.id, text))}
+                  >
                     {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                     Approve
                   </Button>
                 )
+              )}
+              {canDeny(post.status) && !denying && (
+                <Button variant="destructive" disabled={pending} onClick={() => setDenying(true)}>
+                  <Ban className="h-4 w-4" /> Deny
+                </Button>
               )}
               <Button variant="outline" disabled={pending} onClick={() => act(() => savePlanPost(post.id, text))}>
                 Save changes
@@ -162,9 +195,23 @@ function PlanCard({ post }: { post: PlanPost }) {
                   <Undo2 className="h-4 w-4" /> Undo approval
                 </Button>
               )}
-              <Button variant="ghost" disabled={pending} onClick={() => act(() => skipPlanPost(post.id))}>
-                <X className="h-4 w-4" /> Skip
-              </Button>
+            </div>
+          )}
+          {!locked && denying && (
+            <div className="flex flex-col gap-2 rounded-md border border-destructive/40 p-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-muted-foreground">Why not? (optional)</span>
+                <Input value={reason} maxLength={DENY_REASON_MAX} placeholder="e.g. wrong photo, not this week" onChange={(e) => setReason(e.target.value)} />
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="destructive" size="sm" disabled={pending} onClick={() => act(() => denyPlanPost(post.id, reason))}>
+                  {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                  Deny this post
+                </Button>
+                <Button variant="ghost" size="sm" disabled={pending} onClick={() => setDenying(false)}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
           {result && <p className={`text-sm ${result.ok ? "text-emerald-700" : "text-destructive"}`}>{result.message}</p>}

@@ -175,16 +175,16 @@ export async function removeMetaPage(organizationId: string, rowId: string): Pro
   if (error) throw new Error(error.message);
 }
 
-/** The page the week's posts go to, with its key. */
-export async function postingPage(organizationId: string): Promise<{ pageId: string; token: string } | null> {
+/** The page the week's posts go to, with its key and its linked Instagram account, if any. */
+export async function postingPage(organizationId: string): Promise<{ pageId: string; token: string; instagramId: string | null; name: string } | null> {
   const { data } = await db()
     .from("meta_pages")
-    .select("page_id, access_token")
+    .select("page_id, access_token, instagram_id, name")
     .eq("organization_id", organizationId)
     .contains("roles", ["posting"])
     .limit(1)
     .maybeSingle();
-  return data ? { pageId: data.page_id, token: data.access_token } : null;
+  return data ? { pageId: data.page_id, token: data.access_token, instagramId: data.instagram_id ?? null, name: data.name } : null;
 }
 
 /** Whether any business has a page ticked for posting, so the posting cron has somewhere to go. */
