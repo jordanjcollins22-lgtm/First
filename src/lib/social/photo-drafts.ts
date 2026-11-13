@@ -75,7 +75,7 @@ export function draftText(input: DraftInput): PlanText {
         : `Fresh work from the crew in ${where}.`;
 
   const opener = suggestCaption({ services: service ? [service] : [], city: town, phone }).split("\n")[0];
-  const first = input.shape === "pair" ? opener : opener.replace(/ Swipe for the before\.$/, ".");
+  const first = input.shape === "pair" ? opener : opener.replace(/\. Swipe for the before\.$/, ".");
   const note = safeNote(input.note, terms);
   const body = [first, note].filter(Boolean).join(" ");
 
