@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { combinedSaltingValues, costSalting, priceSaltingTogether, saltingAreas, priceSaltingVisits, repriceSaltingScope, saltingMaterial, saltingOrder, saltingScope } from "./salting";
+import { combinedSaltingValues, costSalting, priceSaltingTogether, saltingAreas, priceSaltingVisits, repriceSaltingScope, saltingMaterial, saltingOrder, saltingScope, saltingRateFor, saltingMinutes, SALTING_RATE, SPREADER_SQFT_PER_HOUR, ROCK_SALT_CENTS_PER_SQFT } from "./salting";
 import { DEFAULT_SALT_SETTINGS, quoteOrder } from "./salt";
 import { margin } from "./gross-profit";
 
@@ -108,5 +108,25 @@ describe("every salting area at one house, sold as one", () => {
       "the driveway, the sidewalks and walkways and the stairs"
     );
     expect(combinedSaltingValues([{ surface: "Stairs" }, { surface: "Sidewalks and walkways" }]).surface).toBe("Sidewalks and walkways");
+  });
+});
+
+describe("a parking lot with a spreader and rock salt", () => {
+  it("reads the spreader and the material off the area", () => {
+    const r = saltingRateFor({ spreader: "Walk-behind spreader", material: "Rock salt" });
+    expect(r.sqFtPerHour).toBe(SPREADER_SQFT_PER_HOUR);
+    expect(r.materialCentsPerSqFt).toBe(ROCK_SALT_CENTS_PER_SQFT);
+    expect(saltingRateFor({}).sqFtPerHour).toBe(SALTING_RATE.sqFtPerHour);
+    expect(saltingRateFor({}).materialCentsPerSqFt).toBe(SALTING_RATE.materialCentsPerSqFt);
+  });
+
+  it("keeps them when areas are combined into one visit", () => {
+    const v = combinedSaltingValues([{ surface: "Other", petSafe: "No", treatments: "3", spreader: "Walk-behind spreader", material: "Rock salt" }, { surface: "Sidewalks", petSafe: "Yes", treatments: "3" }]);
+    expect(v.spreader).toBe("Walk-behind spreader");
+    expect(v.material).toBe("Rock salt");
+  });
+
+  it("times a 15,330 sq ft lot at the spreader's rate", () => {
+    expect(saltingMinutes(15330, saltingRateFor({ spreader: "Walk-behind spreader" }))).toBeCloseTo(5 + 15330 / 20000 * 60, 5);
   });
 });

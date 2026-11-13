@@ -3,7 +3,7 @@ import type { CanvasCatalog } from "@/lib/data/canvas-catalog";
 import { buildEstimate, withTravelShare, type EstimateTravelInput, type JobEstimate } from "@/lib/job-estimate";
 import { computeProposalTotal, formatMaterialQuantity, zoneCrewHours, zoneMaterialLineItems, zoneMeasurements } from "@/lib/proposal-pricing";
 import { DEFAULT_SALT_SETTINGS } from "@/lib/salt";
-import { combinedSaltingValues, isSalting, priceSaltingTogether, type SaltingVisits } from "@/lib/salting";
+import { combinedSaltingValues, isSalting, priceSaltingTogether, ROCK_SALT_CENTS_PER_SQFT, saltingRateFor, type SaltingVisits } from "@/lib/salting";
 
 /**
  * A whole site map priced the one way, for the proposal the client gets and
@@ -52,9 +52,11 @@ export function priceSiteMap(input: {
   // The first salting area carries it; the others are part of it and carry
   // nothing of their own, so the areas still add up to the total.
   const saltIndexes = zones.map((_, index) => index).filter((index) => isSalting(zones[index].service?.typeId));
+  const saltValues = saltIndexes.length > 0 ? combinedSaltingValues(saltIndexes.map((index) => zones[index].service!.values)) : null;
   const together =
-    saltIndexes.length > 0
-      ? priceSaltingTogether([combinedSaltingValues(saltIndexes.map((index) => zones[index].service!.values))], salt, {
+    saltValues
+      ? priceSaltingTogether([saltValues], salt, {
+          rate: saltingRateFor(saltValues),
           toSiteMinutes: input.travel.toSiteMinutes,
           fromSiteMinutes: input.travel.fromSiteMinutes,
           crewCostPerHourCents: catalog.crewCostPerHourCents,
@@ -199,6 +201,7 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     }
   }
   const saltMaterials = salting.reduce((sum, s) => sum + s.materialCents * s.treatments, 0);
+  const saltMaterialName = salting[0]?.rate?.materialCentsPerSqFt === ROCK_SALT_CENTS_PER_SQFT ? "Rock salt" : "Pet-safe melt";
   const onlySalting = e.zones.length === 0 && salting.length > 0 && salting.every((s) => s.treatments === salting[0].treatments);
   return {
     workedCents: priced.totalCents,
@@ -209,7 +212,7 @@ export function jobCosts(priced: SiteMapPrice): JobCosts {
     areaPricesCents: priced.areaPricesCents,
     materialsNote:
       onlySalting && salting[0].areaSqFt != null && salting[0].rate
-        ? `Pet-safe melt: ${salting[0].treatments} visits × ${salting[0].areaSqFt.toLocaleString()} sq ft at ${salting[0].rate.materialCentsPerSqFt}¢ a sq ft`
+        ? `${saltMaterialName}: ${salting[0].treatments} visits × ${salting[0].areaSqFt.toLocaleString()} sq ft at ${salting[0].rate.materialCentsPerSqFt}¢ a sq ft`
         : null,
   };
 }

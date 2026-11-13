@@ -157,6 +157,26 @@ export interface SaltingRate {
 /** Matches the "salting" production unit. */
 export const SALTING_RATE: SaltingRate = { sqFtPerHour: 6000, materialCentsPerSqFt: 0.75, setupMinutes: 5 };
 
+/**
+ * A parking lot is not a driveway. With a walk-behind spreader one person
+ * covers about 20,000 sq ft an hour rather than 6,000 by hand, and a lot
+ * that is not pet safe takes rock salt at about 8 lb a thousand sq ft
+ * (125 lb on a 42-space lot) at roughly 20 cents a pound, which is 0.17
+ * cents a sq ft against the melt's 0.75. Set on the area as "spreader" and
+ * "material"; anything else is the driveway rate as before.
+ */
+export const SPREADER_SQFT_PER_HOUR = 20000;
+export const ROCK_SALT_CENTS_PER_SQFT = 0.17;
+
+export function saltingRateFor(values: Record<string, string | undefined>, base: SaltingRate = SALTING_RATE): SaltingRate {
+  return {
+    ...base,
+    sqFtPerHour: values.spreader === "Walk-behind spreader" ? SPREADER_SQFT_PER_HOUR : base.sqFtPerHour,
+    materialCentsPerSqFt: values.material === "Rock salt" ? ROCK_SALT_CENTS_PER_SQFT : base.materialCentsPerSqFt,
+  };
+}
+
+
 /** The minutes on site a visit takes for this many square feet. */
 export function saltingMinutes(areaSqFt: number, rate: SaltingRate = SALTING_RATE): number {
   return rate.setupMinutes + (Math.max(0, areaSqFt) / Math.max(1, rate.sqFtPerHour)) * 60;
@@ -284,11 +304,16 @@ export function combinedSaltingValues(areas: Record<string, string | undefined>[
   );
   const surface: Surface =
     surfaces.has("both") || (surfaces.has("driveway") && surfaces.has("sidewalks")) ? "both" : surfaces.has("driveway") ? "driveway" : "sidewalks";
-  return {
+  const combined: Record<string, string> = {
     surface: SALTING_SURFACES.find((s) => s.surface === surface)!.label,
     petSafe: orders.some(({ order }) => order.petFriendly) ? "Yes" : "No",
     treatments: String(Math.max(MINIMUM_TREATMENTS, ...orders.map(({ order }) => order.treatments))),
   };
+  // How it is spread and with what carry over, so a lot done with a spreader
+  // and rock salt is costed that way rather than as a driveway by hand.
+  if (areas.some((v) => v.spreader === "Walk-behind spreader")) combined.spreader = "Walk-behind spreader";
+  if (areas.some((v) => v.material === "Rock salt")) combined.material = "Rock salt";
+  return combined;
 }
 
 /** The areas in the client's words: "the driveway, the stairs and the sidewalks and walkways", driveways first. */
