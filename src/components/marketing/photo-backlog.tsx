@@ -36,12 +36,18 @@ export function PhotoBacklog({
   phone,
   bookingUrl,
   idPrefix = "",
+  onPreviewSend,
 }: {
   mode?: "live" | "preview";
   counts?: { total: number; drafted: number } | null;
   phone: string;
   bookingUrl: string;
   idPrefix?: string;
+  /**
+   * Preview only: the "Turn into posts" button hands the picked photos to
+   * the page (still on this device) instead of uploading them.
+   */
+  onPreviewSend?: (photos: { url: string; town: string; service: string; note: string }[]) => void;
 }) {
   const [picked, setPicked] = useState<Picked[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -72,6 +78,13 @@ export function PhotoBacklog({
   const remove = (key: string) => setPicked((p) => p.filter((x) => x.key !== key));
 
   async function send() {
+    if (mode === "preview") {
+      const ready = picked.filter((x) => x.status === "ready" || x.status === "failed");
+      onPreviewSend?.(ready.map(({ url, town, service, note }) => ({ url, town, service, note })));
+      setNotice(`${ready.length} draft post${ready.length === 1 ? "" : "s"} made. They're in Ready to approve.`);
+      setPicked((p) => p.filter((x) => !ready.includes(x)));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     let made = 0;
@@ -190,7 +203,7 @@ export function PhotoBacklog({
         </ul>
       )}
 
-      {mode === "live" && waiting > 0 && (
+      {(mode === "live" || onPreviewSend) && waiting > 0 && (
         <Button size="lg" className="mt-4 w-full sm:w-auto" disabled={busy} onClick={send}>
           {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />} Turn {waiting} photo{waiting === 1 ? "" : "s"} into posts
         </Button>

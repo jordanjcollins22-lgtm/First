@@ -49,6 +49,8 @@ export interface UpcomingPost {
   hook: string;
   lastError: string | null;
   attempts: number;
+  /** The accounts it has gone out on so far, when known: shown as a tick or a cross on each. */
+  sent?: string[];
 }
 
 export interface PostingStatus {

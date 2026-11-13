@@ -17,6 +17,21 @@ import type { QueueItem } from "@/lib/data/social-photo-drafts";
 
 type Result = { ok: boolean; message: string };
 
+/** What the buttons do: the server's, or a demo's that changes nothing real. */
+export interface QueueActions {
+  approve: (id: string, text: { hook: string; body: string }) => Promise<Result>;
+  deny: (id: string) => Promise<Result>;
+  undoDeny: (id: string) => Promise<Result>;
+  save: (id: string, text: { hook: string; body: string }) => Promise<Result>;
+}
+
+const SERVER_ACTIONS: QueueActions = {
+  approve: approveQueuedPost,
+  deny: (id) => denyPlanPost(id),
+  undoDeny: undoDenyPlanPost,
+  save: saveQueuedPost,
+};
+
 /**
  * Every draft waiting for a yes, in one place: uploaded photos, crew photos
  * from finished jobs, starter posts. Each shows its picture, its caption
@@ -24,9 +39,23 @@ type Result = { ok: boolean; message: string };
  * and where it came from, with Approve and Deny. Nothing is posted until
  * Approve; Deny keeps it off for good (Undo puts it back).
  */
-export function ReadyToApprove({ items, publishesTo }: { items: QueueItem[]; publishesTo: string[] }) {
+export function ReadyToApprove({
+  items,
+  publishesTo,
+  actions = SERVER_ACTIONS,
+  idPrefix,
+  numberOf,
+}: {
+  items: QueueItem[];
+  publishesTo: string[];
+  /** For a demo: every button runs these instead. */
+  actions?: QueueActions;
+  /** Ids on each card and its buttons: {idPrefix}draft-N, {idPrefix}approve-N, {idPrefix}deny-N. */
+  idPrefix?: string;
+  numberOf?: (item: QueueItem) => number;
+}) {
   return (
-    <section id="ready-to-approve" className="mx-auto mb-8 max-w-3xl px-4 pt-4 sm:pt-6">
+    <section id={idPrefix ? `${idPrefix}ready-to-approve` : "ready-to-approve"} className="mx-auto mb-8 max-w-3xl px-4 pt-4 sm:pt-6">
       <h2 className="text-2xl font-bold">Ready to approve ({items.length})</h2>
       <p className="text-sm text-muted-foreground">
         {items.length === 0
@@ -39,15 +68,15 @@ export function ReadyToApprove({ items, publishesTo }: { items: QueueItem[]; pub
         </p>
       )}
       <div className="mt-4 flex flex-col gap-6">
-        {items.map((item) => (
-          <QueueCard key={item.id} item={item} />
+        {items.map((item, i) => (
+          <QueueCard key={item.id} item={item} actions={actions} ids={idPrefix ? { prefix: idPrefix, n: numberOf?.(item) ?? i + 1 } : null} />
         ))}
       </div>
     </section>
   );
 }
 
-function QueueCard({ item }: { item: QueueItem }) {
+function QueueCard({ item, actions, ids }: { item: QueueItem; actions: QueueActions; ids: { prefix: string; n: number } | null }) {
   const [hook, setHook] = useState(item.hook);
   const [body, setBody] = useState(item.body);
   const [result, setResult] = useState<Result | null>(null);
@@ -66,7 +95,7 @@ function QueueCard({ item }: { item: QueueItem }) {
     });
 
   return (
-    <article className="overflow-hidden rounded-xl border bg-card/70" data-post={item.id}>
+    <article id={ids ? `${ids.prefix}draft-${ids.n}` : undefined} className="overflow-hidden rounded-xl border bg-card/70" data-post={item.id}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{item.source}</Badge>
@@ -102,17 +131,24 @@ function QueueCard({ item }: { item: QueueItem }) {
           {state === "waiting" ? (
             <div className="mt-2 grid grid-cols-2 gap-3">
               <Button
+                id={ids ? `${ids.prefix}approve-${ids.n}` : undefined}
                 size="lg"
                 disabled={pending || problems.length > 0}
-                onClick={() => act(() => approveQueuedPost(item.id, { hook, body }), () => setState("approved"))}
+                onClick={() => act(() => actions.approve(item.id, { hook, body }), () => setState("approved"))}
               >
                 {pending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Check className="h-5 w-5" />} Approve
               </Button>
-              <Button size="lg" variant="destructive" disabled={pending} onClick={() => act(() => denyPlanPost(item.id), () => setState("denied"))}>
+              <Button
+                id={ids ? `${ids.prefix}deny-${ids.n}` : undefined}
+                size="lg"
+                variant="destructive"
+                disabled={pending}
+                onClick={() => act(() => actions.deny(item.id), () => setState("denied"))}
+              >
                 <Ban className="h-5 w-5" /> Deny
               </Button>
               {edited && (
-                <Button size="sm" variant="outline" className="col-span-2" disabled={pending} onClick={() => act(() => saveQueuedPost(item.id, { hook, body }))}>
+                <Button size="sm" variant="outline" className="col-span-2" disabled={pending} onClick={() => act(() => actions.save(item.id, { hook, body }))}>
                   Save caption without approving
                 </Button>
               )}
@@ -121,7 +157,7 @@ function QueueCard({ item }: { item: QueueItem }) {
             <div className="mt-2 flex items-center gap-3">
               <Badge variant={state === "approved" ? "default" : "destructive"}>{state === "approved" ? "Approved" : "Denied"}</Badge>
               {state === "denied" && (
-                <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => undoDenyPlanPost(item.id), () => setState("waiting"))}>
+                <Button size="sm" variant="outline" disabled={pending} onClick={() => act(() => actions.undoDeny(item.id), () => setState("waiting"))}>
                   <Undo2 className="h-4 w-4" /> Undo
                 </Button>
               )}
