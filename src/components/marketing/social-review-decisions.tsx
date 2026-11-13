@@ -24,28 +24,27 @@ export function ReviewDecisions({ total, children }: { total: number; children: 
   return <Ctx.Provider value={{ decisions, total, press }}>{children}</Ctx.Provider>;
 }
 
-export function ReviewDecisionCount() {
+export function ReviewDecisionCount({ prefix = "sp", where = "on each post in the week plan" }: { prefix?: string; where?: string } = {}) {
   const { decisions, total } = useDecisions();
   const c = countDecisions(decisions, total);
   return (
-    <div id="sp-decisions" className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+    <div id={`${prefix}-decisions`} className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
       <p className="font-semibold">
         <span className="text-emerald-700">{c.approved} approved</span> · <span className="text-red-700">{c.denied} denied</span> · {c.undecided} undecided
       </p>
       <p className="mt-1 text-xs text-stone-600">
-        These buttons only work on this page, to try them out: nothing is saved and nothing posts. The real Approve and Deny buttons are on Admin › Social, on each
-        post in the week plan.
+        These buttons only work on this page, to try them out: nothing is saved and nothing posts. The real Approve and Deny buttons are on Admin › Social, {where}.
       </p>
     </div>
   );
 }
 
-export function ReviewDraftCard({ n, children }: { n: number; children: React.ReactNode }) {
+export function ReviewDraftCard({ n, children, prefix = "sp" }: { n: number; children: React.ReactNode; prefix?: string }) {
   const { decisions, press } = useDecisions();
   const verdict = decisions[n];
   const frame = verdict === "approved" ? "border-emerald-500 ring-2 ring-emerald-500" : verdict === "denied" ? "border-red-500 ring-2 ring-red-500 opacity-70" : "border-stone-200";
   return (
-    <li id={`sp-draft-${n}`} data-decision={verdict ?? "undecided"} className={`flex flex-col overflow-hidden rounded-lg border ${frame}`}>
+    <li id={`${prefix}-draft-${n}`} data-decision={verdict ?? "undecided"} className={`flex flex-col overflow-hidden rounded-lg border ${frame}`}>
       {verdict && (
         <p className={`px-3 py-1 text-xs font-bold uppercase tracking-wide text-white ${verdict === "approved" ? "bg-emerald-600" : "bg-red-600"}`}>
           {verdict === "approved" ? "Approved" : "Denied"}
@@ -54,7 +53,7 @@ export function ReviewDraftCard({ n, children }: { n: number; children: React.Re
       {children}
       <div className="mt-auto flex gap-2 border-t border-stone-200 p-3">
         <button
-          id={`sp-approve-${n}`}
+          id={`${prefix}-approve-${n}`}
           type="button"
           aria-pressed={verdict === "approved"}
           onClick={() => press(n, "approved")}
@@ -63,7 +62,7 @@ export function ReviewDraftCard({ n, children }: { n: number; children: React.Re
           {verdict === "approved" ? "Approved ✓" : "Approve"}
         </button>
         <button
-          id={`sp-deny-${n}`}
+          id={`${prefix}-deny-${n}`}
           type="button"
           aria-pressed={verdict === "denied"}
           onClick={() => press(n, "denied")}

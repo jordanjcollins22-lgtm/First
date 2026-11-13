@@ -6,6 +6,8 @@ import { log } from "@/lib/log";
 import { authorizeScheduledCall } from "@/lib/cron-auth";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { recordRun, runSocialPosting, type PostingRun } from "@/lib/data/social-posting-run";
+import { catchUpJobDrafts } from "@/lib/data/social-photo-drafts";
+import { writeDraftText } from "@/lib/social/photo-post-writer";
 
 /**
  * Sends the posts whose time has come, for every business, to Facebook and
@@ -18,6 +20,11 @@ import { recordRun, runSocialPosting, type PostingRun } from "@/lib/data/social-
  * (0374_social_autopost.sql, x-scheduler-token), and once a day by Vercel's
  * cron (vercel.json, CRON_SECRET) as the fallback. Safe to run more often
  * than needed: a post is claimed before it is sent.
+ *
+ * First, the catch-up: finished jobs from the last three weeks whose crew
+ * photos have no post yet each get a draft (lib/data/social-photo-drafts.ts),
+ * which waits on Admin › Social for Approve or Deny. Nothing made here is
+ * sent until somebody approves it.
  */
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,7 +41,13 @@ export async function GET(request: NextRequest) {
   const appBase = (await outboundBaseUrl()).replace(/\/$/, "");
   const { data: orgs } = await admin.from("organizations").select("id");
   const runs: PostingRun[] = [];
+  let drafted = 0;
   for (const { id } of orgs ?? []) {
+    try {
+      drafted += await catchUpJobDrafts(admin, id, { bookingUrl: `${appBase}/book`, writer: writeDraftText });
+    } catch (err) {
+      log.error("cron.social_posts.drafts", err, { org: id });
+    }
     try {
       const run = await runSocialPosting(admin, id, appBase);
       await recordRun(admin, run).catch((err) => log.error("cron.social_posts.record", err, { org: id }));
@@ -45,6 +58,6 @@ export async function GET(request: NextRequest) {
     }
   }
   const total = (k: "due" | "sent" | "failed" | "waiting" | "filled" | "reslotted") => runs.reduce((n, r) => n + r[k], 0);
-  log.info("cron.social_posts", { due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled") });
-  return NextResponse.json({ due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled"), reslotted: total("reslotted"), runs });
+  log.info("cron.social_posts", { drafted, due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled") });
+  return NextResponse.json({ drafted, due: total("due"), sent: total("sent"), failed: total("failed"), waiting: total("waiting"), filled: total("filled"), reslotted: total("reslotted"), runs });
 }

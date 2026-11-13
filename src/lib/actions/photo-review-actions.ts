@@ -9,6 +9,7 @@ import { describeDbError } from "@/lib/setup-errors";
 import { markIsUsable } from "@/lib/photo-review";
 import { listPhotoMarks } from "@/lib/data/photo-review";
 import { canApprove } from "@/lib/photo-review";
+import { queueJobDraft } from "@/lib/data/social-photo-drafts-queue";
 
 export type ReviewResult = { ok: true; message?: string } | { ok: false; message: string };
 
@@ -128,6 +129,8 @@ export async function approvePhotos(jobId: string): Promise<ReviewResult> {
     if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
+    // Signed-off photos become a social post draft, waiting for approval.
+    queueJobDraft(jobId, await getCurrentOrganizationId());
     return { ok: true, message: "Approved, book the walkthrough." };
   } catch (err) {
     console.error("approvePhotos failed:", err);

@@ -42,7 +42,9 @@ export function CadenceSummary({ cadence }: { cadence: SocialCadence }) {
   );
 }
 
-const STATUS_LABEL: Record<string, string> = { scheduled: "Scheduled", approved: "Waiting for a slot", failed: "Failed" };
+const STATUS_LABEL: Record<string, string> = { scheduled: "Scheduled", approved: "Waiting for a slot", failed: "Failed", posted: "Posted" };
+
+const platformName = (x: string) => PLATFORM_LABEL[x as keyof typeof PLATFORM_LABEL] ?? x;
 
 export function UpcomingList({ posts, actions }: { posts: UpcomingPost[]; actions?: (post: UpcomingPost) => React.ReactNode }) {
   if (posts.length === 0) return <p className="text-sm text-muted-foreground">Nothing in the queue.</p>;
@@ -54,9 +56,25 @@ export function UpcomingList({ posts, actions }: { posts: UpcomingPost[]; action
             <p className="truncate font-medium">{p.hook || "(no text yet)"}</p>
             <p className="text-xs text-muted-foreground">
               {STATUS_LABEL[p.status] ?? p.status}
-              {p.scheduledFor ? ` · ${shortWhen(p.scheduledFor)}` : ""} · {p.platforms.map((x) => PLATFORM_LABEL[x as keyof typeof PLATFORM_LABEL] ?? x).join(" + ")}
+              {p.scheduledFor ? ` · ${shortWhen(p.scheduledFor)}` : ""}
+              {p.sent ? "" : ` · ${p.platforms.map(platformName).join(" + ")}`}
               {p.attempts > 0 ? ` · tried ${p.attempts}×` : ""}
             </p>
+            {p.sent && (
+              <p className="mt-1 flex flex-wrap gap-x-3 text-xs font-medium">
+                {p.platforms.map((x) =>
+                  p.sent!.includes(x) ? (
+                    <span key={x} className="text-emerald-700 dark:text-emerald-300">
+                      {platformName(x)} ✓
+                    </span>
+                  ) : (
+                    <span key={x} className={p.status === "failed" ? "text-red-700 dark:text-red-300" : "text-muted-foreground"}>
+                      {platformName(x)} {p.status === "failed" ? "✕" : "…"}
+                    </span>
+                  )
+                )}
+              </p>
+            )}
             {p.lastError && <p className="mt-1 text-xs text-red-700 dark:text-red-300">{p.lastError}</p>}
           </div>
           {actions?.(p)}

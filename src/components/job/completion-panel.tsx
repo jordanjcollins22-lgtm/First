@@ -68,6 +68,7 @@ export function CompletionPanel({
   evaluationBeforesAvailable = 0,
   waivers = [],
   lockedStageReason = null,
+  demo,
 }: {
   jobId: string;
   status: JobStatus;
@@ -94,8 +95,21 @@ export function CompletionPanel({
   completedAt: string | null;
   completedByName: string | null;
   completionNotes: string | null;
+  /**
+   * For a demo: the photo buttons add a sample photo, Remove and the
+   * sign-off run on this screen only, and nothing is uploaded or saved.
+   */
+  demo?: {
+    /** The sample photo a tap on a stage's button takes. */
+    photo: (kind: JobPhotoKind, zone: ZoneRef | null) => string | null;
+    onComplete: (notes: string) => void;
+    onReopen?: () => void;
+    completeLabel?: string;
+  };
 }) {
   const [items, setItems] = useState(photos);
+  const [demoDone, setDemoDone] = useState(false);
+  const demoShots = useRef(0);
   const scope = `job:${jobId}`;
   const [notes, setNotes] = useState(completionNotes ?? "");
   const router = useRouter();
@@ -104,7 +118,7 @@ export function CompletionPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const isDone = status === "completed";
+  const isDone = status === "completed" || demoDone;
   // Only the stages this job has reached, and only ever for a zone. 'issue'
   // rides with 'during', since finding a problem means somebody is on site.
   const offered = KINDS.filter(
@@ -115,7 +129,7 @@ export function CompletionPanel({
       (k === "after" && allowAfter)
   );
 
-  const coverageVerdict = canCompleteJob({ status }, items, zones, waivers);
+  const coverageVerdict = canCompleteJob({ status: isDone ? "completed" : status }, items, zones, waivers);
   const verdict = allowSignOff
     ? coverageVerdict
     : ({ ok: false, reason: signOffLockReason ?? "Not yet." } as const);
@@ -192,6 +206,12 @@ export function CompletionPanel({
     );
   }
 
+  function demoShot(kind: JobPhotoKind, zone: ZoneRef | null) {
+    if (!demo) return;
+    setError(null);
+    addPhoto(`demo-${++demoShots.current}`, "", kind, zone, demo.photo(kind, zone));
+  }
+
   // A photo kept with no signal joins the rest once it is sent.
   useOnSent(scope, (item, result) => {
     if (item.kind !== "job-photo") return;
@@ -257,6 +277,7 @@ export function CompletionPanel({
             uploading={uploading > 0}
             offered={offered}
             onUpload={(files, kind) => upload(files, kind, zone)}
+            onDemoShot={demo ? (kind) => demoShot(kind, zone) : undefined}
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
             jobId={jobId}
             onWaiverChanged={() => router.refresh()}
@@ -278,6 +299,7 @@ export function CompletionPanel({
             uploading={uploading > 0}
             offered={allowDuring ? ["issue"] : []}
             onUpload={(files, kind) => upload(files, kind, null)}
+            onDemoShot={demo ? (kind) => demoShot(kind, null) : undefined}
             onRemoved={(id) => setItems((c) => c.filter((p) => p.id !== id))}
             jobId={jobId}
             onWaiverChanged={() => router.refresh()}
@@ -304,6 +326,12 @@ export function CompletionPanel({
             disabled={isPending}
             onClick={() =>
               startTransition(async () => {
+                if (demo) {
+                  setDemoDone(false);
+                  setMessage(null);
+                  demo.onReopen?.();
+                  return;
+                }
                 const result = await reopenCompletedJob(jobId);
                 if (result.ok) setMessage(result.message ?? "Reopened.");
                 else setError(result.message);
@@ -331,6 +359,12 @@ export function CompletionPanel({
               onClick={() =>
                 startTransition(async () => {
                   setError(null);
+                  if (demo) {
+                    setDemoDone(true);
+                    setMessage("Signed off.");
+                    demo.onComplete(notes);
+                    return;
+                  }
                   const result = await completeJob(jobId, notes, zones);
                   if (result.ok) setMessage(result.message ?? "Signed off.");
                   else setError(result.message);
@@ -339,7 +373,7 @@ export function CompletionPanel({
             >
               {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               <CheckCircle2 className="mr-1.5 h-4 w-4" />
-              Mark complete
+              {demo?.completeLabel ?? "Mark complete"}
             </Button>
 
             {!verdict.ok && <p className="mt-1.5 text-[11px] text-muted-foreground">{verdict.reason}</p>}
@@ -362,6 +396,7 @@ function ZoneSection({
   uploading,
   offered,
   onUpload,
+  onDemoShot,
   onRemoved,
   jobId,
   onWaiverChanged,
@@ -375,6 +410,8 @@ function ZoneSection({
   /** The stages this job is far enough along to accept. */
   offered: JobPhotoKind[];
   onUpload: (files: FileList | null, kind: JobPhotoKind) => void;
+  /** For a demo: the photo buttons take a sample photo instead of opening the camera. */
+  onDemoShot?: (kind: JobPhotoKind) => void;
   onRemoved: (id: string) => void;
   jobId: string;
   onWaiverChanged: () => void;
@@ -575,7 +612,7 @@ function ZoneSection({
               size="sm"
               className="min-h-11 flex-1"
               disabled={uploading}
-              onClick={() => cameraRef.current?.click()}
+              onClick={() => (onDemoShot ? onDemoShot(kind) : cameraRef.current?.click())}
             >
               <Camera className="mr-1.5 h-4 w-4" />
               {PHOTO_KIND_LABELS[kind]} photo
@@ -586,7 +623,7 @@ function ZoneSection({
               variant="outline"
               className="min-h-11"
               disabled={uploading}
-              onClick={() => libraryRef.current?.click()}
+              onClick={() => (onDemoShot ? onDemoShot(kind) : libraryRef.current?.click())}
               aria-label="Choose from library"
             >
               <ImagePlus className="h-4 w-4" />
@@ -596,7 +633,7 @@ function ZoneSection({
           {/* The third answer. Without it the only ways past a stage that
               genuinely has no photo are to leave the job looking unfinished
               forever, or to upload something that is not what it claims. */}
-          {REQUIRED_STAGES.includes(kind as (typeof REQUIRED_STAGES)[number]) && (
+          {!onDemoShot && REQUIRED_STAGES.includes(kind as (typeof REQUIRED_STAGES)[number]) && (
             <WaiveStage
               jobId={jobId}
               zoneId={zone?.id ?? null}
@@ -612,7 +649,7 @@ function ZoneSection({
       {photos.length > 0 && (
         <ul className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
           {photos.map((photo) => (
-            <PhotoTile key={photo.id} photo={photo} editable={editable} onRemoved={() => onRemoved(photo.id)} />
+            <PhotoTile key={photo.id} photo={photo} editable={editable} demo={Boolean(onDemoShot)} onRemoved={() => onRemoved(photo.id)} />
           ))}
         </ul>
       )}
@@ -623,10 +660,13 @@ function ZoneSection({
 function PhotoTile({
   photo,
   editable,
+  demo = false,
   onRemoved,
 }: {
   photo: JobPhotoWithUrl;
   editable: boolean;
+  /** Removed from this screen only. */
+  demo?: boolean;
   onRemoved: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -659,6 +699,7 @@ function PhotoTile({
           aria-label="Remove photo"
           onClick={() =>
             startTransition(async () => {
+              if (demo) return onRemoved();
               const result = await deleteJobPhoto(photo.id);
               if (result.ok) onRemoved();
             })
