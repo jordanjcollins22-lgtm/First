@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import type { NextRequest } from "next/server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseAdminConfigured } from "@/lib/env";
 import { cropBox, tidyCrop } from "@/lib/social-crop";
@@ -36,10 +38,15 @@ async function photoUrl(
   id: string | null,
   space: { width: number; height: number },
   crop: unknown,
-  fit: Fit
+  fit: Fit,
+  backlogId: string | null = null
 ): Promise<string | null> {
-  if (!id) return null;
-  const { data: photo } = await admin.from("job_photos").select("path").eq("id", id).maybeSingle();
+  if (!id && !backlogId) return null;
+  // A crew photo by its job_photos row, or a photo uploaded to the backlog
+  // (social_photo_backlog, 0376): both live in the job-photos bucket.
+  const { data: photo } = id
+    ? await admin.from("job_photos").select("path").eq("id", id).maybeSingle()
+    : await (admin as unknown as SupabaseClient).from("social_photo_backlog").select("path").eq("id", backlogId!).maybeSingle();
   if (!photo?.path) return null;
   const { data: file } = await admin.storage.from("job-photos").download(photo.path);
   if (!file) return null;
@@ -70,12 +77,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   if (!isSupabaseAdminConfigured || !/^[0-9a-f-]{36}$/i.test(id)) return new Response("Not found", { status: 404 });
   const admin = createAdminClient();
-  const { data: post } = await admin
-    .from("social_posts")
-    .select("id, hook, card_style, before_photo_id, after_photo_id, before_crop, after_crop, layout, plan_day, organization_id")
-    .eq("id", id)
-    .not("plan_day", "is", null)
-    .maybeSingle();
+  const columns = "id, hook, card_style, before_photo_id, after_photo_id, before_crop, after_crop, layout, plan_day, organization_id";
+  const read = (cols: string) =>
+    (admin as unknown as SupabaseClient).from("social_posts").select(cols).eq("id", id).not("plan_day", "is", null).maybeSingle();
+  // backlog_photo_id arrives with 0376; until then posts are read without it.
+  const first = await read(`${columns}, backlog_photo_id`);
+  const found = first.error ? (await read(columns)).data : first.data;
+  const post = found as unknown as {
+    id: string;
+    hook: string | null;
+    card_style: string | null;
+    before_photo_id: string | null;
+    after_photo_id: string | null;
+    before_crop: unknown;
+    after_crop: unknown;
+    layout: unknown;
+    plan_day: string | null;
+    organization_id: string;
+    backlog_photo_id?: string | null;
+  } | null;
   if (!post) return new Response("Not found", { status: 404 });
   const { data: org } = await admin.from("organizations").select("name, business_phone").eq("id", post.organization_id).maybeSingle();
 
@@ -94,7 +114,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const spaces = photoSpaces(split ? "split" : "photo", layout);
   const [before, after] = await Promise.all([
     split && spaces.before ? photoUrl(admin, post.before_photo_id, spaces.before, post.before_crop, layout.fit) : Promise.resolve(null),
-    post.card_style === "brand" ? Promise.resolve(null) : photoUrl(admin, post.after_photo_id, spaces.after, post.after_crop, layout.fit),
+    post.card_style === "brand"
+      ? Promise.resolve(null)
+      : photoUrl(admin, post.after_photo_id, spaces.after, post.after_crop, layout.fit, post.after_photo_id ? null : (post.backlog_photo_id ?? null)),
   ]);
   const style = split && before && after ? "split" : post.card_style === "brand" || !after ? "brand" : "photo";
   const [bold, logoData] = await Promise.all([

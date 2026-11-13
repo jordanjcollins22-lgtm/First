@@ -2,11 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { mayActOn, type AutopilotSettings, type StartedMap } from "@/lib/marketing/autopilot-settings";
 import { localDay, nextCappedSlot, reslotOverdue } from "@/lib/marketing/social-autopost";
-import { pairPhotos, suggestCaption, townFromAddress, type PhotoKind } from "@/lib/social-post";
+import { pairPhotos, townFromAddress, type PhotoKind } from "@/lib/social-post";
+import { env } from "@/lib/env";
+import { CREW_SOURCE, draftRow, draftText } from "@/lib/social/photo-drafts";
 
 /**
- * The scheduled-posts side of the autopilot: make posts from crew-approved
- * photos, and move stuck ones forward. Publishing itself stays with the
+ * The scheduled-posts side of the autopilot: make drafts from crew-approved
+ * photos, and move stuck ones forward. A draft made here waits for Approve
+ * or Deny on Admin › Social like every other one: its slot is only a
+ * suggestion until somebody approves it. Publishing itself stays with the
  * existing social-posts cron, which already sends to the connected Facebook
  * page (or the webhook) once a post's time comes.
  *
@@ -26,7 +30,8 @@ export async function runSocialAutopilot(
   client: unknown,
   org: string,
   autopilot: { settings: AutopilotSettings; started: StartedMap },
-  now = new Date()
+  now = new Date(),
+  bookingUrl = `${(env.appUrl || "https://app.jslandscapingmd.com").replace(/\/$/, "")}/book`
 ): Promise<SocialRunResult> {
   const sb = untyped(client);
   const { settings, started } = autopilot;
@@ -108,27 +113,25 @@ export async function runSocialAutopilot(
       .map((r) => nameOf.get(r.service_type_id))
       .filter((n): n is string => Boolean(n))
       .slice(0, 2);
-    const caption = suggestCaption({ services: servicesFor, zoneName: null, city: town, phone });
-    const { error } = await sb.from("social_posts").insert({
-      organization_id: org,
-      job_id: job.id,
-      before_photo_id: pair.before.id,
-      after_photo_id: pair.after.id,
-      zone_id: pair.zoneId,
-      zone_name: pair.zoneName,
-      kind: "before-after",
-      card_style: "split",
-      hook: town ? `Before & after in ${town}` : "Before & after",
-      body: caption,
-      caption,
-      plan_day: localDay(slot),
-      status: "scheduled",
-      scheduled_for: slot.toISOString(),
-      placement: "page",
-      auto_source: "crew_photos",
-      approved_at: now.toISOString(),
-      updated_at: now.toISOString(),
-    });
+    // A draft, never pre-approved: it waits in "Ready to approve" with this
+    // slot suggested, and only goes out once somebody presses Approve.
+    const text = draftText({ shape: "pair", town, service: servicesFor[0] ?? null, phone, bookingUrl });
+    const { error } = await sb.from("social_posts").insert(
+      draftRow({
+        organizationId: org,
+        text,
+        slot,
+        planDay: localDay(slot),
+        jobId: job.id,
+        beforePhotoId: pair.before.id,
+        afterPhotoId: pair.after.id,
+        zoneId: pair.zoneId,
+        zoneName: pair.zoneName,
+        source: CREW_SOURCE,
+        shape: "pair",
+        now,
+      })
+    );
     if (error) {
       // The pair is already a post (unique pair), or the table refused it.
       continue;

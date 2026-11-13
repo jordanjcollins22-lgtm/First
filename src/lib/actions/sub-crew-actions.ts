@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { notifyTeamMember } from "@/lib/notifications";
 import { revalidateJobViews } from "@/lib/revalidate-job";
 import { areaState, canFinish, nextStep } from "@/lib/sub-crew";
+import { queueJobDraft } from "@/lib/data/social-photo-drafts-queue";
 import type { WorkZone } from "@/components/canvas/types";
 
 export type SubCrewResult<T = object> = ({ ok: true } & T) | { ok: false; message: string };
@@ -142,6 +143,8 @@ export async function subFinish(token: string): Promise<SubCrewResult> {
       );
     }
   }
+  // The crew's after photos become a social post draft, waiting for approval.
+  queueJobDraft(visit.job_id, visit.organization_id);
   refresh(token, visit.job_id);
   return { ok: true };
 }

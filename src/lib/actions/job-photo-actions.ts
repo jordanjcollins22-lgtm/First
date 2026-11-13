@@ -10,6 +10,7 @@ import { canCompleteJob, canReopenCompleted, type PhotoWaiver } from "@/lib/job-
 import { walkthroughGate } from "@/lib/walkthrough";
 import { clientApprovalGate } from "@/lib/project-closeout";
 import { latestClientReview } from "@/lib/data/client-review";
+import { queueJobDraft } from "@/lib/data/social-photo-drafts-queue";
 import type { JobPhotoKind, JobPhotoStage, JobStatus, WalkthroughStatus } from "@/types/domain";
 
 export type PhotoResult = { ok: true; message?: string } | { ok: false; message: string };
@@ -205,6 +206,8 @@ export async function completeJob(
     if (error) return { ok: false, message: describeDbError(error) };
 
     refresh(jobId);
+    // The crew's photos become a social post draft, waiting for approval.
+    queueJobDraft(jobId, await getCurrentOrganizationId());
     return { ok: true, message: "Job signed off." };
   } catch (err) {
     console.error("completeJob failed:", err);

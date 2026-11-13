@@ -8,6 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentProfile } from "@/lib/data/team";
 import { deliverApproval, queueApproval } from "@/lib/data/outbound-approvals";
 import { closeoutInputFor } from "@/lib/data/client-review";
+import { queueJobDraft } from "@/lib/data/social-photo-drafts-queue";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { isOwnerLevel } from "@/lib/roles";
@@ -172,6 +173,8 @@ export async function approveAndSignOff(
   refresh(jobId);
   revalidatePath("/pipeline");
   revalidatePath("/jobs/review");
+  // The signed-off photos become a social post draft, waiting for approval.
+  queueJobDraft(jobId, who.profile.organization_id);
   return { ok: true, message: "Signed off. It's on the project review now." };
 }
 
