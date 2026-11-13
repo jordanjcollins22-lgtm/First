@@ -105,3 +105,46 @@ export async function sendSms(input: { contactId: string; message: string }) {
     body: { type: "SMS", contactId: input.contactId, message: input.message },
   });
 }
+
+/** GHL's `type` for POST /conversations/messages, per channel. */
+const SEND_TYPE: Record<string, string> = {
+  sms: "SMS",
+  email: "Email",
+  facebook: "FB",
+  instagram: "IG",
+  whatsapp: "WhatsApp",
+  gmb: "GMB",
+  live_chat: "Live_Chat",
+};
+
+/**
+ * Reply to a contact on any channel GHL handles. GHL picks the right
+ * conversation, number, inbox or page from the contact and the type.
+ */
+export async function sendMessage(input: {
+  contactId: string;
+  channel: string;
+  message: string;
+  subject?: string | null;
+}) {
+  const type = SEND_TYPE[input.channel];
+  if (!type) throw new GhlError(`Can't send on channel "${input.channel}".`);
+
+  const body: Record<string, unknown> = { type, contactId: input.contactId, message: input.message };
+  if (type === "Email") {
+    body.subject = input.subject || "Re: your message";
+    body.html = input.message
+      .split(/\n{2,}/)
+      .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`)
+      .join("");
+  }
+  return ghlFetch<{ messageId?: string; conversationId?: string }>("/conversations/messages", {
+    method: "POST",
+    version: "2021-04-15",
+    body,
+  });
+}
+
+function escapeHtml(text: string) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}

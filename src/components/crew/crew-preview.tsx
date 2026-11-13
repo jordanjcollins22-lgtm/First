@@ -18,9 +18,11 @@ interface CrewPreviewProps {
   zones: Zone[];
   workAreas: WorkAreaWithPhotos[];
   serviceTemplates: ServiceTemplate[];
+  /** Hide links back into the estimator (employees opening a texted link). */
+  employeeView?: boolean;
 }
 
-export function CrewPreview({ job, zones, workAreas, serviceTemplates }: CrewPreviewProps) {
+export function CrewPreview({ job, zones, workAreas, serviceTemplates, employeeView }: CrewPreviewProps) {
   const zoneById = useMemo(() => new Map(zones.map((z) => [z.id, z])), [zones]);
 
   const ordered = useMemo(() => {
@@ -39,11 +41,15 @@ export function CrewPreview({ job, zones, workAreas, serviceTemplates }: CrewPre
     return (
       <div className="mx-auto max-w-xl px-4 py-10 text-center">
         <p className="text-muted-foreground">
-          No work areas yet for this job. Draw some in the estimator first.
+          {employeeView
+            ? "This job doesn't have its work plan yet. Check back soon."
+            : "No work areas yet for this job. Draw some in the estimator first."}
         </p>
-        <Button asChild className="mt-4">
-          <Link href={`/jobs/${job.id}`}>Back to Estimator</Link>
-        </Button>
+        {!employeeView && (
+          <Button asChild className="mt-4">
+            <Link href={`/jobs/${job.id}`}>Back to Estimator</Link>
+          </Button>
+        )}
       </div>
     );
   }
@@ -72,9 +78,13 @@ export function CrewPreview({ job, zones, workAreas, serviceTemplates }: CrewPre
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
       <div className="flex items-center justify-between">
-        <Link href={`/jobs/${job.id}`} className="text-sm text-muted-foreground">
-          &larr; Back to estimator
-        </Link>
+        {employeeView ? (
+          <p className="text-sm font-semibold">{job.name}</p>
+        ) : (
+          <Link href={`/jobs/${job.id}`} className="text-sm text-muted-foreground">
+            &larr; Back to estimator
+          </Link>
+        )}
         <p className="text-sm font-medium">
           Area {index + 1} of {ordered.length}
         </p>

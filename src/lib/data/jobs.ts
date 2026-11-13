@@ -1,3 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import type {
   CalculatedMeasurements,
@@ -24,10 +27,15 @@ export interface JobWorkspace {
   workAreas: WorkAreaWithPhotos[];
 }
 
+/**
+ * Pass `client` to read with a different client, e.g. the service-role client
+ * on employee link pages where nobody is signed in.
+ */
 export async function getJobWorkspace(
-  jobId: string
+  jobId: string,
+  client?: SupabaseClient<Database>
 ): Promise<JobWorkspace | null> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
 
   const { data: jobRow, error: jobError } = await supabase
     .from("jobs")

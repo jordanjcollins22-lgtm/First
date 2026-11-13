@@ -1,8 +1,13 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import type { ServiceTemplate } from "@/types/domain";
 
-export async function listServiceTemplates(): Promise<ServiceTemplate[]> {
-  const supabase = await createClient();
+export async function listServiceTemplates(
+  client?: SupabaseClient<Database>
+): Promise<ServiceTemplate[]> {
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase
     .from("service_templates")
     .select("*")

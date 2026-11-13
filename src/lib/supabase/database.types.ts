@@ -380,6 +380,121 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["detailing_leads"]["Row"]>;
         Relationships: [];
       };
+      agent_runs: {
+        Row: {
+          id: string;
+          sender_kind: string;
+          team_member_id: string | null;
+          ghl_contact_id: string | null;
+          channel: string;
+          status: "running" | "done" | "error";
+          summary: string | null;
+          actions: Json;
+          error: string | null;
+          created_at: string;
+          finished_at: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["agent_runs"]["Row"]> & {
+          sender_kind: string;
+          channel: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["agent_runs"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      comm_messages: {
+        Row: {
+          id: string;
+          channel: string;
+          direction: "inbound" | "outbound";
+          sender_kind: string | null;
+          team_member_id: string | null;
+          ghl_contact_id: string | null;
+          ghl_conversation_id: string | null;
+          ghl_message_id: string | null;
+          contact_name: string | null;
+          contact_address: string | null;
+          subject: string | null;
+          body: string;
+          agent_run_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["comm_messages"]["Row"]> & {
+          channel: string;
+          direction: "inbound" | "outbound";
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["comm_messages"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "comm_messages_agent_run_id_fkey";
+            columns: ["agent_run_id"];
+            referencedRelation: "agent_runs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      agent_drafts: {
+        Row: {
+          id: string;
+          agent_run_id: string | null;
+          ghl_contact_id: string;
+          channel: string;
+          contact_name: string | null;
+          contact_address: string | null;
+          in_reply_to: string | null;
+          subject: string | null;
+          body: string;
+          note: string | null;
+          status: "pending" | "sent" | "discarded" | "failed";
+          error: string | null;
+          decided_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["agent_drafts"]["Row"]> & {
+          ghl_contact_id: string;
+          channel: string;
+          body: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["agent_drafts"]["Row"]>;
+        Relationships: [];
+      };
+      employee_links: {
+        Row: {
+          id: string;
+          token_hash: string;
+          team_member_id: string;
+          kind: "job";
+          job_id: string | null;
+          expires_at: string;
+          revoked_at: string | null;
+          first_opened_at: string | null;
+          last_opened_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["employee_links"]["Row"]> & {
+          token_hash: string;
+          team_member_id: string;
+          kind: "job";
+          expires_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["employee_links"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "employee_links_team_member_id_fkey";
+            columns: ["team_member_id"];
+            referencedRelation: "team_members";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

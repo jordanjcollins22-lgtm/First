@@ -17,6 +17,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               Field Estimator
             </Link>
             <nav className="flex items-center gap-4 text-sm font-medium">
+              <Link href="/inbox" className="hover:text-primary">
+                Inbox
+              </Link>
               <Link href="/properties" className="hover:text-primary">
                 Properties
               </Link>

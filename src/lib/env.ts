@@ -21,7 +21,22 @@ export const serverEnv = {
   ghlWebhookSecret: process.env.GHL_WEBHOOK_SECRET ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  /**
+   * How the comms agent answers customers. "draft" (default): it writes the
+   * reply and a manager approves it in /inbox or by texting back. "auto": it
+   * sends routine replies itself and still escalates anything sensitive.
+   */
+  agentCustomerMode: (process.env.AGENT_CUSTOMER_MODE === "auto" ? "auto" : "draft") as "auto" | "draft",
 };
+
+/** Public base URL of the app, used to build the links texted to employees. */
+export function appBaseUrl(): string {
+  const explicit = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel}`;
+  return "http://localhost:3000";
+}
 
 export function isGhlConfigured() {
   return Boolean(serverEnv.ghlApiKey && serverEnv.ghlLocationId);

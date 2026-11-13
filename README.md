@@ -89,6 +89,51 @@ Scheduled text check-ins with crew members so delays surface early.
    endpoint instead, for example Supabase `pg_cron` + `pg_net` or
    cron-job.org. Send the header `Authorization: Bearer <CRON_SECRET>`.
 
+## Communications agent (email, text, social, all through GoHighLevel)
+
+One AI assistant (Claude) handles every message that comes in. GoHighLevel
+already brings texts, email, Facebook and Instagram DMs, WhatsApp, Google
+Business messages and web chat into one Conversations inbox, so GHL forwards
+each one to `/api/ghl/inbound` and the agent decides what to do.
+
+**Who it talks to, and what it can do**
+
+| Sender | How it's recognized | What the agent can do |
+| --- | --- | --- |
+| Employee | phone / GHL contact on **/team** | answer questions, list jobs, text them a no-login job link, read their check-ins, escalate to managers |
+| Manager | team member marked as manager | everything above for anyone, plus text any employee, approve, edit or discard customer replies ("send a1b2c3"), ask "what happened today?" |
+| Customer | matches a customer or detailing lead | write a reply; by default it waits for approval |
+| Unknown | anything else | same as customer |
+
+Customer replies are held for approval unless `AGENT_CUSTOMER_MODE=auto`.
+When one is held, managers get a text with the draft and can reply
+"send <id>" or say what to change. The same drafts appear on **/inbox**, with
+a log of everything the agent did. If the agent errors or won't handle a
+message, managers get the original message so nothing is dropped.
+
+**No logins for employees.** Employees never sign in. When they need to see
+a job, the agent texts them a link like `https://<app>/e/<token>`. The link
+opens just that job's crew plan, expires after 72 hours, and only a hash of
+the token is stored.
+
+**What the agent knows about the business** lives in
+`src/lib/agent/business-profile.ts`. Add hours, service areas, policies and
+FAQs there. It won't make up prices or times that aren't in that file or the
+app's data.
+
+**Setup**
+
+1. Run `supabase/migrations/0006_comms_agent.sql`.
+2. Set `ANTHROPIC_API_KEY`, and optionally `AGENT_CUSTOMER_MODE` and `APP_URL`
+   (see `.env.example`).
+3. In GoHighLevel, edit the **Customer Replied** workflow from the check-ins
+   setup: remove the `team-member` tag filter and set the channel to all
+   channels. In the Webhook action, add Custom Data `channel` = the message
+   type merge field, so replies go back on the same channel.
+4. Turn off GHL auto-replies that would now double up with the agent.
+5. Mark at least one person as a manager on **/team** so escalations have
+   somewhere to go.
+
 ## Architecture notes
 
 - **Single source of truth for measurements**: `src/lib/measurement.ts` is
