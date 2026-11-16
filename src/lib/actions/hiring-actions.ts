@@ -13,6 +13,7 @@ import { refuseInDemo } from "@/lib/demo-mode";
 import { log, maskEmail } from "@/lib/log";
 import { parseAsBusinessTime, shortWhen } from "@/lib/time-zone";
 import { positionFor } from "@/lib/hiring/positions";
+import { publicPayLine } from "@/lib/hiring/indeed-ad";
 import { applicantEmail, stageAfter, type ApplicantEmailKind } from "@/lib/hiring/emails";
 import { isStage, nextStages, type Stage } from "@/lib/hiring/screening";
 import { onApplicantHired } from "@/lib/data/onboarding";
@@ -148,6 +149,8 @@ export async function previewApplicantEmail(input: { id: string; kind: Applicant
     when,
     place: input.place?.trim() || null,
     videoUrl: appUrl(await outboundBaseUrl(), `/careers/video/${row.token}`),
+    pay: publicPayLine(position),
+    positionKey: position.key,
   });
   return { ok: true, to: row.email, subject, body };
 }

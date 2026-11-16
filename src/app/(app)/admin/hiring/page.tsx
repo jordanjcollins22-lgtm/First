@@ -4,7 +4,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { listApplicants } from "@/lib/data/hiring";
-import { POSITIONS } from "@/lib/hiring/positions";
+import { OPEN_POSITIONS } from "@/lib/hiring/positions";
 import { indeedAd, needsPay } from "@/lib/hiring/indeed-ad";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
@@ -44,7 +44,7 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
     }),
   ]);
 
-  const ads = POSITIONS.map((p) => {
+  const ads = OPEN_POSITIONS.map((p) => {
     const applyUrl = appUrl(base, `/careers/${p.key}?src=indeed`);
     return { key: p.key, ...indeedAd(p, { business: org?.name ?? "JS Landscaping MD", area: "Harford County, Maryland", applyUrl }), applyUrl, needsPay: needsPay(p) };
   });

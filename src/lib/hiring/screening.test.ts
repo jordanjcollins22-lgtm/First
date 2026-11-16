@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { indeedAd, indeedPayFields, needsPay, PAY_MISSING, payLine, publicPayLine } from "@/lib/hiring/indeed-ad";
-import { POSITIONS, positionFor, type Position } from "@/lib/hiring/positions";
+import { OPEN_POSITIONS, POSITIONS, openPositionFor, positionFor, type Position } from "@/lib/hiring/positions";
 import { cleanAnswers, cleanContact, missing, nextStages, screen } from "@/lib/hiring/screening";
 
 const tech = positionFor("project-technician") as Position;
@@ -38,12 +38,22 @@ describe("positions", () => {
     }
   });
 
-  it("asks driving roles for a license and not the desk and online roles", () => {
+  it("asks driving roles for a license and not the online role", () => {
     expect(tech.questions.some((q) => q.key === "license")).toBe(true);
     expect(lead.questions.some((q) => q.key === "license")).toBe(true);
     expect(positionFor("evaluator")!.questions.some((q) => q.key === "license")).toBe(true);
     expect(affiliate.questions.some((q) => q.key === "license")).toBe(false);
-    expect(positionFor("account-manager")!.questions.some((q) => q.key === "license")).toBe(false);
+    // Account managers drive to paid site visits now that evaluators are gone.
+    expect(positionFor("account-manager")!.questions.some((q) => q.key === "license")).toBe(true);
+  });
+
+  it("takes applications only for the roles we still have", () => {
+    expect(OPEN_POSITIONS.map((p) => p.key).sort()).toEqual(["account-manager", "affiliate", "project-technician"]);
+    expect(openPositionFor("evaluator")).toBeNull();
+    expect(openPositionFor("project-lead")).toBeNull();
+    expect(openPositionFor("project-technician")?.key).toBe("project-technician");
+    // Closed, not deleted: past applicants still have their job.
+    expect(positionFor("project-lead")?.closed).toBeTruthy();
   });
 });
 
@@ -111,7 +121,12 @@ describe("stages", () => {
   it("only lets a person, not the form, decide an interview or a hire", () => {
     expect(nextStages("video_requested")).not.toContain("interview");
     expect(nextStages("video_submitted")).toEqual(["interview", "not_a_fit"]);
-    expect(nextStages("interview")).toEqual(["hired", "not_a_fit"]);
+    expect(nextStages("interview")).toEqual(["working_interview", "owner_talk", "not_a_fit", "withdrawn"]);
+    expect(nextStages("working_interview")).toEqual(["owner_talk", "not_a_fit", "withdrawn"]);
+    expect(nextStages("owner_talk")).toEqual(["offer_sent", "not_a_fit", "withdrawn"]);
+    // Nobody is hired before an offer goes out.
+    expect(nextStages("offer_sent")).toEqual(["hired", "withdrawn"]);
+    for (const s of ["video_submitted", "interview", "working_interview", "owner_talk"] as const) expect(nextStages(s)).not.toContain("hired");
     expect(nextStages("hired")).toEqual([]);
   });
 
@@ -132,12 +147,12 @@ describe("the Indeed ad", () => {
 
   it("has the pay for every job, hourly for the crew and commission only for the rest", () => {
     for (const p of POSITIONS) expect(needsPay(p)).toBe(false);
-    expect(payLine(positionFor("project-technician")!)).toBe("$20 an hour, plus commission on the jobs you complete, coming soon");
+    expect(payLine(positionFor("project-technician")!)).toBe("$15 to $36 an hour, plus your crew splits 38% of the labor on every job you finish. Each tech gets their share or $15 an hour, whichever is higher");
     expect(payLine(lead)).toBe("$30 an hour, plus commission on the jobs you complete, coming soon");
     expect(payLine(positionFor("evaluator")!)).toBe("Commission only, no hourly pay: 4% commission on every job you evaluate that sells");
-    expect(payLine(positionFor("account-manager")!)).toBe("Commission only, no hourly pay: 7% commission on every job you close");
+    expect(payLine(positionFor("account-manager")!)).toBe("Commission only, no hourly pay: 7% commission on every job your location completes");
     expect(indeedPayFields(lead)).toContain("Exact amount, $30.00 per hour");
-    expect(indeedPayFields(positionFor("project-technician")!)).toContain("$20.00 per hour");
+    expect(indeedPayFields(positionFor("project-technician")!)).toContain("Range, $15.00 to $36.00 per hour");
     expect(indeedPayFields(affiliate)).toContain("commission only");
   });
 

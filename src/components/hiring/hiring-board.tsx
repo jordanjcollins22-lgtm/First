@@ -10,7 +10,7 @@ import { IndeedAds } from "@/components/hiring/indeed-ads";
 
 /** The Hiring page itself, given what to show. Kept apart from the loading so it can be previewed with sample applicants. */
 
-const BOARD: Stage[] = ["video_submitted", "video_requested", "interview", "hired", "screened_out", "not_a_fit"];
+const BOARD: Stage[] = ["video_submitted", "video_requested", "interview", "working_interview", "owner_talk", "offer_sent", "hired", "screened_out", "not_a_fit"];
 
 export type AdCard = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean };
 
@@ -90,9 +90,12 @@ export function HiringBoard({
               </tr>
             </thead>
             <tbody>
-              {POSITIONS.map((p) => (
+              {POSITIONS.filter((p) => !p.closed || (applicants ?? []).some((a) => a.position === p.key)).map((p) => (
                 <tr key={p.key} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-medium">{p.title}</td>
+                  <td className="px-3 py-2 font-medium" title={p.closed}>
+                    {p.title}
+                    {p.closed && <span className="ml-1 text-xs font-normal text-muted-foreground">(closed)</span>}
+                  </td>
                   {BOARD.map((s) => {
                     const n = count(p.key, s);
                     return (
