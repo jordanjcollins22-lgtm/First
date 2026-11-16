@@ -28,8 +28,9 @@ export interface Question {
 }
 
 export interface Growth {
+  /** Each milestone on the job's Stages of Success track, spelled out. */
   stages: readonly string[];
-  /** The last, optional stage: the move to the next job. */
+  /** The last, optional stage: the move to the next job, said after "Then". */
   then: string;
 }
 
@@ -163,8 +164,15 @@ export const POSITIONS: readonly Position[] = [
       "Crew hoodie, gloves, and eye and ear protection provided",
     ],
     growth: {
-      stages: ["Learn", "Earn", "Shine", "Lead", "Train", "Profit"],
-      then: "Mentor: guide new technicians, and move up to account manager when you're ready",
+      stages: [
+        "You complete in-field training with a trainer",
+        "Two pay weeks in a row where your 38% share beats the minimum-wage floor",
+        "5 online reviews that mention you, your crew or your work",
+        "You lead two morning team meetings",
+        "You're a trainer for a new technician",
+        "You earn two profit sharing checks",
+      ],
+      then: "mentor three new technicians through their first four milestones, and move up to account manager when you're ready",
     },
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
@@ -297,8 +305,15 @@ export const POSITIONS: readonly Position[] = [
       "Your own referral link: earn 4% of every job you bring in",
     ],
     growth: {
-      stages: ["Learn", "Hire", "Crush the rush", "Offseason", "Consistency", "Mentor"],
-      then: "Partner: run your own JS Landscaping location, at no cost to start",
+      stages: [
+        "You complete all the foundational account manager training and pass the test",
+        "You recruit two new team members and keep them for 3 months",
+        "You lead the team through a busy season",
+        "In the offseason, monthly revenue stays at 50% or more of the peak month",
+        "Profit distributions for four straight quarters",
+        "You support a new account manager through their first four milestones",
+      ],
+      then: "become a partner: run your own JS Landscaping location through the Location Partner program, at no cost to start",
     },
     schedule: "Weekdays, from the office, your phone and on site. Longer weeks in busy season.",
     duties: [
@@ -351,8 +366,15 @@ export const POSITIONS: readonly Position[] = [
       "Ready-made replies for people asking online, so you never start from scratch",
     ],
     growth: {
-      stages: ["Join", "First job", "Five", "Shine", "Steady", "$10K"],
-      then: "Move up: join the crew as a project technician",
+      stages: [
+        "You get your own referral link",
+        "Your first referred job is done, and your first 4% is paid",
+        "5 referred jobs booked",
+        "A client you sent leaves us a review",
+        "At least one referred job every month for 3 months",
+        "$10,000 of booked work from your referrals ($400 earned)",
+      ],
+      then: "move up: join the crew as a project technician",
     },
     schedule: "Any time, anywhere. As many or as few hours as you like.",
     duties: [

@@ -59,9 +59,16 @@ export function indeedBenefitFields(position: Position): string {
   return `Benefits: tick ${boxes.join(", ")}.`;
 }
 
-/** The job's track on the Stages of Success, in one line for the ad and the careers page. */
+export const GROWTH_INTRO = "Every milestone you hit gets celebrated at our team huddle:";
+
+/** "Then move up: ...", the line after the milestones. */
+export function growthThen(growth: Growth): string {
+  return `Then ${growth.then}.`;
+}
+
+/** The job's track on the Stages of Success, for the ad: each milestone spelled out. */
 export function growthLine(growth: Growth): string {
-  return `Every job here has stages, and each one you hit is celebrated at our team huddle: ${growth.stages.join(", ")}. Then ${growth.then}.`;
+  return [GROWTH_INTRO, ...growth.stages.map((s) => `• ${s}`), growthThen(growth)].join("\n");
 }
 
 export function indeedAd(position: Position, input: AdInput): { title: string; body: string; payFields: string } {

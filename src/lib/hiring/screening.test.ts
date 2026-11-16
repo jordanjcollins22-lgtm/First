@@ -191,7 +191,9 @@ describe("the Indeed ad", () => {
       expect(indeedAd(p, input).body).toContain("Where this goes");
     }
     expect(indeedAd(affiliate, input).body).toContain("join the crew as a project technician");
-    expect(indeedAd(positionFor("project-technician")!, input).body).toContain("Learn, Earn, Shine, Lead, Train, Profit");
+    expect(indeedAd(affiliate, input).body).toContain("Every milestone you hit gets celebrated at our team huddle:\n• You get your own referral link\n• Your first referred job is done, and your first 4% is paid");
+    expect(indeedAd(affiliate, input).body).toContain("Then move up: join the crew as a project technician.");
+    expect(indeedAd(positionFor("project-technician")!, input).body).toContain("• You lead two morning team meetings");
     expect(indeedAd(positionFor("account-manager")!, input).body).toContain("run your own JS Landscaping location");
   });
 });
