@@ -40,7 +40,7 @@ function gearFor(positionKey: string | null | undefined): string | null {
 /** The first days, by job, so the offer says what they're agreeing to. */
 function firstDaysFor(positionKey: string | null | undefined): string {
   if (positionKey === "project-technician") {
-    return "Your first 30 days: in-field training with a trainer on a real crew, signing off each ground tech skill. Days start at the shop at 6:50 AM.";
+    return "Your first 30 days: in-field training with a trainer on a real crew, signing off each skill. Days start at the shop at 6:50 AM.";
   }
   if (positionKey === "account-manager") {
     return "Your first 30 days: learn our app, scheduling, invoicing and the free satellite estimates, and shadow paid site visits.";
@@ -133,7 +133,7 @@ export function welcomeEmail(input: { firstName: string; positionTitle: string; 
   body: string;
 } {
   const sign = [input.sender, input.business].filter(Boolean).join("\n");
-  const call = input.phone ? `\n\nQuestions before then? Call or text ${input.phone}.` : "";
+  const call = input.phone ? `Questions before then? Call or text ${input.phone}.\n\n` : "";
   const crew = input.positionKey === "project-technician";
   const before = [
     "Fill in your new-hire paperwork (we'll send the forms to sign on your phone).",
@@ -154,7 +154,7 @@ export function welcomeEmail(input: { firstName: string; positionTitle: string; 
       `Welcome aboard! We're excited to have you as our new ${input.positionTitle}.\n\n` +
       `Before day one:\n${before.map((b) => `- ${b}`).join("\n")}\n\n` +
       `Day one:\n${dayOne.map((b) => `- ${b}`).join("\n")}\n\n` +
-      `We'll check in with you every morning and evening for your first two weeks.${call}\n\n` +
+      `${call}` +
       `See you soon,\n${sign}`,
   };
 }

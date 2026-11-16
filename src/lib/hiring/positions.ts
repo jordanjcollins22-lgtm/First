@@ -131,7 +131,7 @@ export const POSITIONS: readonly Position[] = [
       "Paid training",
       "Performance bonuses",
       "Your own referral link: 4% of every job you bring in",
-      "Clear levels from ground tech to senior tech who trains others",
+      "Room to grow: do the work, then teach it, then build the system that teaches it",
     ],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
@@ -203,7 +203,7 @@ export const POSITIONS: readonly Position[] = [
       ...ABOUT,
     ],
     videoPrompt: "A technician on your crew shows up 30 minutes late for the second time this week. Tell us what you do.",
-    closed: "Removed Nov 14, 2026: we no longer have project leads. Senior techs (L4) run the job order on site and train new techs.",
+    closed: "Removed Nov 14, 2026: we no longer have project leads.",
   },
   {
     key: "evaluator",
