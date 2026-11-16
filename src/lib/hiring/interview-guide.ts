@@ -61,7 +61,6 @@ const AFFILIATE_FIRST: readonly GuideSection[] = [
     title: "Can they do the job?",
     ask: [
       "How do you usually keep in touch with people: texting, Facebook, Nextdoor, in person?",
-      "A neighbor says their yard is a mess and they don't know who to call. Walk me through what you'd say.",
       "Someone asks what it will cost. What do you tell them?",
       "How are you with apps on your phone, like copying a link and sending it in a message?",
     ],
