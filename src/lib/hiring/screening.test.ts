@@ -184,4 +184,14 @@ describe("the Indeed ad", () => {
     expect(indeedAd(affiliate, input).body).toContain("4% commission");
     expect(indeedAd(positionFor("account-manager")!, input).body).toContain("7% commission");
   });
+
+  it("says where each open job goes, by its track on the Stages of Success", () => {
+    for (const p of OPEN_POSITIONS) {
+      expect(p.growth?.stages.length).toBe(6);
+      expect(indeedAd(p, input).body).toContain("Where this goes");
+    }
+    expect(indeedAd(affiliate, input).body).toContain("join the crew as a project technician");
+    expect(indeedAd(positionFor("project-technician")!, input).body).toContain("Learn, Earn, Shine, Lead, Train, Profit");
+    expect(indeedAd(positionFor("account-manager")!, input).body).toContain("run your own JS Landscaping location");
+  });
 });

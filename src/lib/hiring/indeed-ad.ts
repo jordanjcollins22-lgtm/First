@@ -1,4 +1,4 @@
-import type { Position } from "@/lib/hiring/positions";
+import type { Growth, Position } from "@/lib/hiring/positions";
 
 /**
  * The Indeed ad for a position, as plain text to paste into Indeed's job
@@ -58,6 +58,11 @@ export function indeedBenefitFields(position: Position): string {
   return `Benefits: tick ${boxes.join(", ")}.`;
 }
 
+/** The job's track on the Stages of Success, in one line for the ad and the careers page. */
+export function growthLine(growth: Growth): string {
+  return `Every job here has stages, and each one you hit is celebrated at our Friday huddle: ${growth.stages.join(", ")}. Then ${growth.then}.`;
+}
+
 export function indeedAd(position: Position, input: AdInput): { title: string; body: string; payFields: string } {
   const bullets = (items: readonly string[]) => items.map((item) => `• ${item}`).join("\n");
   const body = [
@@ -77,6 +82,7 @@ export function indeedAd(position: Position, input: AdInput): { title: string; b
     "What you get",
     bullets(position.benefits),
     "",
+    ...(position.growth ? ["Where this goes", growthLine(position.growth), ""] : []),
     "Schedule",
     position.schedule,
     "",

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import type { Position } from "@/lib/hiring/positions";
-import { publicPayLine } from "@/lib/hiring/indeed-ad";
+import { growthLine, publicPayLine } from "@/lib/hiring/indeed-ad";
 import { careersHref } from "@/lib/hiring/links";
 import { ApplyForm } from "@/components/hiring/apply-form";
 
@@ -48,6 +48,12 @@ export function PositionView({
           <div>
             <h2 className="font-semibold">Pay</h2>
             <p>{publicPayLine(position)}</p>
+          </div>
+        )}
+        {position.growth && (
+          <div>
+            <h2 className="font-semibold">Where this goes</h2>
+            <p>{growthLine(position.growth)}</p>
           </div>
         )}
         <div>

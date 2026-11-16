@@ -27,6 +27,12 @@ export interface Question {
   optional?: boolean;
 }
 
+export interface Growth {
+  stages: readonly string[];
+  /** The last, optional stage: the move to the next job. */
+  then: string;
+}
+
 export interface Position {
   key: PositionKey;
   title: string;
@@ -46,6 +52,11 @@ export interface Position {
   payRange?: readonly [number, number];
   /** What comes with the job besides pay. Maryland job ads must describe it. */
   benefits: readonly string[];
+  /**
+   * Where the job goes: its track on the Stages of Success, in order, and the
+   * stage after the track. Said in the ad and on the careers page.
+   */
+  growth?: Growth;
   schedule: string;
   duties: readonly string[];
   lookingFor: readonly string[];
@@ -139,8 +150,11 @@ export const POSITIONS: readonly Position[] = [
       "Performance pay: the better your crew does the job, the more you take home",
       "Your own referral link: earn 4% of every job you bring in",
       "Crew hoodie, gloves, and eye and ear protection provided",
-      "Room to grow: do the work, then teach it, then build the system that teaches it",
     ],
+    growth: {
+      stages: ["Learn", "Earn", "Shine", "Lead", "Train", "Profit"],
+      then: "Mentor: guide new technicians, and move up to account manager when you're ready",
+    },
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Bring yards back to life: clean up beds, pull weeds, edge, and lay fresh mulch and rock",
@@ -271,6 +285,10 @@ export const POSITIONS: readonly Position[] = [
       "Your income grows with your location: every job it finishes pays you",
       "Your own referral link: earn 4% of every job you bring in",
     ],
+    growth: {
+      stages: ["Learn", "Hire", "Crush the rush", "Offseason", "Consistency", "Mentor"],
+      then: "Partner: run your own JS Landscaping location, at no cost to start",
+    },
     schedule: "Weekdays, from the office, your phone and on site. Longer weeks in busy season.",
     duties: [
       "Keep every client happy: approve or tweak the replies our AI front desk writes for you",
@@ -321,6 +339,10 @@ export const POSITIONS: readonly Position[] = [
       "No hard selling: share your link, and we handle the estimate, the job and the follow-up",
       "Ready-made replies for people asking online, so you never start from scratch",
     ],
+    growth: {
+      stages: ["Join", "First job", "Five", "Shine", "Steady", "$10K"],
+      then: "Move up: join the crew as a project technician",
+    },
     schedule: "Any time, anywhere. As many or as few hours as you like.",
     duties: [
       "Send us anyone who needs yard work: neighbors, friends, family, coworkers, people you meet",
