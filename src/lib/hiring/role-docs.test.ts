@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ROLE_DOCS, roleDocFor } from "@/lib/hiring/role-docs";
+import { ROLE_DOCS, cultureFor, roleDocFor } from "@/lib/hiring/role-docs";
 import { OPEN_POSITIONS } from "@/lib/hiring/positions";
 
 describe("role docs", () => {
@@ -19,5 +19,15 @@ describe("role docs", () => {
   it("has nothing for closed jobs", () => {
     expect(roleDocFor("project-lead")).toBeNull();
     expect(roleDocFor(null)).toBeNull();
+  });
+});
+
+describe("cultureFor", () => {
+  it("gives each job the same five values with its own examples", () => {
+    const tech = cultureFor("project-technician");
+    const affiliate = cultureFor("affiliate");
+    expect(affiliate.map((c) => c.value)).toEqual(tech.map((c) => c.value));
+    expect(affiliate[0].looksLike).toContain("Only send people we can really help");
+    expect(tech[0].looksLike).toContain("blows off the driveway");
   });
 });

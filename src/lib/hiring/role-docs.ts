@@ -41,28 +41,60 @@ export interface RoleDoc {
 }
 
 /** 12 Culture: the same for everyone. Each value with an example of what it looks like here. */
-export const CULTURE: readonly { value: string; looksLike: string }[] = [
+type CultureRole = "project-technician" | "affiliate" | "account-manager";
+
+export interface CultureValue {
+  value: string;
+  /** What it looks like in each job. A job with no example of its own shows the technician's. */
+  looksLike: { "project-technician": string } & Partial<Record<CultureRole, string>>;
+}
+
+/** The five values, the same for every job, each with an example for that job. */
+export const CULTURE: readonly CultureValue[] = [
   {
     value: "Leave it better than we found it",
-    looksLike: "The crew blows off the driveway and the client's walkway before the after photo, even when nobody asked.",
+    looksLike: {
+      "project-technician": "The crew blows off the driveway and the client's walkway before the after photo, even when nobody asked.",
+      affiliate: "Only send people we can really help, and check in after their job to make sure they're happy they asked you.",
+    },
   },
   {
     value: "Show up when we said we would",
-    looksLike: "On the truck at 6:50, at the client's house in the window we gave them. Running late means a text before, not an apology after.",
+    looksLike: {
+      "project-technician": "On the truck at 6:50, at the client's house in the window we gave them. Running late means a text before, not an apology after.",
+      affiliate: "If you tell someone we'll reach out today, get their info to us today. Answer fresh posts the same day they go up.",
+    },
   },
   {
     value: "Photos are the proof",
-    looksLike: "No area is finished until its after photo is in the app. The photo is how the client, the office and the crew know it's done.",
+    looksLike: {
+      "project-technician": "No area is finished until its after photo is in the app. The photo is how the client, the office and the crew know it's done.",
+      affiliate: "Show people our real before and after photos instead of making promises, and let the work sell itself.",
+    },
   },
   {
     value: "Paid on results, so we work as a team",
-    looksLike: "The crew shares the labor on every job, so the fastest person helps the slowest finish, and everyone takes home more.",
+    looksLike: {
+      "project-technician": "The crew shares the labor on every job, so the fastest person helps the slowest finish, and everyone takes home more.",
+      affiliate: "You earn when the job closes, so pass along everything you know (what they want, when, and the best way to reach them) so the account manager can close it.",
+    },
   },
   {
     value: "Learn it, teach it, build it",
-    looksLike: "Once you can do a task alone you show the next new hire, and once you can teach it you help write the checklist so it teaches itself.",
+    looksLike: {
+      "project-technician": "Once you can do a task alone you show the next new hire, and once you can teach it you help write the checklist so it teaches itself.",
+      affiliate: "Once you're steady, show a new affiliate how you find people and what you say to them.",
+    },
   },
 ];
+
+/** The values with this job's example of each. */
+export function cultureFor(position: string | null | undefined): { value: string; looksLike: string }[] {
+  return CULTURE.map((c) => ({
+    value: c.value,
+    looksLike: (position && c.looksLike[position as CultureRole]) || c.looksLike["project-technician"],
+  }));
+}
 
 export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-manager", RoleDoc> = {
   "project-technician": {

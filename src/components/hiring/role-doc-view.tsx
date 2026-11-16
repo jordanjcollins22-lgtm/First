@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import type { Position } from "@/lib/hiring/positions";
-import { CULTURE, type RoleDoc } from "@/lib/hiring/role-docs";
+import { cultureFor, type RoleDoc } from "@/lib/hiring/role-docs";
 import { skillsStepFor } from "@/lib/hiring/screening";
 
 /**
@@ -70,7 +70,7 @@ export function RoleDocView({ position, doc }: { position: Position; doc: RoleDo
 
       <Section title="Our culture">
         <ul className="space-y-2 text-sm">
-          {CULTURE.map((c) => (
+          {cultureFor(position.key).map((c) => (
             <li key={c.value}>
               <span className="font-semibold">{c.value}. </span>
               <span className="text-muted-foreground">{c.looksLike}</span>

@@ -22,4 +22,12 @@ describe("reviewAd", () => {
     expect(plain.fix).toContain("self-starter");
     expect(plain.fix).toContain("fast-paced environment");
   });
+
+  it("passes the values check only when the ad names all five values", () => {
+    const p = positionFor("affiliate")!;
+    const values = (body: string) => reviewAd(p, body).find((c) => c.key === "values")!;
+    expect(values("We're a team that shows up on time and gets results.").passed).toBe(false);
+    expect(values("Leave it better than we found it").fix).toContain("Photos are the proof");
+    expect(values(indeedAd(p, input).body).passed).toBe(true);
+  });
 });

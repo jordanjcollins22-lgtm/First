@@ -1,4 +1,5 @@
 import type { Growth, Position } from "@/lib/hiring/positions";
+import { CULTURE } from "@/lib/hiring/role-docs";
 
 /**
  * The Indeed ad for a position, as plain text to paste into Indeed's job
@@ -75,6 +76,9 @@ export function indeedAd(position: Position, input: AdInput): { title: string; b
     "",
     "Who we're looking for",
     bullets(position.lookingFor),
+    "",
+    "What we care about",
+    bullets(CULTURE.map((c) => c.value)),
     "",
     "What you'll earn",
     payLine(position),

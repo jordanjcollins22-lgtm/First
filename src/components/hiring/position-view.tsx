@@ -3,6 +3,7 @@ import { ChevronLeft } from "lucide-react";
 
 import type { Position } from "@/lib/hiring/positions";
 import { growthLine, publicPayLine } from "@/lib/hiring/indeed-ad";
+import { CULTURE } from "@/lib/hiring/role-docs";
 import { careersHref } from "@/lib/hiring/links";
 import { ApplyForm } from "@/components/hiring/apply-form";
 
@@ -41,6 +42,14 @@ export function PositionView({
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {position.lookingFor.map((d) => (
               <li key={d}>{d}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h2 className="font-semibold">What we care about</h2>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {CULTURE.map((c) => (
+              <li key={c.value}>{c.value}</li>
             ))}
           </ul>
         </div>

@@ -8,7 +8,7 @@ import { Check, ChevronLeft, Loader2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { logJourneyStep, setJourneyDetails, undoJourneyStep } from "@/lib/actions/journey-actions";
-import { CULTURE, type RoleDoc } from "@/lib/hiring/role-docs";
+import { cultureFor, type RoleDoc } from "@/lib/hiring/role-docs";
 import {
   LEVEL_LABEL,
   PHASE_LABEL,
@@ -150,7 +150,7 @@ export function NewHireJourney(p: JourneyProps) {
 
       <Section title="Culture" sub="In the first two weeks, with real examples and the people who best show it.">
         <ul className="space-y-1 text-sm">
-          {CULTURE.map((c) => (
+          {cultureFor(p.doc.position).map((c) => (
             <li key={c.value}>
               <span className="font-semibold">{c.value}. </span>
               <span className="text-muted-foreground">{c.looksLike}</span>

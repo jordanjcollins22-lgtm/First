@@ -1,4 +1,5 @@
 import type { Position } from "@/lib/hiring/positions";
+import { CULTURE } from "@/lib/hiring/role-docs";
 
 /**
  * Step 0.7 of the hiring structure: before anyone sees an ad, check it shows
@@ -40,9 +41,15 @@ export interface AdCheck {
 export function reviewAd(position: Position, adBody: string): AdCheck[] {
   const text = adBody.toLowerCase();
   const found = CORPORATE_WORDS.filter((w) => text.includes(w));
+  const missingValues = CULTURE.map((c) => c.value).filter((v) => !text.includes(v.toLowerCase()));
   const hasPay = position.commissionOnly ? !!position.commission : position.pay != null;
   return [
-    { key: "values", label: "Shows our values", passed: /respect|on time|cleaner|team|results/i.test(adBody), fix: "Say what we care about, like showing up on time and leaving it cleaner than we found it." },
+    {
+      key: "values",
+      label: "Shows our values",
+      passed: missingValues.length === 0,
+      fix: `Add what we care about: ${missingValues.map((v) => `"${v}"`).join(", ")}.`,
+    },
     { key: "duties", label: "Lists the responsibilities", passed: position.duties.length >= 3, fix: "List at least three things they'll do." },
     { key: "hours", label: "Says the hours", passed: position.schedule.trim().length > 0, fix: "Say when they'll work." },
     { key: "pay", label: "Says the pay", passed: hasPay, fix: "Add the pay. Maryland job ads have to show it." },
