@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { handleIndeedMail, type IndeedOutcome } from "@/lib/data/indeed-invite";
+import { handleApplicantReply, type ApplicantReplyOutcome } from "@/lib/data/hiring-replies";
 import { jobFor } from "@/lib/data/thread-email";
 import { getReceivedEmail } from "@/lib/email/resend";
 import { domainOf, looksForged, replyText, senderAddress } from "@/lib/inbound-email";
@@ -20,7 +21,8 @@ export type InboundOutcome =
   | "no_job"
   | "forged"
   | "unreadable"
-  | `indeed_${IndeedOutcome}`;
+  | `indeed_${IndeedOutcome}`
+  | `applicant_${ApplicantReplyOutcome}`;
 
 /**
  * A client's emailed reply, into their conversation.
@@ -67,6 +69,13 @@ export async function fileInboundEmail(admin: Admin, emailId: string): Promise<I
     return null;
   });
   if (indeed) return `indeed_${indeed}`;
+
+  // Somebody answering their job offer: "I accept" hires them.
+  const applicant = await handleApplicantReply(admin, organizationId, from, replyText(email.text, email.html)).catch((err) => {
+    log.warn("inbound_email.applicant_failed", { emailId, error: err instanceof Error ? err.message : String(err) });
+    return null;
+  });
+  if (applicant) return `applicant_${applicant}`;
 
   // A property manager answering a cold email: their sequence stops and the
   // owner hears about it. Then filed like any other email if they are also a client.

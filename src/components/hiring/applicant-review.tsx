@@ -17,12 +17,13 @@ const EMAIL_FOR: Partial<Record<Stage, { kind: ApplicantEmailKind; label: string
   interview: { kind: "interview", label: "Invite to interview" },
   not_a_fit: { kind: "not_a_fit", label: "Not a fit" },
   video_requested: { kind: "video_request", label: "Ask for a video anyway" },
+  offer_sent: { kind: "offer", label: "Send the offer" },
 };
 
 const QUIET_LABEL: Partial<Record<Stage, string>> = {
   working_interview: "Book the paid working interview",
   owner_talk: "On to the owner talk",
-  offer_sent: "Offer sent",
+  offer_sent: "Offer made another way",
   hired: "They accepted: mark hired",
   withdrawn: "They withdrew",
   not_a_fit: "Not a fit, without emailing",
@@ -164,6 +165,9 @@ export function ApplicantReview({ id, stage, next, rating, note }: { id: string;
       )}
 
       {message && <p className={`text-sm ${message.ok ? "text-emerald-700" : "text-destructive"}`}>{message.text}</p>}
+      {stage === "offer_sent" && (
+        <p className="text-sm text-muted-foreground">When they reply &ldquo;I accept&rdquo;, they&apos;re marked hired and sent the welcome email by themselves.</p>
+      )}
       {stage === "hired" && <p className="text-sm font-medium text-emerald-700">Hired. Add them on Team when they start.</p>}
     </section>
   );
