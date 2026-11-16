@@ -266,7 +266,7 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
         steps: [
           "Copy your own link from the app",
           "Text or message it to the person, with a line about what they need",
-          "Tell them they'll get a free estimate, and we take it from there",
+          "Tell them we'll reach out to set up their estimate, and we take it from there",
           "Check in the app that they clicked",
         ],
       },
