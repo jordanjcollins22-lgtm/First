@@ -40,7 +40,7 @@ export interface RoleDoc {
   firstTwoWeeks?: readonly { when: string; what: string }[];
   /** 13 Connection: time seeing other parts of the business, each one logged when done */
   seeTheBusiness?: readonly { key: string; what: string }[];
-  /** Hired and trained from anywhere: check-ins by phone or text, training over a call or screen share. */
+  /** Hired and trained from anywhere: check-ins by phone or video call, training over a call or screen share. */
   remote?: boolean;
   /** 15 the tasks training covers, each one documented, demonstrated, duplicated, then released */
   tasks: readonly TaskChecklist[];
@@ -252,7 +252,7 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
       { when: "Day 3", what: "Send us someone you know, from the first task checklist, on a call with another affiliate if we have one yet." },
       { when: "Day 4", what: "Answer your first posts online with the ready-made replies, with another affiliate watching on a screen share if we have one yet." },
       { when: "Day 5", what: "Fresh-eyes call: what confused you this week, and what would you fix?" },
-      { when: "Week 2", what: "Share your link and answer fresh posts every day on your own. Check in by text or call each morning and evening. Aim: your first estimate booked from your link." },
+      { when: "Week 2", what: "Share your link and answer fresh posts every day on your own. Check in by phone or video call each morning and evening. Aim: your first estimate booked from your link." },
     ],
     seeTheBusiness: [
       { key: "estimate", what: "Listen in on a paid site visit or estimate call the account manager runs (by phone or video), so you know what the people you send will get." },

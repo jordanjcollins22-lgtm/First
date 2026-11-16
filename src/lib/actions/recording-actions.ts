@@ -64,8 +64,18 @@ export async function startCallRecording(input: { owner: RecordingOwner; id: str
   return { ok: true, path, uploadToken: data.token };
 }
 
+/** Notes from the call guide, one per part, kept short and only the parts written in. */
+function cleanNotes(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>).slice(0, 12)) {
+    if (/^[a-z-]{1,40}$/.test(k) && typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 2000);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /** An applicant's call, recorded and kept on their page. */
-export async function saveApplicantCall(input: { applicantId: string; call: string; path: string; seconds: number }): Promise<{ ok: true } | Fail> {
+export async function saveApplicantCall(input: { applicantId: string; call: string; path: string; seconds: number; notes?: Record<string, string> }): Promise<{ ok: true } | Fail> {
   await refuseInDemo();
   const profile = await hiringProfile();
   if (!profile) return { ok: false, message: "Only someone with the Hiring tab can record hiring calls." };
@@ -78,7 +88,7 @@ export async function saveApplicantCall(input: { applicantId: string; call: stri
     .insert({
       applicant_id: input.applicantId,
       kind: "call_recorded",
-      detail: { call: input.call, label: APPLICANT_CALLS[input.call], path: input.path, seconds: Math.max(0, Math.round(input.seconds || 0)) },
+      detail: { call: input.call, label: APPLICANT_CALLS[input.call], path: input.path, seconds: Math.max(0, Math.round(input.seconds || 0)), notes: cleanNotes(input.notes) },
       actor: profile.id,
       actor_name: profile.full_name || null,
     });

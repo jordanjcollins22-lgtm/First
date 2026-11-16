@@ -17,6 +17,7 @@ import { referralMessage } from "@/lib/referral-message";
 import { trackedLink } from "@/lib/outreach-links";
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
 import { ReferralList } from "@/components/v2/panels/role/referral-list";
+import { ApplicantCalls } from "@/components/hiring/applicant-calls";
 import { RoleDocView } from "@/components/hiring/role-doc-view";
 import { PositionView } from "@/components/hiring/position-view";
 import { HiringBoard } from "@/components/hiring/hiring-board";
@@ -119,6 +120,25 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
       <Inert>
         <NewHireJourney {...props} />
       </Inert>
+    );
+  } else if (key === "guides") {
+    const sample = sampleApplicant(today);
+    body = (
+      <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+        <h1 className="text-2xl font-bold">Interview call guides</h1>
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Step 3: first interview</p>
+          <Inert>
+            <ApplicantCalls applicant={{ id: sample.id, position: sample.position, stage: "interview", calls: [] }} />
+          </Inert>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Step 5: owner call</p>
+          <Inert>
+            <ApplicantCalls applicant={{ id: sample.id, position: sample.position, stage: "owner_talk", calls: [] }} />
+          </Inert>
+        </div>
+      </main>
     );
   } else if (key === "app") {
     const link = trackedLink(await outboundBaseUrl(), "k7m2qx9");

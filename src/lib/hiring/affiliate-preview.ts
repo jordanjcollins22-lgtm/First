@@ -108,6 +108,15 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     what: "One new affiliate from day one: plan and culture gone through, their connection (another affiliate), recorded check-ins and reviews, training sign-offs, every email with them, fully operating and level.",
   },
   {
+    key: "guides",
+    title: "Interview call guides",
+    steps: [
+      { id: "3", name: "First interview: history and values" },
+      { id: "5", name: "Third interview: owner and culture" },
+    ],
+    what: "What to cover on each call, with notes per part: background, competence, our five values and the first 2-3 months; then culture, the hard parts and what gets someone let go. Both calls are recorded with their OK.",
+  },
+  {
     key: "app",
     title: "Their app: send your link to someone",
     steps: [{ id: "15", name: "Send us someone you know" }],
@@ -169,7 +178,20 @@ export function sampleApplicant(today: string): ApplicantDetail {
     videoUrl: null,
     videoLink: null,
     skillsVideoUrl: null,
-    calls: [{ at: at(daysAgo(today, 2), "15:00:00"), call: "interview", label: "First interview", seconds: 1260, byName: "Jordan", url: SAMPLE_CALL }],
+    calls: [
+      {
+        at: at(daysAgo(today, 2), "15:00:00"),
+        call: "interview",
+        label: "First interview",
+        seconds: 1260,
+        byName: "Jordan",
+        url: SAMPLE_CALL,
+        notes: {
+          background: "Lived in Bel Air 12 years, knows most of the street and is in two neighborhood groups.",
+          competence: "Said they'd send their link and tell the neighbor we'd reach out about an estimate. Didn't guess a price.",
+        },
+      },
+    ],
     events: [
       { at: row.createdAt, kind: "applied", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "video_submitted", detail: null, actorName: null },
