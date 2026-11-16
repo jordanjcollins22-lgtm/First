@@ -354,7 +354,7 @@ export const POSITIONS: readonly Position[] = [
       "Knows a lot of people, in person or online",
       "Lives in or near Harford County, Maryland",
       "Friendly and genuine, never pushy",
-      "No experience needed: a one-minute tutorial in our app shows you everything",
+      "No experience needed: we train you step by step, and our app writes the replies for you",
       "Paid on results: 4% of every job that books through your link, not hours",
     ],
     questions: [
