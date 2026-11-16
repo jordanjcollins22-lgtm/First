@@ -5,7 +5,7 @@ import { outboundBaseUrl } from "@/lib/base-url";
 import { sendOutbound } from "@/lib/email/outbound";
 import { getReceivedEmail, listReceivedEmails, type ReceivedEmail } from "@/lib/email/resend";
 import { applyInvite, applyReminder, isIndeedAddress, readIndeedNotice, relaySender, type IndeedMail } from "@/lib/hiring/indeed-notice";
-import { positionFor } from "@/lib/hiring/positions";
+import { interviewKind, positionFor } from "@/lib/hiring/positions";
 import { htmlToText, senderAddress } from "@/lib/inbound-email";
 import { log, maskEmail } from "@/lib/log";
 import { notifyTeamMember } from "@/lib/notifications";
@@ -164,7 +164,7 @@ export async function handleIndeedMail(
   }
 
   const { business, sender } = await senderNames(admin, organizationId);
-  const { subject, text } = applyInvite({ name: notice.name, positionTitle: position.title, applyUrl, sender, business });
+  const { subject, text } = applyInvite({ name: notice.name, positionTitle: position.title, applyUrl, sender, business, interview: interviewKind(position) });
 
   // From the hiring address: it is the one on the Indeed account, and Indeed
   // only passes on mail to an applicant from the employer's own addresses.

@@ -182,6 +182,34 @@ export async function submitApplicantVideoLink(input: { token: string; link: str
   return markVideoIn(applicant, { video_path: null, video_link: url.toString().slice(0, 500) });
 }
 
+/**
+ * Their answer to the skills question, in writing, a link to a recording, or
+ * both. Only while the question is open; a second answer replaces the first.
+ */
+export async function submitSkillsAnswer(input: { token: string; answer: string; link?: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const applicant = await applicantFor(input.token);
+  if (!applicant) return { ok: false, error: "That link has expired or was never ours." };
+  if (applicant.stage !== "working_interview") return { ok: false, error: CLOSED };
+  const answer = input.answer.trim().slice(0, 4000);
+  let link: string | null = null;
+  if (input.link?.trim()) {
+    try {
+      const url = new URL(input.link.trim());
+      if (url.protocol !== "https:") return { ok: false, error: "Use the https:// link to your recording." };
+      link = url.toString().slice(0, 500);
+    } catch {
+      return { ok: false, error: "That doesn't look like a link. Copy the whole thing, starting with https://" };
+    }
+  }
+  if (!answer && !link) return { ok: false, error: "Write your answer, or add a link to a recording." };
+  const { data } = await applicant.admin.from("job_applicants").select("answers").eq("id", applicant.id).maybeSingle();
+  const answers = { ...((data?.answers ?? {}) as Record<string, string>), skills_answer: answer, skills_link: link ?? "", skills_at: new Date().toISOString() };
+  const { error } = await applicant.admin.from("job_applicants").update({ answers, updated_at: new Date().toISOString() }).eq("id", applicant.id);
+  if (error) return { ok: false, error: "Couldn't save your answer. Try again in a moment." };
+  await applicant.admin.from("applicant_events").insert({ applicant_id: applicant.id, kind: "skills_answered", detail: link ? { link: true } : null });
+  return { ok: true };
+}
+
 async function markVideoIn(
   applicant: NonNullable<Awaited<ReturnType<typeof applicantFor>>>,
   video: { video_path: string | null; video_link: string | null }

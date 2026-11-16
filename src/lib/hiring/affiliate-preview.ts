@@ -60,15 +60,21 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     what: "What an applicant who passed the questions sees: the one-minute video instead of a phone screen.",
   },
   {
+    key: "skills",
+    title: "Skills question",
+    steps: [{ id: "4", name: "Second interview: skills" }],
+    what: "What the applicant sees from the link in their email: one real situation, answered from their phone in writing or with a recording.",
+  },
+  {
     key: "applicant",
     title: "Applicant page",
     steps: [
-      { id: "3", name: "First interview: history and values" },
-      { id: "4", name: "Second interview: skills (the practice round)" },
-      { id: "5", name: "Third interview: owner and culture" },
+      { id: "3", name: "First interview: history and values (phone or video)" },
+      { id: "4", name: "Second interview: skills (their answer)" },
+      { id: "5", name: "Third interview: owner and culture (phone or video)" },
       { id: "6", name: "Optional 4th interview, then decide" },
     ],
-    what: "One applicant: answers, video, your rating and note, and the next step, including booking the practice round.",
+    what: "One applicant: answers, video, their skills answer, your rating and note, and the next step. Interviews for this job are calls, never in person.",
   },
   {
     key: "emails",
@@ -118,7 +124,7 @@ function at(date: string, time = "15:00:00"): string {
 export function sampleApplicants(today: string): ApplicantRow[] {
   const base = { email: "sample@example.com", phone: "(410) 555-0100", zip: "21014", position: "affiliate" as const, source: "indeed", screenReasons: [], rating: null, videoSubmittedAt: null, interviewAt: null };
   return [
-    { ...base, id: SAMPLE_ID, name: "Dana Sample", stage: "interview", rating: 4, createdAt: at(daysAgo(today, 3)), videoSubmittedAt: at(daysAgo(today, 2)), interviewAt: at(today, "18:00:00") },
+    { ...base, id: SAMPLE_ID, name: "Dana Sample", stage: "working_interview", rating: 4, createdAt: at(daysAgo(today, 3)), videoSubmittedAt: at(daysAgo(today, 2)), interviewAt: at(today, "18:00:00") },
     { ...base, id: "00000000-0000-4000-8000-00000000a002", name: "Chris Example", stage: "video_submitted", createdAt: at(daysAgo(today, 1)), videoSubmittedAt: at(today, "13:00:00") },
     { ...base, id: "00000000-0000-4000-8000-00000000a003", name: "Sam Placeholder", stage: "video_requested", createdAt: at(today, "12:00:00") },
     { ...base, id: "00000000-0000-4000-8000-00000000a004", name: "Pat Demo", stage: "screened_out", screenReasons: ["Not local to Harford County"], createdAt: at(daysAgo(today, 4)) },
@@ -139,14 +145,20 @@ export function sampleApplicant(today: string): ApplicantDetail {
       start: "Right away",
       why: "I know half the street and people always ask me who does yards around here. I'd rather send them somewhere good and get paid for it.",
       heard: "Indeed",
+      skills_answer:
+        "Oh, I know a company that does exactly that. JS Landscaping did my yard last spring and it still looks great. Here's my link, you can put in your address and they'll send you a free estimate. Want me to send you a couple of before and after pictures?",
+      skills_link: "",
+      skills_at: at(today, "14:00:00"),
     },
-    reviewNote: "Friendly on video, knows a lot of people in Bel Air. Practice round next.",
+    reviewNote: "Friendly on the call, knows a lot of people in Bel Air. Skills answer reads natural, link shared. Owner call next.",
     videoUrl: null,
     videoLink: null,
     events: [
       { at: row.createdAt, kind: "applied", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "video_submitted", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "stage_changed", detail: { to: "interview" }, actorName: "Jordan" },
+      { at: at(daysAgo(today, 1)), kind: "email_sent", detail: { kind: "skills_question" }, actorName: "Jordan" },
+      { at: at(today, "14:00:00"), kind: "skills_answered", detail: null, actorName: null },
     ],
   };
 }

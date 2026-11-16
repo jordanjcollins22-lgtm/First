@@ -64,6 +64,17 @@ export interface Position {
   /** What to say in the video, after who they are. */
   videoPrompt: string;
   /**
+   * Interviews by phone or video call, never in person: a job done from
+   * anywhere is hired from anywhere.
+   */
+  remoteInterviews?: boolean;
+  /**
+   * The skills step done from their phone, by link: one real situation they
+   * answer in writing or with a recording. Set for a job with no crew or
+   * desk to try out on.
+   */
+  skillsQuestion?: string;
+  /**
    * Why we're not taking applications for it right now. When set, the job is
    * off the careers page and its apply form, but past applicants still show on
    * the hiring board under it.
@@ -370,7 +381,9 @@ export const POSITIONS: readonly Position[] = [
       { key: "facebook", label: "Do you know a lot of people around here, in person or online (neighbors, friends, local Facebook groups)?", kind: "yesno" },
       ...ABOUT.filter((q) => q.key !== "availability"),
     ],
-    videoPrompt: "Your neighbor says their yard is a mess and they don't know who to call. Tell us what you'd say to them, and why.",
+    videoPrompt: "Tell us a bit about yourself: who you know around here, and why you'd be good at sending people our way.",
+    remoteInterviews: true,
+    skillsQuestion: "Your neighbor says their yard is a mess and they don't know who to call. Write (or record) what you'd say.",
   },
 ];
 
@@ -385,4 +398,9 @@ export const OPEN_POSITIONS: readonly Position[] = POSITIONS.filter((p) => !p.cl
 export function openPositionFor(key: string): Position | null {
   const p = positionFor(key);
   return p && !p.closed ? p : null;
+}
+
+/** How we meet an applicant for interviews, said the way an applicant reads it. */
+export function interviewKind(position: Pick<Position, "remoteInterviews"> | null | undefined): string {
+  return position?.remoteInterviews ? "a phone or video interview" : "an in-person interview";
 }

@@ -135,7 +135,9 @@ export async function previewApplicantEmail(input: { id: string; kind: Applicant
   if (!position || !isStage(row.stage)) return { ok: false, message: "That application is for a job we no longer list." };
   if (!allowedFor(input.kind, row.stage)) return { ok: false, message: "That email isn't a step this application can take from where it is." };
   if (input.kind === "interview" && !input.interviewAt) return { ok: false, message: "Pick the interview day and time first." };
+  if (input.kind === "skills_question" && !position.skillsQuestion) return { ok: false, message: "That job's skills step isn't a question by link." };
 
+  const base = await outboundBaseUrl();
   const { data: org } = await found.admin.from("organizations").select("name, business_phone").eq("id", profile.organization_id).maybeSingle();
   const business = (org as { name?: string } | null)?.name ?? "JS Landscaping MD";
   const when = input.interviewAt ? shortWhen(parseAsBusinessTime(input.interviewAt)) : null;
@@ -148,7 +150,10 @@ export async function previewApplicantEmail(input: { id: string; kind: Applicant
     sender: profile.full_name?.trim().split(/\s+/)[0] ?? null,
     when,
     place: input.place?.trim() || null,
-    videoUrl: appUrl(await outboundBaseUrl(), `/careers/video/${row.token}`),
+    videoUrl: appUrl(base, `/careers/video/${row.token}`),
+    skillsUrl: appUrl(base, `/careers/skills/${row.token}`),
+    skillsQuestion: position.skillsQuestion ?? null,
+    remote: position.remoteInterviews ?? false,
     pay: publicPayLine(position),
     positionKey: position.key,
   });

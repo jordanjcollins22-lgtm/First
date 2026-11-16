@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { indeedAd, indeedPayFields, needsPay, PAY_MISSING, payLine, publicPayLine } from "@/lib/hiring/indeed-ad";
-import { OPEN_POSITIONS, POSITIONS, openPositionFor, positionFor, type Position } from "@/lib/hiring/positions";
-import { cleanAnswers, cleanContact, missing, nextStages, screen } from "@/lib/hiring/screening";
+import { OPEN_POSITIONS, POSITIONS, interviewKind, openPositionFor, positionFor, type Position } from "@/lib/hiring/positions";
+import { cleanAnswers, cleanContact, missing, nextStages, screen, stageLabel } from "@/lib/hiring/screening";
 
 const tech = positionFor("project-technician") as Position;
 const lead = positionFor("project-lead") as Position;
@@ -195,3 +195,18 @@ describe("the Indeed ad", () => {
     expect(indeedAd(positionFor("account-manager")!, input).body).toContain("run your own JS Landscaping location");
   });
 });
+
+describe("affiliate hiring from anywhere", () => {
+  it("tries skills with one question by link, not the video's question, and interviews by call", () => {
+    const affiliate = positionFor("affiliate")!;
+    expect(affiliate.remoteInterviews).toBe(true);
+    expect(affiliate.skillsQuestion).toContain("Your neighbor says their yard is a mess");
+    expect(affiliate.videoPrompt).not.toContain("neighbor");
+    expect(stageLabel("working_interview", "affiliate")).toBe("Skills question");
+    expect(stageLabel("working_interview", "project-technician")).toBe("Working interview");
+    expect(interviewKind(affiliate)).toBe("a phone or video interview");
+    expect(interviewKind(positionFor("project-technician"))).toBe("an in-person interview");
+    expect(indeedAd(affiliate, { business: "B", area: "A", applyUrl: "u" }).body).toContain("before a phone or video interview");
+  });
+});
+

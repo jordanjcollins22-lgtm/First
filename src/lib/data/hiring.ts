@@ -37,6 +37,8 @@ export interface ApplicantByToken {
   position: PositionKey;
   stage: Stage;
   videoIn: boolean;
+  /** They've answered the skills question. */
+  skillsIn: boolean;
 }
 
 /** The applicant behind a video link. */
@@ -45,7 +47,7 @@ export async function applicantByToken(token: string): Promise<ApplicantByToken 
   const admin = createAdminClient();
   const { data } = await admin
     .from("job_applicants")
-    .select("id, organization_id, name, position, stage, video_path, video_link")
+    .select("id, organization_id, name, position, stage, video_path, video_link, answers")
     .eq("token", token)
     .maybeSingle();
   if (!data || !positionFor(data.position) || !isStage(data.stage)) return null;
@@ -56,6 +58,7 @@ export async function applicantByToken(token: string): Promise<ApplicantByToken 
     position: data.position as PositionKey,
     stage: data.stage,
     videoIn: Boolean(data.video_path || data.video_link),
+    skillsIn: Boolean((data.answers as Record<string, string> | null)?.skills_at),
   };
 }
 

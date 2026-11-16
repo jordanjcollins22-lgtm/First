@@ -48,10 +48,18 @@ export function ApplicantReview({
   next: Stage[];
   rating: number | null;
   note: string;
-  /** The job they applied for: the skills step is a practice round for an affiliate. */
+  /** The job they applied for: an affiliate's skills step is a question by link, and their interviews are calls. */
   position?: string | null;
 }) {
-  const quietLabel = (s: Stage) => (s === "working_interview" && position === "affiliate" ? "Book the practice round" : QUIET_LABEL[s]);
+  // An affiliate is hired from anywhere: the skills step is a question sent by
+  // email, and the owner talk is a call.
+  const remote = position === "affiliate";
+  const emailFor = (s: Stage) => (remote && s === "working_interview" ? { kind: "skills_question" as const, label: "Send the skills question" } : EMAIL_FOR[s]);
+  const quietLabel = (s: Stage) => {
+    if (remote && s === "working_interview") return undefined;
+    if (remote && s === "owner_talk") return "On to the owner call (phone or video)";
+    return QUIET_LABEL[s];
+  };
   const router = useRouter();
   const [stars, setStars] = useState<number | null>(rating);
   const [text, setText] = useState(note);
@@ -135,8 +143,8 @@ export function ApplicantReview({
                 <Input type="datetime-local" value={interviewAt} onChange={(e) => setInterviewAt(e.target.value)} />
               </label>
               <label className="grid gap-1 text-sm font-medium">
-                Where (optional)
-                <Input placeholder="Address, or leave blank" value={place} onChange={(e) => setPlace(e.target.value)} />
+                {remote ? "Video call link (optional)" : "Where (optional)"}
+                <Input placeholder={remote ? "Leave blank to phone them" : "Address, or leave blank"} value={place} onChange={(e) => setPlace(e.target.value)} />
               </label>
               <Button type="button" className="sm:col-span-2" disabled={busy || !interviewAt} onClick={() => preview("interview")}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -146,10 +154,10 @@ export function ApplicantReview({
           )}
           <div className="flex flex-wrap gap-2">
             {next
-              .filter((s) => s !== "interview" && EMAIL_FOR[s])
+              .filter((s) => s !== "interview" && emailFor(s))
               .map((s) => (
-                <Button key={`email-${s}`} type="button" variant={s === "not_a_fit" ? "outline" : "secondary"} disabled={busy} onClick={() => preview(EMAIL_FOR[s]!.kind)}>
-                  {EMAIL_FOR[s]!.label}
+                <Button key={`email-${s}`} type="button" variant={s === "not_a_fit" ? "outline" : "secondary"} disabled={busy} onClick={() => preview(emailFor(s)!.kind)}>
+                  {emailFor(s)!.label}
                 </Button>
               ))}
             {next

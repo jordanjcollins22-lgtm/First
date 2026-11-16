@@ -15,6 +15,7 @@ const EVENT_LABEL: Record<string, string> = {
   reviewed: "Reviewed",
   stage_changed: "Moved",
   email_sent: "Emailed",
+  skills_answered: "Answered the skills question",
 };
 
 export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
@@ -62,6 +63,28 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
         )}
         <p className="text-xs text-muted-foreground">They were asked: {position.videoPrompt}</p>
       </section>
+
+      {position.skillsQuestion && (
+        <section className="space-y-2">
+          <h2 className="text-base font-semibold">Skills question</h2>
+          <p className="text-xs text-muted-foreground">They were asked: {position.skillsQuestion}</p>
+          {applicant.answers.skills_at ? (
+            <div className="space-y-2 rounded-xl border border-border bg-card p-4 text-sm">
+              {applicant.answers.skills_answer && <p className="whitespace-pre-wrap">{applicant.answers.skills_answer}</p>}
+              {applicant.answers.skills_link && (
+                <a href={applicant.answers.skills_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-primary hover:underline">
+                  Listen to their recording <ExternalLink className="h-4 w-4" />
+                </a>
+              )}
+              <p className="text-xs text-muted-foreground">Look for friendly and natural, not salesy, and their link shared.</p>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+              {applicant.stage === "working_interview" ? "Sent. Waiting for their answer." : "Not sent yet. It goes out with \"Send the skills question\" after the first interview."}
+            </p>
+          )}
+        </section>
+      )}
 
       <ApplicantReview
         id={applicant.id}

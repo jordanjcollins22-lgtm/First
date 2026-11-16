@@ -31,11 +31,14 @@ export function VideoStep({
   prompt,
   alreadyIn,
   businessName,
+  remote = false,
 }: {
   token: string;
   prompt: string;
   alreadyIn: boolean;
   businessName: string;
+  /** Interviews for this job are calls, not in person. */
+  remote?: boolean;
 }) {
   const recordRef = useRef<HTMLInputElement>(null);
   const [done, setDone] = useState(alreadyIn);
@@ -112,7 +115,7 @@ export function VideoStep({
         <h2 className="mt-2 text-lg font-semibold">We have your video</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Someone from {businessName} will watch it and be in touch about
-          meeting in person. Want to redo it? Send a new one below and it
+          {remote ? " a phone or video interview" : " meeting in person"}. Want to redo it? Send a new one below and it
           replaces this one.
         </p>
         <Button

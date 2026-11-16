@@ -92,18 +92,19 @@ export type Stage = keyof typeof STAGES;
 
 /**
  * A stage's name for one job. The skills step is a paid half-day working
- * interview on a crew, but an affiliate never works on a crew, so theirs is a
- * practice round: answer a few real posts in the app while we watch.
+ * interview on a crew, but an affiliate works from anywhere, so theirs is one
+ * skills question they answer from their phone by link.
  */
 export function stageLabel(stage: Stage, position: string | null | undefined): string {
-  if (stage === "working_interview" && position === "affiliate") return "Practice round";
+  if (stage === "working_interview" && position === "affiliate") return "Skills question";
+  if (stage === "owner_talk" && position === "affiliate") return "Owner call";
   return STAGES[stage];
 }
 
 /** What happens at the skills step, for the person running it. */
 export function skillsStepFor(position: string | null | undefined): string {
   if (position === "affiliate") {
-    return "Practice round: sit with them while they answer three real posts on Posts to Answer, start to finish, using the tutorial. Look for posts picked well, friendly wording, and the link added.";
+    return "Skills question: one real situation, sent by email. They answer from their phone, in writing or with a recording, and it shows up on this page. Look for friendly and natural, not salesy, and their link shared. Interviews for this job are phone or video calls, never in person.";
   }
   if (position === "account-manager") {
     return "Working interview: a paid half-day running the front desk and next week's schedule with you. Look for clear, kind replies and nothing missed.";

@@ -33,7 +33,7 @@ export default async function ApplicantVideoPage({ params }: { params: Promise<{
         </h1>
       </header>
       {open ? (
-        <VideoStep token={token} prompt={position.videoPrompt} alreadyIn={applicant.videoIn} businessName={org.name} />
+        <VideoStep token={token} prompt={position.videoPrompt} alreadyIn={applicant.videoIn} businessName={org.name} remote={position.remoteInterviews} />
       ) : (
         <p className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
           This application is closed. If that&apos;s a surprise, call {org.phone ?? "us"}.

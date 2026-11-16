@@ -1,4 +1,4 @@
-import type { Growth, Position } from "@/lib/hiring/positions";
+import { interviewKind, type Growth, type Position } from "@/lib/hiring/positions";
 import { CULTURE } from "@/lib/hiring/role-docs";
 
 /**
@@ -92,7 +92,7 @@ export function indeedAd(position: Position, input: AdInput): { title: string; b
     "",
     "How to apply",
     `Apply here: ${input.applyUrl}`,
-    "It takes about 3 minutes. If you're a fit, you'll be asked to record a short video from your phone (about a minute) so we can meet you before an in-person interview.",
+    `It takes about 3 minutes. If you're a fit, you'll be asked to record a short video from your phone (about a minute) so we can meet you before ${interviewKind(position)}.`,
   ].join("\n");
   return { title: position.title, body, payFields: `${indeedPayFields(position)}\n${indeedBenefitFields(position)}` };
 }

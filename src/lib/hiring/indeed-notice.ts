@@ -153,7 +153,15 @@ export function greetingName(name: string | null): string {
 }
 
 /** The email that sends them to our application, word for word as approved. */
-export function applyInvite(input: { name: string | null; positionTitle: string; applyUrl: string; sender: string; business: string }): {
+export function applyInvite(input: {
+  name: string | null;
+  positionTitle: string;
+  applyUrl: string;
+  sender: string;
+  business: string;
+  /** How we interview for this job, from interviewKind. Left out, in person. */
+  interview?: string;
+}): {
   subject: string;
   text: string;
 } {
@@ -164,7 +172,9 @@ export function applyInvite(input: { name: string | null; positionTitle: string;
       `Thanks for applying for the ${input.positionTitle} job on Indeed. To keep your application moving, please complete our short application here:\n\n` +
       `${input.applyUrl}\n\n` +
       `It's a few quick questions. If you're a fit, the next step is a short video answering one question, recorded on your phone. ` +
-      `I watch every video myself and then invite people in for an in-person interview.\n\n` +
+      (input.interview && input.interview !== "an in-person interview"
+        ? `I watch every video myself and then invite people to ${input.interview}.\n\n`
+        : `I watch every video myself and then invite people in for an in-person interview.\n\n`) +
       `Thanks,\n${input.sender}\n${input.business}`,
   };
 }

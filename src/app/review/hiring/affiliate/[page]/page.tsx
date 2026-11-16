@@ -18,6 +18,7 @@ import { PositionView } from "@/components/hiring/position-view";
 import { HiringBoard } from "@/components/hiring/hiring-board";
 import { ApplicantView } from "@/components/hiring/applicant-view";
 import { VideoStep } from "@/components/hiring/video-step";
+import { SkillsStep } from "@/components/hiring/skills-step";
 import { NewHireJourney } from "@/components/hiring/new-hire-journey";
 
 /** One page of the affiliate preview, with sample data and its buttons switched off. */
@@ -59,7 +60,21 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
           <h1 className="text-2xl font-bold leading-tight">You&apos;re a fit, Dana. One more step</h1>
         </header>
         <Inert>
-          <VideoStep token="preview" prompt={position.videoPrompt} alreadyIn={false} businessName={BUSINESS} />
+          <VideoStep token="preview" prompt={position.videoPrompt} alreadyIn={false} businessName={BUSINESS} remote={position.remoteInterviews} />
+        </Inert>
+      </main>
+    );
+  } else if (key === "skills") {
+    body = (
+      <main className="mx-auto flex w-full max-w-lg flex-col gap-5 px-4 py-6">
+        <header>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {BUSINESS} · {position.title}
+          </p>
+          <h1 className="text-2xl font-bold leading-tight">One question, Dana</h1>
+        </header>
+        <Inert>
+          <SkillsStep token="preview" question={position.skillsQuestion ?? ""} alreadyIn={false} businessName={BUSINESS} />
         </Inert>
       </main>
     );
@@ -70,10 +85,14 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
       </Inert>
     );
   } else if (key === "emails") {
-    const common = { firstName: "Dana", positionTitle: position.title, business: BUSINESS, phone: "(410) 555-0100", sender: "Jordan" };
+    const common = { firstName: "Dana", positionTitle: position.title, business: BUSINESS, phone: "(410) 555-0100", sender: "Jordan", remote: position.remoteInterviews };
     const emails = [
       { when: "After they pass the questions (step 2)", ...applicantEmail({ ...common, kind: "video_request", videoUrl: "[their video link]" }) },
-      { when: "Interview invite (steps 3 to 5)", ...applicantEmail({ ...common, kind: "interview", when: "Tue, 10:00 AM", place: null }) },
+      { when: "First interview invite, a phone or video call (step 3)", ...applicantEmail({ ...common, kind: "interview", when: "Tue, 10:00 AM", place: null }) },
+      {
+        when: "The skills question (step 4)",
+        ...applicantEmail({ ...common, kind: "skills_question", skillsQuestion: position.skillsQuestion, skillsUrl: "[their answer link]" }),
+      },
       { when: "The offer (step 7)", ...applicantEmail({ ...common, kind: "offer", pay: position.commission, positionKey: position.key }) },
       { when: "Sent by itself when they reply \"I accept\" (steps 8 and 9)", ...welcomeEmail({ ...common, positionKey: position.key }) },
     ];
