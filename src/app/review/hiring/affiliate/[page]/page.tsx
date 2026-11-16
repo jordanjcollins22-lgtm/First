@@ -109,7 +109,7 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
       </main>
     );
   } else if (key === "new-hire") {
-    const props = journeyProps(sampleJourney(today), ["Jordan", "Riley Sample", "Taylor Example"]);
+    const props = journeyProps(sampleJourney(today), ["Casey Sample", "Taylor Example"]);
     if (!props) notFound();
     body = (
       <Inert>

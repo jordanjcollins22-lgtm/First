@@ -23,7 +23,7 @@ import type { StepRow } from "@/lib/data/journey";
 
 /**
  * One new hire, from day one to fully operating: the plan and culture gone
- * through, their technician, today's check-ins, training sign-offs task by task,
+ * through, their connection, today's check-ins, training sign-offs task by task,
  * the 30-60-90 reviews, and where they are on Alex's three levels.
  */
 
@@ -44,7 +44,7 @@ export interface JourneyProps {
   level: Level;
   /** The next, lighter check-in rhythm and when the calendar suggests it. Null at one-on-ones. */
   nextTaper: { phase: CheckInPhase; suggestedFrom: string; due: boolean } | null;
-  /** Who can be their technician: technicians on the team, never the owner, an account manager or themselves. */
+  /** Who can be their connection: others in the same role, never the owner, their boss or themselves. */
   buddyOptions: string[];
 }
 
@@ -118,6 +118,7 @@ export function NewHireJourney(p: JourneyProps) {
   const culture = done(p.steps, "culture", "culture");
   const freshEyes = done(p.steps, "checkin", "fresh-eyes");
   const remote = p.doc.remote ?? false;
+  const roleWord = p.positionTitle.replace(/^Landscape /, "").toLowerCase().replace("project technician", "technician");
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
@@ -180,18 +181,21 @@ export function NewHireJourney(p: JourneyProps) {
       </Section>
 
       <Section
-        title="Their technician"
-        sub="A technician they can ask anything, who is never their boss: not the owner and not an account manager."
+        title={`Their connection: another ${roleWord}`}
+        sub={`Another ${roleWord} they can ask anything. Never their boss.`}
       >
+        {p.buddyOptions.length === 0 && !p.buddyName ? (
+          <p className="text-sm text-muted-foreground">{`No other ${roleWord}s yet; pick one when you have them.`}</p>
+        ) : (
         <div className="flex flex-wrap items-center gap-2">
           <select
             id="buddy"
-            aria-label="Their technician"
+            aria-label="Their connection"
             className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
             value={buddy}
             onChange={(e) => setBuddy(e.target.value)}
           >
-            <option value="">Pick their technician</option>
+            <option value="">{`Pick another ${roleWord}`}</option>
             {[...(p.buddyName && !p.buddyOptions.includes(p.buddyName) ? [p.buddyName] : []), ...p.buddyOptions].map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -202,6 +206,7 @@ export function NewHireJourney(p: JourneyProps) {
             Save
           </Button>
         </div>
+        )}
       </Section>
 
       {p.doc.seeTheBusiness && p.doc.seeTheBusiness.length > 0 && (

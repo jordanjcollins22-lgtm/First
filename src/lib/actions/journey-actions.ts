@@ -12,7 +12,7 @@ import { buddyChoices, type StepKind } from "@/lib/data/journey";
 
 /**
  * Logging a new hire's journey: a check-in held, a review done, a training
- * phase signed off, the plan and culture gone through, their technician. Anyone
+ * phase signed off, the plan and culture gone through, their connection. Anyone
  * with the Hiring tab can log; the person who logs it is recorded.
  */
 
@@ -85,10 +85,11 @@ export async function setJourneyDetails(input: { checklistId: string; buddyName?
   if (input.buddyName !== undefined) {
     const name = input.buddyName?.trim() || null;
     if (name) {
-      // Their technician is never their boss: only a technician from the team list, never the owner or an account manager.
-      const { data: row } = await sb.from("onboarding_checklists").select("profile_id").eq("organization_id", profile.organization_id).eq("id", input.checklistId).maybeSingle();
-      const allowed = await buddyChoices(profile.organization_id, (row as { profile_id: string | null } | null)?.profile_id ?? null);
-      if (!allowed.includes(name)) return { ok: false, message: "Pick a technician from the team list. It can't be the owner or an account manager." };
+      // Their connection is someone in the same job, never their boss: only a name from that list.
+      const { data: row } = await sb.from("onboarding_checklists").select("profile_id, position").eq("organization_id", profile.organization_id).eq("id", input.checklistId).maybeSingle();
+      const r = row as { profile_id: string | null; position: string | null } | null;
+      const allowed = await buddyChoices(profile.organization_id, r?.profile_id ?? null, r?.position ?? null);
+      if (!allowed.includes(name)) return { ok: false, message: "Pick someone in the same job from the list. It can't be the owner or their boss." };
     }
     patch.buddy_name = name;
   }

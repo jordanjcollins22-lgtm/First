@@ -136,23 +136,28 @@ export function taperFrom(steps: StepRow[]): Taper {
 }
 
 /**
- * Who can be a new hire's technician (step 13, connection): technicians on
- * the team, never the owner, an account manager (an affiliate's boss) or
- * the new hire themselves. Their technician
- * is never their boss.
+ * Who can be a new hire's connection (step 13): someone in the same job,
+ * so an affiliate connects with another affiliate, a technician with another
+ * technician, an account manager with another account manager. Never the
+ * owner and never the new hire themselves, so never their boss.
  */
-export async function buddyChoices(organizationId: string, exceptProfileId: string | null): Promise<string[]> {
+export async function buddyChoices(organizationId: string, exceptProfileId: string | null, position: string | null): Promise<string[]> {
   const sb = admin();
-  const { data: people } = await sb.from("profiles").select("id, full_name").eq("organization_id", organizationId);
+  const { data: people } = await sb.from("profiles").select("id, full_name, is_affiliate").eq("organization_id", organizationId);
   const ids = ((people ?? []) as { id: string }[]).map((p) => p.id);
   const { data: roles } = ids.length ? await sb.from("profile_roles").select("profile_id, role_name").in("profile_id", ids) : { data: [] };
   const held = new Map<string, string[]>();
   for (const r of (roles ?? []) as { profile_id: string; role_name: string }[]) held.set(r.profile_id, [...(held.get(r.profile_id) ?? []), r.role_name]);
-  return ((people ?? []) as { id: string; full_name: string | null }[])
+  return ((people ?? []) as { id: string; full_name: string | null; is_affiliate: boolean | null }[])
     .filter((p) => p.id !== exceptProfileId && p.full_name?.trim())
     .filter((p) => {
       const r = held.get(p.id) ?? [];
-      return hasRole(r, "project-technician") && !isOwnerLevel(r) && !hasRole(r, "account-manager");
+      if (isOwnerLevel(r)) return false;
+      if (position === "account-manager") return hasRole(r, "account-manager");
+      if (position === "project-technician") return hasRole(r, "project-technician") && !hasRole(r, "account-manager");
+      // An affiliate: someone whose job is sending us clients, not a technician or account manager with a link on the side.
+      if (position === "affiliate") return !!p.is_affiliate && !hasRole(r, "project-technician") && !hasRole(r, "account-manager");
+      return false;
     })
     .map((p) => p.full_name!.trim())
     .sort((a, b) => a.localeCompare(b));

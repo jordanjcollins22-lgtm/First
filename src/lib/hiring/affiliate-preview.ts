@@ -92,7 +92,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     steps: [
       { id: "11", name: "Clarity: 30-60-90 plan" },
       { id: "12", name: "Culture" },
-      { id: "13", name: "Connection: a technician" },
+      { id: "13", name: "Connection: another affiliate" },
       { id: "14", name: "Check-back: twice a day" },
       { id: "16", name: "Demonstrate" },
       { id: "17", name: "Duplicate: they do, you watch" },
@@ -102,7 +102,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
       { id: "21", name: "Fully operating" },
       { id: "Levels", name: "Alex's three levels" },
     ],
-    what: "One new affiliate from day one: plan and culture gone through, their technician, check-ins, training sign-offs, reviews, fully operating and level.",
+    what: "One new affiliate from day one: plan and culture gone through, their connection (another affiliate), check-ins, training sign-offs, reviews, fully operating and level.",
   },
 ];
 
@@ -197,7 +197,7 @@ export function sampleJourney(today: string): JourneyView {
     position: "affiliate",
     startDate,
     profileId: null,
-    buddyName: "Riley Sample",
+    buddyName: "Casey Sample",
     ownsChecklists: false,
     today,
     steps,
