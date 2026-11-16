@@ -1,0 +1,85 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+
+import { saveApplicantCall } from "@/lib/actions/recording-actions";
+import { APPLICANT_CALLS, type ApplicantCall } from "@/lib/hiring/recordings";
+import { RecordCall } from "@/components/hiring/record-call";
+import type { ApplicantDetail } from "@/lib/data/hiring";
+import { shortWhen } from "@/lib/time-zone";
+
+/** Which call is likely next, from where the application is. */
+function callFor(stage: string): ApplicantCall {
+  if (stage === "owner_talk") return "owner_talk";
+  if (stage === "interview" || stage === "working_interview") return "interview";
+  return "screening";
+}
+
+function length(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Every call with an applicant, recorded and kept here: the screening call,
+ * the first interview and the owner call. Moving them on after an interview
+ * waits on its recording.
+ */
+export function ApplicantCalls({ applicant }: { applicant: Pick<ApplicantDetail, "id" | "stage" | "calls"> }) {
+  const router = useRouter();
+  const [call, setCall] = useState<ApplicantCall>(callFor(applicant.stage));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, start] = useTransition();
+
+  return (
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">Calls</h2>
+      <p className="text-xs text-muted-foreground">Every interview call is recorded, after you tell them and they say OK. The next step waits on the recording.</p>
+      {applicant.calls.length > 0 && (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+          {applicant.calls.map((c, i) => (
+            <li key={i} className="space-y-1 px-3 py-2 text-sm">
+              <p>
+                <span className="font-medium">{c.label}</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {shortWhen(c.at)} · {length(c.seconds)}
+                  {c.byName ? ` · ${c.byName}` : ""}
+                </span>
+              </p>
+              {c.url ? <audio controls preload="none" src={c.url} className="h-8 w-full max-w-sm" aria-label={`${c.label} recording`} /> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-start gap-2 rounded-xl border border-border bg-card p-3">
+        <select
+          aria-label="Which call"
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+          value={call}
+          onChange={(e) => setCall(e.target.value as ApplicantCall)}
+        >
+          {(Object.keys(APPLICANT_CALLS) as ApplicantCall[]).map((k) => (
+            <option key={k} value={k}>
+              {APPLICANT_CALLS[k]}
+            </option>
+          ))}
+        </select>
+        <RecordCall
+          owner="applicant"
+          id={applicant.id}
+          label={`Record the ${APPLICANT_CALLS[call].toLowerCase()}`}
+          onSaved={(r) =>
+            start(async () => {
+              setError(null);
+              const saved = await saveApplicantCall({ applicantId: applicant.id, call, path: r.path, seconds: r.seconds });
+              if (!saved.ok) return setError(saved.message);
+              router.refresh();
+            })
+          }
+        />
+        {busy && <span className="text-xs text-muted-foreground">Saving…</span>}
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}

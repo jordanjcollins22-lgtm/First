@@ -1,3 +1,5 @@
+import { recordingNotice } from "@/lib/hiring/recordings";
+
 /**
  * The emails an applicant can get, word for word. Each one the reviewer
  * starts is shown to them first, can be changed, and goes when they press
@@ -77,6 +79,7 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
         `Thanks for your video. We'd like to ${meet} for the ${input.positionTitle} job${when}.` +
         where +
         `\n\nPlease reply to confirm that time works.${call}\n\n` +
+        `${recordingNotice(input.business)}\n\n` +
         `See you soon,\n${sign}`,
     };
   }
@@ -92,6 +95,7 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
         `${firstDaysFor(input.positionKey)}\n\n` +
         (gear ? `${gear}\n\n` : "") +
         `To accept, just reply to this email with "I accept". This offer is open for ${OFFER_OPEN_HOURS} hours, and you can start within a week of saying yes.${call}\n\n` +
+        `${recordingNotice(input.business)}\n\n` +
         `We're glad you're joining us,\n${sign}`,
     };
   }
@@ -181,6 +185,7 @@ export function welcomeEmail(input: { firstName: string; positionTitle: string; 
       `Before day one:\n${before.map((b) => `- ${b}`).join("\n")}\n\n` +
       `Day one:\n${dayOne.map((b) => `- ${b}`).join("\n")}\n\n` +
       `${call}` +
+      `${recordingNotice(input.business)}\n\n` +
       `See you soon,\n${sign}`,
   };
 }

@@ -73,7 +73,7 @@ export async function handleApplicantReply(admin: Admin, organizationId: string,
   await admin.from("applicant_events").insert({
     applicant_id: applicant.id,
     kind: sent.ok ? "email_sent" : "email_failed",
-    detail: sent.ok ? { kind: "welcome", subject, provider_id: sent.id } : { kind: "welcome", error: sent.message },
+    detail: sent.ok ? { kind: "welcome", subject, body, provider_id: sent.id } : { kind: "welcome", error: sent.message },
     actor: null,
     actor_name: "Automatic",
   });

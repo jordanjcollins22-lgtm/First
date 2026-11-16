@@ -5,6 +5,7 @@ import { businessToday } from "@/lib/data/compliance";
 import { roleDocFor } from "@/lib/hiring/role-docs";
 import { PHASES, type ReviewDay, type Taper } from "@/lib/hiring/journey";
 import { hasRole, isOwnerLevel } from "@/lib/roles";
+import { recordingUrls } from "@/lib/data/recordings";
 
 /**
  * A new hire's journey, read from their new-hire checklist and the steps
@@ -21,6 +22,18 @@ export interface StepRow {
   doneAt: string;
   doneByName: string | null;
   note: string | null;
+  /** The recorded call, ready to play for the next hour. */
+  recordingUrl?: string | null;
+}
+
+/** An email or reply between us and the new hire that went through the app. */
+export interface MessageRow {
+  at: string;
+  direction: "out" | "in";
+  what: string;
+  subject: string | null;
+  body: string | null;
+  byName: string | null;
 }
 
 export interface JourneyView {
@@ -36,13 +49,15 @@ export interface JourneyView {
   /** Training sign-offs this person has given someone else. */
   taughtOthers: number;
   tasks: string[];
+  /** Every email and reply with them that went through the app, oldest first. */
+  messages: MessageRow[];
 }
 
 export async function getJourney(organizationId: string, checklistId: string, now = new Date()): Promise<JourneyView | null> {
   const sb = admin();
   const { data } = await sb
     .from("onboarding_checklists")
-    .select("id, person_name, position, start_date, profile_id, buddy_name, owns_checklists")
+    .select("id, person_name, position, start_date, profile_id, buddy_name, owns_checklists, applicant_id")
     .eq("organization_id", organizationId)
     .eq("id", checklistId)
     .maybeSingle();
@@ -55,10 +70,11 @@ export async function getJourney(organizationId: string, checklistId: string, no
     profile_id: string | null;
     buddy_name: string | null;
     owns_checklists: boolean;
+    applicant_id: string | null;
   };
   const { data: rows } = await sb
     .from("new_hire_steps")
-    .select("kind, key, done_at, done_by_name, note")
+    .select("kind, key, done_at, done_by_name, note, recording_path")
     .eq("checklist_id", c.id)
     .order("done_at", { ascending: true });
   let taughtOthers = 0;
@@ -73,6 +89,8 @@ export async function getJourney(organizationId: string, checklistId: string, no
       .or("key.like.%:demonstrated,key.like.%:duplicated");
     taughtOthers = count ?? 0;
   }
+  const stepRows = (rows ?? []) as { kind: StepKind; key: string; done_at: string; done_by_name: string | null; note: string | null; recording_path: string | null }[];
+  const urls = await recordingUrls(stepRows.map((r) => r.recording_path ?? "")).catch(() => new Map<string, string>());
   return {
     id: c.id,
     name: c.person_name,
@@ -82,16 +100,51 @@ export async function getJourney(organizationId: string, checklistId: string, no
     buddyName: c.buddy_name,
     ownsChecklists: c.owns_checklists,
     today: businessToday(now),
-    steps: ((rows ?? []) as { kind: StepKind; key: string; done_at: string; done_by_name: string | null; note: string | null }[]).map((r) => ({
+    steps: stepRows.map((r) => ({
       kind: r.kind,
       key: r.key,
       doneAt: r.done_at,
       doneByName: r.done_by_name,
       note: r.note,
+      recordingUrl: r.recording_path ? (urls.get(r.recording_path) ?? null) : null,
     })),
     taughtOthers,
     tasks: (roleDocFor(c.position)?.tasks ?? []).map((t) => t.key),
+    messages: c.applicant_id ? await messagesWith(c.applicant_id) : [],
   };
+}
+
+const EMAIL_WHAT: Record<string, string> = {
+  interview: "Interview invite",
+  skills_question: "Skills question",
+  offer: "Offer",
+  welcome: "Welcome",
+  video_request: "Video request",
+  not_a_fit: "Not a fit",
+};
+
+/** The emails we sent them and the replies they sent back, from when they applied. */
+export async function messagesWith(applicantId: string): Promise<MessageRow[]> {
+  const { data } = await admin()
+    .from("applicant_events")
+    .select("at, kind, detail, actor_name")
+    .eq("applicant_id", applicantId)
+    .in("kind", ["email_sent", "email_failed", "offer_reply"])
+    .order("at", { ascending: true });
+  return ((data ?? []) as { at: string; kind: string; detail: Record<string, unknown> | null; actor_name: string | null }[]).map((e) => {
+    const d = e.detail ?? {};
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+    if (e.kind === "offer_reply") return { at: e.at, direction: "in" as const, what: "Their reply", subject: null, body: str(d.text), byName: e.actor_name };
+    const what = EMAIL_WHAT[String(d.kind ?? "")] ?? "Email";
+    return {
+      at: e.at,
+      direction: "out" as const,
+      what: e.kind === "email_failed" ? `${what} (didn't send)` : what,
+      subject: str(d.subject),
+      body: str(d.body),
+      byName: e.actor_name,
+    };
+  });
 }
 
 export function reviewsDone(steps: StepRow[]): Set<ReviewDay> {

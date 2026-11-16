@@ -9,6 +9,8 @@ import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { refuseInDemo } from "@/lib/demo-mode";
 import { buddyChoices, type StepKind } from "@/lib/data/journey";
+import { recordingExists } from "@/lib/data/recordings";
+import { isRecordingPathFor, stepNeedsRecording } from "@/lib/hiring/recordings";
 
 /**
  * Logging a new hire's journey: a check-in held, a review done, a training
@@ -33,13 +35,18 @@ async function ownChecklist(sb: SupabaseClient, organizationId: string, id: stri
   return !!data;
 }
 
-export async function logJourneyStep(input: { checklistId: string; kind: string; key: string; note?: string }): Promise<Result> {
+export async function logJourneyStep(input: { checklistId: string; kind: string; key: string; note?: string; recordingPath?: string | null }): Promise<Result> {
   await refuseInDemo();
   const profile = await trainer();
   if (!profile) return { ok: false, message: "Only someone with the Hiring tab can log this." };
   if (!KINDS.includes(input.kind as StepKind) || !input.key || input.key.length > 80) return { ok: false, message: "That isn't a step we know." };
   const sb = createAdminClient() as unknown as SupabaseClient;
   if (!(await ownChecklist(sb, profile.organization_id, input.checklistId))) return { ok: false, message: "Couldn't find that new hire." };
+  // Check-ins and reviews are calls, and every call is recorded.
+  const recording = input.recordingPath?.trim() || null;
+  if (recording && !isRecordingPathFor(recording, profile.organization_id, "newhire", input.checklistId)) return { ok: false, message: "That recording isn't from this new hire." };
+  if (stepNeedsRecording(input.kind) && !recording) return { ok: false, message: "Record the call first. Every check-in and review is recorded, with their OK." };
+  if (recording && !(await recordingExists(recording))) return { ok: false, message: "The recording didn't finish saving. Record it again." };
   const { error } = await sb.from("new_hire_steps").upsert(
     {
       organization_id: profile.organization_id,
@@ -50,6 +57,7 @@ export async function logJourneyStep(input: { checklistId: string; kind: string;
       done_by: profile.id,
       done_by_name: profile.full_name || null,
       note: input.note?.trim().slice(0, 2000) || null,
+      recording_path: recording,
     },
     { onConflict: "checklist_id,kind,key" }
   );

@@ -98,3 +98,13 @@ describe("accepting an offer", () => {
     expect(`${subject} ${body}`).not.toMatch(/[—–]/);
   });
 });
+
+describe("recording notice", () => {
+  it("is in the interview, offer and welcome emails", () => {
+    const base = { firstName: "Dana", positionTitle: "Affiliate", business: "JS Landscaping MD", phone: null, sender: "Jordan" };
+    const line = "are recorded for training and quality.";
+    expect(applicantEmail({ ...base, kind: "interview", when: "Tue", remote: true }).body).toContain(line);
+    expect(applicantEmail({ ...base, kind: "offer", positionKey: "affiliate" }).body).toContain(line);
+    expect(welcomeEmail({ ...base, positionKey: "affiliate" }).body).toContain(line);
+  });
+});

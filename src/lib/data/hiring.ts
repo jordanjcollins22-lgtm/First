@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recordingUrls } from "@/lib/data/recordings";
 import { positionFor, type PositionKey } from "@/lib/hiring/positions";
 import { isStage, type Stage } from "@/lib/hiring/screening";
 
@@ -133,6 +134,8 @@ export interface ApplicantDetail extends ApplicantRow {
   videoLink: string | null;
   /** Their recorded answer to the skills question, ready to play. */
   skillsVideoUrl: string | null;
+  /** Their recorded calls (screening, interviews, owner call), ready to play. */
+  calls: { at: string; call: string; label: string; seconds: number; byName: string | null; url: string | null }[];
   events: { at: string; kind: string; detail: Record<string, unknown> | null; actorName: string | null }[];
 }
 
@@ -157,8 +160,15 @@ export async function getApplicant(organizationId: string, id: string): Promise<
     admin.from("applicant_events").select("at, kind, detail, actor_name").eq("applicant_id", id).order("at"),
     skillsPath ? admin.storage.from("applicant-videos").createSignedUrl(skillsPath, 60 * 60) : Promise.resolve({ data: null }),
   ]);
+  const recorded = (events ?? []).filter((e) => e.kind === "call_recorded");
+  const callDetail = (d: unknown) => (d ?? {}) as { call?: string; label?: string; path?: string; seconds?: number };
+  const urls = await recordingUrls(recorded.map((e) => callDetail(e.detail).path ?? "")).catch(() => new Map<string, string>());
   return {
     ...row,
+    calls: recorded.map((e) => {
+      const d = callDetail(e.detail);
+      return { at: e.at, call: d.call ?? "", label: d.label ?? "Call", seconds: d.seconds ?? 0, byName: e.actor_name, url: d.path ? (urls.get(d.path) ?? null) : null };
+    }),
     answers: (data.answers ?? {}) as Record<string, string>,
     reviewNote: data.review_note,
     videoUrl: signed?.signedUrl ?? null,

@@ -19,7 +19,9 @@ import {
   type CheckInSlot,
   type Level,
 } from "@/lib/hiring/journey";
-import type { StepRow } from "@/lib/data/journey";
+import type { MessageRow, StepRow } from "@/lib/data/journey";
+import { stepNeedsRecording } from "@/lib/hiring/recordings";
+import { RecordCall, type Recorded } from "@/components/hiring/record-call";
 
 /**
  * One new hire, from day one to fully operating: the plan and culture gone
@@ -46,6 +48,8 @@ export interface JourneyProps {
   nextTaper: { phase: CheckInPhase; suggestedFrom: string; due: boolean } | null;
   /** Who can be their connection: others in the same role, never the owner, their boss or themselves. */
   buddyOptions: string[];
+  /** Every email and reply with them that went through the app. */
+  messages: MessageRow[];
 }
 
 function done(steps: StepRow[], kind: StepRow["kind"], key: string): StepRow | undefined {
@@ -62,11 +66,12 @@ export function NewHireJourney(p: JourneyProps) {
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [buddy, setBuddy] = useState(p.buddyName ?? "");
+  const [recorded, setRecorded] = useState<Record<string, Recorded>>({});
 
   function log(kind: StepRow["kind"], key: string) {
     setError(null);
     start(async () => {
-      const r = await logJourneyStep({ checklistId: p.id, kind, key, note: notes[`${kind}:${key}`] });
+      const r = await logJourneyStep({ checklistId: p.id, kind, key, note: notes[`${kind}:${key}`], recordingPath: recorded[`${kind}:${key}`]?.path ?? null });
       if (!r.ok) setError(r.message);
       else router.refresh();
     });
@@ -96,11 +101,26 @@ export function NewHireJourney(p: JourneyProps) {
       <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => undo(kind, k)} disabled={busy} aria-label="Undo">
         <Undo2 className="h-3.5 w-3.5" />
       </button>
+      {row.recordingUrl ? <audio controls preload="none" src={row.recordingUrl} className="h-8 w-full max-w-xs" aria-label="The recorded call" /> : null}
     </span>
   );
 
-  const noteAndLog = (kind: StepRow["kind"], k: string, label: string) => (
+  // A check-in or review is a call: it's logged only once it's recorded.
+  const noteAndLog = (kind: StepRow["kind"], k: string, label: string) => {
+    const needs = stepNeedsRecording(kind);
+    const rec = recorded[`${kind}:${k}`];
+    return (
     <div className="flex flex-wrap items-center gap-2">
+      {needs &&
+        (rec ? (
+          <span className="flex w-full items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+            <Check className="h-3.5 w-3.5" /> Recorded, {Math.floor(rec.seconds / 60)}:{String(rec.seconds % 60).padStart(2, "0")}
+          </span>
+        ) : (
+          <div className="w-full">
+            <RecordCall owner="newhire" id={p.id} onSaved={(r) => setRecorded((all) => ({ ...all, [`${kind}:${k}`]: r }))} />
+          </div>
+        ))}
       <Input
         id={`note-${kind}-${k}`}
         className="h-8 min-w-0 flex-1 text-sm"
@@ -108,11 +128,12 @@ export function NewHireJourney(p: JourneyProps) {
         value={notes[`${kind}:${k}`] ?? ""}
         onChange={(e) => setNotes({ ...notes, [`${kind}:${k}`]: e.target.value })}
       />
-      <Button type="button" size="sm" disabled={busy} onClick={() => log(kind, k)}>
+      <Button type="button" size="sm" disabled={busy || (needs && !rec)} onClick={() => log(kind, k)}>
         {label}
       </Button>
     </div>
-  );
+    );
+  };
 
   const plan = done(p.steps, "plan", "plan");
   const culture = done(p.steps, "culture", "culture");
@@ -227,7 +248,7 @@ export function NewHireJourney(p: JourneyProps) {
 
       <Section
         title="Check-ins"
-        sub={`Twice a day, then once a day, then twice a week, then a weekly one-on-one${remote ? ", by phone, video or text" : ""}. Each step down happens when they're ready, usually around two weeks, four weeks and day 60. Honest feedback both ways.`}
+        sub={`Twice a day, then once a day, then twice a week, then a weekly one-on-one${remote ? ", by phone or video call" : ""}. Each step down happens when they're ready, usually around two weeks, four weeks and day 60. Honest feedback both ways. Every check-in and review is recorded, after you tell them and they say OK.`}
       >
         {p.nextTaper && (
           <div className="space-y-1.5 rounded-xl border border-border bg-card px-3 py-2">
@@ -357,6 +378,30 @@ export function NewHireJourney(p: JourneyProps) {
           <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
             {p.fully.missing.map((m) => (
               <li key={m}>{m}</li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Messages" sub="Every email we sent them through the app, and every reply they sent back, word for word.">
+        {p.messages.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">No emails through the app yet.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+            {p.messages.map((m, i) => (
+              <li key={i} className="px-3 py-2 text-sm">
+                <details>
+                  <summary className="cursor-pointer">
+                    <span className="font-medium">{m.direction === "in" ? "From them" : "To them"}: {m.what}</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {when(m.at)}
+                      {m.direction === "out" && m.byName ? ` · ${m.byName}` : ""}
+                    </span>
+                  </summary>
+                  {m.subject ? <p className="mt-1 text-xs font-semibold">{m.subject}</p> : null}
+                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{m.body ?? "The words weren't kept for this one (sent before we started keeping them)."}</p>
+                </details>
+              </li>
             ))}
           </ul>
         )}

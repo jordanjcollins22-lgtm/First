@@ -17,6 +17,7 @@ import { publicPayLine } from "@/lib/hiring/indeed-ad";
 import { applicantEmail, stageAfter, type ApplicantEmailKind } from "@/lib/hiring/emails";
 import { isStage, nextStages, type Stage } from "@/lib/hiring/screening";
 import { onApplicantHired } from "@/lib/data/onboarding";
+import { APPLICANT_CALLS, callNeededToMove } from "@/lib/hiring/recordings";
 
 /**
  * The reviewer's side of hiring: rate and note, move an application along,
@@ -88,6 +89,20 @@ async function moveTo(
   profile: { id: string; full_name: string | null },
   interviewAt: string | null
 ): Promise<Result> {
+  // Every interview call is recorded: going forward waits on the recording.
+  const needed = callNeededToMove(from, to);
+  if (needed) {
+    const { data: recorded } = await admin
+      .from("applicant_events")
+      .select("id")
+      .eq("applicant_id", id)
+      .eq("kind", "call_recorded")
+      .filter("detail->>call", "eq", needed)
+      .limit(1);
+    if (!recorded || recorded.length === 0) {
+      return { ok: false, message: `Record the ${APPLICANT_CALLS[needed].toLowerCase()} first. Every interview call is recorded, with their OK.` };
+    }
+  }
   const now = new Date().toISOString();
   const decided = to === "hired" || to === "not_a_fit" || to === "withdrawn";
   const { error } = await admin
@@ -213,7 +228,7 @@ export async function sendApplicantEmail(input: {
   await admin.from("applicant_events").insert({
     applicant_id: row.id,
     kind: "email_sent",
-    detail: { kind: input.kind, subject, provider_id: sent.id },
+    detail: { kind: input.kind, subject, body, provider_id: sent.id },
     actor: profile.id,
     actor_name: profile.full_name || null,
   });

@@ -48,5 +48,6 @@ export function journeyProps(j: JourneyView, buddyOptions: string[]): JourneyPro
     steps: j.steps,
     fully: fullyOperating(state),
     level: levelOf(state),
+    messages: j.messages,
   };
 }

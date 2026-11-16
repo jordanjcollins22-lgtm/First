@@ -6,6 +6,7 @@ import { positionFor } from "@/lib/hiring/positions";
 import { STAGES, nextStages, stageLabel } from "@/lib/hiring/screening";
 import { shortWhen } from "@/lib/time-zone";
 import { ApplicantReview } from "@/components/hiring/applicant-review";
+import { ApplicantCalls } from "@/components/hiring/applicant-calls";
 
 /** One applicant's page, given the applicant. Kept apart from the loading so it can be previewed with a sample. */
 
@@ -16,6 +17,8 @@ const EVENT_LABEL: Record<string, string> = {
   stage_changed: "Moved",
   email_sent: "Emailed",
   skills_answered: "Answered the skills question",
+  call_recorded: "Call recorded",
+  offer_reply: "Replied to the offer",
 };
 
 export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
@@ -85,6 +88,8 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
         </section>
       )}
 
+      <ApplicantCalls applicant={applicant} />
+
       <ApplicantReview
         id={applicant.id}
         stage={applicant.stage}
@@ -126,6 +131,8 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
               <span>
                 {EVENT_LABEL[e.kind] ?? e.kind}
                 {e.kind === "stage_changed" && e.detail?.to ? ` to ${STAGES[e.detail.to as keyof typeof STAGES] ?? e.detail.to}` : ""}
+                {e.kind === "call_recorded" && typeof e.detail?.label === "string" ? `: ${e.detail.label}` : ""}
+                {e.kind === "email_sent" && typeof e.detail?.subject === "string" ? `: ${e.detail.subject}` : ""}
                 {e.actorName ? ` by ${e.actorName}` : ""}
               </span>
             </li>

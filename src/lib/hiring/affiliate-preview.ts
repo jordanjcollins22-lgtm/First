@@ -1,5 +1,7 @@
 import type { ApplicantDetail, ApplicantRow } from "@/lib/data/hiring";
-import type { JourneyView, NewHireLine, StepRow } from "@/lib/data/journey";
+import type { JourneyView, MessageRow, NewHireLine, StepRow } from "@/lib/data/journey";
+import { applicantEmail, welcomeEmail } from "@/lib/hiring/emails";
+import { positionFor } from "@/lib/hiring/positions";
 import { checkInsThrough, trainingKey } from "@/lib/hiring/journey";
 import { roleDocFor } from "@/lib/hiring/role-docs";
 
@@ -63,7 +65,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     key: "skills",
     title: "Skills question",
     steps: [{ id: "4", name: "Second interview: skills" }],
-    what: "What the applicant sees from the link in their email: one real situation, answered from their phone in writing or with a recording.",
+    what: "What the applicant sees from the link in their email: one real situation, answered out loud from their phone with tap to record. No typing, no uploads.",
   },
   {
     key: "applicant",
@@ -74,7 +76,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
       { id: "5", name: "Third interview: owner and culture (phone or video)" },
       { id: "6", name: "Optional 4th interview, then decide" },
     ],
-    what: "One applicant: answers, video, their skills answer, your rating and note, and the next step. Interviews for this job are calls, never in person.",
+    what: "One applicant: answers, video, their skills answer, their recorded calls, your rating and note, and the next step. Interviews for this job are calls, never in person, and every one is recorded with their OK.",
   },
   {
     key: "emails",
@@ -84,7 +86,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
       { id: "8", name: "Offer accepted" },
       { id: "9", name: "Pre-onboarding" },
     ],
-    what: "The video request, interview invite, offer and welcome emails, word for word.",
+    what: "The video request, interview invite, offer and welcome emails, word for word. The interview, offer and welcome emails tell them calls are recorded.",
   },
   {
     key: "new-hire",
@@ -102,7 +104,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
       { id: "21", name: "Fully operating" },
       { id: "Levels", name: "Alex's three levels" },
     ],
-    what: "One new affiliate from day one: plan and culture gone through, their connection (another affiliate), check-ins, training sign-offs, reviews, fully operating and level.",
+    what: "One new affiliate from day one: plan and culture gone through, their connection (another affiliate), recorded check-ins and reviews, training sign-offs, every email with them, fully operating and level.",
   },
 ];
 
@@ -151,10 +153,12 @@ export function sampleApplicant(today: string): ApplicantDetail {
     videoUrl: null,
     videoLink: null,
     skillsVideoUrl: null,
+    calls: [{ at: at(daysAgo(today, 2), "15:00:00"), call: "interview", label: "First interview", seconds: 1260, byName: "Jordan", url: SAMPLE_CALL }],
     events: [
       { at: row.createdAt, kind: "applied", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "video_submitted", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "stage_changed", detail: { to: "interview" }, actorName: "Jordan" },
+      { at: at(daysAgo(today, 2), "15:00:00"), kind: "call_recorded", detail: { call: "interview", label: "First interview", seconds: 1260 }, actorName: "Jordan" },
       { at: at(daysAgo(today, 1)), kind: "email_sent", detail: { kind: "skills_question" }, actorName: "Jordan" },
       { at: at(today, "14:00:00"), kind: "skills_answered", detail: null, actorName: null },
     ],
@@ -169,7 +173,15 @@ export function sampleNewHires(today: string): NewHireLine[] {
 export function sampleJourney(today: string): JourneyView {
   const startDate = daysAgo(today, 34);
   const tasks = (roleDocFor("affiliate")?.tasks ?? []).map((t) => t.key);
-  const step = (kind: StepRow["kind"], key: string, date: string, note: string | null = null): StepRow => ({ kind, key, doneAt: at(date), doneByName: "Jordan", note });
+  const step = (kind: StepRow["kind"], key: string, date: string, note: string | null = null): StepRow => ({
+    kind,
+    key,
+    doneAt: at(date),
+    doneByName: "Jordan",
+    note,
+    // Check-ins and reviews are calls, so each has its recording.
+    recordingUrl: kind === "checkin" || kind === "review" ? SAMPLE_CALL : null,
+  });
   // Moved to once a day after week 3, and to twice a week on day 29, when the manager said they were ready.
   const taper = { daily: daysAgo(today, 20), twice_weekly: daysAgo(today, 6) };
   const steps: StepRow[] = [
@@ -203,5 +215,22 @@ export function sampleJourney(today: string): JourneyView {
     steps,
     taughtOthers: 0,
     tasks,
+    messages: sampleMessages(startDate),
   };
+}
+
+/** A second of silence, standing in for a recorded call so the player shows. */
+const SAMPLE_CALL = "/review/sample-call.wav";
+
+function sampleMessages(startDate: string): MessageRow[] {
+  const offerDay = daysAgo(startDate, 6);
+  const position = positionFor("affiliate");
+  const common = { firstName: "Morgan", positionTitle: position?.title ?? "Affiliate", positionKey: "affiliate", business: "JS Landscaping MD", phone: "(410) 555-0100" };
+  const offer = applicantEmail({ ...common, kind: "offer", sender: "Jordan", pay: position?.commission ?? null });
+  const welcome = welcomeEmail({ ...common, sender: null });
+  return [
+    { at: at(offerDay, "16:00:00"), direction: "out", what: "Offer", subject: offer.subject, body: offer.body, byName: "Jordan" },
+    { at: at(offerDay, "19:12:00"), direction: "in", what: "Their reply", subject: null, body: "I accept! Thank you, excited to start.", byName: "Morgan Sample" },
+    { at: at(offerDay, "19:12:30"), direction: "out", what: "Welcome", subject: welcome.subject, body: welcome.body, byName: "Automatic" },
+  ];
 }
