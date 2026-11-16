@@ -36,6 +36,12 @@ export interface RoleDoc {
   perfectDay: readonly { time: string; what: string }[];
   /** 11 Clarity: day 30, 60 and 90, each with the problem they should be solving by then */
   plan: readonly { day: 30 | 60 | 90; goal: string; problem: string }[];
+  /** 11 Clarity: the planned first one to two weeks, day by day */
+  firstTwoWeeks?: readonly { when: string; what: string }[];
+  /** 13 Connection: time seeing other parts of the business, each one logged when done */
+  seeTheBusiness?: readonly { key: string; what: string }[];
+  /** Hired and trained from anywhere: check-ins by phone or text, training over a call or screen share. */
+  remote?: boolean;
   /** 15 the tasks training covers, each one documented, demonstrated, duplicated, then released */
   tasks: readonly TaskChecklist[];
 }
@@ -238,6 +244,20 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
       { day: 30, goal: "Your link shared with the people you know, and your first estimate booked from it.", problem: "Get one person you know to book an estimate through your link." },
       { day: 60, goal: "Your first job closed from your link.", problem: "Find people the app missed: neighbors, friends, posts you see." },
       { day: 90, goal: "Steady jobs closed every month, from people you know and people online.", problem: "Show a new affiliate how you bring someone in." },
+    ],
+    remote: true,
+    firstTwoWeeks: [
+      { when: "Day 1", what: "Video call with the owner: get your link, a tour of the app, your 30-60-90 plan and our values. Meet your buddy." },
+      { when: "Day 2", what: "Learn what we do: go through our services and our before and after photos, so you can tell people what we do." },
+      { when: "Day 3", what: "Send us someone you know, on a call with your buddy (the first task checklist)." },
+      { when: "Day 4", what: "Answer your first posts online with the ready-made replies, with your buddy watching on a screen share." },
+      { when: "Day 5", what: "Fresh-eyes call: what confused you this week, and what would you fix?" },
+      { when: "Week 2", what: "Share your link and answer fresh posts every day on your own. Check in by text or call each morning and evening. Aim: your first estimate booked from your link." },
+    ],
+    seeTheBusiness: [
+      { key: "estimate", what: "Watch how a free estimate is made from the satellite map, so you know what the people you send will get." },
+      { key: "finished-job", what: "Go through a finished job's before and after photos with a technician, and hear what made it go well." },
+      { key: "booked-to-done", what: "Follow one client from booked estimate to finished job in the app." },
     ],
     tasks: [
       {

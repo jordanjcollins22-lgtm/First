@@ -31,3 +31,13 @@ describe("cultureFor", () => {
     expect(tech[0].looksLike).toContain("blows off the driveway");
   });
 });
+
+describe("affiliate onboarding from anywhere", () => {
+  it("plans the first two weeks and time seeing the rest of the business, all remote", () => {
+    const doc = ROLE_DOCS.affiliate;
+    expect(doc.remote).toBe(true);
+    expect(doc.firstTwoWeeks?.map((d) => d.when)).toEqual(["Day 1", "Day 2", "Day 3", "Day 4", "Day 5", "Week 2"]);
+    expect(doc.seeTheBusiness?.length).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify([doc.firstTwoWeeks, doc.seeTheBusiness]).toLowerCase()).not.toMatch(/in person|ride-along|project lead/);
+  });
+});

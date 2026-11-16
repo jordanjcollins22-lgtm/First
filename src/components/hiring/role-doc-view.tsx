@@ -66,7 +66,30 @@ export function RoleDocView({ position, doc }: { position: Position; doc: RoleDo
             </li>
           ))}
         </ol>
+        {doc.firstTwoWeeks && doc.firstTwoWeeks.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">The first two weeks</p>
+            <ol className="divide-y divide-border rounded-xl border border-border bg-card text-sm">
+              {doc.firstTwoWeeks.map((d) => (
+                <li key={d.when} className="flex gap-3 px-3 py-2">
+                  <span className="w-16 shrink-0 font-semibold">{d.when}</span>
+                  <span className="min-w-0">{d.what}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
       </Section>
+
+      {doc.seeTheBusiness && doc.seeTheBusiness.length > 0 && (
+        <Section title="Seeing the rest of the business">
+          <ul className="list-disc space-y-0.5 pl-5 text-sm">
+            {doc.seeTheBusiness.map((b) => (
+              <li key={b.key}>{b.what}</li>
+            ))}
+          </ul>
+        </Section>
+      )}
 
       <Section title="Our culture">
         <ul className="space-y-2 text-sm">

@@ -175,6 +175,8 @@ export function sampleJourney(today: string): JourneyView {
   const steps: StepRow[] = [
     step("plan", "plan", startDate, "Went through the 30-60-90 plan on day one."),
     step("culture", "culture", startDate),
+    step("checkin", "fresh-eyes", daysAgo(today, 29), "Wants a short list of what we don't do, so they don't send the wrong jobs."),
+    step("connect", "estimate", daysAgo(today, 25), "Watched one made on a call."),
     // Every check-in logged except the last few, so the page shows some to log.
     ...checkInsThrough(startDate, today)
       .filter((c) => c.date < daysAgo(today, 3))

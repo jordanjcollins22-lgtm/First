@@ -11,7 +11,7 @@ create table if not exists public.new_hire_steps (
   checklist_id uuid not null references public.onboarding_checklists(id) on delete cascade,
   -- checkin: key is the date and slot (2026-11-17-am). review: 30, 60 or 90.
   -- training: task:phase. plan and culture: the day they went through it.
-  kind text not null check (kind in ('checkin', 'review', 'training', 'plan', 'culture')),
+  kind text not null check (kind in ('checkin', 'review', 'training', 'plan', 'culture', 'connect')),
   key text not null,
   done_at timestamptz not null default now(),
   done_by uuid references public.profiles(id) on delete set null,

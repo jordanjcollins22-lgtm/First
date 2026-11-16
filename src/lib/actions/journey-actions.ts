@@ -18,7 +18,7 @@ import type { StepKind } from "@/lib/data/journey";
 
 type Result = { ok: true } | { ok: false; message: string };
 
-const KINDS: readonly StepKind[] = ["checkin", "review", "training", "plan", "culture"];
+const KINDS: readonly StepKind[] = ["checkin", "review", "training", "plan", "culture", "connect"];
 
 async function trainer() {
   const profile = await getCurrentProfile();

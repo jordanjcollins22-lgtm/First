@@ -112,6 +112,8 @@ export function NewHireJourney(p: JourneyProps) {
 
   const plan = done(p.steps, "plan", "plan");
   const culture = done(p.steps, "culture", "culture");
+  const freshEyes = done(p.steps, "checkin", "fresh-eyes");
+  const remote = p.doc.remote ?? false;
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
@@ -145,10 +147,23 @@ export function NewHireJourney(p: JourneyProps) {
             </li>
           ))}
         </ol>
+        {p.doc.firstTwoWeeks && p.doc.firstTwoWeeks.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">The first two weeks</p>
+            <ol className="divide-y divide-border rounded-xl border border-border bg-card text-sm">
+              {p.doc.firstTwoWeeks.map((d) => (
+                <li key={d.when} className="flex gap-3 px-3 py-2">
+                  <span className="w-16 shrink-0 font-semibold">{d.when}</span>
+                  <span className="min-w-0">{d.what}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
         {plan ? doneLine(plan, "plan", "plan") : noteAndLog("plan", "plan", "Went through it with them")}
       </Section>
 
-      <Section title="Culture" sub="In the first two weeks, with real examples and the people who best show it.">
+      <Section title="Culture" sub="In the first two weeks, with a real example of each value.">
         <ul className="space-y-1 text-sm">
           {cultureFor(p.doc.position).map((c) => (
             <li key={c.value}>
@@ -160,7 +175,10 @@ export function NewHireJourney(p: JourneyProps) {
         {culture ? doneLine(culture, "culture", "culture") : noteAndLog("culture", "culture", "Went through it with them")}
       </Section>
 
-      <Section title="Their buddy" sub="Someone who isn't their boss, to ask anything. Plus time seeing other parts of the business.">
+      <Section
+        title="Their buddy"
+        sub={`Someone to ask anything who isn't their boss${remote ? " or their account manager" : ""}: usually someone in the same job a few months ahead.`}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <Input id="buddy" className="h-8 min-w-0 flex-1 text-sm" placeholder="Buddy's name" value={buddy} onChange={(e) => setBuddy(e.target.value)} />
           <Button type="button" size="sm" variant="secondary" disabled={busy || buddy === (p.buddyName ?? "")} onClick={() => save({ buddyName: buddy })}>
@@ -169,9 +187,25 @@ export function NewHireJourney(p: JourneyProps) {
         </div>
       </Section>
 
+      {p.doc.seeTheBusiness && p.doc.seeTheBusiness.length > 0 && (
+        <Section title="Seeing the rest of the business" sub="Time with the parts of the business they don't work in, so they see how it all fits.">
+          <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+            {p.doc.seeTheBusiness.map((b) => {
+              const row = done(p.steps, "connect", b.key);
+              return (
+                <li key={b.key} className="space-y-1.5 px-3 py-2">
+                  <p className="text-sm">{b.what}</p>
+                  {row ? doneLine(row, "connect", b.key) : noteAndLog("connect", b.key, "Done")}
+                </li>
+              );
+            })}
+          </ul>
+        </Section>
+      )}
+
       <Section
         title="Check-ins"
-        sub="Twice a day for the first two weeks, then once a day, then twice a week to day 60, then a weekly one-on-one. Honest feedback both ways; after week one, ask for their fresh-eyes notes."
+        sub={`Twice a day for the first two weeks, then once a day, then twice a week to day 60, then a weekly one-on-one${remote ? ", by phone, video or text" : ""}. Honest feedback both ways.`}
       >
         {p.checkIns.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">No check-in due today.</p>
@@ -193,7 +227,18 @@ export function NewHireJourney(p: JourneyProps) {
         )}
       </Section>
 
-      <Section title="Training" sub="For each task: you show them with the checklist, they do it while you watch, then they're released to do it alone.">
+      <div className="space-y-1.5 rounded-xl border border-border bg-card px-3 py-2">
+        <p className="text-sm font-medium">Fresh-eyes notes, after week one</p>
+        <p className="text-xs text-muted-foreground">Ask: what did you notice that we should fix? Write down what they say.</p>
+        {freshEyes ? doneLine(freshEyes, "checkin", "fresh-eyes") : p.day >= 5 ? noteAndLog("checkin", "fresh-eyes", "Asked") : <p className="text-xs text-muted-foreground">From day 5.</p>}
+      </div>
+
+      <Section title="Training" sub={`For each task${remote ? ", over a call or a screen share" : ""}: you show them with the checklist, they do it while you watch, then they're released to do it alone.`}>
+        <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
+          <li>Shown: do it in front of them from the checklist. Every question they ask gets added to the checklist.</li>
+          <li>Watched: they do it, you correct on the spot. Praise what they get right, don&apos;t punish learning mistakes, and judge whether they followed the checklist before judging how it turned out.</li>
+          <li>Released: they do it on their own, without you watching.</li>
+        </ul>
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
@@ -263,7 +308,15 @@ export function NewHireJourney(p: JourneyProps) {
 
       <Section title="Fully operating" sub="Reached when check-ins are down to weekly one-on-ones, every task is released, and the day 30 and 60 reviews are done.">
         {p.fully.reached ? (
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Fully operating. Managing them is now feedback, retraining, rewards and recruiting.</p>
+          <div className="space-y-1 text-sm">
+            <p className="font-medium text-emerald-700 dark:text-emerald-400">Fully operating. Managing them is now feedback, retraining, rewards and recruiting.</p>
+            <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+              <li>Feedback: one thing in every conversation, good or to fix. Don&apos;t save it for reviews.</li>
+              <li>Retraining: when something isn&apos;t getting done, check in order: did they know, have the checklist, have the skill, know the deadline, and have nothing in the way?</li>
+              <li>Rewards: celebrate each stage they hit at the team huddle.</li>
+              <li>Recruiting: ask who they know who&apos;d be good here.</li>
+            </ul>
+          </div>
         ) : (
           <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
             {p.fully.missing.map((m) => (

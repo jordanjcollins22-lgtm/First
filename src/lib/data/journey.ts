@@ -12,7 +12,7 @@ import { type ReviewDay } from "@/lib/hiring/journey";
 
 const admin = (): SupabaseClient => createAdminClient() as unknown as SupabaseClient;
 
-export type StepKind = "checkin" | "review" | "training" | "plan" | "culture";
+export type StepKind = "checkin" | "review" | "training" | "plan" | "culture" | "connect";
 
 export interface StepRow {
   kind: StepKind;
