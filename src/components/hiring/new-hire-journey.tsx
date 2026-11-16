@@ -42,6 +42,10 @@ export interface JourneyProps {
   steps: StepRow[];
   fully: { reached: boolean; missing: string[] };
   level: Level;
+  /** The next, lighter check-in rhythm and when the calendar suggests it. Null at one-on-ones. */
+  nextTaper: { phase: CheckInPhase; suggestedFrom: string; due: boolean } | null;
+  /** Who can be their buddy: the team, less the owner, account managers and themselves. */
+  buddyOptions: string[];
 }
 
 function done(steps: StepRow[], kind: StepRow["kind"], key: string): StepRow | undefined {
@@ -180,7 +184,20 @@ export function NewHireJourney(p: JourneyProps) {
         sub={`Someone to ask anything who isn't their boss${remote ? " or their account manager" : ""}: usually someone in the same job a few months ahead.`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Input id="buddy" className="h-8 min-w-0 flex-1 text-sm" placeholder="Buddy's name" value={buddy} onChange={(e) => setBuddy(e.target.value)} />
+          <select
+            id="buddy"
+            aria-label="Buddy"
+            className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+            value={buddy}
+            onChange={(e) => setBuddy(e.target.value)}
+          >
+            <option value="">Pick from the team</option>
+            {[...(p.buddyName && !p.buddyOptions.includes(p.buddyName) ? [p.buddyName] : []), ...p.buddyOptions].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
           <Button type="button" size="sm" variant="secondary" disabled={busy || buddy === (p.buddyName ?? "")} onClick={() => save({ buddyName: buddy })}>
             Save
           </Button>
@@ -205,8 +222,22 @@ export function NewHireJourney(p: JourneyProps) {
 
       <Section
         title="Check-ins"
-        sub={`Twice a day for the first two weeks, then once a day, then twice a week to day 60, then a weekly one-on-one${remote ? ", by phone, video or text" : ""}. Honest feedback both ways.`}
+        sub={`Twice a day, then once a day, then twice a week, then a weekly one-on-one${remote ? ", by phone, video or text" : ""}. Each step down happens when they're ready, usually around two weeks, four weeks and day 60. Honest feedback both ways.`}
       >
+        {p.nextTaper && (
+          <div className="space-y-1.5 rounded-xl border border-border bg-card px-3 py-2">
+            <p className="text-sm font-medium">
+              Next: {PHASE_LABEL[p.nextTaper.phase].toLowerCase()}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">usual date {when(`${p.nextTaper.suggestedFrom}T12:00:00Z`)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {p.nextTaper.due
+                ? "Past the usual date. Move them down only once they're working on their own; until then the rhythm holds."
+                : "Moves only when you say they're ready, not by the calendar. Until then the rhythm holds."}
+            </p>
+            {noteAndLog("taper", p.nextTaper.phase, "Ready for fewer check-ins")}
+          </div>
+        )}
         {p.checkIns.length === 0 ? (
           <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">No check-in due today.</p>
         ) : (

@@ -8,7 +8,7 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { listRolePermissions } from "@/lib/data/permissions";
 import { tabsAllowedForRoles } from "@/lib/permissions";
 import { refuseInDemo } from "@/lib/demo-mode";
-import type { StepKind } from "@/lib/data/journey";
+import { buddyChoices, type StepKind } from "@/lib/data/journey";
 
 /**
  * Logging a new hire's journey: a check-in held, a review done, a training
@@ -18,7 +18,7 @@ import type { StepKind } from "@/lib/data/journey";
 
 type Result = { ok: true } | { ok: false; message: string };
 
-const KINDS: readonly StepKind[] = ["checkin", "review", "training", "plan", "culture", "connect"];
+const KINDS: readonly StepKind[] = ["checkin", "review", "training", "plan", "culture", "connect", "taper"];
 
 async function trainer() {
   const profile = await getCurrentProfile();
@@ -80,9 +80,18 @@ export async function setJourneyDetails(input: { checklistId: string; buddyName?
   const profile = await trainer();
   if (!profile) return { ok: false, message: "Only someone with the Hiring tab can change this." };
   const patch: Record<string, unknown> = {};
-  if (input.buddyName !== undefined) patch.buddy_name = input.buddyName?.trim().slice(0, 120) || null;
   if (input.ownsChecklists !== undefined) patch.owns_checklists = !!input.ownsChecklists;
   const sb = createAdminClient() as unknown as SupabaseClient;
+  if (input.buddyName !== undefined) {
+    const name = input.buddyName?.trim() || null;
+    if (name) {
+      // A buddy is never their boss: only someone from the team list, which leaves out the owner and account managers.
+      const { data: row } = await sb.from("onboarding_checklists").select("profile_id").eq("organization_id", profile.organization_id).eq("id", input.checklistId).maybeSingle();
+      const allowed = await buddyChoices(profile.organization_id, (row as { profile_id: string | null } | null)?.profile_id ?? null);
+      if (!allowed.includes(name)) return { ok: false, message: "Pick a buddy from the team list. It can't be the owner or an account manager." };
+    }
+    patch.buddy_name = name;
+  }
   const { error } = await sb.from("onboarding_checklists").update(patch).eq("organization_id", profile.organization_id).eq("id", input.checklistId);
   if (error) return { ok: false, message: "Couldn't save that. Try again." };
   revalidatePath(`/admin/hiring/team/${input.checklistId}`);

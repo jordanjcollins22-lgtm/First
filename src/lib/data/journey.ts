@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { businessToday } from "@/lib/data/compliance";
 import { roleDocFor } from "@/lib/hiring/role-docs";
-import { type ReviewDay } from "@/lib/hiring/journey";
+import { PHASES, type ReviewDay, type Taper } from "@/lib/hiring/journey";
+import { hasRole, isOwnerLevel } from "@/lib/roles";
 
 /**
  * A new hire's journey, read from their new-hire checklist and the steps
@@ -12,7 +13,7 @@ import { type ReviewDay } from "@/lib/hiring/journey";
 
 const admin = (): SupabaseClient => createAdminClient() as unknown as SupabaseClient;
 
-export type StepKind = "checkin" | "review" | "training" | "plan" | "culture" | "connect";
+export type StepKind = "checkin" | "review" | "training" | "plan" | "culture" | "connect" | "taper";
 
 export interface StepRow {
   kind: StepKind;
@@ -123,4 +124,35 @@ export async function listNewHires(organizationId: string): Promise<NewHireLine[
     position: c.position,
     startDate: c.start_date,
   }));
+}
+
+/** When each lighter check-in rhythm was started, from the steps logged. */
+export function taperFrom(steps: StepRow[]): Taper {
+  const out: Taper = {};
+  for (const s of steps) {
+    if (s.kind === "taper" && (PHASES as readonly string[]).includes(s.key) && s.key !== "twice_daily") out[s.key as keyof Taper] = s.doneAt.slice(0, 10);
+  }
+  return out;
+}
+
+/**
+ * Who can be a new hire's buddy: anyone on the team except the owner, the
+ * account managers (an affiliate's boss) and the new hire themselves. A buddy
+ * is never their boss.
+ */
+export async function buddyChoices(organizationId: string, exceptProfileId: string | null): Promise<string[]> {
+  const sb = admin();
+  const { data: people } = await sb.from("profiles").select("id, full_name").eq("organization_id", organizationId);
+  const ids = ((people ?? []) as { id: string }[]).map((p) => p.id);
+  const { data: roles } = ids.length ? await sb.from("profile_roles").select("profile_id, role_name").in("profile_id", ids) : { data: [] };
+  const held = new Map<string, string[]>();
+  for (const r of (roles ?? []) as { profile_id: string; role_name: string }[]) held.set(r.profile_id, [...(held.get(r.profile_id) ?? []), r.role_name]);
+  return ((people ?? []) as { id: string; full_name: string | null }[])
+    .filter((p) => p.id !== exceptProfileId && p.full_name?.trim())
+    .filter((p) => {
+      const r = held.get(p.id) ?? [];
+      return !isOwnerLevel(r) && !hasRole(r, "account-manager");
+    })
+    .map((p) => p.full_name!.trim())
+    .sort((a, b) => a.localeCompare(b));
 }

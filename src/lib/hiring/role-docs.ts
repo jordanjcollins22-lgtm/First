@@ -255,7 +255,7 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
       { when: "Week 2", what: "Share your link and answer fresh posts every day on your own. Check in by text or call each morning and evening. Aim: your first estimate booked from your link." },
     ],
     seeTheBusiness: [
-      { key: "estimate", what: "Watch how a free estimate is made from the satellite map, so you know what the people you send will get." },
+      { key: "estimate", what: "Listen in on a paid site visit or estimate call the account manager runs (by phone or video), so you know what the people you send will get." },
       { key: "finished-job", what: "Go through a finished job's before and after photos with a technician, and hear what made it go well." },
       { key: "booked-to-done", what: "Follow one client from booked estimate to finished job in the app." },
     ],

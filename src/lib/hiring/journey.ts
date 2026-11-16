@@ -37,9 +37,9 @@ function isWeekday(iso: string): boolean {
 export type CheckInPhase = "twice_daily" | "daily" | "twice_weekly" | "one_on_one";
 
 export const PHASE_LABEL: Record<CheckInPhase, string> = {
-  twice_daily: "Twice a day (first two weeks)",
-  daily: "Once a day (weeks 3 and 4)",
-  twice_weekly: "Twice a week (to day 60)",
+  twice_daily: "Twice a day",
+  daily: "Once a day",
+  twice_weekly: "Twice a week",
   one_on_one: "Weekly one-on-one",
 };
 
@@ -53,13 +53,43 @@ export function phaseEnds(startDate: string): { twiceDaily: string; daily: strin
   return { twiceDaily, daily, twiceWeekly };
 }
 
-export function phaseOn(startDate: string, date: string): CheckInPhase {
-  const ends = phaseEnds(startDate);
+export const PHASES: readonly CheckInPhase[] = ["twice_daily", "daily", "twice_weekly", "one_on_one"];
+
+/**
+ * When the manager said they were ready for fewer check-ins: the date each
+ * later phase began. Alex tapers on progress, not the calendar, so with this
+ * given a phase only starts once it is marked, and the dates are a suggestion.
+ */
+export type Taper = Partial<Record<Exclude<CheckInPhase, "twice_daily">, string>>;
+
+export function phaseOn(startDate: string, date: string, taper?: Taper): CheckInPhase {
   const d = date.slice(0, 10);
+  if (taper) {
+    let phase: CheckInPhase = "twice_daily";
+    for (const next of PHASES.slice(1) as Exclude<CheckInPhase, "twice_daily">[]) {
+      const from = taper[next];
+      if (!from || from.slice(0, 10) > d) break;
+      phase = next;
+    }
+    return phase;
+  }
+  const ends = phaseEnds(startDate);
   if (d <= ends.twiceDaily) return "twice_daily";
   if (d <= ends.daily) return "daily";
   if (d <= ends.twiceWeekly) return "twice_weekly";
   return "one_on_one";
+}
+
+/** The next, lighter rhythm, and the date the calendar suggests moving to it. Null once at one-on-ones. */
+export function nextTaper(startDate: string, today: string, taper: Taper): { phase: Exclude<CheckInPhase, "twice_daily">; suggestedFrom: string; due: boolean } | null {
+  const now = phaseOn(startDate, today, taper);
+  const i = PHASES.indexOf(now);
+  if (i === PHASES.length - 1) return null;
+  const phase = PHASES[i + 1] as Exclude<CheckInPhase, "twice_daily">;
+  const ends = phaseEnds(startDate);
+  const lastOf = { twice_daily: ends.twiceDaily, daily: ends.daily, twice_weekly: ends.twiceWeekly }[now as "twice_daily" | "daily" | "twice_weekly"];
+  const suggestedFrom = addDays(lastOf, 1);
+  return { phase, suggestedFrom, due: today.slice(0, 10) >= suggestedFrom };
 }
 
 export interface CheckInSlot {
@@ -71,10 +101,10 @@ export interface CheckInSlot {
 }
 
 /** The check-ins due on one date, if any. Weekends have none. */
-export function checkInsOn(startDate: string, date: string): CheckInSlot[] {
+export function checkInsOn(startDate: string, date: string, taper?: Taper): CheckInSlot[] {
   const d = date.slice(0, 10);
   if (d < startDate.slice(0, 10) || !isWeekday(d)) return [];
-  const phase = phaseOn(startDate, d);
+  const phase = phaseOn(startDate, d, taper);
   const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
   if (phase === "twice_daily") {
     return [
@@ -88,9 +118,9 @@ export function checkInsOn(startDate: string, date: string): CheckInSlot[] {
 }
 
 /** Every check-in from the first day through today, oldest first. */
-export function checkInsThrough(startDate: string, today: string): CheckInSlot[] {
+export function checkInsThrough(startDate: string, today: string, taper?: Taper): CheckInSlot[] {
   const out: CheckInSlot[] = [];
-  for (let d = startDate.slice(0, 10); d <= today.slice(0, 10); d = addDays(d, 1)) out.push(...checkInsOn(startDate, d));
+  for (let d = startDate.slice(0, 10); d <= today.slice(0, 10); d = addDays(d, 1)) out.push(...checkInsOn(startDate, d, taper));
   return out;
 }
 
@@ -149,6 +179,8 @@ export interface JourneyState {
   taughtOthers: number;
   /** Marked by the owner when this person writes and keeps up the task checklists. */
   ownsChecklists: boolean;
+  /** When each lighter check-in rhythm was started. Left out, the calendar decides. */
+  taper?: Taper;
 }
 
 export interface FullyOperating {
@@ -160,7 +192,7 @@ export interface FullyOperating {
 /** Reached when check-ins are down to regular one-on-ones, every task is released, and the 30 and 60 day reviews are done. */
 export function fullyOperating(s: JourneyState): FullyOperating {
   const missing: string[] = [];
-  if (phaseOn(s.startDate, s.today) !== "one_on_one") missing.push("Check-ins aren't down to weekly one-on-ones yet");
+  if (phaseOn(s.startDate, s.today, s.taper) !== "one_on_one") missing.push("Check-ins aren't down to weekly one-on-ones yet");
   const released = releasedOn(s.training, s.tasks);
   if (released < s.tasks.length) missing.push(`Released on ${released} of ${s.tasks.length} tasks`);
   for (const day of [30, 60] as const) if (!s.reviewsDone.has(day)) missing.push(`Day ${day} review not done`);

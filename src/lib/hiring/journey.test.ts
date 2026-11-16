@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkInsOn, checkInsThrough, fullyOperating, levelOf, nextTrainingPhase, phaseOn, reviewDates, trainingKey } from "@/lib/hiring/journey";
+import { checkInsOn, checkInsThrough, fullyOperating, levelOf, nextTaper, nextTrainingPhase, phaseOn, reviewDates, trainingKey } from "@/lib/hiring/journey";
 
 // Monday 2026-11-16 as the first day.
 const START = "2026-11-16";
@@ -67,3 +67,31 @@ describe("fully operating and levels", () => {
     expect(levelOf({ tasks, training: allReleased, taughtOthers: 2, ownsChecklists: true })).toBe("leader");
   });
 });
+
+describe("tapering on progress (step 20)", () => {
+  const START = "2026-11-16";
+  it("holds the rhythm past the usual date until the manager marks them ready", () => {
+    expect(phaseOn(START, "2026-12-14", {})).toBe("twice_daily");
+    expect(checkInsOn(START, "2026-12-14", {}).length).toBe(2);
+    const next = nextTaper(START, "2026-12-14", {})!;
+    expect(next.phase).toBe("daily");
+    expect(next.due).toBe(true);
+    expect(next.suggestedFrom).toBe("2026-11-28");
+  });
+
+  it("steps down from the day each one was marked, early or late", () => {
+    const taper = { daily: "2026-11-25", twice_weekly: "2026-12-20" };
+    expect(phaseOn(START, "2026-11-24", taper)).toBe("twice_daily");
+    expect(phaseOn(START, "2026-11-25", taper)).toBe("daily");
+    expect(phaseOn(START, "2027-01-30", taper)).toBe("twice_weekly");
+    expect(nextTaper(START, "2026-11-26", taper)!.phase).toBe("twice_weekly");
+    expect(nextTaper(START, "2027-02-01", { ...taper, one_on_one: "2027-01-31" })).toBeNull();
+  });
+
+  it("isn't fully operating until one-on-ones were marked, whatever the date", () => {
+    const base = { startDate: START, today: "2027-06-01", tasks: [], training: new Set<string>(), reviewsDone: new Set([30, 60] as const), taughtOthers: 0, ownsChecklists: false };
+    expect(fullyOperating({ ...base, taper: {} }).reached).toBe(false);
+    expect(fullyOperating({ ...base, taper: { daily: "2026-12-01", twice_weekly: "2026-12-15", one_on_one: "2027-01-20" } }).reached).toBe(true);
+  });
+});
+

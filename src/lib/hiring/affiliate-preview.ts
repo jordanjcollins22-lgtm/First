@@ -172,13 +172,17 @@ export function sampleJourney(today: string): JourneyView {
   const startDate = daysAgo(today, 34);
   const tasks = (roleDocFor("affiliate")?.tasks ?? []).map((t) => t.key);
   const step = (kind: StepRow["kind"], key: string, date: string, note: string | null = null): StepRow => ({ kind, key, doneAt: at(date), doneByName: "Jordan", note });
+  // Moved to once a day after week 3, and to twice a week on day 29, when the manager said they were ready.
+  const taper = { daily: daysAgo(today, 20), twice_weekly: daysAgo(today, 6) };
   const steps: StepRow[] = [
+    step("taper", "daily", taper.daily, "Answering posts on their own, fewer questions."),
+    step("taper", "twice_weekly", taper.twice_weekly, "First estimate booked from their link."),
     step("plan", "plan", startDate, "Went through the 30-60-90 plan on day one."),
     step("culture", "culture", startDate),
     step("checkin", "fresh-eyes", daysAgo(today, 29), "Wants a short list of what we don't do, so they don't send the wrong jobs."),
     step("connect", "estimate", daysAgo(today, 25), "Watched one made on a call."),
     // Every check-in logged except the last few, so the page shows some to log.
-    ...checkInsThrough(startDate, today)
+    ...checkInsThrough(startDate, today, taper)
       .filter((c) => c.date < daysAgo(today, 3))
       .map((c) => step("checkin", c.key, c.date)),
     ...tasks.slice(0, 2).flatMap((t, i) => [
@@ -195,7 +199,7 @@ export function sampleJourney(today: string): JourneyView {
     position: "affiliate",
     startDate,
     profileId: null,
-    buddyName: "Jordan",
+    buddyName: "Riley Sample",
     ownsChecklists: false,
     today,
     steps,

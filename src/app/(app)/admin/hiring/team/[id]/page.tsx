@@ -4,7 +4,7 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { requireTab } from "@/lib/data/access";
 import { getCurrentProfile } from "@/lib/data/team";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
-import { getJourney } from "@/lib/data/journey";
+import { buddyChoices, getJourney } from "@/lib/data/journey";
 import { journeyProps } from "@/lib/hiring/journey-props";
 import { NewHireJourney } from "@/components/hiring/new-hire-journey";
 
@@ -19,7 +19,7 @@ export default async function NewHirePage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const j = await getJourney(profile.organization_id, id);
   if (!j) notFound();
-  const props = journeyProps(j);
+  const props = journeyProps(j, await buddyChoices(profile.organization_id, j.profileId));
   if (!props) notFound();
   return <NewHireJourney {...props} />;
 }
