@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { APPLICANT_TOKEN, careersOrg } from "@/lib/data/hiring";
-import { positionFor } from "@/lib/hiring/positions";
+import { openPositionFor } from "@/lib/hiring/positions";
 import { cleanAnswers, cleanContact, missing, screen } from "@/lib/hiring/screening";
 import { linkIndeedInvite } from "@/lib/data/indeed-invite";
 import { log, maskEmail } from "@/lib/log";
@@ -39,7 +39,7 @@ export async function applyForPosition(input: {
   /** A field people can't see. Anything in it was filled in by a bot. */
   website?: string;
 }): Promise<ApplyResult> {
-  const position = positionFor(input.position);
+  const position = openPositionFor(input.position);
   if (!position) return { ok: false, error: "That job isn't open." };
   // A bot fills in every box. Told it worked, so it doesn't try again.
   if (input.website) return { ok: true, passed: false };

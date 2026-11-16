@@ -80,6 +80,9 @@ export const STAGES = {
   video_requested: "Waiting for their video",
   video_submitted: "Video to review",
   interview: "Invited to interview",
+  working_interview: "Working interview",
+  owner_talk: "Owner talk",
+  offer_sent: "Offer sent",
   hired: "Hired",
   not_a_fit: "Not a fit",
   withdrawn: "Withdrew",
@@ -91,13 +94,26 @@ export function isStage(value: string): value is Stage {
   return value in STAGES;
 }
 
-/** Where an application can go from where it is. The two ends are the person's call, not the form's. */
+/**
+ * Where an application can go from where it is. The two ends are the person's
+ * call, not the form's. The middle follows the hiring steps: first interview,
+ * a paid half-day working interview, the owner talk, then the offer. An
+ * affiliate never works on a crew, so they can go from the first interview
+ * straight to the owner talk.
+ */
 export function nextStages(stage: Stage): Stage[] {
   switch (stage) {
     case "video_submitted":
       return ["interview", "not_a_fit"];
     case "interview":
-      return ["hired", "not_a_fit"];
+      return ["working_interview", "owner_talk", "not_a_fit", "withdrawn"];
+    case "working_interview":
+      return ["owner_talk", "not_a_fit", "withdrawn"];
+    case "owner_talk":
+      return ["offer_sent", "not_a_fit", "withdrawn"];
+    case "offer_sent":
+      // Their yes is the hire; a no is theirs to give.
+      return ["hired", "withdrawn"];
     case "video_requested":
       return ["not_a_fit", "withdrawn"];
     case "screened_out":

@@ -46,6 +46,12 @@ export interface Position {
   questions: readonly Question[];
   /** What to say in the video, after who they are. */
   videoPrompt: string;
+  /**
+   * Why we're not taking applications for it right now. When set, the job is
+   * off the careers page and its apply form, but past applicants still show on
+   * the hiring board under it.
+   */
+  closed?: string;
 }
 
 const YES = ["yes"] as const;
@@ -104,15 +110,29 @@ const ABOUT: readonly Question[] = [
   },
 ];
 
+/** The crew's share of each job's labor, split among the techs on it. */
+export const CREW_SPLIT = 0.38;
+/** Labor is budgeted at this much per tech-hour. */
+export const LABOR_PER_TECH_HOUR = 95;
+/** A tech never earns less than this an hour, whatever the split comes to: Maryland's minimum wage. */
+export const TECH_FLOOR_PER_HOUR = 15;
+/** What a tech earns an hour when a job comes in on budget: 38% of $95. */
+export const TECH_ON_BUDGET_PER_HOUR = Math.round(CREW_SPLIT * LABOR_PER_TECH_HOUR);
+
 export const POSITIONS: readonly Position[] = [
   {
     key: "project-technician",
     title: "Landscape Project Technician",
     tagline: "Hands-on landscaping work: bed cleanups, mulch, planting, lawn work and installs.",
-    pay: "$20 an hour",
-    commission: "commission on the jobs you complete, coming soon",
+    pay: `$${TECH_FLOOR_PER_HOUR} to $${TECH_ON_BUDGET_PER_HOUR} an hour`,
+    commission: `your crew splits ${Math.round(CREW_SPLIT * 100)}% of the labor on every job you finish. Each tech gets their share or $${TECH_FLOOR_PER_HOUR} an hour, whichever is higher`,
     commissionOnly: false,
-    benefits: ["Paid training", "Performance bonuses"],
+    benefits: [
+      "Paid training",
+      "Performance bonuses",
+      "Your own referral link: 4% of every job you bring in",
+      "Clear levels from ground tech to senior tech who trains others",
+    ],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
       "Clean up beds, pull weeds, edge, and lay mulch and rock",
@@ -183,6 +203,7 @@ export const POSITIONS: readonly Position[] = [
       ...ABOUT,
     ],
     videoPrompt: "A technician on your crew shows up 30 minutes late for the second time this week. Tell us what you do.",
+    closed: "Removed Nov 14, 2026: we no longer have project leads. Senior techs (L4) run the job order on site and train new techs.",
   },
   {
     key: "evaluator",
@@ -227,49 +248,52 @@ export const POSITIONS: readonly Position[] = [
       ...ABOUT,
     ],
     videoPrompt: "Pretend you've just knocked on a homeowner's door for their evaluation. Introduce yourself and the visit, as you would to them.",
+    closed: "Removed Nov 14, 2026: estimates are free satellite breakdowns from Harford County GIS, and paid site visits go to the account manager.",
   },
   {
     key: "account-manager",
     title: "Account Manager",
-    tagline: "Own the client from first visit to finished job: send proposals, follow up and close.",
+    tagline: "Run the location day to day: the team, the schedule and every client, so the work gets done right.",
     pay: null,
-    commission: "7% commission on every job you close",
+    commission: "7% commission on every job your location completes",
     commissionOnly: true,
-    benefits: ["Flexible schedule", "Performance bonuses"],
-    schedule: "Weekdays, mostly from your phone and computer. Some site visits.",
+    benefits: ["Paid training", "Performance bonuses", "Your own referral link: 4% of every job you bring in"],
+    schedule: "Weekdays, from the office, your phone and on site. Longer weeks in busy season.",
     duties: [
-      "Price evaluations and send proposals from our app",
-      "Call and follow up with every client until they decide",
-      "Keep each client updated from signed proposal to finished job",
-      "Approve before and after photos and close out the job",
+      "Approve or edit the replies our AI front desk drafts for clients, crews and new leads",
+      "Run the schedule for every crew and keep jobs on their day",
+      "Handle invoices, estimate requests and paid site visits",
+      "Recruit, onboard and keep the team, and mark the stage steps the system can't check",
+      "Review the location's weekly scorecard with the partner or owner",
     ],
     lookingFor: [
-      "Sales or customer service experience",
-      "Makes the follow-up call every time, and enjoys it",
+      "Customer service, office or crew management experience",
       "Organized: nothing falls through the cracks",
       "Clear, friendly writer for texts and emails",
-      "Commission only: you're paid on the jobs you close, not hours",
+      "Comfortable leading people and having the hard conversation",
+      "Commission only: you earn 7% of every job your location completes, not hours",
     ],
     questions: [
       ...BASICS,
+      ...DRIVING,
       {
         key: "sales",
-        label: "How much sales or customer service experience do you have?",
+        label: "How much customer service, office or management experience do you have?",
         kind: "choice",
         options: ["None", "Less than a year", "1 to 3 years", "More than 3 years"],
       },
-      { key: "calls", label: "Are you comfortable making follow-up phone calls to clients every day?", kind: "yesno", passes: YES, failReason: "Not comfortable making calls" },
+      { key: "calls", label: "Are you comfortable calling and texting clients and crew every day?", kind: "yesno", passes: YES, failReason: "Not comfortable calling clients and crew" },
+      { key: "computer", label: "Are you comfortable working in an app and on a computer much of the day?", kind: "yesno", passes: YES, failReason: "Not comfortable with computer work" },
       {
         key: "commission_ok",
-        label: "This is commission only: 7% of every job you close, with no hourly pay. Is that OK with you?",
+        label: "This is commission only: 7% of every job your location completes, with no hourly pay. Is that OK with you?",
         kind: "yesno",
         passes: YES,
         failReason: "Doesn't want commission-only pay",
       },
-      { key: "computer", label: "Are you comfortable working in an app and on a computer all day?", kind: "yesno", passes: YES, failReason: "Not comfortable with computer work" },
       ...ABOUT,
     ],
-    videoPrompt: "Pretend you're calling a homeowner who got their proposal three days ago and hasn't answered. Leave us that voicemail.",
+    videoPrompt: "A client texts that the crew left a mess and they're upset. Tell us what you'd do in the next hour, start to finish.",
   },
   {
     key: "affiliate",
@@ -310,4 +334,13 @@ export const POSITIONS: readonly Position[] = [
 
 export function positionFor(key: string): Position | null {
   return POSITIONS.find((p) => p.key === key) ?? null;
+}
+
+/** The jobs we're taking applications for: what the careers page lists and the apply form accepts. */
+export const OPEN_POSITIONS: readonly Position[] = POSITIONS.filter((p) => !p.closed);
+
+/** A job someone can apply for now, or null when it's unknown or closed. */
+export function openPositionFor(key: string): Position | null {
+  const p = positionFor(key);
+  return p && !p.closed ? p : null;
 }

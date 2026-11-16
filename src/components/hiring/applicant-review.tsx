@@ -20,7 +20,10 @@ const EMAIL_FOR: Partial<Record<Stage, { kind: ApplicantEmailKind; label: string
 };
 
 const QUIET_LABEL: Partial<Record<Stage, string>> = {
-  hired: "Mark hired",
+  working_interview: "Book the paid working interview",
+  owner_talk: "On to the owner talk",
+  offer_sent: "Offer sent",
+  hired: "They accepted: mark hired",
   withdrawn: "They withdrew",
   not_a_fit: "Not a fit, without emailing",
   video_requested: "Allow a video, without emailing",

@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-import { POSITIONS } from "@/lib/hiring/positions";
+import { OPEN_POSITIONS } from "@/lib/hiring/positions";
 import { careersHref } from "@/lib/hiring/links";
 
 /** Every open job. Kept apart from the loading so it can be previewed. */
@@ -23,7 +23,7 @@ export function CareersList({ orgName, keep }: { orgName: string; keep: { org: s
         phone, then meet you in person.
       </p>
       <ul className="flex flex-col gap-3">
-        {POSITIONS.map((p) => (
+        {OPEN_POSITIONS.map((p) => (
           <li key={p.key}>
             <Link
               href={careersHref(`/careers/${p.key}`, keep)}
