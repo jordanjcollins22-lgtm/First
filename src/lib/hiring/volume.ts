@@ -1,6 +1,7 @@
 /**
  * Step 0.11 of the hiring structure: frontline hiring is a numbers game.
- * Alex Hormozi needed about 40 interviews for one frontline hire. Working
+ * At least 40 interviews for every hire, in every job (Alex Hormozi's number,
+ * a minimum, never a cap). Working
  * back from that with our own steps (application, video, interview) gives
  * how many applications to aim for before posting.
  *

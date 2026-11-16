@@ -295,18 +295,19 @@ function NewHires({ hires }: { hires: NewHireLine[] | null }) {
 function Volume({ stages }: { stages: string[] }) {
   const target = targetFor(1);
   const now = countFunnel(stages);
-  const rows: { label: string; aim: number; have: number }[] = [
-    { label: "Applications", aim: target.applications, have: now.applications },
-    { label: "Videos", aim: target.videos, have: now.videos },
-    { label: "Interviews", aim: target.interviews, have: now.interviews },
-    { label: "Hires", aim: target.hires, have: now.hires },
+  const rows: { label: string; aim: string; have: number }[] = [
+    { label: "Applications", aim: `at least ${target.applications}`, have: now.applications },
+    { label: "Videos", aim: `at least ${target.videos}`, have: now.videos },
+    { label: "Interviews", aim: `at least ${target.interviews}`, have: now.interviews },
+    { label: "Hires", aim: String(target.hires), have: now.hires },
   ];
   return (
     <section className="space-y-2">
       <h2 className="text-base font-semibold">How many applicants one hire takes</h2>
       <p className="text-sm text-muted-foreground">
-        Alex Hormozi needed about {INTERVIEWS_PER_HIRE} interviews for one frontline hire. Working back through our steps, aim for this many before you
-        expect a hire. The rates are first guesses and get better as real applicants come in.
+        At least {INTERVIEWS_PER_HIRE} interviews for every hire, in every job, affiliates included. That&apos;s Alex Hormozi&apos;s number and it&apos;s a
+        minimum, not a cap: keep going until you find the right person. Working back through our steps gives the applications and videos it takes.
+        Those rates are first guesses and get better as real applicants come in.
       </p>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {rows.map((r) => (
