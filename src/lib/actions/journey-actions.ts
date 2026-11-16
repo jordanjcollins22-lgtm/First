@@ -12,7 +12,7 @@ import { buddyChoices, type StepKind } from "@/lib/data/journey";
 
 /**
  * Logging a new hire's journey: a check-in held, a review done, a training
- * phase signed off, the plan and culture gone through, their buddy. Anyone
+ * phase signed off, the plan and culture gone through, their technician. Anyone
  * with the Hiring tab can log; the person who logs it is recorded.
  */
 
@@ -85,10 +85,10 @@ export async function setJourneyDetails(input: { checklistId: string; buddyName?
   if (input.buddyName !== undefined) {
     const name = input.buddyName?.trim() || null;
     if (name) {
-      // A buddy is never their boss: only someone from the team list, which leaves out the owner and account managers.
+      // Their technician is never their boss: only a technician from the team list, never the owner or an account manager.
       const { data: row } = await sb.from("onboarding_checklists").select("profile_id").eq("organization_id", profile.organization_id).eq("id", input.checklistId).maybeSingle();
       const allowed = await buddyChoices(profile.organization_id, (row as { profile_id: string | null } | null)?.profile_id ?? null);
-      if (!allowed.includes(name)) return { ok: false, message: "Pick a buddy from the team list. It can't be the owner or an account manager." };
+      if (!allowed.includes(name)) return { ok: false, message: "Pick a technician from the team list. It can't be the owner or an account manager." };
     }
     patch.buddy_name = name;
   }

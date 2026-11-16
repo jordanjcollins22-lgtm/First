@@ -23,7 +23,7 @@ import type { StepRow } from "@/lib/data/journey";
 
 /**
  * One new hire, from day one to fully operating: the plan and culture gone
- * through, their buddy, today's check-ins, training sign-offs task by task,
+ * through, their technician, today's check-ins, training sign-offs task by task,
  * the 30-60-90 reviews, and where they are on Alex's three levels.
  */
 
@@ -44,7 +44,7 @@ export interface JourneyProps {
   level: Level;
   /** The next, lighter check-in rhythm and when the calendar suggests it. Null at one-on-ones. */
   nextTaper: { phase: CheckInPhase; suggestedFrom: string; due: boolean } | null;
-  /** Who can be their buddy: the team, less the owner, account managers and themselves. */
+  /** Who can be their technician: technicians on the team, never the owner, an account manager or themselves. */
   buddyOptions: string[];
 }
 
@@ -180,18 +180,18 @@ export function NewHireJourney(p: JourneyProps) {
       </Section>
 
       <Section
-        title="Their buddy"
-        sub={`Someone to ask anything who isn't their boss${remote ? " or their account manager" : ""}: usually someone in the same job a few months ahead.`}
+        title="Their technician"
+        sub="A technician they can ask anything, who is never their boss: not the owner and not an account manager."
       >
         <div className="flex flex-wrap items-center gap-2">
           <select
             id="buddy"
-            aria-label="Buddy"
+            aria-label="Their technician"
             className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm"
             value={buddy}
             onChange={(e) => setBuddy(e.target.value)}
           >
-            <option value="">Pick from the team</option>
+            <option value="">Pick their technician</option>
             {[...(p.buddyName && !p.buddyOptions.includes(p.buddyName) ? [p.buddyName] : []), ...p.buddyOptions].map((n) => (
               <option key={n} value={n}>
                 {n}

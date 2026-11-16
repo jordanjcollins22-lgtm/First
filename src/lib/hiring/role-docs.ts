@@ -247,10 +247,10 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
     ],
     remote: true,
     firstTwoWeeks: [
-      { when: "Day 1", what: "Video call with the owner: get your link, a tour of the app, your 30-60-90 plan and our values. Meet your buddy." },
+      { when: "Day 1", what: "Video call with the owner: get your link, a tour of the app, your 30-60-90 plan and our values. Meet your technician." },
       { when: "Day 2", what: "Learn what we do: go through our services and our before and after photos, so you can tell people what we do." },
-      { when: "Day 3", what: "Send us someone you know, on a call with your buddy (the first task checklist)." },
-      { when: "Day 4", what: "Answer your first posts online with the ready-made replies, with your buddy watching on a screen share." },
+      { when: "Day 3", what: "Send us someone you know, on a call with your technician (the first task checklist)." },
+      { when: "Day 4", what: "Answer your first posts online with the ready-made replies, with your technician watching on a screen share." },
       { when: "Day 5", what: "Fresh-eyes call: what confused you this week, and what would you fix?" },
       { when: "Week 2", what: "Share your link and answer fresh posts every day on your own. Check in by text or call each morning and evening. Aim: your first estimate booked from your link." },
     ],

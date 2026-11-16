@@ -262,7 +262,7 @@ function NewHires({ hires }: { hires: NewHireLine[] | null }) {
     <section id="new-hires" className="space-y-2">
       <h2 className="text-base font-semibold">New hires</h2>
       <p className="text-sm text-muted-foreground">
-        Their 30-60-90 plan, buddy, check-ins, training sign-offs, reviews, and when they&apos;re fully operating.
+        Their 30-60-90 plan, their technician, check-ins, training sign-offs, reviews, and when they&apos;re fully operating.
       </p>
       {hires === null ? (
         <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Couldn&apos;t load new hires just now. Reload the page.</p>

@@ -136,8 +136,9 @@ export function taperFrom(steps: StepRow[]): Taper {
 }
 
 /**
- * Who can be a new hire's buddy: anyone on the team except the owner, the
- * account managers (an affiliate's boss) and the new hire themselves. A buddy
+ * Who can be a new hire's technician (step 13, connection): technicians on
+ * the team, never the owner, an account manager (an affiliate's boss) or
+ * the new hire themselves. Their technician
  * is never their boss.
  */
 export async function buddyChoices(organizationId: string, exceptProfileId: string | null): Promise<string[]> {
@@ -151,7 +152,7 @@ export async function buddyChoices(organizationId: string, exceptProfileId: stri
     .filter((p) => p.id !== exceptProfileId && p.full_name?.trim())
     .filter((p) => {
       const r = held.get(p.id) ?? [];
-      return !isOwnerLevel(r) && !hasRole(r, "account-manager");
+      return hasRole(r, "project-technician") && !isOwnerLevel(r) && !hasRole(r, "account-manager");
     })
     .map((p) => p.full_name!.trim())
     .sort((a, b) => a.localeCompare(b));
