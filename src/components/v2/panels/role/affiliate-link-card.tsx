@@ -32,7 +32,7 @@ export function AffiliateLinkCard({ link, qrSvg }: { link: string | null; qrSvg:
     if (!link) return;
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
-        await navigator.share({ title: "Free yard evaluation", text: "Book a free yard evaluation here:", url: link });
+        await navigator.share({ title: "Yard estimate", text: "Here's my link to get a yard estimate set up:", url: link });
       } catch {
         // Backing out of the share sheet is not an error.
       }

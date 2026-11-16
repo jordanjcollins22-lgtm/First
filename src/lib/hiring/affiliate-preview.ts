@@ -4,6 +4,7 @@ import { applicantEmail, welcomeEmail } from "@/lib/hiring/emails";
 import { positionFor } from "@/lib/hiring/positions";
 import { checkInsThrough, trainingKey } from "@/lib/hiring/journey";
 import { roleDocFor } from "@/lib/hiring/role-docs";
+import type { ReferralRow } from "@/lib/data/referrals";
 
 /**
  * Sample people for the no-login affiliate preview (/review/hiring/affiliate):
@@ -106,7 +107,22 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     ],
     what: "One new affiliate from day one: plan and culture gone through, their connection (another affiliate), recorded check-ins and reviews, training sign-offs, every email with them, fully operating and level.",
   },
+  {
+    key: "app",
+    title: "Their app: send your link to someone",
+    steps: [{ id: "15", name: "Send us someone you know" }],
+    what: "The top of an affiliate's app: who it's for and how they know them, then a message ready to copy with their own tracked link, and who opened it.",
+  },
 ];
+
+/** Who a sample affiliate sent their link to. */
+export function sampleReferrals(today: string): ReferralRow[] {
+  return [
+    { name: "Pat Neighbor", affiliation: "Neighbor", sentAt: at(today, "13:00:00"), clicks: 0 },
+    { name: "Jamie Friend", affiliation: "Friend", sentAt: at(daysAgo(today, 1)), clicks: 2 },
+    { name: "Alex Coworker", affiliation: "Coworker", sentAt: at(daysAgo(today, 3)), clicks: 1 },
+  ];
+}
 
 export function previewPage(key: string): PreviewPage | null {
   return AFFILIATE_PREVIEW_PAGES.find((p) => p.key === key) ?? null;

@@ -2,7 +2,7 @@ import type { Tour } from "@/lib/tutorials/types";
 
 /**
  * The first-open tutorial for the affiliate role (a "commenter" too): answer
- * a post, share the link, see what came of it and what it paid. Each step
+ * send the link to someone, answer a post, see what came of it and what it paid. Each step
  * points at the affiliate home screen (affiliate-home.tsx) or the comment
  * card inside it (comment-card.tsx: "card", "found").
  */
@@ -12,7 +12,12 @@ export const affiliateTour: Tour = {
   steps: [
     {
       title: "Your day, on one screen",
-      body: "Answer neighbors asking for yard work, share your own link, and see what you earn. Tap Help any time to see this again.",
+      body: "Send your link to people you know, answer neighbors asking for yard work, and see what you earn. Tap Help any time to see this again.",
+    },
+    {
+      title: "Send your link to someone",
+      target: "affiliate-link",
+      body: "Type who you're sending it to and pick how you know them. You get a message with your own link in it: tap Copy and send it. You'll see when they open it.",
     },
     {
       title: "Answer a post",
@@ -28,11 +33,6 @@ export const affiliateTour: Tour = {
       title: "Found one yourself?",
       target: "found",
       body: "Saw a post asking for yard work? Paste its link under Found a post. It comes to you next, with a reply written.",
-    },
-    {
-      title: "Share your link",
-      target: "affiliate-link",
-      body: "Your own booking link. Copy it, share it, or show the QR code. Anyone who books through it is credited to you.",
     },
     {
       title: "See what came of it",

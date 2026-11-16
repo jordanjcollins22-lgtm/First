@@ -264,9 +264,9 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
         key: "share-link",
         title: "Send us someone you know",
         steps: [
-          "Copy your own link from the app",
-          "Text or message it to the person, with a line about what they need",
-          "Tell them we'll reach out to set up their estimate, and we take it from there",
+          "At the top of your app, type who you're sending it to",
+          "Pick how you know them",
+          "Tap Copy and send them the message",
           "Check in the app that they clicked",
         ],
       },
@@ -293,7 +293,7 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
       {
         key: "follow-up",
         title: "Follow the people you sent",
-        steps: ["Open Your answered posts", "See each one's status, from No clicks yet to Closed", "Follow up kindly with anyone who clicked but hasn't booked an estimate"],
+        steps: ["Open People you sent it to, and Your answered posts", "See who opened your link, and each post's status from No clicks yet to Closed", "Follow up kindly with anyone who opened it but hasn't booked an estimate"],
       },
     ],
   },

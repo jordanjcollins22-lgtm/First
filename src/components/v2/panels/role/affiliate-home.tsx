@@ -3,6 +3,9 @@ import { after } from "next/server";
 import { CommentCard } from "@/components/marketing/comment-card";
 import { RecentAnswers } from "@/components/marketing/recent-answers";
 import { AffiliateLinkCard } from "@/components/v2/panels/role/affiliate-link-card";
+import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
+import { ReferralList } from "@/components/v2/panels/role/referral-list";
+import { myReferrals } from "@/lib/data/referrals";
 import { affiliateMoney, affiliateResults, privateBoard } from "@/lib/affiliate-home";
 import { outboundBaseUrl } from "@/lib/base-url";
 import type { BroughtInRow } from "@/lib/brought-in";
@@ -22,10 +25,13 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigi
  * The affiliate's home screen in the new layout: their whole day on one
  * phone screen, top to bottom in the order they do it.
  *
- * 1. Posts to answer: the next neighbor asking for yard work, with a reply
+ * 1. Send your link to someone: who it's for and how they know them, then a
+ *    message ready to copy with its own tracked link, and whether each
+ *    person they sent it to opened it. Their plain link and QR code sit
+ *    underneath.
+ * 2. Posts to answer: the next neighbor asking for yard work, with a reply
  *    written for them carrying their own tracked link. "Copy & go to post"
  *    copies it, opens the post and marks it posted.
- * 2. Their booking link: copy, share, or a QR code to scan.
  * 3. What came of it: clicks, bookings, and each project they brought in.
  * 4. Their money: earned, paid, and still owed.
  *
@@ -40,7 +46,7 @@ export async function AffiliateHomePanel() {
   const now = new Date();
   const baseUrl = await outboundBaseUrl().catch(() => "");
 
-  const [posts, today, projects, clickCounts, link, commission] = await Promise.all([
+  const [posts, today, projects, clickCounts, link, commission, sent] = await Promise.all([
     getCurrentOrganization()
       .then((o) => getPostBoard(org, profile.id, now, { roles: profile.roles, businessName: o.name }))
       .catch((err) => {
@@ -55,6 +61,7 @@ export async function AffiliateHomePanel() {
       console.error("Affiliate home: commission failed to load:", err);
       return null;
     }),
+    myReferrals(org, profile.id),
   ]);
   const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
   // As Posts to Answer does: anything the finder brought in that is not
@@ -67,8 +74,24 @@ export async function AffiliateHomePanel() {
 
   return (
     <div className="mx-auto grid w-full max-w-md gap-5">
+      <section data-tour="affiliate-link" aria-labelledby="aff-link">
+        <Heading id="aff-link" step={1} title="Send your link to someone" sub="Say who it's for and how you know them. You get a message to copy and send, with your own link in it." />
+        <Card>
+          <ReferralMessageCard />
+        </Card>
+        <div className="mt-3 grid gap-3">
+          <ReferralList rows={sent} />
+          <details className="rounded-2xl border bg-card p-4 text-sm">
+            <summary className="cursor-pointer font-medium">Just your link, or a QR code</summary>
+            <div className="mt-3">
+              <AffiliateLinkCard link={link} qrSvg={qr} />
+            </div>
+          </details>
+        </div>
+      </section>
+
       <section data-tour="affiliate-posts" aria-labelledby="aff-posts">
-        <Heading id="aff-posts" step={1} title="Answer a post" sub="Neighbors asking for yard work. Use the reply, copy it, paste it under their post." />
+        <Heading id="aff-posts" step={2} title="Answer a post" sub="Neighbors asking for yard work. Use the reply, copy it, paste it under their post." />
         {board ? (
           <div className="grid gap-4">
             <CommentCard posts={board} pinned={null} answeredToday={today} />
@@ -77,13 +100,6 @@ export async function AffiliateHomePanel() {
         ) : (
           <Card>The posts couldn&apos;t load just now. Reload the page.</Card>
         )}
-      </section>
-
-      <section data-tour="affiliate-link" aria-labelledby="aff-link">
-        <Heading id="aff-link" step={2} title="Share your link" sub="Your own booking link. Anyone who books through it is yours." />
-        <Card>
-          <AffiliateLinkCard link={link} qrSvg={qr} />
-        </Card>
       </section>
 
       <section data-tour="affiliate-results" aria-labelledby="aff-results">

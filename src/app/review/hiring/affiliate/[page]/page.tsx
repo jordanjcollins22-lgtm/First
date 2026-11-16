@@ -12,7 +12,11 @@ import { applicantEmail, welcomeEmail } from "@/lib/hiring/emails";
 import { journeyProps } from "@/lib/hiring/journey-props";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
-import { previewPage, sampleApplicant, sampleApplicants, sampleJourney, sampleNewHires } from "@/lib/hiring/affiliate-preview";
+import { previewPage, sampleApplicant, sampleApplicants, sampleJourney, sampleNewHires, sampleReferrals } from "@/lib/hiring/affiliate-preview";
+import { referralMessage } from "@/lib/referral-message";
+import { trackedLink } from "@/lib/outreach-links";
+import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
+import { ReferralList } from "@/components/v2/panels/role/referral-list";
 import { RoleDocView } from "@/components/hiring/role-doc-view";
 import { PositionView } from "@/components/hiring/position-view";
 import { HiringBoard } from "@/components/hiring/hiring-board";
@@ -115,6 +119,31 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
       <Inert>
         <NewHireJourney {...props} />
       </Inert>
+    );
+  } else if (key === "app") {
+    const link = trackedLink(await outboundBaseUrl(), "k7m2qx9");
+    const message = referralMessage({ name: "Pat Neighbor", affiliation: "neighbor", link, business: BUSINESS, from: "Morgan Sample" });
+    body = (
+      <main className="mx-auto grid w-full max-w-md gap-4 px-4 py-6">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Top of the affiliate&apos;s app</p>
+          <h1 className="text-lg font-extrabold leading-tight">1. Send your link to someone</h1>
+          <p className="text-sm text-muted-foreground">Say who it&apos;s for and how you know them. You get a message to copy and send, with your own link in it.</p>
+        </div>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">They fill it in</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <ReferralMessageCard sample={{ name: "Pat Neighbor", affiliation: "neighbor" }} />
+          </div>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">They tap Get my message</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <ReferralMessageCard sample={{ name: "Pat Neighbor", affiliation: "neighbor", message }} />
+          </div>
+        </Inert>
+        <ReferralList rows={sampleReferrals(today)} />
+      </main>
     );
   } else {
     notFound();
