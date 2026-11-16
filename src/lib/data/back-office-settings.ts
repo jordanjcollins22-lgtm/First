@@ -34,7 +34,8 @@ export const SETTINGS_DEFAULTS: BackOfficeSettings = {
   commissionAccrualOn: false,
   commissionAccrualStartedAt: null,
   defaultAccountManagerPct: 7,
-  defaultEvaluatorPct: 4,
+  // Off for now with the evaluator's share; see EVALUATOR_SHARE_PCT.
+  defaultEvaluatorPct: 0,
   defaultAffiliatePct: 4,
   holdbackOn: false,
   holdbackCollectPct: 50,

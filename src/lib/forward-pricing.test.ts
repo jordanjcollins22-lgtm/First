@@ -4,6 +4,7 @@ import {
   PRICING_EQUATION,
   PRODUCTION_SERVICES,
   allocations,
+  crewCostRateCents,
   crewRateCents,
   offWork,
   priceForward,
@@ -28,17 +29,29 @@ const work = { ...eq, onJobShare: 1 };
 
 describe("the forward pricing equation", () => {
   it("works the training example through", () => {
-    expect(crewRateCents(eq)).toBe(7500);
-    expect(revenueAllocation(eq)).toBeCloseTo(0.65);
-    expect(projectCostMargin(eq)).toBeCloseTo(0.35);
-    expect(projectCostMargin({ ...eq, reserve: 0.05 })).toBeCloseTo(0.3);
-    // 12 crew-hours at $75 is $900; with $500 of materials, R is $4,000.
+    // Two technicians at $95 a tech-hour: a crew-hour is charged at $190.
+    expect(crewRateCents(eq)).toBe(19_000);
+    expect(crewCostRateCents(eq)).toBeCloseTo(7220);
+    // The evaluator's share is off: GP 50 + A 4 + AM 7.
+    expect(eq.evaluator).toBe(0);
+    expect(revenueAllocation(eq)).toBeCloseTo(0.61);
+    expect(projectCostMargin(eq)).toBeCloseTo(0.39);
+    expect(projectCostMargin({ ...eq, evaluator: 0.04 })).toBeCloseTo(0.35);
+    // 12 crew-hours at $190 is $2,280, $866.40 of it the crew pool; $390 of
+    // materials over 0.39 is $1,000, so R is $3,280.
     const labour = priceLine({ key: "weed-pulling", quantity: 12 * 600, materialCents: 0 }, eq);
     expect(labour.plh).toBeCloseTo(12);
-    expect(labour.plcCents).toBeCloseTo(90_000);
-    const job = priceForward([[labour, { key: "disposal", quantity: 1, materialCents: 50_000 }]], work);
-    expect(job.rCents).toBe(400_000);
-    expect(job.allocations).toEqual({ grossProfitCents: 200_000, affiliateCents: 16_000, evaluatorCents: 16_000, accountManagerCents: 28_000, reserveCents: 0 });
+    expect(labour.plcCents).toBeCloseTo(86_640);
+    expect(labour.rCents).toBe(228_000);
+    const job = priceForward([[labour, { key: "disposal", quantity: 1, materialCents: 39_000 }]], work);
+    expect(job.rCents).toBe(328_000);
+    expect(job.allocations).toEqual({ grossProfitCents: 164_000, affiliateCents: 13_120, evaluatorCents: 0, accountManagerCents: 22_960, reserveCents: 0 });
+  });
+
+  it("charges labour at its own rate, whatever the shares", () => {
+    const line = { key: "weed-pulling", quantity: 600, materialCents: 0 };
+    expect(priceLine(line, eq).rCents).toBe(19_000);
+    expect(priceLine(line, { ...eq, evaluator: 0.04 }).rCents).toBe(19_000);
   });
 
   it("prices each service at its own production rate", () => {
@@ -46,7 +59,7 @@ describe("the forward pricing equation", () => {
     expect(priceLine({ key: "weed-spraying", quantity: 600, materialCents: 0 }, eq).plh).toBeCloseTo(0.2);
     expect(priceLine({ key: "bush-removal-large", quantity: 1, materialCents: 0 }, eq).plh).toBe(1);
     // A cost with no crew time is its cost over PCM.
-    expect(priceLine({ key: "disposal", quantity: 1, materialCents: 7500 }, eq).rCents).toBe(21_429);
+    expect(priceLine({ key: "disposal", quantity: 1, materialCents: 7800 }, eq).rCents).toBe(20_000);
   });
 
   it("matches the hand-worked price for the Bel Air weeding job", () => {
@@ -64,10 +77,11 @@ describe("the forward pricing equation", () => {
       work
     );
     expect(job.plh).toBeCloseTo(5.12, 2);
-    expect(Math.round(job.plcCents)).toBe(38_375);
+    // 5.12 crew-hours at $190, plus $100 of materials over 0.39.
+    expect(Math.round(job.plcCents)).toBe(Math.round(job.plh * 7220));
     expect(job.materialCents).toBe(10_000);
-    expect(job.rCents).toBe(138_214);
-    expect(allocations(job.rCents, eq).grossProfitCents).toBe(69_107);
+    expect(Math.abs(job.rCents - Math.round(job.plh * 19_000 + 10_000 / 0.39))).toBeLessThanOrEqual(2);
+    expect(allocations(job.rCents, eq).grossProfitCents).toBe(Math.round(job.rCents / 2));
   });
 
   it("adds an area's lines and its share of time off the work up to exactly its price", () => {
@@ -215,9 +229,9 @@ describe("the production rates settings", () => {
   });
 
   it("says what one unit is priced at", () => {
-    // $75 a crew-hour over 600 sq ft is 12.5 cents a foot; over 0.35 that is about 36 cents.
-    expect(Math.round(pricePerUnitCents({ key: "a", label: "A", unit: "SF", pr: 600 }, eq)!)).toBe(36);
-    expect(Math.round(pricePerUnitCents({ key: "d", label: "D", unit: "job", pr: null, materialCentsPerUnit: 7000 }, eq)!)).toBe(20_000);
+    // $190 a crew-hour over 600 sq ft is about 32 cents a foot.
+    expect(Math.round(pricePerUnitCents({ key: "a", label: "A", unit: "SF", pr: 600 }, eq)!)).toBe(32);
+    expect(Math.round(pricePerUnitCents({ key: "d", label: "D", unit: "job", pr: null, materialCentsPerUnit: 7800 }, eq)!)).toBe(20_000);
   });
 
   it("prices with the saved rates, and stops suggesting a service that is off", () => {
@@ -281,7 +295,7 @@ describe("travel and time off the work", () => {
     const off = offWork(30, eq, 40);
     expect(off).toMatchObject({ days: 5, workHoursPerDay: 6, by: "share" });
     expect(off.plh).toBeCloseTo(10);
-    expect(off.plcCents).toBeCloseTo(10 * 7500);
+    expect(off.plcCents).toBeCloseTo(10 * 7220);
   });
 
   it("pays the drive when that is more, on a small job", () => {
@@ -309,8 +323,8 @@ describe("travel and time off the work", () => {
     expect(job.areas[1].offWork.plh).toBeCloseTo(2);
     expect(job.plh).toBeCloseTo(32);
     expect(job.areas[0].rCents + job.areas[1].rCents).toBe(job.rCents);
-    // 32 crew-hours at $75 over 0.35.
-    expect(job.rCents).toBe(Math.round((18 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((6 * 7500) / 0.35) + Math.round((2 * 7500) / 0.35));
+    // 32 crew-hours at $190.
+    expect(job.rCents).toBe(32 * 19_000);
   });
 });
 

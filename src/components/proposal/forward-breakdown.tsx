@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, ChevronLeft, ChevronRight, ExternalLink, Images, Plus, X } from "lucide-react";
 
 import {
+  crewCostRateCents,
   crewRateCents,
   priceForward,
   productionService,
@@ -730,13 +731,20 @@ function offWorkWhy(off: PricedJob["offWork"]): string {
 
 function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
   const al = job.allocations;
-  const shares: { label: string; cents: number }[] = [
-    { label: `Cost (M + PLC), ${pct(projectCostMargin(eq))}`, cents: Math.round(job.costCents) },
+  const set: { label: string; cents: number }[] = [
     { label: `Gross profit, ${pct(eq.grossProfit)}`, cents: al.grossProfitCents },
     { label: `Account manager, ${pct(eq.accountManager)}`, cents: al.accountManagerCents },
     { label: `Affiliate, ${pct(eq.affiliate)}`, cents: al.affiliateCents },
-    { label: `Evaluator, ${pct(eq.evaluator)}`, cents: al.evaluatorCents },
+    ...(eq.evaluator > 0 ? [{ label: `Evaluator, ${pct(eq.evaluator)}`, cents: al.evaluatorCents }] : []),
     ...(eq.reserve > 0 ? [{ label: `Goal reserve, ${pct(eq.reserve)}`, cents: al.reserveCents }] : []),
+  ];
+  const cost = Math.round(job.costCents);
+  // Labour is charged at its own rate, so the cost and the shares don't add up to the price exactly; the rest stays with the business.
+  const rest = job.rCents - cost - set.reduce((sum, x) => sum + x.cents, 0);
+  const shares: { label: string; cents: number }[] = [
+    { label: `Cost (M + PLC), crew pool ${pct(eq.crewPoolShare)} of labour`, cents: cost },
+    ...set,
+    { label: "Left over, kept by the business", cents: rest },
   ];
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -751,7 +759,8 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
               job.offWork.days > 0 ? `${job.offWork.days} (${qty(job.offWork.workHoursPerDay)} hrs of work a day)` : "—",
             ],
             ["Projected crew-hours paid (PLH)", job.plh.toFixed(2)],
-            [`Projected labour cost (PLC), at ${money(crewRateCents(eq))}/hr`, money(Math.round(job.plcCents))],
+            [`Labour charged, at ${money(crewRateCents(eq))}/crew-hr`, money(Math.round(job.plh * crewRateCents(eq)))],
+            [`Projected labour cost (PLC), the crew pool at ${money(Math.round(crewCostRateCents(eq)))}/hr`, money(Math.round(job.plcCents))],
             ["Materials and direct costs (M)", money(job.materialCents)],
             ["Cost (M + PLC)", money(Math.round(job.costCents))],
           ].map(([k, v]) => (
@@ -761,7 +770,7 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
             </div>
           ))}
           <div className="flex justify-between gap-3 bg-primary/5 px-3 py-2 font-bold">
-            <dt>Price, R = (M + PLC) ÷ {projectCostMargin(eq).toFixed(2)}</dt>
+            <dt>Price, R = PLH × {money(crewRateCents(eq))} + M ÷ {projectCostMargin(eq).toFixed(2)}</dt>
             <dd className="tabular-nums">{money(job.rCents)}</dd>
           </div>
         </dl>
@@ -778,7 +787,8 @@ function JobTotals({ job, eq }: { job: PricedJob; eq: PricingEquation }) {
         </dl>
       </div>
       <p className="text-xs text-muted-foreground md:col-span-2">
-        CR = {eq.leads} lead × {money(eq.leadRateCents)} + {eq.technicians} technician × {money(eq.technicianRateCents)} = {money(crewRateCents(eq))}/hr · RA ={" "}
+        CR = {eq.leads} lead × {money(eq.leadRateCents)} + {eq.technicians} technician × {money(eq.technicianRateCents)} = {money(crewRateCents(eq))}/hr charged, crew pool{" "}
+        {pct(eq.crewPoolShare)} · RA ={" "}
         {pct(revenueAllocation(eq))} · PCM = {projectCostMargin(eq).toFixed(2)}. Each service has its own production rate (PR). A {qty(eq.workdayHours)}-hour day is {pct(eq.onJobShare)}{" "}
         working at the job; the rest of the day (the drive, loading, the dump, breaks) is paid too, so it is priced in: the larger of that share and the actual drive
         there and back each day.

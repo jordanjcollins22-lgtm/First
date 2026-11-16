@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { saveProductionPricing } from "@/lib/actions/production-pricing-actions";
 import {
   PRODUCTION_UNITS,
+  crewCostRateCents,
   crewRateCents,
   pricePerUnitCents,
   projectCostMargin,
@@ -116,8 +117,8 @@ export function ProductionRatesForm({
       <header>
         <h1 className="text-xl font-semibold">Production rates</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every price is worked out from these. Each service&apos;s hours are its quantity over its production rate, and the crew&apos;s pay makes those hours a cost. The price is
-          that cost and the materials, divided by what is left once the shares are set aside: R = (M + PLC) ÷ PCM.
+          Every price is worked out from these. Each service&apos;s hours are its quantity over its production rate, and those hours are charged at the crew rate. Materials are
+          divided by what is left once the shares are set aside: R = PLH × CR + M ÷ PCM.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           {saved && savedAt ? `Last saved ${new Date(savedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}.` : "These are the starting figures. Nothing has been saved yet."}{" "}
@@ -136,7 +137,7 @@ export function ProductionRatesForm({
       <section className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4">
         <div>
           <h2 className="text-base font-semibold">The crew</h2>
-          <p className="text-sm text-muted-foreground">Who is on a crew and what each is paid an hour. Together they make the crew rate, CR.</p>
+          <p className="text-sm text-muted-foreground">Who is budgeted on every project and what an hour of each one&apos;s time is charged at. Together they make the crew rate, CR. The crew pool is {pct(eq.crewPoolShare)} of it.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {(
@@ -162,7 +163,7 @@ export function ProductionRatesForm({
               </label>
               <span className="pb-2 text-muted-foreground">×</span>
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium">Pay an hour</span>
+                <span className="font-medium">Charged an hour</span>
                 <span className="inline-flex items-center gap-1">
                   <span className="text-muted-foreground">$</span>
                   <input
@@ -182,12 +183,13 @@ export function ProductionRatesForm({
           ))}
         </div>
         <p className="rounded-lg bg-primary/5 px-3 py-2 text-sm font-semibold">
-          Crew rate, CR = {eq.leads} × {money(eq.leadRateCents)} + {eq.technicians} × {money(eq.technicianRateCents)} = <span className="tabular-nums">{money(cr)}/hr</span>
+          Crew rate, CR = {eq.leads} × {money(eq.leadRateCents)} + {eq.technicians} × {money(eq.technicianRateCents)} = <span className="tabular-nums">{money(cr)}/hr</span>, of which
+          the crew pool is <span className="tabular-nums">{money(Math.round(crewCostRateCents(eq)))}/hr</span>
         </p>
         <p className="text-xs text-muted-foreground">
           Shares set aside from every price: gross profit {pct(eq.grossProfit)}, account manager {pct(eq.accountManager)}, affiliate {pct(eq.affiliate)}, evaluator{" "}
           {pct(eq.evaluator)}
-          {eq.reserve > 0 ? `, goal reserve ${pct(eq.reserve)}` : ""}. RA = {pct(revenueAllocation(eq))}, so PCM = {projectCostMargin(eq).toFixed(2)}: every dollar of cost is priced at{" "}
+          {eq.reserve > 0 ? `, goal reserve ${pct(eq.reserve)}` : ""}. RA = {pct(revenueAllocation(eq))}, so PCM = {projectCostMargin(eq).toFixed(2)}: every dollar of materials is priced at{" "}
           {money(Math.round(100 / projectCostMargin(eq)))}.
         </p>
       </section>
