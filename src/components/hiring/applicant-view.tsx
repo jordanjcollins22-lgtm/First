@@ -70,11 +70,10 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
           <p className="text-xs text-muted-foreground">They were asked: {position.skillsQuestion}</p>
           {applicant.answers.skills_at ? (
             <div className="space-y-2 rounded-xl border border-border bg-card p-4 text-sm">
-              {applicant.answers.skills_answer && <p className="whitespace-pre-wrap">{applicant.answers.skills_answer}</p>}
-              {applicant.answers.skills_link && (
-                <a href={applicant.answers.skills_link} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-primary hover:underline">
-                  Listen to their recording <ExternalLink className="h-4 w-4" />
-                </a>
+              {applicant.skillsVideoUrl ? (
+                <video src={applicant.skillsVideoUrl} controls playsInline preload="metadata" className="aspect-video w-full rounded-lg bg-black" />
+              ) : (
+                <p className="rounded-lg bg-muted/50 p-3 text-muted-foreground">Their recording plays here.</p>
               )}
               <p className="text-xs text-muted-foreground">Look for friendly and natural, not salesy, and their link shared.</p>
             </div>

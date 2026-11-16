@@ -131,6 +131,8 @@ export interface ApplicantDetail extends ApplicantRow {
   reviewNote: string | null;
   videoUrl: string | null;
   videoLink: string | null;
+  /** Their recorded answer to the skills question, ready to play. */
+  skillsVideoUrl: string | null;
   events: { at: string; kind: string; detail: Record<string, unknown> | null; actorName: string | null }[];
 }
 
@@ -147,11 +149,13 @@ export async function getApplicant(organizationId: string, id: string): Promise<
   if (!data) return null;
   const row = toRow(data);
   if (!row) return null;
-  const [{ data: signed }, { data: events }] = await Promise.all([
+  const skillsPath = (data.answers as Record<string, string> | null)?.skills_path;
+  const [{ data: signed }, { data: events }, { data: skillsSigned }] = await Promise.all([
     data.video_path
       ? admin.storage.from("applicant-videos").createSignedUrl(data.video_path, 60 * 60)
       : Promise.resolve({ data: null }),
     admin.from("applicant_events").select("at, kind, detail, actor_name").eq("applicant_id", id).order("at"),
+    skillsPath ? admin.storage.from("applicant-videos").createSignedUrl(skillsPath, 60 * 60) : Promise.resolve({ data: null }),
   ]);
   return {
     ...row,
@@ -159,6 +163,7 @@ export async function getApplicant(organizationId: string, id: string): Promise<
     reviewNote: data.review_note,
     videoUrl: signed?.signedUrl ?? null,
     videoLink: data.video_link,
+    skillsVideoUrl: skillsSigned?.signedUrl ?? null,
     events: (events ?? []).map((e) => ({ at: e.at, kind: e.kind, detail: e.detail, actorName: e.actor_name })),
   };
 }

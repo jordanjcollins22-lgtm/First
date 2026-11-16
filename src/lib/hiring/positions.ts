@@ -71,8 +71,8 @@ export interface Position {
   remoteInterviews?: boolean;
   /**
    * The skills step done from their phone, by link: one real situation they
-   * answer in writing or with a recording. Set for a job with no crew or
-   * desk to try out on.
+   * answer by tapping Record and saying it, live in the page. Set for a job
+   * with no crew or desk to try out on.
    */
   skillsQuestion?: string;
   /**
@@ -405,7 +405,7 @@ export const POSITIONS: readonly Position[] = [
     ],
     videoPrompt: "Tell us a bit about yourself: who you know around here, and why you'd be good at sending people our way.",
     remoteInterviews: true,
-    skillsQuestion: "Your neighbor says their yard is a mess and they don't know who to call. Write (or record) what you'd say.",
+    skillsQuestion: "Your neighbor says their yard is a mess and they don't know who to call. Tap record and tell us what you'd say.",
   },
 ];
 

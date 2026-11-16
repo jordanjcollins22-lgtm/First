@@ -101,9 +101,9 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
       subject: `One question for the ${input.positionTitle} job with ${input.business}`,
       body:
         `Hi ${input.firstName},\n\n` +
-        `Thanks for talking with us. The next step is one quick question you answer from your phone, in writing or with a recording. It takes about five minutes.\n\n` +
+        `Thanks for talking with us. The next step is one quick question you answer from your phone: open the link, tap record and tell us what you'd say. It takes about five minutes.\n\n` +
         `The question: ${input.skillsQuestion ?? ""}\n\n` +
-        `Answer it here: ${input.skillsUrl ?? ""}\n\n` +
+        `Record your answer here: ${input.skillsUrl ?? ""}\n\n` +
         `Answer the way you really would. There's no wrong way to say it.${call}\n\n` +
         `Thanks,\n${sign}`,
     };

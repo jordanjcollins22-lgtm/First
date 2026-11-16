@@ -1,32 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { submitSkillsAnswer } from "@/lib/actions/hiring-public-actions";
+import { RecordAndSend } from "@/components/hiring/record-and-send";
 
-/**
- * The skills question, answered from their phone: in writing, or a link to a
- * recording (a voice memo or video shared from their phone), or both.
- */
+/** The skills question, answered by tapping Record and saying it, live in the page. Nothing written or uploaded. */
 export function SkillsStep({ token, question, alreadyIn, businessName }: { token: string; question: string; alreadyIn: boolean; businessName: string }) {
   const [done, setDone] = useState(alreadyIn);
-  const [answer, setAnswer] = useState("");
-  const [link, setLink] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, start] = useTransition();
-
-  function send() {
-    setError(null);
-    start(async () => {
-      const result = await submitSkillsAnswer({ token, answer, link });
-      if (!result.ok) return setError(result.error);
-      setDone(true);
-    });
-  }
 
   if (done) {
     return (
@@ -34,10 +16,10 @@ export function SkillsStep({ token, question, alreadyIn, businessName }: { token
         <CheckCircle2 className="mx-auto h-8 w-8 text-primary" />
         <h2 className="mt-2 text-lg font-semibold">We have your answer</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Someone from {businessName} will read it and be in touch. Want to change it? Send a new one and it replaces this one.
+          Someone from {businessName} will watch it and be in touch. Want to change it? Record a new one and it replaces this one.
         </p>
         <Button type="button" variant="outline" className="mt-3" onClick={() => setDone(false)}>
-          Send a new answer
+          Record a new answer
         </Button>
       </section>
     );
@@ -46,17 +28,8 @@ export function SkillsStep({ token, question, alreadyIn, businessName }: { token
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-card p-4">
       <p className="text-base font-semibold">{question}</p>
-      <p className="text-sm text-muted-foreground">Answer the way you really would. A few sentences is plenty.</p>
-      <Textarea rows={6} placeholder="What you'd say" value={answer} onChange={(e) => setAnswer(e.target.value)} aria-label="Your answer" />
-      <label className="grid gap-1 text-sm">
-        <span className="text-muted-foreground">Rather say it out loud? Record it on your phone, share it, and paste the link here (optional).</span>
-        <Input type="url" inputMode="url" placeholder="https://" value={link} onChange={(e) => setLink(e.target.value)} />
-      </label>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="button" className="w-full" disabled={busy} onClick={send}>
-        {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Send my answer
-      </Button>
+      <p className="text-sm text-muted-foreground">Say it the way you really would. Under a minute is plenty.</p>
+      <RecordAndSend token={token} purpose="skills" label="Tap to record" onSent={() => setDone(true)} />
     </section>
   );
 }

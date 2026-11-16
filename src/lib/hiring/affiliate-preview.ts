@@ -145,14 +145,12 @@ export function sampleApplicant(today: string): ApplicantDetail {
       start: "Right away",
       why: "I know half the street and people always ask me who does yards around here. I'd rather send them somewhere good and get paid for it.",
       heard: "Indeed",
-      skills_answer:
-        "Oh, I know a company that does exactly that. JS Landscaping did my yard last spring and it still looks great. Here's my link, you can put in your address and they'll send you a free estimate. Want me to send you a couple of before and after pictures?",
-      skills_link: "",
       skills_at: at(today, "14:00:00"),
     },
     reviewNote: "Friendly on the call, knows a lot of people in Bel Air. Skills answer reads natural, link shared. Owner call next.",
     videoUrl: null,
     videoLink: null,
+    skillsVideoUrl: null,
     events: [
       { at: row.createdAt, kind: "applied", detail: null, actorName: null },
       { at: row.videoSubmittedAt!, kind: "video_submitted", detail: null, actorName: null },
