@@ -185,6 +185,11 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/admin/hiring/[id]":
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",
+  "/admin/hiring/team/[id]":
+    "One new hire's journey, opened from the Hiring page. Checks the hiring tab itself, and its actions check it again " +
+    "before logging a check-in, review or training sign-off.",
+  "/admin/hiring/jobs/[position]":
+    "One job's written documents, opened from the Hiring page. Checks the hiring tab itself; it only reads.",
   "/login": "Sign-in page, nobody is signed in yet, so there are no roles to check.",
   "/v2":
     "Sends the new four-page layout on to its first page, Marketing. Nothing on it; the page it opens is " +

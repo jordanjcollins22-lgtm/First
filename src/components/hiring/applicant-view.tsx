@@ -3,7 +3,7 @@ import { ChevronLeft, ExternalLink, Mail, Phone } from "lucide-react";
 
 import type { ApplicantDetail } from "@/lib/data/hiring";
 import { positionFor } from "@/lib/hiring/positions";
-import { STAGES, nextStages } from "@/lib/hiring/screening";
+import { STAGES, nextStages, stageLabel } from "@/lib/hiring/screening";
 import { shortWhen } from "@/lib/time-zone";
 import { ApplicantReview } from "@/components/hiring/applicant-review";
 
@@ -31,7 +31,7 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
         <p className="text-xs uppercase tracking-wide text-muted-foreground">{position.title}</p>
         <h1 className="text-2xl font-bold">{applicant.name}</h1>
         <p className="text-sm">
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{STAGES[applicant.stage]}</span>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">{stageLabel(applicant.stage, applicant.position)}</span>
           <span className="ml-2 text-muted-foreground">
             Applied {shortWhen(applicant.createdAt)}
             {applicant.source ? ` · from ${applicant.source}` : ""} · ZIP {applicant.zip}
@@ -69,6 +69,7 @@ export function ApplicantView({ applicant }: { applicant: ApplicantDetail }) {
         next={nextStages(applicant.stage)}
         rating={applicant.rating}
         note={applicant.reviewNote ?? ""}
+        position={applicant.position}
       />
 
       <section className="space-y-2">

@@ -4,8 +4,9 @@ import { useState } from "react";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { AdCheck } from "@/lib/hiring/ad-review";
 
-type Ad = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean };
+type Ad = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean; checks?: AdCheck[] };
 
 /** Each job's ad, with a button to copy the title and one for the description. */
 export function IndeedAds({ ads }: { ads: Ad[] }) {
@@ -38,6 +39,19 @@ export function IndeedAds({ ads }: { ads: Ad[] }) {
               <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                 The pay for this job isn&apos;t set yet, so the ad says &quot;[ADD PAY RANGE BEFORE POSTING]&quot;. Maryland job ads have to show the pay.
               </p>
+            )}
+            {ad.checks && ad.checks.length > 0 && (
+              <div className="rounded-lg border border-border px-3 py-2 text-xs">
+                <p className="font-semibold">Before you post it, check:</p>
+                <ul className="mt-1 grid gap-0.5 sm:grid-cols-2">
+                  {ad.checks.map((c) => (
+                    <li key={c.key} className={c.passed ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}>
+                      {c.passed ? "✓" : "!"} {c.label}
+                      {!c.passed && c.fix ? <span className="block pl-3 text-muted-foreground">{c.fix}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-3 font-sans text-sm">{ad.body}</pre>
             <p className="whitespace-pre-line rounded-lg border border-border px-3 py-2 text-xs">

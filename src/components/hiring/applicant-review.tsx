@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { previewApplicantEmail, saveApplicantReview, sendApplicantEmail, setApplicantStage } from "@/lib/actions/hiring-actions";
 import type { ApplicantEmailKind } from "@/lib/hiring/emails";
 import type { Stage } from "@/lib/hiring/screening";
+import { skillsStepFor } from "@/lib/hiring/screening";
 
 type Draft = { kind: ApplicantEmailKind; to: string; subject: string; body: string; interviewAt: string | null };
 
@@ -34,7 +35,23 @@ const QUIET_LABEL: Partial<Record<Stage, string>> = {
  * What you thought of them, and what happens next. An email is always shown
  * word for word, can be changed, and goes only on Send.
  */
-export function ApplicantReview({ id, stage, next, rating, note }: { id: string; stage: Stage; next: Stage[]; rating: number | null; note: string }) {
+export function ApplicantReview({
+  id,
+  stage,
+  next,
+  rating,
+  note,
+  position = null,
+}: {
+  id: string;
+  stage: Stage;
+  next: Stage[];
+  rating: number | null;
+  note: string;
+  /** The job they applied for: the skills step is a practice round for an affiliate. */
+  position?: string | null;
+}) {
+  const quietLabel = (s: Stage) => (s === "working_interview" && position === "affiliate" ? "Book the practice round" : QUIET_LABEL[s]);
   const router = useRouter();
   const [stars, setStars] = useState<number | null>(rating);
   const [text, setText] = useState(note);
@@ -136,13 +153,16 @@ export function ApplicantReview({ id, stage, next, rating, note }: { id: string;
                 </Button>
               ))}
             {next
-              .filter((s) => QUIET_LABEL[s])
+              .filter((s) => quietLabel(s))
               .map((s) => (
                 <Button key={`quiet-${s}`} type="button" variant="ghost" disabled={busy} onClick={() => quiet(s)}>
-                  {QUIET_LABEL[s]}
+                  {quietLabel(s)}
                 </Button>
               ))}
           </div>
+          {(stage === "interview" || stage === "working_interview") && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">{skillsStepFor(position)}</p>
+          )}
         </div>
       )}
 

@@ -38,6 +38,12 @@ export interface Position {
   commission: string | null;
   /** Paid by commission alone, with no hourly pay: said plainly, so nobody applies expecting a wage. */
   commissionOnly: boolean;
+  /**
+   * The lowest and highest hourly pay, for Indeed's own pay fields (Maryland
+   * job ads have to show a range). Kept apart from the ad's wording, which
+   * leads with what a good week pays rather than the floor.
+   */
+  payRange?: readonly [number, number];
   /** What comes with the job besides pay. Maryland job ads must describe it. */
   benefits: readonly string[];
   schedule: string;
@@ -123,29 +129,31 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "project-technician",
     title: "Landscape Project Technician",
-    tagline: "Hands-on landscaping work: bed cleanups, mulch, planting, lawn work and installs.",
-    pay: `$${TECH_FLOOR_PER_HOUR} to $${TECH_ON_BUDGET_PER_HOUR} an hour`,
-    commission: `your crew splits ${Math.round(CREW_SPLIT * 100)}% of the labor on every job you finish. Each tech gets their share or $${TECH_FLOOR_PER_HOUR} an hour, whichever is higher`,
+    tagline: "Turn tired yards into ones people stop to look at, on a crew that's paid on results. We teach you the trade, and the better your crew gets, the more you earn.",
+    pay: `About $${TECH_ON_BUDGET_PER_HOUR} an hour when your crew finishes a job on budget, and more when you beat it`,
+    commission: `Your crew shares ${Math.round(CREW_SPLIT * 100)}% of the labor on every job you finish, so a faster, sharper crew means a bigger paycheck. On a slow job you're still guaranteed at least $${TECH_FLOOR_PER_HOUR} an hour`,
     commissionOnly: false,
+    payRange: [TECH_FLOOR_PER_HOUR, TECH_ON_BUDGET_PER_HOUR],
     benefits: [
-      "Paid training",
-      "Performance bonuses",
-      "Your own referral link: 4% of every job you bring in",
+      "Paid training from your first day",
+      "Performance pay: the better your crew does the job, the more you take home",
+      "Your own referral link: earn 4% of every job you bring in",
+      "Crew hoodie, gloves, and eye and ear protection provided",
       "Room to grow: do the work, then teach it, then build the system that teaches it",
     ],
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
-      "Clean up beds, pull weeds, edge, and lay mulch and rock",
-      "Plant shrubs and flowers, seed and topsoil lawns",
-      "Load and unload tools and materials, and keep them clean and organized",
-      "Take before and after photos on the job in our app",
+      "Bring yards back to life: clean up beds, pull weeds, edge, and lay fresh mulch and rock",
+      "Plant shrubs and flowers, and seed and topsoil lawns",
+      "Work with your crew from loading the truck to the final walkthrough",
+      "Snap before and after photos in our app, so your work speaks for itself",
       "Leave every property cleaner than we found it",
     ],
     lookingFor: [
-      "Shows up on time, every time",
-      "Can lift 50 lb bags and work outside in heat and cold",
-      "Landscaping experience is a plus, not required. We train",
-      "Respectful with clients and their property",
+      "You show up on time, every time",
+      "You like hard work outside and can lift 50 lb bags",
+      "No experience needed: we teach you everything, and you're paid while you learn",
+      "You treat clients and their homes with respect",
     ],
     questions: [
       ...BASICS,
@@ -253,25 +261,30 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "account-manager",
     title: "Account Manager",
-    tagline: "Run the location day to day: the team, the schedule and every client, so the work gets done right.",
+    tagline: "Be the person who makes a growing landscaping location run: the team, the schedule and every client. You earn on every job your location finishes.",
     pay: null,
     commission: "7% commission on every job your location completes",
     commissionOnly: true,
-    benefits: ["Paid training", "Performance bonuses", "Your own referral link: 4% of every job you bring in"],
+    benefits: [
+      "Paid training on our app and how we run a location",
+      "Performance bonuses",
+      "Your income grows with your location: every job it finishes pays you",
+      "Your own referral link: earn 4% of every job you bring in",
+    ],
     schedule: "Weekdays, from the office, your phone and on site. Longer weeks in busy season.",
     duties: [
-      "Approve or edit the replies our AI front desk drafts for clients, crews and new leads",
-      "Run the schedule for every crew and keep jobs on their day",
+      "Keep every client happy: approve or tweak the replies our AI front desk writes for you",
+      "Run the schedule for every crew so jobs land on their day",
       "Handle invoices, estimate requests and paid site visits",
-      "Recruit, onboard and keep the team, and mark the stage steps the system can't check",
-      "Review the location's weekly scorecard with the partner or owner",
+      "Build the team: recruit, onboard and keep great people",
+      "Review the weekly scorecard with the owner and steer the location",
     ],
     lookingFor: [
-      "Customer service, office or crew management experience",
+      "Experience in customer service, an office, or running a crew",
       "Organized: nothing falls through the cracks",
-      "Clear, friendly writer for texts and emails",
+      "A clear, friendly writer for texts and emails",
       "Comfortable leading people and having the hard conversation",
-      "Commission only: you earn 7% of every job your location completes, not hours",
+      "Paid on results: you earn 7% of every job your location completes, not hours",
     ],
     questions: [
       ...BASICS,
@@ -298,22 +311,23 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "affiliate",
     title: "Affiliate",
-    tagline: "Help neighbors who are asking for yard work find us online, and earn on every job that books.",
+    tagline: "Earn from your phone by pointing neighbors who need yard work to a local company they'll love. Every job that books through your link pays you.",
     pay: null,
     commission: "4% commission on every job that books through your link",
     commissionOnly: true,
-    benefits: ["Flexible schedule", "Performance bonuses"],
+    benefits: ["Flexible schedule: any time, from anywhere", "Performance bonuses", "No selling: we find the posts and write the replies"],
     schedule: "Work from your phone, any time. As many or as few hours as you like.",
     duties: [
-      "Answer local Facebook posts from people asking for yard work, using comments we write for you",
-      "Share your own link so jobs are counted for you",
-      "Track every post you answered and how it went in our app",
+      "We find local Facebook posts from people asking for yard work, and write the reply for you",
+      "You post it from your own account with your own link. It takes about a minute",
+      "Watch in our app as your posts turn into booked jobs",
     ],
     lookingFor: [
       "Active on Facebook and in local community groups",
       "Lives in or near Harford County, Maryland",
       "Friendly and genuine online",
-      "Commission only: you're paid on jobs, not hours",
+      "No experience needed: a one-minute tutorial in our app shows you everything",
+      "Paid on results: 4% of every job that books through your link, not hours",
     ],
     questions: [
       ...BASICS,

@@ -147,10 +147,14 @@ describe("the Indeed ad", () => {
 
   it("has the pay for every job, hourly for the crew and commission only for the rest", () => {
     for (const p of POSITIONS) expect(needsPay(p)).toBe(false);
-    expect(payLine(positionFor("project-technician")!)).toBe("$15 to $36 an hour, plus your crew splits 38% of the labor on every job you finish. Each tech gets their share or $15 an hour, whichever is higher");
-    expect(payLine(lead)).toBe("$30 an hour, plus commission on the jobs you complete, coming soon");
-    expect(payLine(positionFor("evaluator")!)).toBe("Commission only, no hourly pay: 4% commission on every job you evaluate that sells");
-    expect(payLine(positionFor("account-manager")!)).toBe("Commission only, no hourly pay: 7% commission on every job your location completes");
+    const tech = payLine(positionFor("project-technician")!);
+    // Leads with what a good week pays; the $15 floor reads as a guarantee, not the rate.
+    expect(tech.startsWith("About $36 an hour")).toBe(true);
+    expect(tech).toContain("guaranteed at least $15 an hour");
+    expect(tech).not.toMatch(/share or \$15/);
+    expect(payLine(lead)).toBe("$30 an hour. Commission on the jobs you complete, coming soon.");
+    expect(payLine(positionFor("evaluator")!)).toBe("Paid on results (commission only, no hourly pay): 4% commission on every job you evaluate that sells.");
+    expect(payLine(positionFor("account-manager")!)).toBe("Paid on results (commission only, no hourly pay): 7% commission on every job your location completes.");
     expect(indeedPayFields(lead)).toContain("Exact amount, $30.00 per hour");
     expect(indeedPayFields(positionFor("project-technician")!)).toContain("Range, $15.00 to $36.00 per hour");
     expect(indeedPayFields(affiliate)).toContain("commission only");
@@ -164,7 +168,7 @@ describe("the Indeed ad", () => {
   });
 
   it("never shows applicants the placeholder on our own page", () => {
-    expect(publicPayLine(affiliate)).toBe("Commission only, no hourly pay: 4% commission on every job that books through your link");
+    expect(publicPayLine(affiliate)).toBe("Paid on results (commission only, no hourly pay): 4% commission on every job that books through your link.");
     expect(publicPayLine({ ...lead, pay: null, commission: null })).toBeNull();
     for (const p of POSITIONS) expect(publicPayLine(p) ?? "").not.toContain(PAY_MISSING);
   });
