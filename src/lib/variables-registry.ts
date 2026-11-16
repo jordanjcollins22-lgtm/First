@@ -43,8 +43,8 @@ export function otherVariables(): RegisteredVariable[] {
   const eq = PRICING_EQUATION;
   const salt = DEFAULT_SALT_SETTINGS;
   return [
-    { group: "Pay", label: "Lead pay (forward pricing, hourly)", value: `${usd(eq.leadRateCents)}/h`, where: "src/lib/forward-pricing.ts PRICING_EQUATION", editAt: "Admin › Production rates" },
-    { group: "Pay", label: "Technician pay (forward pricing, hourly)", value: `${usd(eq.technicianRateCents)}/h`, where: "src/lib/forward-pricing.ts PRICING_EQUATION", editAt: "Admin › Production rates" },
+    { group: "Pay", label: "Lead labour charged (forward pricing, per hour)", value: `${eq.leads} × ${usd(eq.leadRateCents)}/h`, where: "src/lib/forward-pricing.ts PRICING_EQUATION", editAt: "Admin › Production rates" },
+    { group: "Pay", label: "Technician labour charged (forward pricing, per hour)", value: `${eq.technicians} × ${usd(eq.technicianRateCents)}/h, crew pool ${pct(eq.crewPoolShare)}`, where: "src/lib/forward-pricing.ts PRICING_EQUATION", editAt: "Admin › Production rates" },
     { group: "Pay", label: "Salt crew cost", value: `${usd(salt.crewCostPerHourCents)}/h`, where: "src/lib/salt.ts DEFAULT_SALT_SETTINGS", editAt: "Admin › Salt route" },
     { group: "Commissions", label: "Commission pool", value: `${POOL_PCT}% of the project`, where: "src/lib/commission-split.ts POOL_PCT", editAt: null },
     { group: "Commissions", label: "Pool shares: account manager / evaluator / affiliate", value: `${SHARE_PCT.account_manager}% / ${SHARE_PCT.evaluator}% / ${SHARE_PCT.affiliate}%`, where: "src/lib/commission-split.ts SHARE_PCT", editAt: null },

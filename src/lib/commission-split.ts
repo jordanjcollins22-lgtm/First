@@ -1,11 +1,12 @@
 /**
- * The commission pool: 15% of what a project brings in, split by who carried
+ * The commission pool: a share of what a project brings in (11% while the
+ * evaluator's share is off, 15% with it), split by who carried
  * it. 7% to the account manager, who prices it, sells it, runs it to sign-off
  * and collects; 4% to the evaluator, whose site map is the price; 4% to the
  * affiliate, who brought the lead.
  *
  * A share nobody earned -- no affiliate on a job booked from the website, say
- * -- stays with the business: prices are always set with the whole 15% in
+ * -- stays with the business: prices are always set with the whole pool in
  * them. One person can earn more than one share: whoever answers the post,
  * walks the property and manages the job earns all 15%. The owner earns none;
  * a share the owner filled stays with the business too.
@@ -16,15 +17,23 @@
  * Pure, so the rules are tested without a database.
  */
 
-export const POOL_PCT = 15;
-
 export type PoolRole = "account_manager" | "evaluator" | "affiliate";
+
+/**
+ * The evaluator's share is off for now (November 16, 2026): nobody does
+ * paid evaluations, so nobody is paid the 4% and it is not passed to the
+ * account manager. Put it back to 4 to turn it on again.
+ */
+export const EVALUATOR_SHARE_PCT = 0;
 
 export const SHARE_PCT: Record<PoolRole, number> = {
   account_manager: 7,
-  evaluator: 4,
+  evaluator: EVALUATOR_SHARE_PCT,
   affiliate: 4,
 };
+
+/** The whole pool: the shares added up. */
+export const POOL_PCT = SHARE_PCT.account_manager + SHARE_PCT.evaluator + SHARE_PCT.affiliate;
 
 export const ROLE_LABEL: Record<PoolRole, string> = {
   account_manager: "Account manager",
@@ -67,7 +76,7 @@ export function sharesFor(roles: JobRoles, notEarning: ReadonlySet<string> = new
   };
   for (const role of ORDER) {
     const id = holder[role];
-    if (!id || notEarning.has(id)) continue;
+    if (!id || notEarning.has(id) || SHARE_PCT[role] <= 0) continue;
     by.set(id, [...(by.get(id) ?? []), role]);
   }
   return [...by.entries()].map(([profileId, list]) => ({
