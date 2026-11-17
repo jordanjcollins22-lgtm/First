@@ -202,7 +202,6 @@ export function EstimateView({
             <li key={`p-${i}`} className="flex items-start justify-between gap-3 border-t border-border/60 pt-2 first:border-0 first:pt-0">
               <span>
                 <span className="font-medium">{line.label}</span>
-                {line.size && <span className="block text-sm text-muted-foreground">About {line.size}</span>}
               </span>
             </li>
           ))}
