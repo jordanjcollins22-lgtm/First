@@ -1,8 +1,7 @@
 import { ChevronDown } from "lucide-react";
 
 import { AffiliateLinkCard } from "@/components/v2/panels/role/affiliate-link-card";
-import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
-import { ReferralList } from "@/components/v2/panels/role/referral-list";
+import { SendLinkBlock } from "@/components/v2/panels/role/send-link-block";
 import { myReferrals } from "@/lib/data/referrals";
 import { affiliateStage, withProgress, type AffiliateStage } from "@/lib/affiliate-home";
 import { POSITIONS } from "@/lib/hiring/positions";
@@ -26,11 +25,11 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigi
  * 1. Send your link to someone: who it's for and how they know them, then a
  *    message ready to copy with its own tracked link. Someone they found
  *    online asking for yard work goes in here too ("Someone online", with a
- *    screenshot). Their plain link and QR code sit underneath.
- * 2. People you sent it to: each one with how far they got (sent, opened,
- *    booked, sold) and their 4% once it's sold.
- * 3. Their wallet: ready to pay out, waiting on the client, and a payout request.
- * 4. Their stage on the Stages of Success, and what the next one asks.
+ *    screenshot). Inside it, People you sent it to drops down: each one with
+ *    how far they got (sent, opened, booked, sold) and their 4% once sold.
+ *    Their plain link and QR code sit at the foot.
+ * 2. Their wallet: ready to pay out, waiting on the client, and a payout request.
+ * 3. Their stage on the Stages of Success, and what the next one asks.
  *
  * Drawn as getCurrentProfile(), so Preview as shows exactly this person.
  * Everything here is theirs alone: no company or other affiliate's numbers
@@ -59,35 +58,23 @@ export async function AffiliateHomePanel() {
   const wallet = walletFor(commission, requests, paidOut);
   const track = POSITIONS.find((p) => p.key === "affiliate")?.growth;
   const stage = track ? affiliateStage({ stages: track.stages, hasLink: !!link, projects: projects ?? [], paid: commission?.paid ?? 0 }) : null;
-  const sold = people.filter((p) => p.progress === "sold").length;
 
   return (
     <div className="mx-auto grid w-full max-w-md gap-4">
-      <section data-tour="affiliate-link" aria-labelledby="aff-link">
-        <Card>
-          <h2 id="aff-link" className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-            1. Send your link to someone
-          </h2>
-          <ReferralMessageCard />
-        </Card>
-        <div className="mt-3 grid gap-3">
-          <details className="rounded-2xl border bg-card p-4 text-sm">
+      <SendLinkBlock
+        title="1. Send your link to someone"
+        people={people}
+        footer={
+          <details className="mt-3 border-t pt-3">
             <summary className="cursor-pointer font-medium">Just your link, or a QR code</summary>
             <div className="mt-3">
               <AffiliateLinkCard link={link} qrSvg={qr} />
             </div>
           </details>
-        </div>
-      </section>
-
-      <Drop tour="affiliate-results" title="People you sent it to" hint={`${people.length} sent · ${sold} sold`}>
-        {people.length > 0 ? (
-          <ReferralList rows={people} titled={false} />
-        ) : (
-          <p className="text-sm text-muted-foreground">Nobody yet. Everyone you send your link to shows up here, with how far they got.</p>
-        )}
+        }
+      >
         {projects && projects.length > 0 && <OtherBookings projects={projects} people={people} />}
-      </Drop>
+      </SendLinkBlock>
 
       <Drop tour="affiliate-money" title="Wallet" hint={commission ? `${money(wallet.ready)} ready` : undefined}>
         {commission ? <WalletCard wallet={wallet} /> : <Card>Your wallet couldn&apos;t load just now. Reload the page.</Card>}

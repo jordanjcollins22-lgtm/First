@@ -121,7 +121,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
     key: "app",
     title: "Their app: link, people, wallet, stage",
     steps: [{ id: "15", name: "Send us someone you know" }],
-    what: "An affiliate's app in four parts: send your link (someone found online goes in here too, with a screenshot), people you sent it to and how far each got, the wallet with Request payout, and their stage.",
+    what: "An affiliate's app in three parts: send your link (someone found online goes in here too, with a screenshot) with people you sent it to dropping down inside it, the wallet with Request payout, and their stage.",
   },
 ];
 
