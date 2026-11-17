@@ -23,8 +23,8 @@ type Xy = [number, number];
 
 /** How far the yard reaches past the back of the home. About 26 feet. */
 export const BACK_M = 8;
-/** How far past the front, at most: out to the sidewalk on most townhouses. About 26 feet. */
-export const FRONT_M = 8;
+/** How far past the front, at most: out to the sidewalk on most townhouses. About 33 feet. */
+export const FRONT_M = 10;
 /** How far past an open side, on an end home. About 16 feet. */
 export const SIDE_M = 5;
 /** A yard stops this far from a road's centerline: the curb and the sidewalk. About 20 feet. */
@@ -49,6 +49,14 @@ export interface YardInput {
   front?: LngLat | null;
   /** Road centerlines nearby: the yard stops at the sidewalk. */
   streets?: LngLat[][];
+  /**
+   * Every lot nearby, when known. Ground on none of them is the road's own
+   * strip (the grass between a lot line and the sidewalk), and the yard may
+   * take it in up to the sidewalk.
+   */
+  parcels?: LngLat[][];
+  /** The county's outlines of sidewalks and roads, when it has them: the yard stops at the sidewalk. */
+  pavement?: LngLat[][] | null;
 }
 
 function frame(origin: LngLat) {
@@ -135,7 +143,13 @@ export function yardAround(input: YardInput): LngLat[] | null {
   const neighbours = [...split.rest, ...input.neighbours.map((r) => r.map(to))];
   const allowed = input.allowed.map((r) => r.map(to));
   const streets = (input.streets ?? []).map((r) => r.map(to));
+  const parcels = input.parcels?.map((r) => r.map(to));
+  const roadStrip = (p: Xy) => parcels != null && streets.length > 0 && !parcels.some((ring) => inside(p, ring));
+  const pavement = input.pavement?.map((r) => r.map(to)) ?? null;
+  const onPavement = (p: Xy) => (pavement ?? []).some((ring) => inside(p, ring));
+  // Without the county's sidewalks, a set distance from the road's centerline stands in for them.
   const nearStreet = (p: Xy) =>
+    pavement == null &&
     streets.some((line) => line.some((q, i) => i > 0 && segmentDistance(p, line[i - 1], q) < STREET_M));
 
   // The home's two wall directions; u runs front to back (the longer way for a townhouse).
@@ -160,7 +174,7 @@ export function yardAround(input: YardInput): LngLat[] | null {
   const others = neighbours.filter((n) => !rowMates.includes(n));
   const ok = (p: Xy): boolean => {
     if (inside(p, mine)) return true;
-    if (!allowed.some((ring) => inside(p, ring))) return false;
+    if (!allowed.some((ring) => inside(p, ring)) && !roadStrip(p)) return false;
     if (nearStreet(p)) return false;
     if (rowMates.some((n) => inside(p, n))) return false;
     const mineD = distanceTo(p, mine);
@@ -181,9 +195,18 @@ export function yardAround(input: YardInput): LngLat[] | null {
   const STEP = 0.5;
   // Checked a little in from each end: lots are drawn by hand and their
   // corners overlap the next one's by a hair.
+  // A sidewalk running along the edge covers most of it; a front walk
+  // crossing it covers only a little, and the lawn carries on beside it.
   const clean = (strip: (t: number) => Xy, length: number) => {
-    for (let t = TIE_M; t <= length - TIE_M + 1e-9; t += STEP) if (!ok(strip(t))) return false;
-    return true;
+    let points = 0;
+    let paved = 0;
+    for (let t = TIE_M; t <= length - TIE_M + 1e-9; t += STEP) {
+      const p = strip(t);
+      if (!ok(p)) return false;
+      points++;
+      if (onPavement(p)) paved++;
+    }
+    return paved * 2 < points;
   };
   const grow = (side: "u0" | "u1" | "v0" | "v1", limit: number) => {
     for (let e = STEP; e <= limit + 1e-9; e += STEP) {

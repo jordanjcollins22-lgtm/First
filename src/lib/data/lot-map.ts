@@ -10,6 +10,8 @@ const COUNTY = "https://hcggis.harfordcountymd.gov/arcgis/rest/services";
 const PARCELS = `${COUNTY}/County_Data/Cadastral/MapServer/0/query`;
 const FOOTPRINTS = `${COUNTY}/WebGIS/Base_Mapping_EXB/MapServer/89/query`;
 const CENTERLINES = `${COUNTY}/WebGIS/Base_Mapping_EXB/MapServer/73/query`;
+/** The county's 2025 outlines of paved ground: roads, sidewalks, driveways, patios. */
+const IMPERVIOUS = `${COUNTY}/Hosted/Impervious_2025/FeatureServer/0/query`;
 
 /** Asked again after this when the county had nothing, not on every open. */
 const RETRY_EMPTY_MS = 24 * 60 * 60 * 1000;
@@ -46,7 +48,7 @@ function boxAround([lng, lat]: LngLat, padMetres: number): string {
 }
 
 /** Bumped whenever the way a lot is worked out changes, so stored copies are worked out again. */
-export const LOT_VERSION = 4;
+export const LOT_VERSION = 5;
 
 /** Everything the lot picture needs, straight from the county. Null when the address is not on a Harford parcel. */
 export async function fetchLotFromCounty(lat: number, lng: number, address: string): Promise<LotData | null> {
@@ -84,6 +86,8 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
       allowed: [parcel.ring, ...common],
       front: roads ? pickFront(roads, middle, streetOf(address))?.point ?? null : null,
       streets: roadLines(roads),
+      parcels: all.flatMap((p) => p.parts),
+      pavement: await pavementAround(pin),
     });
     if (yard) {
       ring = yard;
@@ -102,6 +106,7 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
         allowed: [parcel.ring],
         front: roads ? pickFront(roads, centroidOf(building), streetOf(address))?.point ?? null : null,
         streets: roadLines(roads),
+        pavement: await pavementAround(pin),
       });
       if (yard) {
         ring = yard;
@@ -124,6 +129,15 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
     ...(yardDrawn ? { yardDrawn: true } : {}),
     v: LOT_VERSION,
   };
+}
+
+/** The sidewalks and roads round the pin, as the county drew them: a yard stops at them. Null when the county doesn't answer. */
+async function pavementAround(pin: LngLat): Promise<LngLat[][] | null> {
+  const body = await countyQuery(IMPERVIOUS, boxAround(pin, YARD_SEARCH_M), "esriGeometryEnvelope", "description").catch(() => null);
+  if (!body || !Array.isArray((body as { features?: unknown }).features)) return null;
+  return ringsOf(body)
+    .filter((f) => /^(SIDEWALK|RD_)/.test(String(f.attributes.description ?? "")))
+    .flatMap((f) => f.parts);
 }
 
 /** How far round the pin to look for neighbouring homes and common land. */
