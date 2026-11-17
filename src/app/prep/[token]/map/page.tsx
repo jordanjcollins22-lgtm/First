@@ -44,6 +44,7 @@ export default async function TapMapPage({
     await recordFunnelStep(createAdminClient(), { organizationId: data.organizationId, step: "map_opened", jobId: data.intake.jobId });
   }
 
+  const imagery = await imageryAt(data.home[0], data.home[1]).catch(() => null);
 
   return (
     <TapMapLoader
@@ -54,7 +55,7 @@ export default async function TapMapPage({
       photoUrls={data.photoUrls}
       firstName={welcome === "1" ? data.intake.clientFirstName : null}
       estimateHref={estimatePath(token)}
-      imagery={await imageryAt(data.home[0], data.home[1]).catch(() => null)}
+      imagery={imagery}
     />
   );
 }

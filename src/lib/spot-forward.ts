@@ -162,12 +162,13 @@ export function priceWorksForward(works: InstantWork[], setup: ForwardSetup): (I
   });
 }
 
-/** The price rule in words, e.g. "cost ÷ 0.35: 50% gross profit, 15% commissions". */
+/** The price rule in words, e.g. "materials ÷ 0.39 + $190 a crew-hour: 50% gross profit, 11% commissions". */
 export function forwardRuleWords(eq: PricingEquation): string {
   const pcm = projectCostMargin(eq);
   const commissions = eq.affiliate + eq.evaluator + eq.accountManager + eq.reserve;
   const pct = (n: number) => `${Math.round(n * 100)}%`;
-  return `cost ÷ ${+pcm.toFixed(2)}: ${pct(eq.grossProfit)} gross profit${commissions > 0 ? `, ${pct(commissions)} commissions` : ""}`;
+  const rate = `$${+(crewRateCents(eq) / 100).toFixed(2)} a crew-hour`;
+  return `materials ÷ ${+pcm.toFixed(2)} + ${rate}: ${pct(eq.grossProfit)} gross profit${commissions > 0 ? `, ${pct(commissions)} commissions` : ""}`;
 }
 
 /**

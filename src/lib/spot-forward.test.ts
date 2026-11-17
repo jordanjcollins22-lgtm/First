@@ -77,11 +77,11 @@ describe("priceWorksForward", () => {
     // 1.5 yd at 2.5 yd a crew-hour is 0.6 crew-hours of work. At 75% of the
     // day on the job, the time off it is a third as much again: 0.8 in all.
     expect(line!.crewHours).toBeCloseTo(0.8, 2);
-    // At $55 a crew-hour.
-    expect(line!.labourCents).toBe(Math.round(0.8 * 5500));
-    // Price is cost ÷ 0.35, so gross profit is half the price.
+    // The crew is paid 38% of the $55 a crew-hour charged.
+    expect(line!.labourCents).toBe(Math.round(0.8 * 5500 * 0.38));
+    // Price is materials ÷ 0.39, plus the crew-hours at the charged rate.
     const cost = line!.labourCents + line!.materialsCents;
-    expect(line!.priceCents).toBeCloseTo(cost / 0.35, -1);
+    expect(line!.priceCents).toBeCloseTo(line!.materialsCents / 0.39 + 0.8 * 5500, -1);
     expect(line!.markupCents).toBe(line!.priceCents! - cost);
   });
 
@@ -105,6 +105,6 @@ describe("priceWorksForward", () => {
 
 describe("forwardRuleWords", () => {
   it("says the rule", () => {
-    expect(forwardRuleWords(PRICING_EQUATION)).toBe("cost ÷ 0.35: 50% gross profit, 15% commissions");
+    expect(forwardRuleWords(PRICING_EQUATION)).toBe("materials ÷ 0.39 + $190 a crew-hour: 50% gross profit, 11% commissions");
   });
 });
