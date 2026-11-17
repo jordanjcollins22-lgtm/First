@@ -27,11 +27,13 @@ describe("a home's own yard where the county has no line round it", () => {
     expect(ringSqft(yard!)).toBeLessThan(2000);
   });
 
-  it("gives the short yard to the side facing the road", () => {
+  it("runs the front yard out to the sidewalk and no further", () => {
     const home = rect(0, 0, 6, 10);
-    const yard = yardAround({ pin: m(3, 5), home, splitRow: false, neighbours: [rect(-6, 0, 0, 10), rect(6, 0, 12, 10)], allowed: [community], front: m(3, -20) });
-    expect(pointInRing(m(3, -1.5), yard!)).toBe(true);
-    expect(pointInRing(m(3, -3), yard!)).toBe(false);
+    // The street's centerline runs 10 m in front of the home.
+    const street = [m(-50, -10), m(50, -10)];
+    const yard = yardAround({ pin: m(3, 5), home, splitRow: false, neighbours: [rect(-6, 0, 0, 10), rect(6, 0, 12, 10)], allowed: [community], front: m(3, -10), streets: [street] });
+    expect(pointInRing(m(3, -3.5), yard!)).toBe(true);
+    expect(pointInRing(m(3, -4.5), yard!)).toBe(false);
     expect(pointInRing(m(3, 17), yard!)).toBe(true);
   });
 

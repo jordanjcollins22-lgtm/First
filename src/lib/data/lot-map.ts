@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { centroidOf, parseParcel, pickFootprint, pickFront, pointInRing, ringsOf, streetOf, type LngLat, type LotData } from "@/lib/lot-map";
+import { centroidOf, parseParcel, pickFootprint, pickFront, pointInRing, ringsOf, roadLines, streetOf, type LngLat, type LotData } from "@/lib/lot-map";
 import { ringSqft, yardAround } from "@/lib/yard-shape";
 
 /**
@@ -46,7 +46,7 @@ function boxAround([lng, lat]: LngLat, padMetres: number): string {
 }
 
 /** Bumped whenever the way a lot is worked out changes, so stored copies are worked out again. */
-export const LOT_VERSION = 3;
+export const LOT_VERSION = 4;
 
 /** Everything the lot picture needs, straight from the county. Null when the address is not on a Harford parcel. */
 export async function fetchLotFromCounty(lat: number, lng: number, address: string): Promise<LotData | null> {
@@ -83,6 +83,7 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
       neighbours: [...homes, ...near.filter((r) => !pointInRing(middle, r))],
       allowed: [parcel.ring, ...common],
       front: roads ? pickFront(roads, middle, streetOf(address))?.point ?? null : null,
+      streets: roadLines(roads),
     });
     if (yard) {
       ring = yard;
@@ -100,6 +101,7 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
         neighbours: near.filter((r) => r !== building),
         allowed: [parcel.ring],
         front: roads ? pickFront(roads, centroidOf(building), streetOf(address))?.point ?? null : null,
+        streets: roadLines(roads),
       });
       if (yard) {
         ring = yard;
