@@ -11,12 +11,12 @@ import { Label } from "@/components/ui/label";
 import { readAdClick, type AdClick } from "@/lib/ad-click";
 import { cn } from "@/lib/utils";
 import { isMapboxConfigured } from "@/lib/public-env";
-import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
+import { marylandFirst, plainAddress, reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
 import { recordBookingVisit, recordDetailsShown, recordLocateResult, startPublicLead } from "@/lib/actions/public-booking-actions";
 import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
 import type { PublicService } from "@/lib/data/public-booking";
 import { LandingCard } from "@/components/booking/landing-card";
-import { BOOKING_PAGES, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
+import { BOOKING_PAGES, CLIENT_STEPS, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
 import {
   MEMORY_KEY,
   readRemembered,
@@ -234,7 +234,8 @@ export function BookingWizard({
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const found = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          const located = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          const found = located ? { ...located, fullAddress: plainAddress(located.fullAddress) } : null;
           if (!found) {
             noteLocate("failed");
             setError("We couldn't match your location to an address. Type it instead.");
@@ -274,7 +275,7 @@ export function BookingWizard({
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        setSuggestions(await searchAddress(value));
+        setSuggestions(marylandFirst(await searchAddress(value)));
       } catch {
         setSuggestions([]);
       } finally {
@@ -425,16 +426,15 @@ export function BookingWizard({
     setStep(Math.min(pageCount - 1, Math.max(0, index)));
   }
 
-  /** "Page 2 of 4 · Your details", and the dots. */
+  /** "Step 2 of 4 · Your details", and the dots: counted across the whole booking, map and price included. */
   function pageCounter(at: number) {
     return (
       <div className="flex w-full items-center justify-between gap-3">
         <span className="text-xs font-medium text-muted-foreground">
-          Page {at + 1} of {pageCount}
-          {at > 0 ? ` · ${BOOKING_PAGES[at]}` : ""}
+          Step {at + 1} of {CLIENT_STEPS.length} · {CLIENT_STEPS[at]}
         </span>
         <span className="flex gap-1" aria-hidden>
-          {BOOKING_PAGES.map((label, i) => (
+          {CLIENT_STEPS.map((label, i) => (
             <span key={label} className={cn("h-1.5 w-5 rounded-full", i <= at ? "bg-primary" : "bg-muted")} />
           ))}
         </span>

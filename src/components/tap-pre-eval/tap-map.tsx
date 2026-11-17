@@ -22,7 +22,7 @@ import {
   SPOT_NOW,
   type TapSpot,
 } from "@/lib/tap-estimate";
-import { groundToPicture, satelliteUrl, type LngLat, type LotData } from "@/lib/lot-map";
+import { groundToPicture, pointInRing, satelliteUrl, type LngLat, type LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -119,6 +119,9 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
 
   const openIndex = spots.findIndex((s) => s.key === openKey);
   const openSpot = openIndex >= 0 ? spots[openIndex] : null;
+  // A tap past the property line: said gently, since the line is the county's
+  // and can be off, but most often it's the neighbour's grass.
+  const openOutside = Boolean(openSpot && lot?.ring && lot.ring.length >= 4 && !pointInRing([openSpot.lng, openSpot.lat], lot.ring));
   // What is there now, once they've said: the second question shows only its wants.
   const openNow = openSpot?.here ? (SPOT_NOW.find((n) => n.value === openSpot.here) ?? null) : null;
 
@@ -230,6 +233,13 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
     const map = mapRef.current;
     if (!map) return;
     const spot = spots.find((s) => s.key === openKey);
+    if (!spot && lot?.ring?.length) {
+      // Done with a spot: back to the whole property, ready for the next tap.
+      const ring = closedRing(lot.ring);
+      const bounds = ring.reduce((b, p) => b.extend(p), new mapboxgl.LngLatBounds(ring[0], ring[0]));
+      map.fitBounds(bounds, { padding: 48, maxZoom: 20 });
+      return;
+    }
     const bottom = spot && !drawing ? map.getContainer().clientHeight * 0.6 : 0;
     map.easeTo({ center: spot ? [spot.lng, spot.lat] : undefined, padding: { top: 0, left: 0, right: 0, bottom } });
     // Only when a spot opens or closes or drawing starts or stops, not on every change to it.
@@ -486,8 +496,11 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
         />
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-5 pb-10 pt-5 text-center text-white">
-        <h1 className="text-2xl font-bold drop-shadow">{drawing ? "Draw round the area with your finger" : "Tap where you want work done"}</h1>
+      {/* Out of the way while a spot is open: the sheet asks its own question, and the spot sits where this was. */}
+      <div className={cn("pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-5 pb-10 pt-5 text-center text-white", openSpot && !drawing && "hidden")}>
+        <h1 className="text-2xl font-bold drop-shadow">
+          {drawing ? "Draw round the area with your finger" : spots.length === 0 ? "Tap where you want work done" : "Anything else? Tap another spot"}
+        </h1>
         {drawing && <p className="mt-1 text-base drop-shadow">One loop round the edge is plenty. It doesn&apos;t have to be neat.</p>}
         {!drawing && lot?.ring?.length ? (
           <p className="mt-1 flex items-center justify-center gap-1.5 text-sm font-medium drop-shadow">
@@ -617,6 +630,12 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
               <PencilLine className="size-5" />
               Show how big (optional)
             </Button>
+          )}
+
+          {openOutside && (
+            <p className="rounded-lg bg-amber-100 px-4 py-2 text-sm font-medium text-amber-900">
+              This spot is outside your green line. If it isn&apos;t your property, tap the bin to remove it.
+            </p>
           )}
 
           {error && <p className="text-center text-sm font-medium text-destructive">{error}</p>}

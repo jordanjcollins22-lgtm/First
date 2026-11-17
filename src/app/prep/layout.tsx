@@ -12,8 +12,8 @@ import { OutboxRunner } from "@/components/offline/outbox-runner";
  */
 export const metadata: Metadata = {
   metadataBase: new URL("https://app.jslandscapingmd.com"),
-  title: "Before your evaluation",
-  description: "A few questions so we come ready.",
+  title: "Your yard and your price",
+  description: "Mark what you'd like done and see your price.",
   robots: { index: false, follow: false },
 };
 
