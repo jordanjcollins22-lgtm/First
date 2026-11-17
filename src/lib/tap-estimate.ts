@@ -37,6 +37,7 @@ export const TAP_CHOICES: TapChoice[] = [
   { value: "wash", label: "Wash the house", service: "washing", details: { wash_what: "siding" } },
   { value: "water", label: "Water problem", service: "drainage", details: { water: "pools" } },
   { value: "patio", label: "Patio or walkway", service: "hardscape", details: { hard_what: "patio" } },
+  { value: "leaves", label: "Leaf removal", service: "cleanup", details: { cleanup_what: "leaves" } },
   { value: "other", label: "Not sure, take a look", service: "other" },
 ];
 
@@ -80,6 +81,7 @@ export const SPOT_NOW: SpotNow[] = [
       { value: "rock", label: "River rock", choices: ["rock"] },
       { value: "weeds", label: "Weeds pulled", choices: ["weeds"] },
       { value: "plants", label: "New plants", choices: ["plants"] },
+      { value: "leaves", label: "Leaves cleared out", choices: ["leaves"] },
     ],
   },
   {
@@ -93,9 +95,10 @@ export const SPOT_NOW: SpotNow[] = [
   },
   {
     value: "grass",
-    label: "Grass",
+    label: "Lawn",
     wants: [
-      { value: "lawn", label: "Better grass", choices: ["lawn"] },
+      { value: "leaves", label: "Leaves cleared off", choices: ["leaves"] },
+      { value: "lawn", label: "A thicker, greener lawn", choices: ["lawn"] },
       { value: "bed", label: "A garden bed", choices: ["mulch"] },
       { value: "patio", label: "A patio or walkway", choices: ["patio"] },
     ],
@@ -106,7 +109,7 @@ export const SPOT_NOW: SpotNow[] = [
     wants: [
       { value: "mulch", label: "A mulch bed", choices: ["mulch", "weeds"] },
       { value: "rock", label: "A rock bed", choices: ["rock", "weeds"] },
-      { value: "lawn", label: "Grass", choices: ["lawn"] },
+      { value: "lawn", label: "A lawn", choices: ["lawn"] },
       { value: "clean", label: "Just cleaned up", choices: ["weeds"] },
       { value: "patio", label: "A patio or walkway", choices: ["patio"] },
     ],

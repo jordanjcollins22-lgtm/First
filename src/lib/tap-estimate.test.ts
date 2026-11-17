@@ -255,6 +255,8 @@ describe("the two spot questions", () => {
   it("works answers out to the priced choices, in order, with no repeats", () => {
     expect(choicesForSpot("dirt", ["rock", "mulch"])).toEqual(["mulch", "rock", "weeds"]);
     expect(choicesForSpot("bushes", ["trim", "remove"])).toEqual(["trim", "remove"]);
+    // Leaves on the lawn are a leaf removal, priced like any other area.
+    expect(choicesForSpot("grass", ["leaves"])).toEqual(["leaves"]);
     expect(choicesForSpot("unsure", [])).toEqual(["other"]);
     expect(choicesForSpot("water", ["fix"])).toEqual(["water"]);
   });

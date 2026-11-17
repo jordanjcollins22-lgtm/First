@@ -48,6 +48,10 @@ describe("equationWithTeamPay", () => {
 });
 
 describe("forwardLinesFor", () => {
+  it("prices leaves on the lawn as leaf removal by the square foot", () => {
+    expect(forwardLinesFor({ service: "cleanup", label: "x", typeId: "leaf-seasonal-cleanup", areaSqft: 2000 }, PRODUCTION_SERVICES)).toMatchObject([{ key: "leaf-removal", quantity: 2000 }]);
+  });
+
   it("spreads a bed's mulch two inches deep, to the next half yard", () => {
     // 204 sq ft at 2 in is 1.26 yd: 1.5 yd.
     expect(forwardLinesFor(bed(204), PRODUCTION_SERVICES)).toMatchObject([{ key: "mulch-install", quantity: 1.5 }]);
