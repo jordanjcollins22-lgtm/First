@@ -20,6 +20,7 @@ import {
 import { composeReminder, fitSms, sayWhen } from "@/lib/client-message-templates";
 import { BUSINESS_TIME_ZONE, zonedToUtc } from "@/lib/time-zone";
 import { HOW_TO_REPLY } from "@/lib/message-via";
+import { estimatePath, tapMapPath } from "@/lib/data/tap-estimate";
 import {
   alreadySent,
   contactsFor,
@@ -194,6 +195,7 @@ export async function GET(request: NextRequest) {
             address: facts.address,
             link,
             amount: facts.amount,
+            stoppedAt: facts.stoppedAt ?? null,
           },
           { includeOptOut, unsubscribeUrl }
         );
@@ -250,6 +252,8 @@ interface SubjectWithFacts {
   amount: string | null;
   /** Proposal follow-ups: which touch each offset is, for its wording. */
   touchIndex?: Map<number, number>;
+  /** Booking not finished: where they stopped. */
+  stoppedAt?: "map" | "estimate";
 }
 
 /** A sent proposal the follow-up sequence may still be working. */
@@ -422,6 +426,8 @@ async function subjectsFor(
     }
   }
 
+  out.push(...(await unfinishedBookings(admin, organizationId, now)));
+
   // Proposals carry the business directly, so no list of job ids is needed.
   const { data: proposals, error: proposalsError } = await admin
     .from("job_proposals")
@@ -511,4 +517,93 @@ async function subjectsFor(
   }
 
   return { subjects: out, proposals: inPlay };
+}
+
+/**
+ * People who gave their name, email and phone on the booking page in the
+ * last week and then stopped before paying: at the map, or looking at their
+ * estimate. Before the details there is nobody to follow up with, so the
+ * address step on its own never gets a message.
+ *
+ * Done with once they pay, book a visit, the job is cancelled, or they get
+ * in touch on any channel: somebody who replied is talking to us already.
+ */
+async function unfinishedBookings(
+  admin: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  now: Date
+): Promise<SubjectWithFacts[]> {
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: leads, error } = await admin
+    .from("funnel_events")
+    .select("job_id, created_at")
+    .eq("organization_id", organizationId)
+    .eq("step", "lead")
+    .not("job_id", "is", null)
+    .gte("created_at", weekAgo)
+    .limit(500);
+  if (error) {
+    log.error("cron.client_reminders.unfinished", error, { organizationId });
+    return [];
+  }
+  // The first time they gave their details, per job.
+  const since = new Map<string, Date>();
+  for (const lead of leads ?? []) {
+    if (!lead.job_id) continue;
+    const at = new Date(lead.created_at);
+    const seen = since.get(lead.job_id);
+    if (!seen || at < seen) since.set(lead.job_id, at);
+  }
+  const ids = [...since.keys()];
+  if (ids.length === 0) return [];
+
+  const [{ data: jobs }, { data: estimates }, { data: intakes }, { data: sent }] = await Promise.all([
+    admin
+      .from("jobs")
+      .select("id, is_test, cancelled_at, evaluation_date, property:properties!inner(address, customer_id)")
+      .in("id", ids),
+    admin.from("job_estimates").select("job_id, paid_at").in("job_id", ids),
+    admin.from("evaluation_intakes").select("job_id, token").in("job_id", ids),
+    admin.from("funnel_events").select("job_id").eq("organization_id", organizationId).eq("step", "map_sent").in("job_id", ids),
+  ]);
+
+  type JobRow = {
+    id: string;
+    is_test: boolean | null;
+    cancelled_at: string | null;
+    evaluation_date: string | null;
+    property: { address: string; customer_id: string | null } | null;
+  };
+  const paid = new Set((estimates ?? []).filter((e) => e.paid_at).map((e) => e.job_id));
+  const hasEstimate = new Set([...(estimates ?? []).map((e) => e.job_id), ...(sent ?? []).map((e) => e.job_id)]);
+  const tokenOf = new Map((intakes ?? []).map((i) => [i.job_id, i.token]));
+  const rows = ((jobs ?? []) as unknown as JobRow[]).filter((j) => j.property?.customer_id && tokenOf.get(j.id));
+  const replied = await lastClientContact(admin, rows.map((j) => j.property!.customer_id!));
+
+  return rows.map((job) => {
+    const customerId = job.property!.customer_id!;
+    const anchor = since.get(job.id)!;
+    const reply = replied.get(customerId);
+    const stoppedAt = hasEstimate.has(job.id) ? "estimate" : "map";
+    const token = tokenOf.get(job.id)!;
+    return {
+      subject: {
+        kind: "booking_unfinished" as const,
+        referenceId: job.id,
+        customerId,
+        anchor,
+        settled:
+          Boolean(job.is_test) ||
+          Boolean(job.cancelled_at) ||
+          Boolean(job.evaluation_date) ||
+          paid.has(job.id) ||
+          Boolean(reply && reply > anchor),
+      },
+      when: null,
+      address: job.property!.address,
+      link: stoppedAt === "estimate" ? estimatePath(token) : tapMapPath(token),
+      amount: null,
+      stoppedAt,
+    };
+  });
 }

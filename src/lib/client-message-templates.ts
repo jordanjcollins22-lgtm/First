@@ -25,6 +25,8 @@ export interface MessageFacts {
   /** The property, when saying which one helps. */
   address?: string | null;
   amount?: string | null;
+  /** Booking not finished: where they stopped, the map or their estimate. */
+  stoppedAt?: "map" | "estimate" | null;
 }
 
 export interface ComposedMessage {
@@ -42,6 +44,22 @@ function core(kind: ReminderKind, facts: MessageFacts): { subject: string; lines
   const when = facts.when ? ` for ${facts.when}` : "";
 
   switch (kind) {
+    case "booking_unfinished":
+      return facts.stoppedAt === "estimate"
+        ? {
+            subject: "Your estimate is ready",
+            lines: [
+              `${hi}your estimate${place} is ready whenever you are.`,
+              "Pay a third down and a team member will reach out to set your start day, or book a paid evaluation and we will come out first.",
+            ],
+          }
+        : {
+            subject: "Finish your yard map to see your price",
+            lines: [
+              `${hi}you started an estimate${place} but did not get to the map.`,
+              "It takes a couple of minutes: tap where you want work done and you will see your price right away.",
+            ],
+          };
     case "evaluation_confirmed":
       return {
         subject: `Your evaluation is booked${facts.when ? ` for ${facts.when}` : ""}`,

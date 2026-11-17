@@ -42,6 +42,7 @@ export const MODE_LABEL: Record<ApprovalMode, string> = {
  * right bucket without a change here. Matched in order; first wins.
  */
 const LOW_RISK_PATTERNS: RegExp[] = [
+  /^booking_unfinished$/,
   /^evaluation_confirmed$/,
   /^evaluation_reminder$/,
   /^evaluation_(booked|two_days|day_before|morning_of|after)$/,
@@ -69,6 +70,7 @@ export function defaultModeFor(kind: string): ApprovalMode {
 
 /** The kinds the settings screen lists, in the order a person thinks of them. */
 export const KNOWN_KINDS: string[] = [
+  "booking_unfinished",
   "evaluation_booked",
   "evaluation_confirmed",
   "evaluation_two_days",

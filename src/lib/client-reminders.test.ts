@@ -32,8 +32,9 @@ const REMIND_A_DAY_BEFORE: ReminderRule[] = [
 ];
 
 describe("the reminders a business gets before it changes anything", () => {
-  it("covers the five moments a client actually hears from us", () => {
+  it("covers the six moments a client actually hears from us", () => {
     expect(DEFAULT_RULES.map((rule) => rule.kind).sort()).toEqual([
+      "booking_unfinished",
       "evaluation_confirmed",
       "evaluation_reminder",
       "invoice_reminder",

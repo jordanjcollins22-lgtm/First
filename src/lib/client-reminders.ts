@@ -18,6 +18,7 @@ import type { Channel } from "@/lib/client-consent";
 
 /** The things a reminder can be about. */
 export type ReminderKind =
+  | "booking_unfinished"
   | "evaluation_confirmed"
   | "evaluation_reminder"
   | "proposal_follow_up"
@@ -46,6 +47,11 @@ export interface ReminderRule {
  * a business that is on top of things; five is a business somebody mutes.
  */
 export const DEFAULT_RULES: ReminderRule[] = [
+  // Somebody gave us their name, email and phone on the booking page, then
+  // stopped before paying: at the map, or looking at their estimate. Counted
+  // from when they gave their details: the next morning, then three days on.
+  // Nothing before that, because before the details there is nobody to ask.
+  { kind: "booking_unfinished", enabled: true, channels: ["sms", "email"], offsetsHours: [24, 72] },
   { kind: "evaluation_confirmed", enabled: true, channels: ["sms", "email"], offsetsHours: [0] },
   { kind: "evaluation_reminder", enabled: true, channels: ["sms"], offsetsHours: [-18] },
   { kind: "proposal_follow_up", enabled: true, channels: ["email"], offsetsHours: [72, 168] },
@@ -58,6 +64,7 @@ export const DEFAULT_RULES: ReminderRule[] = [
 ];
 
 export const KIND_LABEL: Record<ReminderKind, string> = {
+  booking_unfinished: "Booking not finished",
   evaluation_confirmed: "Evaluation booked",
   evaluation_reminder: "Evaluation coming up",
   proposal_follow_up: "Proposal not answered",
@@ -66,6 +73,7 @@ export const KIND_LABEL: Record<ReminderKind, string> = {
 };
 
 export const KIND_WHY: Record<ReminderKind, string> = {
+  booking_unfinished: "They gave us their details and stopped before paying. Each one carries the link back to where they left off.",
   evaluation_confirmed: "Straight after somebody books, so they have it in writing.",
   evaluation_reminder: "Before we drive out to a house with nobody home.",
   proposal_follow_up: "A proposal nobody answered is not a no, it is a proposal nobody opened.",
