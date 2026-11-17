@@ -1,4 +1,5 @@
 import type { ApplicantDetail, ApplicantRow } from "@/lib/data/hiring";
+import type { PayoutRequestRow, Wallet } from "@/lib/wallet";
 import type { JourneyView, MessageRow, NewHireLine, StepRow } from "@/lib/data/journey";
 import { applicantEmail, welcomeEmail } from "@/lib/hiring/emails";
 import { positionFor } from "@/lib/hiring/positions";
@@ -118,19 +119,46 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
   },
   {
     key: "app",
-    title: "Their app: send your link to someone",
+    title: "Their app: link, people, wallet, stage",
     steps: [{ id: "15", name: "Send us someone you know" }],
-    what: "The top of an affiliate's app: who it's for and how they know them, then a message ready to copy with their own tracked link, and who opened it.",
+    what: "An affiliate's app in four parts: send your link (someone found online goes in here too, with a screenshot), people you sent it to and how far each got, the wallet with Request payout, and their stage.",
   },
 ];
 
 /** Who a sample affiliate sent their link to. */
 export function sampleReferrals(today: string): ReferralRow[] {
   return [
-    { name: "Pat Neighbor", affiliation: "Neighbor", sentAt: at(today, "13:00:00"), clicks: 0 },
-    { name: "Jamie Friend", affiliation: "Friend", sentAt: at(daysAgo(today, 1)), clicks: 2, screenshot: true },
-    { name: "Alex Coworker", affiliation: "Coworker", sentAt: at(daysAgo(today, 3)), clicks: 1 },
+    { name: "Pat Neighbor", affiliation: "Neighbor", sentAt: at(today, "13:00:00"), clicks: 0, progress: "sent" },
+    { name: "Jamie Friend", affiliation: "Friend", sentAt: at(daysAgo(today, 1)), clicks: 2, screenshot: true, progress: "opened" },
+    { name: "Alex Coworker", affiliation: "Coworker", sentAt: at(daysAgo(today, 3)), clicks: 1, progress: "booked" },
+    { name: "Chris Miller", affiliation: "Neighbor", sentAt: at(daysAgo(today, 20)), clicks: 3, progress: "sold", yours: 74 },
   ];
+}
+
+/** A sample affiliate's wallet: one job paid, one waiting on the client, one payout already sent. */
+export function sampleWallet(today: string): Wallet {
+  return {
+    ready: 212,
+    waiting: 100,
+    onHold: 0,
+    open: null,
+    canRequest: 212,
+    history: [
+      { label: "Miller project", amount: 74, at: at(daysAgo(today, 3)) },
+      { label: "Paid out to your bank", amount: -150, at: at(daysAgo(today, 14)) },
+      { label: "Lopez project", amount: 138, at: at(daysAgo(today, 16)) },
+    ],
+  };
+}
+
+/** The same wallet once they've tapped Request payout. */
+export function sampleWalletAsked(today: string): Wallet {
+  const w = sampleWallet(today);
+  return { ...w, canRequest: 0, open: samplePayoutRequest(today) };
+}
+
+export function samplePayoutRequest(today: string): PayoutRequestRow {
+  return { id: "sample-payout", profileId: "sample", person: "Sam Affiliate", amount: 212, status: "requested", requestedAt: at(today, "13:00:00"), decidedAt: null, decisionNote: null, sentAt: null, method: null, reference: null };
 }
 
 export function previewPage(key: string): PreviewPage | null {
@@ -223,7 +251,7 @@ export function sampleJourney(today: string): JourneyView {
   // Moved to once a day after week 3, and to twice a week on day 29, when the manager said they were ready.
   const taper = { daily: daysAgo(today, 20), twice_weekly: daysAgo(today, 6) };
   const steps: StepRow[] = [
-    step("taper", "daily", taper.daily, "Answering posts on their own, fewer questions."),
+    step("taper", "daily", taper.daily, "Sending their link on their own, fewer questions."),
     step("taper", "twice_weekly", taper.twice_weekly, "First estimate booked from their link."),
     step("plan", "plan", startDate, "Went through the 30-60-90 plan on day one."),
     step("culture", "culture", startDate),
@@ -239,7 +267,7 @@ export function sampleJourney(today: string): JourneyView {
       step("training", trainingKey(t, "released"), daysAgo(today, 27 - i * 4)),
     ]),
     ...(tasks[2] ? [step("training", trainingKey(tasks[2], "demonstrated"), daysAgo(today, 10))] : []),
-    step("review", "30", daysAgo(today, 4), "Two clients booked from their link. Next: answer posts every evening."),
+    step("review", "30", daysAgo(today, 4), "Two clients booked from their link. Next: answer people online every evening."),
   ];
   return {
     id: SAMPLE_ID,

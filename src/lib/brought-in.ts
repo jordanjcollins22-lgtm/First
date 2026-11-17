@@ -19,6 +19,8 @@ export interface BroughtInJob {
   /** What the client pays, in dollars, once there is a price. */
   price: number | null;
   createdAt: string;
+  /** The tracked link it came through, when it did. */
+  referralCode?: string | null;
 }
 
 export type BroughtInStep = "lead" | "evaluation" | "proposal" | "sold" | "done" | "lost";
@@ -41,7 +43,7 @@ export function broughtInStep(job: BroughtInJob): BroughtInStep {
 }
 
 const LABEL: Record<BroughtInStep, string> = {
-  lead: "New lead: the office is booking the free evaluation",
+  lead: "New lead: the office is reaching out to set up an estimate",
   evaluation: "Evaluation booked",
   proposal: "Priced, waiting on the client",
   sold: "Sold: you earn 4% when it's paid",
