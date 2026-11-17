@@ -5,11 +5,13 @@
  * paid for by the price rather than taken out of the crew's time.
  *
  *   PLH = Q ÷ PR                         projected crew-hours, per service
- *   CR  = (NPL × PLR) + (NPT × PTR)      the crew's hourly pay, together
- *   PLC = PLH × CR                       projected labour cost
+ *   CR  = (NPL × PLR) + (NPT × PTR)      labour price per crew-hour
+ *                                        (pay for performance: $95 a tech, $190 a crew)
+ *   PLC = PLH × CR × CP%                 projected labour cost, the crew pool
  *   RA  = GP% + A% + E% + AM% + GR%      revenue already allocated
  *   PCM = 1 − RA                         what is left for cost
- *   R   = (M + PLC) ÷ PCM                the price
+ *   R   = M ÷ PCM + PLH × CR             the price: materials marked up,
+ *                                        labour charged at its own rate
  *
  * Each service has one production rate (PR), its own, used on every job:
  * hand weed pulling is one rate, weed spraying another, plant removal
@@ -162,12 +164,17 @@ const isOn = (s: ProductionService | null): s is ProductionService => s != null 
 
 /** The crew and the shares of the price set aside. */
 export interface PricingEquation {
-  /** NPL and PLR. */
+  /** NPL and PLR: leads, and what an hour of a lead's time is charged at. */
   leads: number;
   leadRateCents: number;
-  /** NPT and PTR. */
+  /** NPT and PTR: technicians, and what an hour of a technician's time is charged at. */
   technicians: number;
   technicianRateCents: number;
+  /**
+   * CP%: the share of the labour price that goes to the crew pool (pay for
+   * performance), so labour's cost is this share of what it is charged at.
+   */
+  crewPoolShare: number;
   /** GP%, A%, E%, AM% and GR%, as fractions. */
   grossProfit: number;
   affiliate: number;
@@ -184,26 +191,36 @@ export interface PricingEquation {
 }
 
 /**
- * The crew and allocations as they stand. The pay rates are the training
- * example's ($45 a lead, $30 a technician), not confirmed pay.
+ * The crew and allocations as they stand: pay for performance, two
+ * technicians to a truck and no leads, labour charged at $95 per tech per
+ * budgeted hour ($190 a crew-hour), 38% of it to the crew pool. The
+ * evaluator's share is off for now (see EVALUATOR_SHARE_PCT); put it back to
+ * 0.04 to turn it on again.
  */
 export const PRICING_EQUATION: PricingEquation = {
-  leads: 1,
-  leadRateCents: 4500,
-  technicians: 1,
-  technicianRateCents: 3000,
+  leads: 0,
+  leadRateCents: 9500,
+  technicians: 2,
+  technicianRateCents: 9500,
+  crewPoolShare: 0.38,
   grossProfit: 0.5,
   affiliate: 0.04,
-  evaluator: 0.04,
+  evaluator: 0,
   accountManager: 0.07,
   reserve: 0,
   workdayHours: 8,
   onJobShare: 0.75,
 };
 
-/** CR = (NPL × PLR) + (NPT × PTR). */
+/** CR = (NPL × PLR) + (NPT × PTR): what a crew-hour is charged at. */
 export function crewRateCents(eq: PricingEquation): number {
   return eq.leads * eq.leadRateCents + eq.technicians * eq.technicianRateCents;
+}
+
+/** What a crew-hour costs: the crew pool's share of what it is charged at. */
+export function crewCostRateCents(eq: PricingEquation): number {
+  const share = Number.isFinite(eq.crewPoolShare) && eq.crewPoolShare >= 0 && eq.crewPoolShare <= 1 ? eq.crewPoolShare : 0;
+  return crewRateCents(eq) * share;
 }
 
 /** RA = GP% + A% + E% + AM% + GR%. */
@@ -243,9 +260,9 @@ export interface PricedLine extends PriceLine {
   pr: number | null;
   /** PLH = Q ÷ PR, in crew-hours. */
   plh: number;
-  /** PLC = PLH × CR, in cents (unrounded, so lines add up to the job's). */
+  /** PLC = PLH × CR × CP%, in cents (unrounded, so lines add up to the job's). */
   plcCents: number;
-  /** R = (M + PLC) ÷ PCM, in cents, rounded. */
+  /** R = M ÷ PCM + PLH × CR, in cents, rounded. */
   rCents: number;
 }
 
@@ -255,7 +272,7 @@ export function priceLine(line: PriceLine, eq: PricingEquation, services: Produc
   const quantity = Math.max(0, Number.isFinite(line.quantity) ? line.quantity : 0);
   const materialCents = Math.max(0, Math.round(Number.isFinite(line.materialCents) ? line.materialCents : 0));
   const plh = pr && pr > 0 ? quantity / pr : 0;
-  const plcCents = plh * crewRateCents(eq);
+  const plcCents = plh * crewCostRateCents(eq);
   const pcm = projectCostMargin(eq);
   return {
     ...line,
@@ -266,7 +283,7 @@ export function priceLine(line: PriceLine, eq: PricingEquation, services: Produc
     pr,
     plh,
     plcCents,
-    rCents: pcm > 0 ? Math.round((materialCents + plcCents) / pcm) : 0,
+    rCents: Math.round((pcm > 0 ? materialCents / pcm : 0) + plh * crewRateCents(eq)),
   };
 }
 
@@ -351,7 +368,7 @@ export function offWork(workPlh: number, eq: PricingEquation, driveMinutesPerDay
   const byShare = workPlh * (1 / share - 1);
   const byDrive = drive != null ? (days * drive) / 60 : 0;
   const plh = Math.max(byShare, byDrive);
-  return { days, workHoursPerDay, driveMinutesPerDay: drive, plh, plcCents: plh * crewRateCents(eq), by: plh <= 0 ? "none" : byDrive > byShare ? "drive" : "share" };
+  return { days, workHoursPerDay, driveMinutesPerDay: drive, plh, plcCents: plh * crewCostRateCents(eq), by: plh <= 0 ? "none" : byDrive > byShare ? "drive" : "share" };
 }
 
 export interface PricedJob {
@@ -377,7 +394,6 @@ export function priceForward(
   services: ProductionService[] = PRODUCTION_SERVICES,
   driveMinutesPerDay: number | null = null
 ): PricedJob {
-  const pcm = projectCostMargin(eq);
   const worked = areas.map((lines) => priceArea(lines, eq, services));
   const workPlh = worked.reduce((s, a) => s + a.plh, 0);
   const off = offWork(workPlh, eq, driveMinutesPerDay);
@@ -385,7 +401,7 @@ export function priceForward(
     const part = workPlh > 0 ? a.plh / workPlh : 0;
     const plh = off.plh * part;
     const plcCents = off.plcCents * part;
-    const rCents = pcm > 0 ? Math.round(plcCents / pcm) : 0;
+    const rCents = Math.round(plh * crewRateCents(eq));
     return { ...a, plh: a.plh + plh, plcCents: a.plcCents + plcCents, costCents: a.costCents + plcCents, rCents: a.rCents + rCents, offWork: { plh, plcCents, rCents } };
   });
   const sum = (pick: (a: PricedArea) => number) => priced.reduce((s, a) => s + pick(a), 0);
@@ -534,12 +550,18 @@ function sized(line: PriceLine, size: string): PriceLine {
   return line.quantity > 0 ? { ...line, note: `${line.note}, priced as ${size}` } : line;
 }
 
+/** A service's material for this much work, at its set cost per unit. */
+export function materialCentsFor(service: ProductionService | null | undefined, quantity: number): number {
+  if (!service?.materialCentsPerUnit || !(quantity > 0)) return 0;
+  return Math.round(quantity * service.materialCentsPerUnit);
+}
+
 /** Only services that are on, each with its material at its set cost. */
 function withMaterials(lines: PriceLine[], services: ProductionService[]): PriceLine[] {
   return lines.flatMap((l) => {
     const s = productionService(l.key, services);
     if (!isOn(s)) return [];
-    return [s.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l];
+    return [s.materialCentsPerUnit ? { ...l, materialCents: materialCentsFor(s, l.quantity) } : l];
   });
 }
 
@@ -718,12 +740,12 @@ export interface PricingSetup {
 
 export const DEFAULT_SETUP: PricingSetup = { equation: PRICING_EQUATION, services: PRODUCTION_SERVICES };
 
-/** What one unit of a service is priced at, for the settings page: (CR ÷ PR + M per unit) ÷ PCM, in cents. */
+/** What one unit of a service is priced at, for the settings page: CR ÷ PR + M per unit ÷ PCM, in cents. */
 export function pricePerUnitCents(service: ProductionService, eq: PricingEquation): number | null {
   const pcm = projectCostMargin(eq);
   if (pcm <= 0) return null;
   const labour = service.pr && service.pr > 0 ? crewRateCents(eq) / service.pr : 0;
-  return (labour + (service.materialCentsPerUnit ?? 0)) / pcm;
+  return labour + (service.materialCentsPerUnit ?? 0) / pcm;
 }
 
 /** A key for a service added on the settings page, from its name: "Sod install" → "sod-install-3f9a". */
@@ -751,7 +773,7 @@ export function readSetup(input: unknown): { ok: true; setup: PricingSetup } | {
   const technicianRateCents = int(e.technicianRateCents);
   if (![leads, technicians].every((n) => Number.isFinite(n) && n >= 0 && n <= 20)) return { ok: false, error: "The crew is between 0 and 20 people of each kind." };
   if (leads + technicians === 0) return { ok: false, error: "The crew needs at least one person." };
-  if (![leadRateCents, technicianRateCents].every((n) => Number.isFinite(n) && n >= 0 && n <= 50_000)) return { ok: false, error: "Hourly pay is between $0 and $500." };
+  if (![leadRateCents, technicianRateCents].every((n) => Number.isFinite(n) && n >= 0 && n <= 50_000)) return { ok: false, error: "An hour of labour is charged at between $0 and $500." };
   const list = Array.isArray(o.services) ? o.services : [];
   if (list.length === 0 || list.length > 200) return { ok: false, error: "Keep at least one service." };
   const services: ProductionService[] = [];

@@ -41,7 +41,7 @@ export function ClientSignIn() {
       if (!result.ok) return setError(result.error);
       // A member of staff who signs in here belongs in the app, not on a
       // client page.
-      router.replace(result.message === "staff" ? "/dashboard" : "/my");
+      router.replace(result.message === "staff" ? "/me" : "/my");
       router.refresh();
     });
   }

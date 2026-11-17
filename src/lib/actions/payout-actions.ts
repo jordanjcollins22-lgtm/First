@@ -31,7 +31,7 @@ function approves(roles: string[]): boolean {
 const db = async () => (await createClient()) as unknown as SupabaseClient;
 
 function refresh() {
-  revalidatePath("/my-day");
+  revalidatePath("/me");
   revalidatePath("/admin/payments");
 }
 

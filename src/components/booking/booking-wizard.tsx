@@ -1,28 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { staticImageryPath } from "@/lib/static-imagery";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, CheckCircle2, ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Loader2, LocateFixed, MapPin, Search, UserCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { readAdClick, type AdClick } from "@/lib/ad-click";
 import { cn } from "@/lib/utils";
-import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
-import { reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
-import { recordBookingVisit, recordLocateResult, submitPublicBooking } from "@/lib/actions/public-booking-actions";
+import { isMapboxConfigured } from "@/lib/public-env";
+import { marylandFirst, plainAddress, reverseGeocode, searchAddress, type GeocodeSuggestion } from "@/lib/mapbox-geocoding";
+import { recordBookingVisit, recordDetailsShown, recordLocateResult, startPublicLead } from "@/lib/actions/public-booking-actions";
 import { assignedVariant, type AddressEntry, type AddressVariant } from "@/lib/booking-test";
-import type { AvailableSlotGroup } from "@/lib/booking-availability";
 import type { PublicService } from "@/lib/data/public-booking";
-import type { BookingTimes, OfferedTime } from "@/app/book/times/route";
-import { RecommendedTimes } from "@/components/booking/recommended-times";
 import { LandingCard } from "@/components/booking/landing-card";
-import { BOOKING_PAGES, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
-import { modeForAddress } from "@/lib/evaluation-mode";
-import { HEARD_ABOUT, type HeardAbout } from "@/lib/heard-about";
-import { BUDGET_RANGES } from "@/lib/booking-budget-ranges";
-import { routeForBudget } from "@/lib/photo-quote";
+import { BOOKING_PAGES, CLIENT_STEPS, NO_PROOF, type BookingProof } from "@/lib/booking-proof";
 import {
   MEMORY_KEY,
   readRemembered,
@@ -32,7 +26,7 @@ import {
 } from "@/lib/booking-memory";
 
 /**
- * Booking a free evaluation, in the order somebody is willing to answer.
+ * The start of the funnel, in the order somebody is willing to answer.
  *
  * The form used to open on a calendar and ask for a name, an email and a phone
  * number at step two — before the person had committed to anything, and before
@@ -46,47 +40,16 @@ import {
  * already booked nearby and offer those. The client gets a shorter wait, we get
  * a tighter round, and neither of us had to think about it.
  *
- * **Then who they are, then when.** Four pages: the landing card asks where
- * the property is, the next asks for a name, email and phone, the next for a
- * time, and the last says they are booked. What they want done is not asked
- * at all: the pre-evaluation form after booking asks it properly, and asking
- * twice is a page somebody gives up on.
- *
- * **A small job skips the time.** The details page asks, optionally, roughly
- * what budget they have in mind. When the business quotes small jobs from
- * photos and the budget is wholly under its line, there is no time to pick:
- * the job is made and they go straight to the pre-evaluation form to tap the
- * areas and add photos (photo-quote.ts has the rule; the server applies it).
- *
- * **A time is picked, then confirmed.** Tapping a time only chooses it, so a
- * slip of the thumb on a phone is not a booking.
+ * **Then who they are, and on to the project.** Two pages: the landing card
+ * asks where the property is, the next for a name, email and phone. Then they
+ * go straight on to mark what they want done on the map and see their
+ * estimate. The visit time is not asked here at all: it is picked once they
+ * have paid, a deposit or a paid evaluation, so nobody is on the calendar
+ * who hasn't.
  */
 
-const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 /** The phone the owner's preview of the landing card stands in for. */
 const PREVIEW_SCREEN_PX = 680;
-
-function toDateKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function parseDateKey(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function formatDateHeader(dateKey: string): string {
-  return parseDateKey(dateKey).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-
-function formatMonth(d: Date): string {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-}
-
-function formatTimeLabel(time: string): string {
-  const [h, m] = time.split(":").map(Number);
-  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-}
 
 /**
  * The remembered booking, as an external store.
@@ -144,28 +107,20 @@ export function BookingWizard({
   organizationName,
   referredByProfileId,
   services,
-  slots,
-  noticeText = "",
   linkRef,
-  linkOrg,
   referralCode,
   proof = NO_PROOF,
   service = null,
   preview = false,
   start = null,
-  photoQuoteLine = null,
-  wantsVisit = false,
+  test = false,
 }: {
   organizationId: string;
   organizationName: string;
   referredByProfileId: string | null;
   services: PublicService[];
-  slots: AvailableSlotGroup[];
-  /** "The earliest visit is tomorrow." Said before they look for today. */
-  noticeText?: string;
-  /** The ?ref= and ?org= off the booking link, so the times endpoint resolves the same business. */
+  /** The ?ref= off the booking link, recorded with the visit. */
   linkRef: string | null;
-  linkOrg: string | null;
   /**
    * The ?rec= off the link, when this came through a reply somebody posted.
    *
@@ -185,37 +140,19 @@ export function BookingWizard({
   /** The address the landing page sent along: the booking opens on who they are, with it already in. */
   start?: { address: GeocodeSuggestion; located: boolean } | null;
   /**
-   * The business's photo-quote line in dollars, or null when it books a visit
-   * for everybody. A budget wholly under it skips the times and goes to the
-   * pre-evaluation form instead; the server decides it again on submit.
+   * From a ?test=1 link: somebody trying the whole funnel out. It runs as it
+   * would for a client, but the lead is marked as a test, the page opens
+   * aren't counted, and nothing is charged or booked further on.
    */
-  photoQuoteLine?: number | null;
-  /** From the office's "book a visit" link: the times, whatever the budget. */
-  wantsVisit?: boolean;
+  test?: boolean;
 }) {
-  // 0 is the landing card with the address; 1 is who they are; 2 is when.
-  // Booked is the fourth page. What they want done is asked afterwards, on
-  // the pre-evaluation form, so it is not asked here.
+  // 0 is the landing card with the address; 1 is who they are. Then they go
+  // on to the map pre-evaluation and their estimate; the visit time is picked
+  // only once they have paid, on the page after the estimate.
+  const router = useRouter();
   const [step, setStep] = useState(0);
-  // The preview can show the page a client sees once they have booked.
-  const [previewDone, setPreviewDone] = useState(false);
-  const [booked, setBooked] = useState<{
-    date: string;
-    time: string;
-    address: string;
-    digital: boolean;
-    prepToken: string | null;
-  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
-
-  const today = new Date();
-  const [monthCursor, setMonthCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<AvailableSlotGroup | null>(null);
-  // A preview has no address, so no suggested times: straight to the calendar.
-  const [showAllTimes, setShowAllTimes] = useState(preview);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -233,25 +170,26 @@ export function BookingWizard({
   const visitIdRef = useRef<string | null>(null);
   const visitRecordedRef = useRef(false);
   useEffect(() => {
-    if (visitRecordedRef.current || preview) return;
+    if (visitRecordedRef.current || preview || test) return;
     visitRecordedRef.current = true;
     recordBookingVisit({ organizationId, variant, referralCode, linkRef })
       .then((r) => {
         visitIdRef.current = r.visitId;
       })
       .catch(() => {});
-  }, [organizationId, variant, referralCode, linkRef, preview]);
+  }, [organizationId, variant, referralCode, linkRef, preview, test]);
+
+  // Reaching the details page, once, for the admin Funnel page.
+  const detailsRecordedRef = useRef(false);
+  useEffect(() => {
+    if (step !== 1 || preview || detailsRecordedRef.current || !visitIdRef.current) return;
+    detailsRecordedRef.current = true;
+    void recordDetailsShown(visitIdRef.current).catch(() => {});
+  }, [step, preview]);
 
   // The ad they came from, if any. Kept for the tab, because a landing page
   // can send them here without the click id on the address.
   const adClickRef = useRef<AdClick | null>(null);
-  // "How did you hear about us?": one tap, optional, so it never costs a booking.
-  const [heardAbout, setHeardAbout] = useState<HeardAbout | null>(null);
-  const [heardAboutDetail, setHeardAboutDetail] = useState("");
-  // "Roughly what budget do you have in mind?": optional, and blank is "Not sure yet".
-  const [budget, setBudget] = useState<string | null>(null);
-  // Under the line: no time to pick, straight to the photos instead.
-  const photoQuote = !wantsVisit && routeForBudget(budget, photoQuoteLine == null ? null : { enabled: true, line: photoQuoteLine }) === "photo_quote";
   useEffect(() => {
     adClickRef.current = rememberedAdClick();
   }, []);
@@ -263,10 +201,6 @@ export function BookingWizard({
   // knows before the pre-evaluation form is back.
   const askedAbout = service ? services.find((s) => s.name.toLowerCase() === service.toLowerCase()) ?? null : null;
 
-  // The ranked times, worked out on the server once it knows the address.
-  const [times, setTimes] = useState<BookingTimes | null>(null);
-  const [timesLoading, setTimesLoading] = useState(false);
-
   // What this browser already knows about whoever is holding it.
   //
   // Subscribed to rather than read into state in an effect. localStorage is an
@@ -277,41 +211,6 @@ export function BookingWizard({
   const savedRaw = useSyncExternalStore(subscribeToMemory, memorySnapshot, serverMemorySnapshot);
   const remembered = useMemo(() => readRemembered(savedRaw), [savedRaw]);
   const [dismissedMemory, setDismissedMemory] = useState(false);
-
-  /**
-   * The ranked times for one address.
-   *
-   * Called from the two places an address actually becomes settled — picking a
-   * suggestion, and reusing a remembered one — rather than from an effect
-   * watching the coordinates. Both of those are events, and an effect that
-   * fetches on a state change it could have been told about directly is a
-   * render that has to happen before the work can start.
-   *
-   * The coordinates are arguments rather than read off state, because the
-   * handler that has them has not re-rendered yet.
-   */
-  const loadTimes = useCallback(
-    async (lat: number, lng: number) => {
-      setTimesLoading(true);
-      try {
-        const query = new URLSearchParams();
-        if (linkRef) query.set("ref", linkRef);
-        if (linkOrg) query.set("org", linkOrg);
-        query.set("lat", String(lat));
-        query.set("lng", String(lng));
-        const response = await fetch(`/book/times?${query.toString()}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(String(response.status));
-        setTimes((await response.json()) as BookingTimes);
-      } catch {
-        // The plain list the page already has is a perfectly good fallback: the
-        // same hours, just without the "we're nearby" on any of them.
-        setTimes(null);
-      } finally {
-        setTimesLoading(false);
-      }
-    },
-    [linkRef, linkOrg]
-  );
 
   function noteLocate(result: "tapped" | "accepted" | "declined" | "failed") {
     const id = visitIdRef.current;
@@ -335,7 +234,8 @@ export function BookingWizard({
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const found = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          const located = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+          const found = located ? { ...located, fullAddress: plainAddress(located.fullAddress) } : null;
           if (!found) {
             noteLocate("failed");
             setError("We couldn't match your location to an address. Type it instead.");
@@ -345,7 +245,6 @@ export function BookingWizard({
           setAddressQuery(found.fullAddress);
           setSuggestions([]);
           setAddressEntry("located");
-          void loadTimes(found.lat, found.lng);
           // Straight on; the next page shows the address with a way to change it.
           setStep(1);
         } catch {
@@ -376,7 +275,7 @@ export function BookingWizard({
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
       try {
-        setSuggestions(await searchAddress(value));
+        setSuggestions(marylandFirst(await searchAddress(value)));
       } catch {
         setSuggestions([]);
       } finally {
@@ -402,15 +301,12 @@ export function BookingWizard({
     setEmail(saved.email);
     setPhone(saved.phone);
     setAddressQuery(saved.address);
-    setSelectedAddress({
-      fullAddress: saved.address,
-      lat: saved.lat,
-      lng: saved.lng,
-    } as GeocodeSuggestion);
+    const address = { fullAddress: saved.address, lat: saved.lat, lng: saved.lng } as GeocodeSuggestion;
+    setSelectedAddress(address);
     setSuggestions([]);
     setError(null);
-    setStep(2);
-    void loadTimes(saved.lat, saved.lng);
+    // Everything is already known: straight on to the map, in one tap.
+    goToProject({ ...saved, address });
   }
 
   function forgetRemembered() {
@@ -427,7 +323,6 @@ export function BookingWizard({
     setAddressQuery(found.fullAddress);
     setSuggestions([]);
     setError(null);
-    void loadTimes(found.lat, found.lng);
     setStep(1);
   }
 
@@ -442,8 +337,6 @@ export function BookingWizard({
       pickAddress(start.address);
     }, 0);
     return () => clearTimeout(timer);
-    // Once, for the address the link brought.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start, preview]);
 
   /** Back to the first page to pick another address. */
@@ -452,12 +345,10 @@ export function BookingWizard({
     setSelectedAddress(null);
     setAddressQuery("");
     setAddressEntry("typed");
-    setTimes(null);
-    setSelectedSlot(null);
     setStep(0);
   }
 
-  /** Who they are, checked before the times. */
+  /** Who they are, checked before they go on. */
   function detailsProblem(): string | null {
     if (!firstName.trim() || !lastName.trim()) return "Enter your first and last name.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Enter a valid email address.";
@@ -465,213 +356,85 @@ export function BookingWizard({
     return null;
   }
 
-  function handleSubmit() {
-    setError(null);
-    if (preview) return setError("This is a preview, so nothing is booked.");
-    const problem = detailsProblem();
-    if (problem) {
-      setStep(1);
-      return setError(problem);
+  /**
+   * Who they are and where, saved as a lead with the pre-evaluation form
+   * ready, and on to the map. No time yet: that is picked once they have
+   * paid, a deposit or a paid evaluation, after their estimate.
+   */
+  function goToProject(details?: { firstName: string; lastName: string; email: string; phone: string; address: GeocodeSuggestion }) {
+    if (preview) return setError("This is a preview, so nothing is saved.");
+    const who = details ?? { firstName, lastName, email, phone, address: selectedAddress };
+    if (!details) {
+      const problem = detailsProblem();
+      if (problem) return setError(problem);
     }
-    if (!selectedAddress) return setError("Pick your address first.");
-    // A photo quote has no time to pick; anything else needs one.
-    const slot = photoQuote ? null : selectedSlot;
-    if (!photoQuote && !slot) return setError("Pick a time first.");
+    if (!who.address) return setError("Pick your address first.");
+    const address = who.address;
     if (addressEntry === "located") noteLocate("accepted");
+    setError(null);
 
     startTransition(async () => {
       try {
-        const result = await submitPublicBooking({
+        const result = await startPublicLead({
           organizationId,
           referredByProfileId,
-          candidateEvaluatorIds: slot?.evaluatorIds ?? [],
-          date: slot?.date ?? "",
-          time: slot?.time ?? "",
-          firstName,
-          lastName,
-          email,
-          phone,
-          address: selectedAddress.fullAddress,
-          lat: selectedAddress.lat,
-          lng: selectedAddress.lng,
+          firstName: who.firstName,
+          lastName: who.lastName,
+          email: who.email,
+          phone: who.phone,
+          address: address.fullAddress,
+          lat: address.lat,
+          lng: address.lng,
           requestedServiceTypeIds: askedAbout ? [askedAbout.service_type_id] : [],
           referralCode,
           bookingVariant: variant,
           addressEntry,
           visitId: visitIdRef.current,
-          adClick: adClickRef.current,
+          adClick: test ? null : adClickRef.current,
           notes: service ? `Asked about ${service} in the post we answered.` : "",
-          budgetRange: budget ?? "Not sure yet",
-          heardAbout,
-          heardAboutDetail,
-          wantsVisit,
+          test,
         });
-        // Kept in their own browser so a second booking is a tap rather than
+        // Kept in their own browser so a second request is a tap rather than
         // the same four fields typed again on a phone.
         const keep = rememberBooking({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-          address: selectedAddress.fullAddress,
-          lat: selectedAddress.lat,
-          lng: selectedAddress.lng,
+          firstName: who.firstName.trim(),
+          lastName: who.lastName.trim(),
+          email: who.email.trim(),
+          phone: who.phone.trim(),
+          address: address.fullAddress,
+          lat: address.lat,
+          lng: address.lng,
         });
         if (keep) writeMemory(keep);
-        // What the server decided, whichever way the page guessed: a photo
-        // quote goes straight to its form, where the areas and photos are asked.
-        if (result.mode === "photo_quote") {
-          if (result.prepToken) return router.push(`/prep/${result.prepToken}`);
-          return setError("We have your details, but couldn't open the photo form. We'll email you the link.");
-        }
-        if (!slot) return setError("Pick a time first.");
-        setBooked({
-          date: slot.date,
-          time: slot.time,
-          address: selectedAddress.fullAddress,
-          // What the server decided, not what the browser guessed.
-          digital: result.mode === "digital",
-          prepToken: result.prepToken ?? null,
-        });
+        router.push(`/prep/${result.prepToken}/map?welcome=1`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong, please try again.");
       }
     });
   }
 
-  // What a client sees once they have booked. The preview shows it with a
-  // made-up time, so the owner can see the last page too.
-  const done =
-    booked ??
-    (preview && previewDone
-      ? {
-          date: toDateKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2)),
-          time: "10:00",
-          address: "123 Example Rd, Bel Air, MD",
-          digital: false,
-          prepToken: null,
-        }
-      : null);
-  const doneEmail = booked ? email : "you@example.com";
-
-  // Shadows the state on purpose: the preview's made-up booking reads the same.
-  function renderDone(booked: NonNullable<typeof done>) {
-    return (
-      <div className="flex flex-col items-center gap-4 text-center">
-        {pageCounter(BOOKING_PAGES.length - 1)}
-        <CheckCircle2 className="h-12 w-12 text-primary" />
-        <h1 className="text-2xl font-bold">You&apos;re booked</h1>
-        <p className="text-muted-foreground">
-          {formatDateHeader(booked.date)} at {formatTimeLabel(booked.time)}
-          <br />
-          {booked.address}
-        </p>
-        {/* The one thing left to do, and the reason the booking asked so little. */}
-        {(booked.prepToken || preview) && (
-          <div className="w-full rounded-xl border-2 border-primary/40 bg-primary/5 p-4 text-left text-sm">
-            <p className="font-semibold">Next step: tell us what you&apos;d like done</p>
-            <p className="mt-1 text-muted-foreground">
-              Fill out a short pre-evaluation form about the work you want, the looks you like, and any concerns you have.
-              It takes about five minutes and helps us arrive with ideas ready for you.
-            </p>
-            <a
-              href={booked.prepToken ? `/prep/${booked.prepToken}` : undefined}
-              className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-primary px-4 font-semibold text-primary-foreground"
-            >
-              Fill out the pre-evaluation form
-            </a>
-          </div>
-        )}
-        <div className="w-full rounded-xl border border-border bg-card p-4 text-left text-sm">
-          <p className="font-medium">What happens next</p>
-          <ul className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
-            <li>We&apos;ve sent a confirmation to {doneEmail}.</li>
-            <li>
-              {booked.digital
-                ? "We'll walk through your property with you on a video call. It takes about an hour."
-                : "We'll walk through your property with you. It takes about an hour."}
-            </li>
-            <li>After the visit, you&apos;ll get a written proposal with a fixed price, with no obligation to go ahead.</li>
-          </ul>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Need a different time? Reply to the confirmation email and we&apos;ll reschedule.
-        </p>
-      </div>
-    );
-  }
-
   const imageUrl =
     selectedAddress && isMapboxConfigured
-      ? `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x?access_token=${publicEnv.mapboxToken}`
+      ? staticImageryPath(`pin-s+2f6d3c(${selectedAddress.lng},${selectedAddress.lat})/${selectedAddress.lng},${selectedAddress.lat},19,0/480x320@2x`)
       : null;
 
-  // Whether somebody is driving to this one. Worked out in the browser purely
-  // so the client can be told before they commit; what gets written down is
-  // decided again on the server, from the same coordinates.
-  const mode = selectedAddress ? modeForAddress(selectedAddress.lat, selectedAddress.lng, selectedAddress.fullAddress) : null;
-
-  // The ranked list once the server has answered, the plain one until then.
-  const allTimes: AvailableSlotGroup[] = times
-    ? times.all.map((t) => ({ date: t.date, time: t.time, evaluatorIds: t.evaluatorIds }))
-    : slots;
-
-  const slotsByDate = new Map<string, AvailableSlotGroup[]>();
-  for (const slot of allTimes) {
-    const list = slotsByDate.get(slot.date) ?? [];
-    list.push(slot);
-    slotsByDate.set(slot.date, list);
-  }
-  for (const list of slotsByDate.values()) list.sort((a, b) => a.time.localeCompare(b.time));
-
-  const slotDateKeys = Array.from(slotsByDate.keys()).sort();
-  const earliestSlotMonth = slotDateKeys[0] ? parseDateKey(slotDateKeys[0]) : today;
-  const latestSlotMonth = slotDateKeys[slotDateKeys.length - 1]
-    ? parseDateKey(slotDateKeys[slotDateKeys.length - 1])
-    : today;
-
-  const monthStart = new Date(monthCursor.getFullYear(), monthCursor.getMonth(), 1);
-  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
-  const leadingBlanks = monthStart.getDay();
-  const monthCells: (Date | null)[] = [
-    ...Array.from({ length: leadingBlanks }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => new Date(monthStart.getFullYear(), monthStart.getMonth(), i + 1)),
-  ];
-  const canGoPrev = monthStart > new Date(earliestSlotMonth.getFullYear(), earliestSlotMonth.getMonth(), 1);
-  const canGoNext = monthStart < new Date(latestSlotMonth.getFullYear(), latestSlotMonth.getMonth(), 1);
-  const timesForSelectedDate = selectedDate ? slotsByDate.get(selectedDate) ?? [] : [];
-
-  // Picking a time only chooses it; the confirm button books it, so a
-  // mis-tap on a phone is not a booking.
-  function pickOffered(offer: OfferedTime) {
-    setSelectedSlot({ date: offer.date, time: offer.time, evaluatorIds: offer.evaluatorIds });
-    setSelectedDate(offer.date);
-    setError(null);
-  }
-
   const pageCount = BOOKING_PAGES.length;
-  // Where the preview arrows can go: every page, the booked one last.
-  const previewAt = previewDone ? pageCount - 1 : step;
+  // Where the preview arrows can go: every page of the card.
+  const previewAt = step;
   function previewGo(index: number) {
     setError(null);
-    if (index >= pageCount - 1) {
-      setPreviewDone(true);
-      return;
-    }
-    setPreviewDone(false);
-    setStep(Math.max(0, index));
+    setStep(Math.min(pageCount - 1, Math.max(0, index)));
   }
 
-  /** "Page 2 of 4 · Your details", and the dots. */
+  /** "Step 2 of 4 · Your details", and the dots: counted across the whole booking, map and price included. */
   function pageCounter(at: number) {
     return (
       <div className="flex w-full items-center justify-between gap-3">
         <span className="text-xs font-medium text-muted-foreground">
-          Page {at + 1} of {pageCount}
-          {at > 0 ? ` · ${BOOKING_PAGES[at]}` : ""}
+          Step {at + 1} of {CLIENT_STEPS.length} · {CLIENT_STEPS[at]}
         </span>
         <span className="flex gap-1" aria-hidden>
-          {BOOKING_PAGES.map((label, i) => (
+          {CLIENT_STEPS.map((label, i) => (
             <span key={label} className={cn("h-1.5 w-5 rounded-full", i <= at ? "bg-primary" : "bg-muted")} />
           ))}
         </span>
@@ -681,7 +444,7 @@ export function BookingWizard({
 
   // The landing card is one screen, nothing to scroll: the page is exactly
   // the height of the phone, and the card sizes its before-and-after to fit.
-  const landing = !done && step === 0;
+  const landing = step === 0;
 
   // Where the booking starts, on the landing card: the address search. The
   // suggestions drop down over the card rather than push it, so it stays one
@@ -766,6 +529,11 @@ export function BookingWizard({
         landing && !preview ? "h-[100dvh] py-3" : "py-6 sm:py-10"
       )}
     >
+      {test && (
+        <p className="rounded-xl border-2 border-dashed border-amber-500/60! bg-amber-500/10 px-3 py-2 text-center text-xs font-medium">
+          Test link: go through it like a real booking. Nothing is charged and no visit is booked.
+        </p>
+      )}
       {preview && (
         <div className="flex flex-col gap-2 rounded-2xl border border-dashed border-primary/50 bg-primary/5 p-3">
           <div className="flex items-center justify-between gap-2">
@@ -816,9 +584,6 @@ export function BookingWizard({
           landing && "shrink-0 gap-3"
         )}
       >
-      {done ? (
-        renderDone(done)
-      ) : (
       <>
       {/* Which page of how many, so nobody wonders how long this goes on. */}
       {pageCounter(step)}
@@ -852,7 +617,7 @@ export function BookingWizard({
               </button>
             </div>
           </div>
-          <p className="font-medium">Where do we send the confirmation?</p>
+          <p className="font-medium">How do we reach you?</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="firstName">First name</Label>
@@ -871,242 +636,20 @@ export function BookingWizard({
             <Label htmlFor="phone">Phone</Label>
             <Input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-12 text-base" autoComplete="tel" />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium">
-              How did you hear about us? <span className="font-normal text-muted-foreground">(optional)</span>
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {HEARD_ABOUT.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  aria-pressed={heardAbout === o.value}
-                  onClick={() => setHeardAbout((v) => (v === o.value ? null : o.value))}
-                  className={cn(
-                    "min-h-10 rounded-full border px-3 text-sm transition-colors",
-                    heardAbout === o.value ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
-                  )}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-            {heardAbout === "other" && (
-              <Input
-                value={heardAboutDetail}
-                onChange={(e) => setHeardAboutDetail(e.target.value)}
-                placeholder="Where was it?"
-                maxLength={80}
-                className="h-11 text-base"
-              />
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <p className="text-sm font-medium">
-              Roughly what budget do you have in mind? <span className="font-normal text-muted-foreground">(optional)</span>
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {BUDGET_RANGES.map((range) => (
-                <button
-                  key={range}
-                  type="button"
-                  aria-pressed={budget === range}
-                  onClick={() => setBudget((v) => (v === range ? null : range))}
-                  className={cn(
-                    "min-h-10 rounded-full border px-3 text-sm transition-colors",
-                    budget === range ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-accent"
-                  )}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-            {photoQuote && (
-              <p className="flex gap-2 rounded-lg border border-border bg-accent/40 px-3 py-2.5 text-sm text-muted-foreground">
-                <Camera className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                A project this size we can quote from photos, so there&apos;s no visit to wait for. Next you&apos;ll tap the areas on a
-                map of your property and add a few photos of each.
-              </p>
-            )}
-          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(0)} disabled={isPending}>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setStep(0)}>
               Back
             </Button>
-            <Button
-              type="button"
-              className="flex-1"
-              disabled={isPending}
-              onClick={() => {
-                const problem = preview ? null : detailsProblem();
-                if (problem) return setError(problem);
-                setError(null);
-                if (photoQuote) return handleSubmit();
-                setStep(2);
-              }}
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> One moment…
-                </>
-              ) : photoQuote ? (
-                "Continue to photos"
-              ) : (
-                "See open times"
-              )}
+            <Button type="button" className="flex-1" disabled={isPending} onClick={() => goToProject()}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Next: your project"}
             </Button>
           </div>
           <p className="text-center text-xs text-muted-foreground">We won&apos;t pass your details to anyone.</p>
         </div>
       )}
 
-      {/* ------------------------------------------------------- 3. the time */}
-      {step === 2 && (
-        <div className="flex flex-col gap-4">
-          {/* Which kind of evaluation this address gets, said before they pick
-              a time rather than after they have booked one. Somebody two hours
-              away should know it is a video call while they still have the
-              choice, not discover it in a confirmation email. */}
-          {mode?.mode === "digital" && (
-            <div className="flex gap-2.5 rounded-lg border border-border bg-accent/40 px-3 py-2.5">
-              <Video className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <p className="text-sm text-muted-foreground">{mode.says}</p>
-            </div>
-          )}
-          <div>
-            <p className="font-medium">When suits you?</p>
-            <p className="text-sm text-muted-foreground">
-              {times && times.recommended.some((t) => t.says?.includes("close"))
-                ? "These work best for us, so they're the ones we can promise."
-                : "The soonest we can get to you."}
-              {noticeText && ` ${noticeText}`}
-            </p>
-          </div>
-
-          {!showAllTimes ? (
-            <RecommendedTimes
-              times={times?.recommended ?? []}
-              loading={timesLoading && !times}
-              selected={selectedSlot}
-              onPick={pickOffered}
-              onSeeAll={() => setShowAllTimes(true)}
-            />
-          ) : (
-            <div className="flex flex-col gap-4">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <button
-                    type="button"
-                    disabled={!canGoPrev}
-                    onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() - 1, 1))}
-                    className="rounded-md p-2 text-muted-foreground hover:bg-accent disabled:opacity-30"
-                    aria-label="Previous month"
-                  >
-                    ‹
-                  </button>
-                  <p className="text-sm font-semibold">{formatMonth(monthStart)}</p>
-                  <button
-                    type="button"
-                    disabled={!canGoNext}
-                    onClick={() => setMonthCursor(new Date(monthCursor.getFullYear(), monthCursor.getMonth() + 1, 1))}
-                    className="rounded-md p-2 text-muted-foreground hover:bg-accent disabled:opacity-30"
-                    aria-label="Next month"
-                  >
-                    ›
-                  </button>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
-                  {WEEKDAY_LABELS.map((label, i) => (
-                    <div key={i}>{label}</div>
-                  ))}
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {monthCells.map((date, i) => {
-                    if (!date) return <div key={`blank-${i}`} />;
-                    const key = toDateKey(date);
-                    const hasSlots = slotsByDate.has(key);
-                    const isSelected = key === selectedDate;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={!hasSlots}
-                        onClick={() => {
-                          setSelectedDate(key);
-                          setSelectedSlot(null);
-                        }}
-                        className={cn(
-                          "flex aspect-square items-center justify-center rounded-md text-xs",
-                          !hasSlots && "text-muted-foreground/30",
-                          hasSlots && !isSelected && "font-medium text-primary hover:bg-accent",
-                          isSelected && "bg-primary font-semibold text-primary-foreground"
-                        )}
-                      >
-                        {date.getDate()}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex-1">
-                <p className="mb-2 text-sm font-semibold">
-                  {selectedDate ? formatDateHeader(selectedDate) : "Pick a day with open times"}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {timesForSelectedDate.map((slot) => {
-                    const chosen = selectedSlot?.date === slot.date && selectedSlot?.time === slot.time;
-                    return (
-                      <button
-                        key={`${slot.date}T${slot.time}`}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSlot(slot);
-                          setError(null);
-                        }}
-                        className={cn(
-                          "min-h-11 rounded-lg border px-3 text-sm font-medium",
-                          chosen ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary hover:bg-accent"
-                        )}
-                      >
-                        {formatTimeLabel(slot.time)}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAllTimes(false)}
-                  className="mt-3 py-2 text-sm text-muted-foreground underline"
-                >
-                  Back to the suggested times
-                </button>
-              </div>
-            </div>
-          )}
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <Button type="button" className="h-12 w-full text-base" disabled={isPending || preview || !selectedSlot} onClick={handleSubmit}>
-            {isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Booking…
-              </>
-            ) : selectedSlot ? (
-              `Confirm ${formatDateHeader(selectedSlot.date)} at ${formatTimeLabel(selectedSlot.time)}`
-            ) : (
-              "Pick a time above"
-            )}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">Free, and no obligation.</p>
-          <Button type="button" variant="outline" className="self-start" onClick={() => setStep(1)} disabled={isPending}>
-            Back
-          </Button>
-        </div>
-      )}
       </>
-      )}
       </div>
     </div>
   );

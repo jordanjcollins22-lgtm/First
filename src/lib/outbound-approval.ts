@@ -21,6 +21,8 @@ export const SOURCE_LABEL: Record<ApprovalSource, string> = {
 /** What each one is, in the words the list shows. */
 export function whatLabel(kind: string): string {
   switch (kind) {
+    case "booking_unfinished":
+      return "Booking not finished";
     case "evaluation_booked":
     case "evaluation_confirmed":
       return "Booking confirmation";
@@ -68,6 +70,7 @@ export function staleAfter(kind: string, now: Date): Date {
         return 12;
       case "evaluation_two_days":
       case "evaluation_after":
+      case "booking_unfinished":
         return 24;
       case "evaluation_booked":
       case "evaluation_confirmed":

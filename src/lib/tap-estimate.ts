@@ -1,0 +1,442 @@
+/**
+ * The pre-evaluation as a map: the client taps each spot they want worked
+ * on, says what they want done there in one tap, and adds a photo. From
+ * that, an estimate straight away, with a third down to hold it.
+ *
+ * The taps become the ordinary pre-evaluation answers (services, areas and
+ * the detail questions), so everything that already reads those keeps
+ * working: the evaluator's site map is seeded from them, and the instant
+ * price is worked from them the same way it is for the long form.
+ *
+ * Pure, so the mapping from taps to answers is tested without a database.
+ */
+
+import { area as turfArea, kinks, polygon, simplify } from "@turf/turf";
+
+import { cleanAnswers, type IntakeAnswers } from "@/lib/evaluation-intake";
+import { groundRegions, pointInRing, type AreaKey, type LngLat, type LotData } from "@/lib/lot-map";
+
+/** One thing a client can ask for on a spot, said the way they would say it. */
+export interface TapChoice {
+  value: string;
+  label: string;
+  /** The pre-evaluation form's service it is. */
+  service: string;
+  /** The detail answers it implies, by question id. */
+  details?: Record<string, string>;
+}
+
+export const TAP_CHOICES: TapChoice[] = [
+  { value: "mulch", label: "Fresh mulch", service: "beds", details: { beds_add: "mulch" } },
+  { value: "rock", label: "River rock", service: "beds", details: { beds_add: "stone" } },
+  { value: "plants", label: "New plants", service: "beds", details: { beds_add: "plants" } },
+  { value: "weeds", label: "Weeds and cleanup", service: "cleanup", details: { cleanup_what: "weeds" } },
+  { value: "trim", label: "Trim bushes", service: "cleanup", details: { cleanup_what: "trim" } },
+  { value: "remove", label: "Take out bushes", service: "removal", details: { remove_what: "small" } },
+  { value: "lawn", label: "Fix the lawn", service: "lawn", details: { lawn_need: "patch" } },
+  { value: "wash", label: "Wash the house", service: "washing", details: { wash_what: "siding" } },
+  { value: "water", label: "Water problem", service: "drainage", details: { water: "pools" } },
+  { value: "patio", label: "Patio or walkway", service: "hardscape", details: { hard_what: "patio" } },
+  { value: "leaves", label: "Leaf removal", service: "cleanup", details: { cleanup_what: "leaves" } },
+  { value: "other", label: "Not sure, take a look", service: "other" },
+];
+
+const CHOICE = new Map(TAP_CHOICES.map((c) => [c.value, c]));
+
+export function choiceLabel(value: string): string {
+  return CHOICE.get(value)?.label ?? value;
+}
+
+/** One answer to "what do you want here?", and the priced choices it stands for. */
+export interface SpotWant {
+  value: string;
+  label: string;
+  /** TAP_CHOICES values. */
+  choices: string[];
+}
+
+/** One answer to "what's here now?", with only the wants that make sense on it. */
+export interface SpotNow {
+  value: string;
+  label: string;
+  /** Empty: the answer is the whole job (a spot they aren't sure about). */
+  wants: SpotWant[];
+  /** The priced choices when there is nothing more to ask. */
+  choices?: string[];
+}
+
+/**
+ * The spot sheet as two short questions instead of one long list: what is
+ * there now, then what they want there, from only the answers that fit what
+ * is there. Every answer comes down to the same priced choices as before,
+ * so pricing is unchanged; what is there now is kept for the office and the
+ * picture reading.
+ */
+export const SPOT_NOW: SpotNow[] = [
+  {
+    value: "bed",
+    label: "A garden bed",
+    wants: [
+      { value: "mulch", label: "Fresh mulch", choices: ["mulch"] },
+      { value: "rock", label: "River rock", choices: ["rock"] },
+      { value: "weeds", label: "Weeds pulled", choices: ["weeds"] },
+      { value: "plants", label: "New plants", choices: ["plants"] },
+      { value: "leaves", label: "Leaves cleared out", choices: ["leaves"] },
+    ],
+  },
+  {
+    value: "bushes",
+    label: "Bushes",
+    wants: [
+      { value: "trim", label: "Trimmed", choices: ["trim"] },
+      { value: "remove", label: "Taken out", choices: ["remove"] },
+      { value: "mulch", label: "Fresh mulch around them", choices: ["mulch"] },
+    ],
+  },
+  {
+    value: "grass",
+    label: "Lawn",
+    wants: [
+      { value: "leaves", label: "Leaves cleared off", choices: ["leaves"] },
+      { value: "lawn", label: "A thicker, greener lawn", choices: ["lawn"] },
+      { value: "bed", label: "A garden bed", choices: ["mulch"] },
+      { value: "patio", label: "A patio or walkway", choices: ["patio"] },
+    ],
+  },
+  {
+    value: "dirt",
+    label: "Dirt or weeds",
+    wants: [
+      { value: "mulch", label: "A mulch bed", choices: ["mulch", "weeds"] },
+      { value: "rock", label: "A rock bed", choices: ["rock", "weeds"] },
+      { value: "lawn", label: "A lawn", choices: ["lawn"] },
+      { value: "clean", label: "Just cleaned up", choices: ["weeds"] },
+      { value: "patio", label: "A patio or walkway", choices: ["patio"] },
+    ],
+  },
+  {
+    value: "house",
+    label: "The house",
+    wants: [
+      { value: "wash", label: "Washed", choices: ["wash"] },
+      { value: "bed", label: "A bed along it", choices: ["mulch", "weeds"] },
+    ],
+  },
+  { value: "water", label: "Water sits here", wants: [{ value: "fix", label: "Fixed", choices: ["water"] }] },
+  { value: "unsure", label: "Not sure", wants: [], choices: ["other"] },
+];
+
+const NOW = new Map(SPOT_NOW.map((n) => [n.value, n]));
+
+export function hereLabel(value: string | undefined): string | null {
+  return value ? (NOW.get(value)?.label ?? null) : null;
+}
+
+/** The labels of what they want, for the office, e.g. ["Trimmed", "Taken out"]. */
+export function wantLabels(here: string | undefined, wants: string[] | undefined): string[] {
+  const now = here ? NOW.get(here) : undefined;
+  if (!now || !wants) return [];
+  return wants.flatMap((w) => now.wants.find((x) => x.value === w)?.label ?? []);
+}
+
+/**
+ * The priced choices for an answer to both questions, in TAP_CHOICES order
+ * with no repeats. Null when the answer isn't one the sheet offers.
+ */
+export function choicesForSpot(here: string, wants: string[]): string[] | null {
+  const now = NOW.get(here);
+  if (!now) return null;
+  if (now.wants.length === 0) return wants.length === 0 ? [...(now.choices ?? [])] : null;
+  if (wants.length === 0) return null;
+  const picked = new Set<string>();
+  for (const w of wants) {
+    const want = now.wants.find((x) => x.value === w);
+    if (!want) return null;
+    for (const c of want.choices) picked.add(c);
+  }
+  return TAP_CHOICES.map((c) => c.value).filter((c) => picked.has(c));
+}
+
+/** One spot the client tapped. */
+export interface TapSpot {
+  lng: number;
+  lat: number;
+  /** TAP_CHOICES values. */
+  choices: string[];
+  /** Storage paths of this spot's photos, in the job-photos bucket. */
+  photos: string[];
+  /** What is there now (SPOT_NOW value). Missing on spots from before the two questions. */
+  here?: string;
+  /** What they want there (that SPOT_NOW entry's want values); the choices are worked from these. */
+  wants?: string[];
+  /**
+   * What the client drew round to show how big the spot is, when they did.
+   * A closed lng/lat ring (the last point repeats the first) of 3 to
+   * MAX_OUTLINE_POINTS corners. Optional: most clients just tap, and a size
+   * comes from elsewhere then.
+   */
+  outline?: LngLat[];
+}
+
+export const MAX_SPOTS = 20;
+/** The form keeps three photos per part of the yard; a spot never needs more. */
+export const MAX_PHOTOS_PER_SPOT = 3;
+// Further than this from the house is a mis-tap or a map panned away, not the job.
+const MAX_SPOT_METERS = 400;
+
+/** Corners kept on a drawn outline; a finger drags out hundreds, a bed needs a few dozen. */
+export const MAX_OUTLINE_POINTS = 60;
+// Smaller than a doormat is a slip of the finger, not a bed.
+const MIN_OUTLINE_SQFT = 4;
+// Bigger than this is round half the yard, not one spot; better sized at the visit than priced off a scribble.
+const MAX_OUTLINE_SQFT = 20_000;
+const SQFT_PER_SQ_METER = 10.763_910_4;
+
+/** The share of the estimate paid to hold it. */
+export const DEPOSIT_SHARE = 1 / 3;
+
+/** A third of the estimate, rounded up to a whole dollar. */
+export function depositCents(totalCents: number): number {
+  if (!(totalCents > 0)) return 0;
+  return Math.ceil((totalCents * DEPOSIT_SHARE) / 100) * 100;
+}
+
+/** Whole dollars, e.g. "$1,250": estimates and their deposits are whole dollars. */
+export function dollars(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+}
+
+function metersBetween([lng1, lat1]: LngLat, [lng2, lat2]: LngLat): number {
+  const rad = Math.PI / 180;
+  const x = (lng2 - lng1) * rad * Math.cos(((lat1 + lat2) / 2) * rad);
+  const y = (lat2 - lat1) * rad;
+  return Math.sqrt(x * x + y * y) * 6_371_000;
+}
+
+/** The corners of a ring, without the closing repeat of the first. */
+function openRing(ring: LngLat[]): LngLat[] {
+  const [first, last] = [ring[0], ring[ring.length - 1]];
+  return ring.length > 1 && first[0] === last[0] && first[1] === last[1] ? ring.slice(0, -1) : ring;
+}
+
+/**
+ * The area inside a drawn outline, in square feet, measured on the globe
+ * (not on the flat map, which stretches with latitude). Null when it isn't
+ * a shape that has an area: too few corners, crossing itself, or junk.
+ */
+export function outlineAreaSqft(outline: LngLat[] | null | undefined): number | null {
+  if (!Array.isArray(outline)) return null;
+  const corners = openRing(outline);
+  if (corners.length < 3) return null;
+  if (!corners.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))) return null;
+  try {
+    const shape = polygon([[...corners, corners[0]]]);
+    // A figure eight has no honest area: the two loops cancel out.
+    if (kinks(shape).features.length > 0) return null;
+    const sqft = turfArea(shape) * SQFT_PER_SQ_METER;
+    return Number.isFinite(sqft) && sqft > 0 ? sqft : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A path dragged on the map made into an outline to keep: thinned to at
+ * most MAX_OUTLINE_POINTS corners and closed. Null when what's left isn't a
+ * believable spot (crosses itself, a sliver, or bigger than one spot could
+ * be), so the page can ask them to draw again rather than send it. Points
+ * further than a spot may be from the house are refused too, as the server
+ * would refuse them.
+ */
+export function cleanOutline(path: LngLat[], home: LngLat): LngLat[] | null {
+  let corners = openRing(path.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])));
+  // Consecutive repeats from a finger held still add nothing.
+  corners = corners.filter((p, i) => i === 0 || p[0] !== corners[i - 1][0] || p[1] !== corners[i - 1][1]);
+  if (corners.length < 3) return null;
+  if (corners.some((p) => metersBetween(home, p) > MAX_SPOT_METERS)) return null;
+  // Thin by distance until few enough, starting finer than a finger's width
+  // on the map (about 10 cm) so small beds keep their shape.
+  let ring: LngLat[] = [...corners, corners[0]];
+  for (let tolerance = 0.000_001; ring.length - 1 > MAX_OUTLINE_POINTS || ring.length - 1 < 3; tolerance *= 2) {
+    if (tolerance > 0.001) return null;
+    try {
+      ring = simplify(polygon([[...corners, corners[0]]]), { tolerance, highQuality: true }).geometry.coordinates[0] as LngLat[];
+    } catch {
+      return null;
+    }
+    if (ring.length - 1 < 3) return null;
+  }
+  const sqft = outlineAreaSqft(ring);
+  if (sqft === null || sqft < MIN_OUTLINE_SQFT || sqft > MAX_OUTLINE_SQFT) return null;
+  return ring.map(([lng, lat]) => [lng, lat]);
+}
+
+/**
+ * An outline as sent, checked. "bad" for something the page would never
+ * send (wrong types, too many corners, off away from the house), so the
+ * whole request is refused like any other tampering; null for a shape that
+ * was honestly drawn but can't be measured, which just goes, leaving the
+ * spot sized another way.
+ */
+function parseOutline(raw: unknown, home: LngLat): LngLat[] | null | "bad" {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw) || raw.length < 3 || raw.length > MAX_OUTLINE_POINTS + 1) return "bad";
+  const points: LngLat[] = [];
+  for (const p of raw) {
+    if (!Array.isArray(p) || p.length !== 2 || typeof p[0] !== "number" || typeof p[1] !== "number") return "bad";
+    if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return "bad";
+    if (metersBetween(home, [p[0], p[1]]) > MAX_SPOT_METERS) return "bad";
+    points.push([p[0], p[1]]);
+  }
+  const corners = openRing(points);
+  if (corners.length < 3 || corners.length > MAX_OUTLINE_POINTS) return "bad";
+  const sqft = outlineAreaSqft(corners);
+  if (sqft === null || sqft < MIN_OUTLINE_SQFT || sqft > MAX_OUTLINE_SQFT) return null;
+  return [...corners, corners[0]];
+}
+
+/** An outline as stored, or nothing: only well-formed rings come back. */
+function readOutline(raw: unknown): LngLat[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const points = raw.filter(
+    (p): p is LngLat => Array.isArray(p) && p.length === 2 && typeof p[0] === "number" && typeof p[1] === "number" && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  );
+  if (points.length !== raw.length) return undefined;
+  const corners = openRing(points);
+  if (corners.length < 3 || corners.length > MAX_OUTLINE_POINTS) return undefined;
+  return [...corners, corners[0]];
+}
+
+/**
+ * Spots from the page, made safe, or null when anything is off so a bad
+ * request never half-saves. Photos are checked to be this job's form
+ * photos; that they are on the form at all is the caller's check.
+ */
+export function parseTapSpots(input: unknown, ctx: { jobId: string; home: LngLat }): TapSpot[] | null {
+  if (!Array.isArray(input) || input.length === 0 || input.length > MAX_SPOTS) return null;
+  const photoPath = new RegExp(`^${ctx.jobId}/intake-[0-9a-f-]{36}\\.(jpg|png|webp)$`);
+  const spots: TapSpot[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") return null;
+    const { lng, lat, choices: rawChoices, photos, outline: rawOutline, here, wants } = raw as Record<string, unknown>;
+    if (typeof lng !== "number" || typeof lat !== "number" || !Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    if (metersBetween(ctx.home, [lng, lat]) > MAX_SPOT_METERS) return null;
+    // Answered with the two questions: the choices are worked out here from
+    // the answers, never taken from the page. Otherwise (a spot from before
+    // them) the choices themselves, checked.
+    let choices: unknown = rawChoices;
+    let answered: { here: string; wants: string[] } | null = null;
+    if (here !== undefined) {
+      if (typeof here !== "string" || !Array.isArray(wants) || !wants.every((w) => typeof w === "string")) return null;
+      const unique = [...new Set(wants as string[])];
+      const worked = choicesForSpot(here, unique);
+      if (!worked) return null;
+      choices = worked;
+      answered = { here, wants: unique };
+    }
+    if (!Array.isArray(choices) || choices.length === 0 || !choices.every((c) => typeof c === "string" && CHOICE.has(c))) return null;
+    if (!Array.isArray(photos) || photos.length > MAX_PHOTOS_PER_SPOT) return null;
+    if (!photos.every((p) => typeof p === "string" && photoPath.test(p))) return null;
+    const outline = parseOutline(rawOutline, ctx.home);
+    if (outline === "bad") return null;
+    spots.push({
+      lng,
+      lat,
+      choices: [...new Set(choices as string[])],
+      photos: [...new Set(photos as string[])],
+      ...(outline ? { outline } : {}),
+      ...(answered ?? {}),
+    });
+  }
+  return spots;
+}
+
+/** Spots as stored, with anything malformed dropped. */
+export function readTapSpots(value: unknown): TapSpot[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((s): TapSpot[] => {
+    if (!s || typeof s !== "object") return [];
+    const { lng, lat, choices, photos, outline: rawOutline, here, wants } = s as Record<string, unknown>;
+    if (typeof lng !== "number" || typeof lat !== "number") return [];
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+    const outline = readOutline(rawOutline);
+    const answered = typeof here === "string" && NOW.has(here) ? { here, wants: strings(wants) } : {};
+    return [{ lng, lat, choices: strings(choices), photos: strings(photos), ...(outline ? { outline } : {}), ...answered }];
+  });
+}
+
+/**
+ * Which part of the yard a spot is in, by the county lot: around the house
+ * first (it sits inside the others), then front, back and sides. Null with
+ * no lot, or for a spot off the parcel.
+ */
+export function areaForPoint(point: LngLat, regions: Record<AreaKey, LngLat[][]> | null): Exclude<AreaKey, "whole"> | null {
+  if (!regions) return null;
+  for (const key of ["foundation", "front", "back", "sides"] as const) {
+    if (regions[key]?.some((ring) => pointInRing(point, ring))) return key;
+  }
+  return null;
+}
+
+export function regionsFor(lot: LotData | null): Record<AreaKey, LngLat[][]> | null {
+  if (!lot) return null;
+  try {
+    return groundRegions(lot);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pre-evaluation answers the spots stand for, on top of whatever the
+ * form already holds (a client who started the long form keeps what they
+ * wrote). Services, areas and details are added to, never taken away.
+ */
+export function answersFromSpots(base: IntakeAnswers, spots: TapSpot[], areaOf: (spot: TapSpot) => string | null): IntakeAnswers {
+  const services = new Set(base.services);
+  const areas = new Set(base.areas);
+  const details: Record<string, string | string[]> = { ...base.details };
+  for (const spot of spots) {
+    const area = areaOf(spot);
+    if (area) areas.add(area);
+    for (const value of spot.choices) {
+      const choice = CHOICE.get(value);
+      if (!choice) continue;
+      services.add(choice.service);
+      for (const [id, answer] of Object.entries(choice.details ?? {})) {
+        const now = details[id];
+        const list = Array.isArray(now) ? now : now ? [now] : [];
+        details[id] = list.includes(answer) ? list : [...list, answer];
+      }
+    }
+  }
+  // Through the form's own cleaner, so only answers the form knows survive.
+  return cleanAnswers({
+    ...base,
+    property: base.property || "home",
+    services: [...services],
+    areas: [...areas],
+    details,
+  });
+}
+
+/**
+ * The picture's spot sizes, trusted as much as the client says the picture
+ * deserves. They tapped "Not my property?": none of it is their yard, so
+ * none of it is used. They tapped "Not up to date?": the yard may have
+ * changed since it was flown, so each size is trusted a step less (a wider
+ * cushion, and a low one is measured at the visit). Their own photos and
+ * anything they drew round still count in full.
+ */
+export function trustPictureReadings<T extends { confidence: "high" | "medium" | "low"; notes: string }>(
+  readings: T[],
+  flags: { outdated: boolean; wrongProperty: boolean }
+): T[] {
+  if (flags.wrongProperty) return [];
+  if (!flags.outdated) return readings;
+  return readings.map((r) => ({
+    ...r,
+    confidence: r.confidence === "high" ? "medium" : "low",
+    notes: `${r.notes} (client says the aerial photo is out of date)`.trim(),
+  }));
+}

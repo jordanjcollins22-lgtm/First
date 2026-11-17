@@ -11,7 +11,7 @@ describe("personal links", () => {
     expect(roleHomePath(["owner"])).toBe("/me");
     expect(roleHomePath(["account-manager", "affiliate"])).toBe("/me");
     expect(roleHomePath(["project-technician", "affiliate"])).toBe("/me");
-    expect(roleHomePath(["evaluator"])).toBe("/v2/sales?choice=evaluations");
+    expect(roleHomePath(["evaluator"])).toBe("/me");
     expect(roleHomePath(["affiliate"])).toBe("/me");
     expect(roleHomePath([])).toBe("/");
   });

@@ -38,7 +38,7 @@ export function BookingFormSkeleton() {
         <div className="flex items-center justify-between">
           <div className="h-3 w-20 rounded bg-muted" />
           <div className="flex gap-1">
-            {[0, 1, 2, 3].map((i) => (
+            {[0, 1].map((i) => (
               <div key={i} className="h-1.5 w-5 rounded-full bg-muted" />
             ))}
           </div>
@@ -142,21 +142,15 @@ export function BookingForm() {
       organizationName={options.organizationName}
       referredByProfileId={options.referredByProfileId}
       services={options.services}
-      slots={options.slots}
-      noticeText={options.noticeText ?? ""}
       linkRef={ref}
-      linkOrg={org}
       referralCode={rec}
       proof={options.proof}
       service={options.service}
-      // ?visit=1 is the link the office sends when a photo quote needs a
-      // visit after all: the times, whatever the budget.
-      photoQuoteLine={options.photoQuoteLine}
-      wantsVisit={searchParams.get("visit") === "1"}
       start={readStartAddress(searchParams)}
       // ?preview=1 is the owner looking at it from the website studio: the
       // arrows to step through it, no visit counted and nothing booked.
       preview={searchParams.get("preview") === "1"}
+      test={searchParams.get("test") === "1"}
     />
   );
 }

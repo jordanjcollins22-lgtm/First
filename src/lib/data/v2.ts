@@ -962,7 +962,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
         { t: "Order materials", v: n(below.length), d: "Materials below reorder point", rows: below.slice(0, OPS_CAP).map(materialRow) },
         { t: "Close out", v: n(myWalks.filter((w) => myJobIds.has(w.job_id)).length), d: "Walkthroughs done on your jobs", rows: myWalks.filter((w) => myJobIds.has(w.job_id)).slice(0, OPS_CAP).map(walkRow) },
       ],
-      links: [{ label: "My day", href: "/my-day" }],
+      links: [{ label: "My day", href: "/me" }],
     },
     {
       id: "mytech", label: "My day", kind: "project", who: [],
@@ -972,7 +972,7 @@ export async function loadOperations(viewerId: string | null = null): Promise<V2
         { t: "Clock in / out", v: n(myEvents), d: "Your check-ins recorded" },
         { t: "Photos", v: n(myPhotos), d: "Photos on your jobs" },
       ],
-      links: [{ label: "My day", href: "/my-day" }],
+      links: [{ label: "My day", href: "/me" }],
     },
     {
       id: "opsmessages", label: "Automated messages", kind: "project", who: ["owner"], group: "a",

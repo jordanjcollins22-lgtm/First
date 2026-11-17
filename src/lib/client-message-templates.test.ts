@@ -143,3 +143,22 @@ describe("sayWhen for a work day", () => {
     expect(sayWhen(new Date("2026-09-26"), tz, now)).toBe("today at 8pm");
   });
 });
+
+describe("a booking somebody did not finish", () => {
+  const link = "https://app.example.com/prep/abc/map";
+
+  it("sends them back to the map when they stopped before it", () => {
+    const { subject, body } = composeReminder("booking_unfinished", "email", { ...FACTS, link, stoppedAt: "map" });
+    expect(subject).toBe("Finish your yard map to see your price");
+    expect(body).toContain("did not get to the map");
+    expect(body).toContain(link);
+  });
+
+  it("points at their estimate when they saw it and did not pay", () => {
+    const { subject, body } = composeReminder("booking_unfinished", "sms", { ...FACTS, link, stoppedAt: "estimate" });
+    expect(subject).toBe("");
+    expect(body).toContain("your estimate at 14 Willow Road is ready");
+    expect(body).toContain("a team member will reach out");
+    expect(fitSms(body).length).toBeLessThanOrEqual(SMS_LIMIT);
+  });
+});

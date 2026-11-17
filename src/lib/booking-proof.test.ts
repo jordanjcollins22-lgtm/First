@@ -8,14 +8,14 @@ const news = { id: "n", outlet: "WBAL", headline: "Local landscaper", url: "http
 describe("what the landing card says", () => {
   it("claims only what has something behind it", () => {
     const none: BookingProof = { reviews: [], news: [], showcase: [] };
-    expect(landingBadges(none)).toEqual(["Free evaluation", "Fixed-price proposal", "Book in under 5 minutes"]);
+    expect(landingBadges(none)).toEqual(["Free instant estimate", "Price in minutes", "No obligation"]);
     expect(landingBadges({ reviews: [review("a")], news: [], showcase: [] })).not.toContain("Amazing reviews");
     expect(landingBadges({ reviews: [review("a"), review("b")], news: [news], showcase: [] })).toEqual([
       "Featured in the news",
       "Amazing reviews",
-      "Free evaluation",
-      "Fixed-price proposal",
-      "Book in under 5 minutes",
+      "Free instant estimate",
+      "Price in minutes",
+      "No obligation",
     ]);
   });
 

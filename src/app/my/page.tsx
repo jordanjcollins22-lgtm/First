@@ -49,7 +49,7 @@ export default async function MyPage() {
         <div className="rounded-xl border border-border bg-card/60 p-4 text-sm">
           <p>We haven&apos;t got any work down against this address yet.</p>
           <Link href="/book" className="mt-2 inline-block text-primary hover:underline">
-            Book a free evaluation
+            Get a free estimate
           </Link>
         </div>
       )}

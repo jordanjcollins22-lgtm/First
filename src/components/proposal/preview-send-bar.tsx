@@ -25,7 +25,7 @@ export function PreviewSendBar({ jobId, sendTo, sentAt }: { jobId: string; sendT
             <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-emerald-700">
               <CheckCircle2 className="h-4 w-4" /> Sent to {sent}.
             </p>
-            <Link href="/my-day" className="inline-flex h-11 items-center justify-center rounded-md border border-border font-semibold">
+            <Link href="/me" className="inline-flex h-11 items-center justify-center rounded-md border border-border font-semibold">
               Back to My Day
             </Link>
           </>

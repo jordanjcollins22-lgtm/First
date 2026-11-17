@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AccountManagerPhone } from "@/components/phone/screens/account-manager";
 import { AffiliatePhone, TechnicianPhone } from "@/components/phone/screens/affiliate-tech";
 import { OwnerPhone, PartnerPhone } from "@/components/phone/screens/partner-owner";
+import { Screen } from "@/components/phone/parts";
 import { getCurrentProfile } from "@/lib/data/team";
 import { v2RolesOf } from "@/lib/v2-roles";
 
@@ -29,7 +30,15 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   else if (roles.includes("account-manager")) screen = "account-manager";
   else if (roles.includes("project-lead") || roles.includes("project-technician")) screen = "technician";
   else if (roles.includes("affiliate")) screen = "affiliate";
-  if (!screen) redirect(roles.includes("evaluator") ? "/v2/sales?choice=evaluations" : "/");
+  if (!screen) {
+    return (
+      <Screen hello={profile.first_name || "Hi"} role="">
+        <div className="vx-card">
+          <div className="vx-sm">Your page isn&apos;t in the new app yet. Ask Jordan to set your role.</div>
+        </div>
+      </Screen>
+    );
+  }
 
   switch (screen) {
     case "owner":

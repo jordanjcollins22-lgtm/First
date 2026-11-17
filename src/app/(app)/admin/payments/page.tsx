@@ -48,7 +48,7 @@ export default async function PaymentsPage({
   const profile = await getCurrentProfile();
   const isAdmin = Boolean(profile?.roles.includes("admin"));
   const allowed = isAdmin || profile?.roles.includes("overhead");
-  if (!allowed) redirect("/my-day");
+  if (!allowed) redirect("/me");
 
   // Before the numbers are read, ask Stripe for anything it was paid that we
   // have no row for. The webhook is how this is meant to arrive and for a

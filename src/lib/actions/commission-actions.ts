@@ -99,7 +99,7 @@ export async function recordCommissionPaid(input: {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/payments");
-  revalidatePath("/my-day");
+  revalidatePath("/me");
   return { ok: true };
 }
 
@@ -122,6 +122,6 @@ export async function undoCommissionPaid(payoutId: string): Promise<Result> {
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/admin/payments");
-  revalidatePath("/my-day");
+  revalidatePath("/me");
   return { ok: true };
 }

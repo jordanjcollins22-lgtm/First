@@ -60,7 +60,7 @@ export async function OwnerPhone({ profile }: { profile: Profile }) {
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
-        <Row a="Forest Hill (home)" b={finance ? `${money(finance.revenue.month.invoiced)} this month` : "Couldn't load"} href="/v2/admin?choice=finance" />
+        <Row a="Forest Hill (home)" b={finance ? `${money(finance.revenue.month.invoiced)} this month` : "Couldn't load"} />
       </Card>
       <Card title="Company fee earned">
         <Big>$0</Big>
@@ -71,9 +71,9 @@ export async function OwnerPhone({ profile }: { profile: Profile }) {
           <Row key={p.id} a={`${p.person} · payout`} b={money(p.amount)} tag="new" href="/admin/payments" />
         ))}
         {queue.slice(0, 6).map((q) => (
-          <Row key={`${q.type}-${q.id}`} a={q.title} b="Open" tag="new" href="/v2/admin?choice=oversight" />
+          <Row key={`${q.type}-${q.id}`} a={q.title} tag="new" />
         ))}
-        {queue.length > 6 && <Row a={`${queue.length - 6} more`} b="Open all" href="/v2/admin?choice=oversight" />}
+        {queue.length > 6 && <Row a={`${queue.length - 6} more`} />}
         {!asked.length && !queue.length && <Row a="Nothing waiting" />}
       </Card>
       <Card title="See what they see">

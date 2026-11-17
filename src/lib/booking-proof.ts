@@ -69,12 +69,19 @@ export function showcaseTitleFromCaption(caption: string | null | undefined, zon
 }
 
 /**
- * The pages a client goes through, in order. The first says what the comment
- * said and asks where the property is; then who they are; then when; then
- * they are booked. What they want done is asked afterwards, on the
- * pre-evaluation form, so it is not asked here.
+ * The booking card's pages, in order. The first says what the comment said
+ * and asks where the property is; then who they are. From there they go on
+ * to mark what they want done on the map, see their estimate, pay (a deposit
+ * or a paid evaluation), and only then pick the visit time.
  */
-export const BOOKING_PAGES = ["Where", "Your details", "When", "Booked"] as const;
+export const BOOKING_PAGES = ["Where", "Your details"] as const;
+
+/**
+ * The whole booking as the client counts it: these two pages, then their yard
+ * on the map, then their price. One count from start to finish, so "page 2 of
+ * 2" never turns into "step 3 of 4".
+ */
+export const CLIENT_STEPS = ["Your address", "Your details", "Your yard", "Your price"] as const;
 
 /** One review is not "amazing reviews". Two is the least that reads as a pattern. */
 export const REVIEWS_TO_CLAIM = 2;
@@ -140,8 +147,8 @@ export function landingBadges(proof: BookingProof): string[] {
   return [
     proof.news.length > 0 ? "Featured in the news" : null,
     proof.reviews.length >= REVIEWS_TO_CLAIM ? "Amazing reviews" : null,
-    "Free evaluation",
-    "Fixed-price proposal",
-    "Book in under 5 minutes",
+    "Free instant estimate",
+    "Price in minutes",
+    "No obligation",
   ].filter((b): b is string => Boolean(b));
 }

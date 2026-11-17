@@ -27,11 +27,10 @@ const base = {
 };
 
 describe("accrualsForPayment", () => {
-  it("pays each share at the default rate", () => {
+  it("pays each share at the default rate, and the evaluator nothing while their share is off", () => {
     const rows = accrualsForPayment(base);
     expect(rows.map((r) => [r.profileId, r.role, r.amount, r.payOnCollect])).toEqual([
       ["am", "account_manager", 70, false],
-      ["ev", "evaluator", 40, false],
       ["af", "affiliate", 40, true],
     ]);
   });

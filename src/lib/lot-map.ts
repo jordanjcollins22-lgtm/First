@@ -16,6 +16,8 @@
  * Pure: the parsing, the choosing and the drawing are all tested here.
  */
 
+import { staticImageryPath } from "@/lib/static-imagery";
+
 export type LngLat = [number, number];
 
 export interface LotData {
@@ -27,11 +29,30 @@ export interface LotData {
   frontRoad: string | null;
   lotSqft: number | null;
   structureSqft: number | null;
+  /**
+   * The ring is the home's own yard, worked out from the buildings and the
+   * common land, because the county has no line round it: a townhouse whose
+   * lot is the house itself, or one home in a rental community on one lot.
+   */
+  yardDrawn?: boolean;
+  /** Which way of working the lot out this came from, so older copies are worked out again. */
+  v?: number;
 }
 
 /* --------------------------------------------------------------- parsing */
 
 type Feature = { attributes?: Record<string, unknown>; geometry?: { rings?: number[][][]; paths?: number[][][] } };
+
+export function ringsOf(body: unknown): { ring: LngLat[]; parts: LngLat[][]; attributes: Record<string, unknown> }[] {
+  return ((body as { features?: Feature[] } | null)?.features ?? [])
+    .map((f) => ({
+      ring: ringOf(f),
+      // Every ring: a community's common land often comes in several pieces.
+      parts: (f.geometry?.rings ?? []).filter((r) => r.length >= 4).map((r) => r.map((p) => [p[0], p[1]] as LngLat)),
+      attributes: f.attributes ?? {},
+    }))
+    .filter((f): f is { ring: LngLat[]; parts: LngLat[][]; attributes: Record<string, unknown> } => Boolean(f.ring));
+}
 
 function ringOf(feature: Feature | undefined): LngLat[] | null {
   const ring = feature?.geometry?.rings?.[0];
@@ -40,7 +61,7 @@ function ringOf(feature: Feature | undefined): LngLat[] | null {
 }
 
 /** The parcel the house sits on, from a Cadastral point query. */
-export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | null; structureSqft: number | null } | null {
+export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | null; structureSqft: number | null; streetNumber: number | null; landUse: string | null } | null {
   const features = (body as { features?: Feature[] } | null)?.features ?? [];
   const feature = features[0];
   const ring = ringOf(feature);
@@ -52,6 +73,8 @@ export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | 
     ring,
     lotSqft: num(a["Shape.STArea()"]) ?? (acres ? acres * 43560 : null),
     structureSqft: num(a.ST_SQ_FT),
+    streetNumber: typeof a.P_ST_NO === "number" ? a.P_ST_NO : null,
+    landUse: typeof a.LANDUSE === "string" ? a.LANDUSE.trim() || null : null,
   };
 }
 
@@ -65,7 +88,7 @@ export function pointInRing([x, y]: LngLat, ring: LngLat[]): boolean {
   return inside;
 }
 
-function ringArea(ring: LngLat[]): number {
+export function ringArea(ring: LngLat[]): number {
   let sum = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) sum += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
   return Math.abs(sum / 2);
@@ -151,6 +174,12 @@ export function pickFront(body: unknown, house: LngLat, address: { number: numbe
   candidates.sort((x, y) => x.rank - y.rank || x.distance - y.distance);
   const best = candidates[0];
   return best ? { point: best.point, road: best.road } : null;
+}
+
+/** The road centerlines in a county answer, as lines on the ground. */
+export function roadLines(body: unknown): LngLat[][] {
+  const features = (body as { features?: Feature[] } | null)?.features ?? [];
+  return features.flatMap((f) => (f.geometry?.paths ?? []).map((path) => path.map((p) => [p[0], p[1]] as LngLat)));
 }
 
 /* ---------------------------------------------------------------- drawing */
@@ -333,14 +362,15 @@ export function layoutLot(lot: LotData, width: number, height: number, turn = 0)
 }
 
 /** The satellite photo behind it, from Mapbox, turned to the same bearing. */
-/** The map's credits, shown under a photo from satelliteUrl. */
-export const MAP_CREDIT = "© Mapbox © OpenStreetMap © Maxar";
+/** The credits shown under a photo from satelliteUrl, when nothing more exact is known. */
+export const MAP_CREDIT = "Aerial photo: Harford County or © Mapbox © Maxar";
 
-export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">, token: string): string {
+export function satelliteUrl(layout: Pick<LotLayout, "center" | "zoom" | "bearing" | "width" | "height">): string {
   const [lng, lat] = layout.center;
-  // No logo or credits printed over the photo: the credits are said under it
-  // instead (MAP_CREDIT), which is what Mapbox asks for when they are off the image.
-  return `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x?attribution=false&logo=false&access_token=${token}`;
+  // The newest aerial covering the lot, drawn to Mapbox's geometry so the
+  // parcel lines laid over it still fit. No logo or credits on the photo:
+  // they are said under it instead (MAP_CREDIT).
+  return staticImageryPath(`${lng.toFixed(6)},${lat.toFixed(6)},${layout.zoom},${layout.bearing.toFixed(1)}/${layout.width}x${layout.height}@2x`);
 }
 
 export function pathOf(points: Px[]): string {

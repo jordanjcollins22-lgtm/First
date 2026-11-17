@@ -21,6 +21,8 @@ export interface Organization {
   crew_cost_per_hour: number | null;
   /** What direct cost is multiplied by to reach the quoted price. */
   price_multiplier: number;
+  /** The paid evaluations offered on the estimate; null for the app's defaults (see evaluation-tiers.ts). */
+  evaluation_tiers?: unknown;
   /** Overhead, charged on the multiplied figure rather than the raw cost. */
   overhead_percent: number;
   /** Days a month the crew is on a paying job. Not working days: rain,

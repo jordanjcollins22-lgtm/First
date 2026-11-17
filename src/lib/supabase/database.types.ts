@@ -95,6 +95,7 @@ export interface Database {
           slug: string | null;
           crew_cost_per_hour: number | null;
           price_multiplier: number;
+          evaluation_tiers: Json | null;
           overhead_percent: number;
           /** Days a month the crew is on a paying job, not working days. */
           billable_days_per_month: number;
@@ -1902,6 +1903,8 @@ export interface Database {
           evaluation_date: string | null;
           evaluation_end_date: string | null;
           evaluation_mode: string;
+          /** A run through the booking funnel from a ?test=1 link: nothing charged or booked. */
+          is_test: boolean;
           ghl_appointment_id: string | null;
           ghl_push_pending: boolean;
           booking_variant: string | null;
@@ -2395,6 +2398,9 @@ export interface Database {
           answers: Json;
           submitted_at: string | null;
           submitted_by: string | null;
+          photo_outdated_at: string | null;
+          wrong_property_at: string | null;
+          photo_seen: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -2403,6 +2409,56 @@ export interface Database {
           job_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["evaluation_intakes"]["Row"]>;
+        Relationships: [];
+      };
+      funnel_events: {
+        Row: {
+          id: string;
+          organization_id: string;
+          visit_id: string | null;
+          job_id: string | null;
+          step: string;
+          detail: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["funnel_events"]["Row"]> & {
+          organization_id: string;
+          step: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["funnel_events"]["Row"]>;
+        Relationships: [];
+      };
+      job_estimates: {
+        Row: {
+          id: string;
+          organization_id: string;
+          job_id: string;
+          spots: Json;
+          price: Json;
+          sizing: Json | null;
+          ai_readings: Json | null;
+          total_cents: number;
+          deposit_cents: number;
+          accepted_at: string | null;
+          checkout_session_id: string | null;
+          paid_at: string | null;
+          choice: "deposit" | "evaluation" | null;
+          evaluation_tier: "basic" | "measured" | "design" | null;
+          charged_cents: number | null;
+          start_day: string | null;
+          /** The evaluation time a tester picked; never booked. */
+          test_visit_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["job_estimates"]["Row"]> & {
+          organization_id: string;
+          job_id: string;
+          price: Json;
+          total_cents: number;
+          deposit_cents: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["job_estimates"]["Row"]>;
         Relationships: [];
       };
       evaluation_sequence_steps: {

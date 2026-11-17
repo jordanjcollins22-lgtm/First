@@ -3,7 +3,7 @@
 import { CalendarCheck, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { OfferedTime } from "@/app/book/times/route";
+import type { OfferedTime } from "@/lib/data/booking-times";
 
 function formatDay(dateKey: string): string {
   const [y, m, d] = dateKey.split("-").map(Number);

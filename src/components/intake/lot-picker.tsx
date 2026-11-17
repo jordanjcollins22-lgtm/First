@@ -3,8 +3,8 @@
 import { useId, useMemo, useState } from "react";
 import { RotateCw } from "lucide-react";
 
-import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
-import { MAP_CREDIT, layoutLot, pathOf, satelliteUrl, type AreaKey, type LotData } from "@/lib/lot-map";
+import { isMapboxConfigured } from "@/lib/public-env";
+import { layoutLot, pathOf, satelliteUrl, type AreaKey, type LotData } from "@/lib/lot-map";
 
 const WIDTH = 640;
 const HEIGHT = 440;
@@ -44,7 +44,7 @@ export function LotPicker({
       <div className="relative overflow-hidden rounded-xl border border-border bg-muted" style={{ aspectRatio: `${WIDTH} / ${HEIGHT}` }}>
         {/* A static Mapbox photo: next/image has nothing to optimise. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={satelliteUrl(layout, publicEnv.mapboxToken)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={satelliteUrl(layout)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
         <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="absolute inset-0 h-full w-full" role="img" aria-label="Your property line, with the parts you picked highlighted">
           <defs>
             <clipPath id={`lot-${clip}`}>
@@ -90,13 +90,11 @@ export function LotPicker({
       {readOnly ? (
         <figcaption className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs text-muted-foreground">
           <span>{caption ?? "Your property line from the county, with the parts you picked."}</span>
-          <span className="text-[10px] opacity-70">{MAP_CREDIT}</span>
         </figcaption>
       ) : (
       <figcaption className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
           Your property line from the county. Tap a part of the yard, or pick below.
-          <span className="block text-[10px] opacity-70">{MAP_CREDIT}</span>
         </span>
         <button type="button" onClick={() => setTurn((t) => (t + 1) % 4)} className="flex shrink-0 items-center gap-1 font-medium text-primary">
           <RotateCw className="h-3.5 w-3.5" /> Front&apos;s wrong?

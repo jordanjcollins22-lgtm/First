@@ -19,7 +19,7 @@ export async function POST() {
   if (!isPlaidConfigured || !isSupabaseAdminConfigured) return NextResponse.json({ error: "The bank link is not configured on the server." }, { status: 503 });
   try {
     const result = await syncOrganization(createAdminClient(), profile.organization_id);
-    for (const page of ["/my-day", "/dashboard"]) revalidatePath(page);
+    for (const page of ["/me", "/dashboard"]) revalidatePath(page);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -45,7 +45,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await admin.from("bank_links").delete().eq("id", link.id);
     if (error) throw error;
     await admin.rpc("summary_refresh", { org: profile.organization_id, the_key: "ops_pulse" });
-    for (const page of ["/my-day", "/dashboard"]) revalidatePath(page);
+    for (const page of ["/me", "/dashboard"]) revalidatePath(page);
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

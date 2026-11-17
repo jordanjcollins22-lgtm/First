@@ -844,6 +844,14 @@ body {
   }
 }
 
+/* No Mapbox logo or attribution strip on any map (owner's call). */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl,
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-attrib {
+  display: none !important;
+}
+
 /* The fresh app's frame, in the phone pages' colours. */
 .vx-body { background: #f5f8f6; }
 .dark .vx-body { background: #0d1714; }

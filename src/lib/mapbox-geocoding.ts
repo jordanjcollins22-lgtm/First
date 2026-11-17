@@ -106,6 +106,22 @@ export async function lookupAddress(
  * telling them something untrue about their address. Anything deciding what to
  * write to the database should use `lookupAddress` and read `retryable`.
  */
+/** An address as a client reads it: ", United States" says nothing to someone in Maryland. */
+export function plainAddress(fullAddress: string): string {
+  return fullAddress.replace(/, United States$/, "");
+}
+
+/**
+ * Suggestions for a client typing their own address: Maryland ones only when
+ * there are any (the business works in Harford County, and a half-typed
+ * street can match one in Minnesota), in plain words.
+ */
+export function marylandFirst(suggestions: GeocodeSuggestion[]): GeocodeSuggestion[] {
+  const plain = suggestions.map((s) => ({ ...s, fullAddress: plainAddress(s.fullAddress) }));
+  const local = plain.filter((s) => /, Maryland\b/.test(s.fullAddress));
+  return local.length > 0 ? local : plain;
+}
+
 export async function searchAddress(
   query: string,
   signal?: AbortSignal,

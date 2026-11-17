@@ -11,7 +11,7 @@ import { checkEdit } from "@/lib/time-clock";
 export type ClockResult = { ok: true; message?: string } | { ok: false; message: string };
 
 function refresh(jobId?: string | null) {
-  revalidatePath("/my-day");
+  revalidatePath("/me");
   revalidatePath("/admin/payments");
   if (jobId) revalidatePath(`/jobs/${jobId}`);
 }

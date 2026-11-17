@@ -17,7 +17,7 @@ function approves(roles: string[]): boolean {
 }
 
 function refresh() {
-  revalidatePath("/my-day");
+  revalidatePath("/me");
   revalidatePath("/admin/payments");
 }
 

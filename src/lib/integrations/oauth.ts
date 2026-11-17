@@ -57,7 +57,7 @@ export function redirectUriFor(base: string, provider: string): string {
 }
 
 /** Where the owner lands after connecting: the Integrations card on Admin › Settings. */
-export const DEFAULT_RETURN_TO = "/v2/admin?choice=settings";
+export const DEFAULT_RETURN_TO = "/me";
 
 const cookieName = (provider: string) => `oauth_${provider.replace(/[^a-z0-9_]/gi, "_")}`;
 const cookiePath = (provider: string) => `/api/integrations/${provider}`;

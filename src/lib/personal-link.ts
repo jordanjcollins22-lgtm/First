@@ -22,7 +22,7 @@ const HOMES: [V2Role, string][] = [
   ["account-manager", "/me"],
   ["project-lead", "/me"],
   ["project-technician", "/me"],
-  ["evaluator", "/v2/sales?choice=evaluations"],
+  ["evaluator", "/me"],
   ["affiliate", "/me"],
 ];
 
