@@ -13,17 +13,17 @@ export function dashboardPath(slug: string): string {
 }
 
 /**
- * Where each role's own page is in the app. A person with several roles lands
- * on the first one here, in this order: the owner on everything, then the job
- * they do most of the day.
+ * Where each role's own page is in the app. Everyone but an evaluator lands
+ * on /me, their home drawn as the Project Hub's phone mock-ups draw it. A
+ * person with several roles gets the first one here, in this order.
  */
 const HOMES: [V2Role, string][] = [
-  ["owner", "/v2/admin?choice=oversight"],
-  ["account-manager", "/v2/sales?choice=pipeline"],
-  ["project-lead", "/v2/operations?choice=projects"],
-  ["project-technician", "/v2/operations?choice=projects"],
+  ["owner", "/me"],
+  ["account-manager", "/me"],
+  ["project-lead", "/me"],
+  ["project-technician", "/me"],
   ["evaluator", "/v2/sales?choice=evaluations"],
-  ["affiliate", "/v2/marketing?choice=digital"],
+  ["affiliate", "/me"],
 ];
 
 export function roleHomePath(roles: readonly V2Role[]): string {

@@ -8,10 +8,11 @@ describe("personal links", () => {
   });
 
   it("sends each role to its own page", () => {
-    expect(roleHomePath(["owner"])).toBe("/v2/admin?choice=oversight");
-    expect(roleHomePath(["account-manager", "affiliate"])).toBe("/v2/sales?choice=pipeline");
-    expect(roleHomePath(["project-technician", "affiliate"])).toBe("/v2/operations?choice=projects");
-    expect(roleHomePath(["affiliate"])).toBe("/v2/marketing?choice=digital");
+    expect(roleHomePath(["owner"])).toBe("/me");
+    expect(roleHomePath(["account-manager", "affiliate"])).toBe("/me");
+    expect(roleHomePath(["project-technician", "affiliate"])).toBe("/me");
+    expect(roleHomePath(["evaluator"])).toBe("/v2/sales?choice=evaluations");
+    expect(roleHomePath(["affiliate"])).toBe("/me");
     expect(roleHomePath([])).toBe("/");
   });
 

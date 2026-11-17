@@ -15,6 +15,7 @@ import { isMapboxConfigured, isSupabaseConfigured } from "@/lib/env";
 import { isAccountManager, isCommenterOnly, isFieldOnly } from "@/lib/affiliate-roles";
 import { MOVED } from "@/lib/moved-routes";
 import { v2PagesFor, v2RolesOf } from "@/lib/v2-roles";
+import { roleHomePath } from "@/lib/personal-link";
 
 export default async function Home({
   searchParams,
@@ -32,6 +33,7 @@ export default async function Home({
   if (profile && !wantsForm) {
     const roles = v2RolesOf(profile);
     const pages = v2PagesFor(roles);
+    if (!roles.includes("owner") && roleHomePath(roles) === "/me") redirect("/me");
     if (!roles.includes("owner") && pages.length) redirect(`/v2/${pages[0]}`);
   }
 

@@ -214,6 +214,12 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
     "Every role and its people, to open the app as any of them with nothing saved. Gated on the " +
     "account actually signed in being an admin, like View as, so it stays reachable from inside a demo.",
   "/today": "Redirects to My Day, which shows a crew member their own stops.",
+  "/p/[slug]":
+    "A person's own link. Signed out it shows the sign-in form with their email filled in; signed in as them it sends them " +
+    "to their home; signed in as anyone else it only offers to sign out. It shows a first name and nothing else.",
+  "/me":
+    "Everyone's own home in the phone layout. Each person sees only their own day, link, wallet and stage; the account manager's " +
+    "and owner's cards read through the same loaders their v2 home screens use, and only the owner can open another role's layout.",
   "/routes/[playId]":
     "One door-hanger round, walked door by door on a phone. Reached from My Day by whoever the round " +
     "was given to, and guarded on that, a tick somebody forgot to grant is the difference between a " +
