@@ -1,7 +1,7 @@
 /**
  * The message an affiliate sends someone they know, with their own tracked
  * link in it. Written to sound like a person, fitting how they know them,
- * and true: it promises an estimate gets set up, never that it's free.
+ * and true: it points them to the instant estimate, never promising it's free.
  */
 
 export const AFFILIATIONS = [
@@ -58,5 +58,5 @@ export function referralMessage(input: { name: string; affiliation: Affiliation;
     default:
       intro = me ? `It's ${me}. I work with ${crew}.` : `I work with ${crew}.`;
   }
-  return [hi, intro, `If you ever need help with your yard, here's my link to get an estimate set up:\n${input.link}`, "They'll reach out to you from there. Thanks!"].join("\n\n");
+  return [hi, intro, `If you ever need help with your yard, you can get an instant estimate here:\n${input.link}`, "Thanks!"].join("\n\n");
 }
