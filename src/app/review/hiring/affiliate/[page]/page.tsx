@@ -16,9 +16,9 @@ import { previewPage, sampleApplicant, sampleApplicants, sampleJourney, sampleNe
 import { referralMessage } from "@/lib/referral-message";
 import { trackedLink } from "@/lib/outreach-links";
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
-import { ReferralList } from "@/components/v2/panels/role/referral-list";
 import { Drop, StageCard } from "@/components/v2/panels/role/affiliate-home";
 import { WalletCard } from "@/components/v2/panels/role/wallet-card";
+import { SendLinkBlock } from "@/components/v2/panels/role/send-link-block";
 import { PayoutRequests } from "@/components/payments/payout-requests";
 import { ApplicantCalls } from "@/components/hiring/applicant-calls";
 import { RoleDocView } from "@/components/hiring/role-doc-view";
@@ -146,6 +146,7 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
   } else if (key === "app") {
     const link = trackedLink(await outboundBaseUrl(), "k7m2qx9");
     const message = referralMessage({ name: "Pat Miller", affiliation: "neighbor", link, business: BUSINESS, from: "Morgan Sample" });
+    const people = sampleReferrals(today);
     body = (
       <main className="mx-auto grid w-full max-w-md gap-4 px-4 py-6">
         <div>
@@ -153,12 +154,9 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
           <h1 className="text-lg font-extrabold leading-tight">1. Send your link to someone</h1>
           <p className="text-sm text-muted-foreground">One button, then one question per screen. They end with a message to copy and send, with their own tracked link on its own line.</p>
         </div>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">1. They tap the button</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">1. They tap the button. People you sent it to drops down inside the same block</p>
         <Inert>
-          <div className="rounded-2xl border bg-card p-4 text-sm">
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
-            <ReferralMessageCard sample={{ step: "start" }} />
-          </div>
+          <SendLinkBlock title="1. Send your link to someone" people={people} sample={{ step: "start" }} />
         </Inert>
         <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2. Type their name, then Next</p>
         <Inert>
@@ -188,11 +186,9 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
             <ReferralMessageCard sample={{ step: "message", name: "Pat Miller", affiliation: "neighbor", message }} />
           </div>
         </Inert>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2. People you sent it to (closed until they tap)</p>
-        <Drop title="People you sent it to" hint={`${sampleReferrals(today).length} sent · 1 sold`} open>
-          <ReferralList rows={sampleReferrals(today)} titled={false} />
-        </Drop>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">3. Wallet (closed until they tap)</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">People you sent it to, opened: how far each one got</p>
+        <SendLinkBlock title="1. Send your link to someone" people={people} sample={{ step: "start" }} open />
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2. Wallet (closed until they tap)</p>
         <Inert>
           <Drop title="Wallet" hint="$212 ready" open>
             <WalletCard wallet={sampleWallet(today)} />
@@ -204,7 +200,7 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
             <WalletCard wallet={sampleWalletAsked(today)} />
           </div>
         </Inert>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">4. Their stage</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">3. Their stage</p>
         <StageCard stage={{ done: 3, total: 7, next: "A client you sent leaves us a review", nextNeedsAManager: true }} />
         <p className="mt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">The office&apos;s side, on the Money page</p>
         <Inert>
