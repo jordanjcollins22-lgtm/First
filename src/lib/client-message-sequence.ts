@@ -63,6 +63,7 @@ export interface SequenceInput {
 
 /** What each reminder counts from, for saying when it goes. */
 const ANCHOR: Record<ReminderKind, { thing: string; zero: string }> = {
+  booking_unfinished: { thing: "they give their details, if they haven't paid", zero: "When they give their details" },
   evaluation_confirmed: { thing: "they book", zero: "Right after they book" },
   evaluation_reminder: { thing: "the visit", zero: "At the time of the visit" },
   proposal_follow_up: { thing: "the proposal is sent, if they haven't answered", zero: "When the proposal is sent" },
@@ -71,6 +72,7 @@ const ANCHOR: Record<ReminderKind, { thing: string; zero: string }> = {
 };
 
 const STAGE_OF: Record<ReminderKind, SequenceMessage["stage"]> = {
+  booking_unfinished: "evaluation",
   evaluation_confirmed: "evaluation",
   evaluation_reminder: "evaluation",
   proposal_follow_up: "proposal",
@@ -98,7 +100,7 @@ type Draft = Omit<SequenceMessage, "number" | "moment" | "square">;
  */
 function squareFor(momentKey: string): string {
   if (/^evaluation-after/.test(momentKey)) return "evaluation";
-  if (/^(evaluation|evaluation_confirmed|evaluation_reminder)/.test(momentKey)) return "booking";
+  if (/^(evaluation|evaluation_confirmed|evaluation_reminder|booking_unfinished)/.test(momentKey)) return "booking";
   if (/^(proposal)/.test(momentKey)) return "pricing";
   if (/^job_start/.test(momentKey)) return "crew-sheet";
   return "client-approval";
@@ -140,7 +142,7 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
     address: sample.address,
     when: kind === "job_start_reminder" ? "tomorrow" : kind.startsWith("evaluation") ? "Thursday at 9am" : null,
     // Only the proposal follow-up carries a link, as the sender builds it.
-    link: kind === "proposal_follow_up" ? `${sample.baseUrl}/proposal/sample` : null,
+    link: kind === "proposal_follow_up" ? `${sample.baseUrl}/proposal/sample` : kind === "booking_unfinished" ? `${sample.baseUrl}/prep/sample/map` : null,
     amount: kind === "invoice_reminder" ? "$1,850" : null,
   });
 
@@ -185,7 +187,8 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
       // Where this lands. The booking confirmation and the evening-before
       // reminder share their moment with the evaluation email for it.
       let moment: { title: string; at: number; square: string; items: Draft[] };
-      if (kind === "evaluation_confirmed" && hours === 0 && evalMoment.booked) moment = moments.get(evalMoment.booked)!;
+      if (kind === "booking_unfinished") moment = at(`${kind}-${hours}`, `Booking not finished: ${describeOffset(hours).replace(/ after$/, "")}`, hours / 1000);
+      else if (kind === "evaluation_confirmed" && hours === 0 && evalMoment.booked) moment = moments.get(evalMoment.booked)!;
       else if (kind === "evaluation_reminder" && hours === -18 && evalMoment.day_before) moment = moments.get(evalMoment.day_before)!;
       else if (kind === "evaluation_confirmed") moment = at(`${kind}-${hours}`, sayWhen(kind, hours), hours / 1000);
       else if (kind === "evaluation_reminder") moment = at(`${kind}-${hours}`, sayWhen(kind, hours), 1000 + hours);
@@ -241,6 +244,7 @@ export function buildMessageSequence(input: SequenceInput): SequenceMessage[] {
     }
   };
 
+  reminder("booking_unfinished");
   reminder("evaluation_confirmed");
   reminder("evaluation_reminder");
 
