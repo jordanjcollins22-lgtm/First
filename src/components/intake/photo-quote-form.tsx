@@ -12,8 +12,8 @@ import { isHeic, shrinkImage } from "@/lib/shrink-image";
 import { sendOrKeep } from "@/lib/offline/outbox-send";
 import { removeItem } from "@/lib/offline/outbox";
 import { useOnSent, useWaiting } from "@/components/offline/waiting-photos";
-import { publicEnv, isMapboxConfigured } from "@/lib/public-env";
-import { MAP_CREDIT, groundToPicture, layoutLot, pathOf, pictureToGround, pinView, satelliteUrl, type LotData, type PictureView } from "@/lib/lot-map";
+import { isMapboxConfigured } from "@/lib/public-env";
+import { groundToPicture, layoutLot, pathOf, pictureToGround, pinView, satelliteUrl, type LotData, type PictureView } from "@/lib/lot-map";
 
 type Photo = { path: string; url: string };
 
@@ -312,7 +312,6 @@ function SpotMap({
           <MapPin className="mr-1 inline h-3.5 w-3.5" />
           Tap where you want work done. Tap a number to open that area.
         </span>
-        <span className="text-[10px] opacity-70">{MAP_CREDIT}</span>
       </figcaption>
     </figure>
   );

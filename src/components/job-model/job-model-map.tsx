@@ -81,7 +81,7 @@ export function JobModelMap(props: JobModelMapProps) {
         bearing: 0,
         maxPitch: 80,
         antialias: true,
-        attributionControl: true,
+        attributionControl: false,
       });
     } catch {
       // No WebGL on this device: the flat plan instead.

@@ -25,7 +25,7 @@ import {
   type RubricChecks,
   type RubricGroup,
 } from "@/lib/lead-finder";
-import { MAP_CREDIT, satelliteUrl } from "@/lib/lot-map";
+import { satelliteUrl } from "@/lib/lot-map";
 import type { FinderRow } from "@/lib/lead-finder-view";
 import {
   fillLeadFinderWeek,
@@ -250,7 +250,6 @@ function Detail({
         {picture ? (
           <figure>
             <img src={picture} alt={`Satellite view of ${row.name}`} className="aspect-[5/3] w-full object-cover" />
-            <figcaption className="px-2 py-1 text-[10px] text-stone-500">{MAP_CREDIT}</figcaption>
           </figure>
         ) : (
           <div className="flex aspect-[5/3] items-center justify-center p-4 text-center text-sm text-stone-500">

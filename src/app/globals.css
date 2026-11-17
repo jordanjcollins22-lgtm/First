@@ -843,3 +843,11 @@ body {
     box-shadow: 0 0 0 6px color-mix(in oklab, var(--primary) 15%, transparent);
   }
 }
+
+/* No Mapbox logo or attribution strip on any map (owner's call). */
+.mapboxgl-ctrl-logo,
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-bottom-left .mapboxgl-ctrl,
+.mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-attrib {
+  display: none !important;
+}
