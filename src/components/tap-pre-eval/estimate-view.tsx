@@ -10,6 +10,7 @@ import type { ClientEstimate } from "@/lib/data/tap-estimate";
 import { tierById, type EvaluationTier, type TierId } from "@/lib/evaluation-tiers";
 import { choiceLabel, dollars } from "@/lib/tap-estimate";
 import { clientSizeWords } from "@/lib/spot-size-words";
+import { plainAddress } from "@/lib/mapbox-geocoding";
 
 interface Message {
   id: string;
@@ -27,7 +28,8 @@ export interface EstimateViewProps {
   address: string | null;
   visit: string | null;
   estimate: ClientEstimate;
-  mapUrl: string | null;
+  /** The property from above with the spots numbered, and its property line as SVG points on it. */
+  map: { url: string; outline: string | null; width: number; height: number } | null;
   photoUrls: Record<string, string>;
   messages: Message[];
   /** The paid evaluations on offer, for somebody not ready to put a deposit down. */
@@ -56,7 +58,7 @@ export function EstimateView({
   address,
   visit,
   estimate,
-  mapUrl,
+  map,
   photoUrls,
   messages: initialMessages,
   tiers,
@@ -77,6 +79,8 @@ export function EstimateView({
     const s = sizingByIndex.get(i);
     return s ? clientSizeWords(s, { hasPhotos: spot.photos.length > 0, traced: Boolean(spot.outline) }) : null;
   });
+  // "And your photos" only when they sent some: most people don't.
+  const sentPhotos = estimate.spots.some((spot) => spot.photos.length > 0);
   const priced = estimate.price.lines.filter((l) => l.priceCents != null);
   const atVisit = estimate.price.lines.filter((l) => l.priceCents == null);
   const hasPrice = estimate.totalCents > 0;
@@ -109,13 +113,14 @@ export function EstimateView({
     <div className="mx-auto flex max-w-2xl flex-col gap-8 px-4 py-10">
       <div className="flex flex-col items-center gap-2 text-center">
         <p className="text-sm font-semibold uppercase tracking-wide text-primary">{businessName}</p>
+        {!paid && <p className="text-xs font-medium text-muted-foreground">Step 4 of 4 · Your price</p>}
         <h1 className="text-2xl font-bold">Your Estimate</h1>
         <p className="text-muted-foreground">
           {clientFirstName ? `Prepared for ${clientFirstName}` : "Prepared for you"}
-          {address ? ` · ${address}` : ""}
+          {address ? ` · ${plainAddress(address)}` : ""}
         </p>
         <p className="max-w-md text-sm text-muted-foreground">
-          From the spots you marked and your photos, here&apos;s what we&apos;d do and what we expect it to come to.
+          From the spots you marked{sentPhotos ? " and your photos" : ""}, here&apos;s what we&apos;d do and what we expect it to come to.
         </p>
       </div>
 
@@ -144,11 +149,19 @@ export function EstimateView({
         </div>
       )}
 
-      {mapUrl && (
+      {map && (
         <section>
           <h2 className="mb-2 text-lg font-semibold">Your property</h2>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={mapUrl} alt="Your property with the spots you marked" className="w-full rounded-2xl border border-border" />
+          <div className="relative overflow-hidden rounded-2xl border border-border">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={map.url} alt="Your property with the spots you marked" className="block w-full" />
+            {map.outline && (
+              <svg viewBox={`0 0 ${map.width} ${map.height}`} className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+                <polygon points={map.outline} fill="none" stroke="#000000" strokeOpacity={0.45} strokeWidth={6} strokeLinejoin="round" />
+                <polygon points={map.outline} fill="none" stroke="#a3e635" strokeWidth={3} strokeLinejoin="round" />
+              </svg>
+            )}
+          </div>
         </section>
       )}
 
@@ -227,7 +240,7 @@ export function EstimateView({
         <div className="flex flex-col gap-2">
           <p className="font-semibold">This is an estimate, not the final price</p>
           <p>
-            We worked it out from your photos and the county&apos;s map of your lot, before seeing the yard in person. The
+            We worked it out from {sentPhotos ? "your photos and " : "the spots you marked and "}the county&apos;s map of your lot, before seeing the yard in person. The
             final price can change if we find something we couldn&apos;t see, like:
           </p>
           <ul className="list-disc pl-5">

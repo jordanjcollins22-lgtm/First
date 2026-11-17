@@ -114,7 +114,10 @@ export function clientSizeWords(s: SpotSizing, opts: { hasPhotos: boolean; trace
     // the area is still theirs, measured; only the rest (a count of bushes,
     // say) waits for the visit, and the line should say which is which.
     const area = opts.traced ? sizeAmount({ ...s, count: null }) : null;
-    return area ? `${area}, traced on the map. We'll count the rest at your visit` : AT_VISIT;
+    // Otherwise the same rough size the scope shows, said to be rough: "we'll
+    // measure it" on its own read as if we had no number, under a line that
+    // gave one.
+    return area ? `${area}, traced on the map. We'll count the rest at your visit` : roughGuess(amount);
   }
   switch (s.source) {
     case "traced":
@@ -124,8 +127,13 @@ export function clientSizeWords(s: SpotSizing, opts: { hasPhotos: boolean; trace
     case "history":
       return `${amount}, typical for a spot like this on yards we've measured. We'll confirm it at your visit`;
     default:
-      return AT_VISIT;
+      return roughGuess(amount);
   }
+}
+
+/** A size we priced from but haven't measured. */
+function roughGuess(amount: string): string {
+  return `${amount}, our best guess for now. We'll measure it at your visit`;
 }
 
 const SOURCE_LABEL: Record<SizeSource, string> = {

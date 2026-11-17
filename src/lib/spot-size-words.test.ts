@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AT_VISIT, clientSizeWords, needsChecking, officeSourceWords, readSizing, roundSqft, sizeAmount } from "@/lib/spot-size-words";
+import { clientSizeWords, needsChecking, officeSourceWords, readSizing, roundSqft, sizeAmount } from "@/lib/spot-size-words";
 import type { SpotSizing } from "@/lib/spot-sizing";
 
 const spot = (over: Partial<SpotSizing> = {}): SpotSizing => ({
@@ -49,8 +49,9 @@ describe("clientSizeWords", () => {
     expect(clientSizeWords(spot({ source: "history", confidence: "medium" }), { hasPhotos: false })).toMatch(/yards we've measured/);
   });
   it("never passes a stand-in off as a measurement", () => {
-    expect(clientSizeWords(spot({ source: "typical", confidence: "low" }), { hasPhotos: true })).toBe(AT_VISIT);
-    expect(clientSizeWords(spot({ source: "ai", confidence: "low" }), { hasPhotos: true })).toBe(AT_VISIT);
+    const rough = "About 640 sq ft, our best guess for now. We'll measure it at your visit";
+    expect(clientSizeWords(spot({ source: "typical", confidence: "low" }), { hasPhotos: true })).toBe(rough);
+    expect(clientSizeWords(spot({ source: "ai", confidence: "low" }), { hasPhotos: true })).toBe(rough);
   });
   it("keeps a traced area when only the count is a stand-in", () => {
     expect(clientSizeWords(spot({ choices: ["mulch", "trim"], count: 4, source: "typical", confidence: "low" }), { hasPhotos: false, traced: true })).toBe(

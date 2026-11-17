@@ -6,7 +6,7 @@ import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { staticImageryPath } from "@/lib/static-imagery";
 import { getTapPreEval, schedulePath, tapMapPath } from "@/lib/data/tap-estimate";
 import { listExternalMessagesForJob } from "@/lib/data/public-job-messages";
-import { fitView, type LngLat } from "@/lib/lot-map";
+import { fitView, groundToPicture, type LngLat } from "@/lib/lot-map";
 import { dayOnly, timeOnly } from "@/lib/time-zone";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { EstimateView } from "@/components/tap-pre-eval/estimate-view";
@@ -25,11 +25,15 @@ const MAP_HEIGHT = 400;
  * A satellite picture of the property with each spot numbered on it, from
  * the newest aerial covering it (the county's own flight, where there is one).
  */
-function spotsMapUrl(points: LngLat[], frame: LngLat[]): string | null {
+function spotsMap(points: LngLat[], frame: LngLat[], lot: LngLat[] | null): { url: string; outline: string | null; width: number; height: number } | null {
   if (points.length === 0) return null;
   const { center, zoom } = fitView(frame, MAP_WIDTH, MAP_HEIGHT);
   const pins = points.map(([lng, lat], i) => `pin-l-${i + 1}+2f6d3c(${lng.toFixed(6)},${lat.toFixed(6)})`).join(",");
-  return staticImageryPath(`${pins}/${center[0].toFixed(6)},${center[1].toFixed(6)},${zoom}/${MAP_WIDTH}x${MAP_HEIGHT}@2x`);
+  const url = staticImageryPath(`${pins}/${center[0].toFixed(6)},${center[1].toFixed(6)},${zoom}/${MAP_WIDTH}x${MAP_HEIGHT}@2x`);
+  // Their property line on it, in the same green as the map they tapped.
+  const view = { center, zoom, bearing: 0, width: MAP_WIDTH, height: MAP_HEIGHT };
+  const outline = lot && lot.length >= 3 ? lot.map((p) => groundToPicture(view, p).map((n) => n.toFixed(1)).join(",")).join(" ") : null;
+  return { url, outline, width: MAP_WIDTH, height: MAP_HEIGHT };
 }
 
 export default async function EstimatePage({ params }: { params: Promise<{ token: string }> }) {
@@ -57,7 +61,7 @@ export default async function EstimatePage({ params }: { params: Promise<{ token
       address={data.intake.address}
       visit={data.intake.evaluationAt && !data.intake.cancelled ? `${dayOnly(data.intake.evaluationAt)} at ${timeOnly(data.intake.evaluationAt).toLowerCase()}` : null}
       estimate={estimate}
-      mapUrl={spotsMapUrl(points, frame)}
+      map={spotsMap(points, frame, data.lot?.ring ?? null)}
       photoUrls={data.photoUrls}
       messages={messages.map((m) => ({ id: m.id, fromClient: m.author_type === "client", author: m.author_name, body: m.body, at: m.created_at }))}
       tiers={data.tiers}

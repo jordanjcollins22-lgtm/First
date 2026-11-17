@@ -76,6 +76,13 @@ export function showcaseTitleFromCaption(caption: string | null | undefined, zon
  */
 export const BOOKING_PAGES = ["Where", "Your details"] as const;
 
+/**
+ * The whole booking as the client counts it: these two pages, then their yard
+ * on the map, then their price. One count from start to finish, so "page 2 of
+ * 2" never turns into "step 3 of 4".
+ */
+export const CLIENT_STEPS = ["Your address", "Your details", "Your yard", "Your price"] as const;
+
 /** One review is not "amazing reviews". Two is the least that reads as a pattern. */
 export const REVIEWS_TO_CLAIM = 2;
 
