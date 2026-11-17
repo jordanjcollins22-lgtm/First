@@ -265,7 +265,7 @@ export const ROLE_DOCS: Record<"project-technician" | "affiliate" | "account-man
         title: "Send us someone you know",
         steps: [
           "At the top of your app, type who you're sending it to",
-          "Pick how you know them",
+          "Pick how you know them, and add a screenshot of who you're answering if you have one",
           "Tap Copy and send them the message",
           "Check in the app that they clicked",
         ],

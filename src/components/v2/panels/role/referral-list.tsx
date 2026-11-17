@@ -11,7 +11,7 @@ export function ReferralList({ rows }: { rows: ReferralRow[] }) {
           <li key={i} className="flex items-center justify-between gap-2 px-3 py-2">
             <span className="min-w-0 truncate">
               <span className="font-medium">{r.name}</span>
-              <span className="ml-1 text-xs text-muted-foreground">· {r.affiliation}</span>
+              <span className="ml-1 text-xs text-muted-foreground">· {r.affiliation}{r.screenshot ? " · screenshot" : ""}</span>
             </span>
             <span className={r.clicks > 0 ? "shrink-0 text-xs font-semibold text-emerald-700 dark:text-emerald-400" : "shrink-0 text-xs text-muted-foreground"}>
               {r.clicks > 0 ? "Opened your link" : "Not opened yet"}

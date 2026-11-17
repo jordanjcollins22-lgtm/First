@@ -128,7 +128,7 @@ export const AFFILIATE_PREVIEW_PAGES: readonly PreviewPage[] = [
 export function sampleReferrals(today: string): ReferralRow[] {
   return [
     { name: "Pat Neighbor", affiliation: "Neighbor", sentAt: at(today, "13:00:00"), clicks: 0 },
-    { name: "Jamie Friend", affiliation: "Friend", sentAt: at(daysAgo(today, 1)), clicks: 2 },
+    { name: "Jamie Friend", affiliation: "Friend", sentAt: at(daysAgo(today, 1)), clicks: 2, screenshot: true },
     { name: "Alex Coworker", affiliation: "Coworker", sentAt: at(daysAgo(today, 3)), clicks: 1 },
   ];
 }

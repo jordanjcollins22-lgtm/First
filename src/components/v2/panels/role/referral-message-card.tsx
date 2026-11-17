@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, Loader2, Share2 } from "lucide-react";
+import { Check, Copy, ImagePlus, Loader2, Share2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { copyNow, writeClipboard } from "@/lib/clipboard";
 import { startReferral } from "@/lib/actions/referral-actions";
+import { createShotUpload } from "@/lib/actions/outreach-link-actions";
+import { createClient } from "@/lib/supabase/client";
+import { shrinkImage } from "@/lib/shrink-image";
 import { AFFILIATIONS, type Affiliation } from "@/lib/referral-message";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +19,7 @@ import { cn } from "@/lib/utils";
  * The top of an affiliate's app: say who you're sending your link to and how
  * you know them, and get a message ready to copy and send, with your own
  * link in it. Each one is tracked, so you can see whether they opened it.
+ * A screenshot of who they're answering (a post, a text) can go with it.
  */
 export function ReferralMessageCard({ sample }: { sample?: { name: string; affiliation: Affiliation; message?: string } }) {
   const router = useRouter();
@@ -25,13 +29,24 @@ export function ReferralMessageCard({ sample }: { sample?: { name: string; affil
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, start] = useTransition();
+  const [shot, setShot] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   function write() {
     setError(null);
     if (!name.trim()) return setError("Type who you're sending it to.");
     if (!affiliation) return setError("Pick how you know them.");
     start(async () => {
-      const r = await startReferral({ name, affiliation });
+      let screenshotPath: string | null = null;
+      if (shot) {
+        const small = await shrinkImage(shot).catch(() => shot);
+        const slot = await createShotUpload({ fileType: small.type, fileSize: small.size });
+        if (!slot.ok) return setError(slot.error);
+        const sent = await createClient().storage.from("recommendation-shots").uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
+        if (sent.error) return setError("That screenshot wouldn't upload. Try a smaller one, or leave it off.");
+        screenshotPath = slot.path;
+      }
+      const r = await startReferral({ name, affiliation, screenshotPath });
       if (!r.ok) return setError(r.error);
       setMessage(r.message);
       router.refresh();
@@ -66,6 +81,8 @@ export function ReferralMessageCard({ sample }: { sample?: { name: string; affil
     setMessage(null);
     setCopied(false);
     setError(null);
+    setShot(null);
+    if (fileRef.current) fileRef.current.value = "";
   }
 
   if (message) {
@@ -115,6 +132,39 @@ export function ReferralMessageCard({ sample }: { sample?: { name: string; affil
             </button>
           ))}
         </div>
+      </div>
+      <div className="grid gap-1">
+        <p className="text-sm font-medium">
+          Screenshot of who you&apos;re answering <span className="font-normal text-muted-foreground">(optional)</span>
+        </p>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => setShot(e.target.files?.[0] ?? null)}
+        />
+        {shot ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+            <span className="min-w-0 truncate">{shot.name}</span>
+            <button
+              type="button"
+              aria-label="Remove the screenshot"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setShot(null);
+                if (fileRef.current) fileRef.current.value = "";
+              }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <Button type="button" variant="outline" className="h-11" onClick={() => fileRef.current?.click()}>
+            <ImagePlus className="mr-1 h-5 w-5" /> Add a screenshot
+          </Button>
+        )}
+        <p className="text-xs text-muted-foreground">A post or text from them, so we can see who you sent it to.</p>
       </div>
       <Button type="button" className="h-12 text-base" disabled={busy} onClick={write}>
         {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
