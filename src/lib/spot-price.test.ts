@@ -276,6 +276,13 @@ describe("nothing to price", () => {
     expect(price.totalCents).toBe(0);
   });
 
+  it("sizes leaves on a lawn by themselves, and leaves in a bed by the bed", () => {
+    const { sizing } = run({ spots: [spot(0, ["leaves"]), spot(1, ["mulch", "leaves"], 200)] });
+    expect(sizing[0].areaSqft).toBeGreaterThan(100);
+    expect(sizing[0].choices).toEqual(["leaves"]);
+    expect(sizing[1].areaSqft).toBe(200);
+  });
+
   it("prices the rest of a spot that also asks for a look", () => {
     const { price, sizing } = run({ spots: [spot(0, ["mulch", "other"], 200)] });
     expect(price.lines[0].priceCents).toBeGreaterThan(0);
