@@ -227,6 +227,7 @@ const WORK: Record<string, ChoiceWork> = {
     what: "plant new plants",
     note: "Labour only. The plants themselves are picked and priced on the visit.",
   },
+  leaves: { typeId: "leaf-seasonal-cleanup", service: "cleanup", kind: "area", what: "leaf removal" },
   patio: { typeId: null, service: "hardscape", kind: "visit", what: "patio or walkway" },
   other: { typeId: null, service: "other", kind: "visit", what: "take a look" },
 };

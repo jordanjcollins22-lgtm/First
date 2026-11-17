@@ -80,6 +80,9 @@ export function forwardLinesFor(work: InstantWork, services: ProductionService[]
     case "lawn-restoration":
       if (area > 0) lines = [line("soil-prep", area, sq(area)), line("seeding", area, sq(area))];
       break;
+    case "leaf-seasonal-cleanup":
+      if (area > 0) lines = [line("leaf-removal", area, sq(area))];
+      break;
     case "grading":
       if (area > 0) lines = [line("hand-grading", area, sq(area))];
       break;
