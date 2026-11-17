@@ -29,11 +29,25 @@ export interface LotData {
   frontRoad: string | null;
   lotSqft: number | null;
   structureSqft: number | null;
+  /**
+   * The ring is the home's own yard, worked out from the buildings and the
+   * common land, because the county has no line round it: a townhouse whose
+   * lot is the house itself, or one home in a rental community on one lot.
+   */
+  yardDrawn?: boolean;
+  /** Which way of working the lot out this came from, so older copies are worked out again. */
+  v?: number;
 }
 
 /* --------------------------------------------------------------- parsing */
 
 type Feature = { attributes?: Record<string, unknown>; geometry?: { rings?: number[][][]; paths?: number[][][] } };
+
+export function ringsOf(body: unknown): { ring: LngLat[]; attributes: Record<string, unknown> }[] {
+  return ((body as { features?: Feature[] } | null)?.features ?? [])
+    .map((f) => ({ ring: ringOf(f), attributes: f.attributes ?? {} }))
+    .filter((f): f is { ring: LngLat[]; attributes: Record<string, unknown> } => Boolean(f.ring));
+}
 
 function ringOf(feature: Feature | undefined): LngLat[] | null {
   const ring = feature?.geometry?.rings?.[0];
@@ -42,7 +56,7 @@ function ringOf(feature: Feature | undefined): LngLat[] | null {
 }
 
 /** The parcel the house sits on, from a Cadastral point query. */
-export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | null; structureSqft: number | null } | null {
+export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | null; structureSqft: number | null; streetNumber: number | null; landUse: string | null } | null {
   const features = (body as { features?: Feature[] } | null)?.features ?? [];
   const feature = features[0];
   const ring = ringOf(feature);
@@ -54,6 +68,8 @@ export function parseParcel(body: unknown): { ring: LngLat[]; lotSqft: number | 
     ring,
     lotSqft: num(a["Shape.STArea()"]) ?? (acres ? acres * 43560 : null),
     structureSqft: num(a.ST_SQ_FT),
+    streetNumber: typeof a.P_ST_NO === "number" ? a.P_ST_NO : null,
+    landUse: typeof a.LANDUSE === "string" ? a.LANDUSE.trim() || null : null,
   };
 }
 
@@ -67,7 +83,7 @@ export function pointInRing([x, y]: LngLat, ring: LngLat[]): boolean {
   return inside;
 }
 
-function ringArea(ring: LngLat[]): number {
+export function ringArea(ring: LngLat[]): number {
   let sum = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) sum += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
   return Math.abs(sum / 2);
