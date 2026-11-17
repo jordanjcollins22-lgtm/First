@@ -87,6 +87,8 @@ const BED_SHARE: Record<string, number> = { front: 0.12, back: 0.12, sides: 0.12
 const CLEANUP_SHARE = 0.25;
 /** A lawn spot is a bare or thin patch: 15% of the lawn, which is 70% of the part. */
 const LAWN_PATCH_SHARE = 0.7 * 0.15;
+/** A leafy spot with no bed: most of the lawn in its part of the yard. */
+const LEAF_SHARE = 0.5;
 /** A tap with no part of the yard (off the county's lines, or no lot): about a front yard. */
 const UNKNOWN_PART_SHARE = 0.25;
 
@@ -100,6 +102,7 @@ const SPOT_LIMITS: Record<string, [number, number]> = {
   "landscape-bed": [60, 1000],
   "landscape-cleanup": [60, 2000],
   "lawn-restoration": [50, 5000],
+  "leaf-seasonal-cleanup": [100, 5000],
   grading: [100, 600],
   "soft-washing": [200, 6000],
 };
@@ -116,6 +119,7 @@ const MEASURED_LIMITS: Record<string, [number, number]> = {
   "landscape-bed": [10, 2500],
   "landscape-cleanup": [20, 5000],
   "lawn-restoration": [20, 15_000],
+  "leaf-seasonal-cleanup": [20, 15_000],
   // The real fix for water is set at the visit. The estimate holds it to a
   // big wet corner, so a reading of the whole back yard can't become a
   // $3,000 regrade and a deposit to match.
@@ -325,6 +329,8 @@ interface Plan {
   bed: Size | null;
   lawn: Size | null;
   water: Size | null;
+  /** The leafy ground: the bed when the leaves are in one, else its own size. */
+  leaves: Size | null;
 }
 
 export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizing: SpotSizing[] } {
@@ -380,6 +386,10 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
       case "lawn-restoration":
         value = part.ground * LAWN_PATCH_SHARE;
         from = `a typical bare patch in ${of}`;
+        break;
+      case "leaf-seasonal-cleanup":
+        value = part.ground * LEAF_SHARE;
+        from = `half of ${of}`;
         break;
       default:
         value = TYPICAL_WATER_SQFT;
@@ -494,15 +504,17 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
     const measured = areaChoiceFor(choices);
     const bedLead = BED_CHOICES.find((c) => choices.includes(c)) ?? null;
     const bedType = bedLead ? WORK[bedLead].typeId! : null;
+    // The bed is first in areaChoiceFor's order, so when there is one it is what was measured.
+    const bed = bedLead && bedType ? areaFor(spot, bedType, true, bedLead === "weeds" ? "weedy beds" : "beds") : null;
     return {
       spot,
       choices,
       measured,
       bedType,
-      // The bed is first in areaChoiceFor's order, so when there is one it is what was measured.
-      bed: bedLead && bedType ? areaFor(spot, bedType, true, bedLead === "weeds" ? "weedy beds" : "beds") : null,
+      bed,
       lawn: choices.includes("lawn") ? areaFor(spot, "lawn-restoration", measured === "lawn", "lawn patches") : null,
       water: choices.includes("water") ? areaFor(spot, "grading", measured === "water", "wet ground") : null,
+      leaves: choices.includes("leaves") ? (bed ?? areaFor(spot, "leaf-seasonal-cleanup", measured === "leaves", "leafy ground")) : null,
     };
   });
 
@@ -596,6 +608,10 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
         add(choice, plan.water);
         continue;
       }
+      if (choice === "leaves") {
+        add(choice, plan.leaves);
+        continue;
+      }
       const ground = plan.bed;
       if (!ground) continue;
       if ((choice === "mulch" || choice === "rock") && mulch && rock) {
@@ -611,12 +627,12 @@ export function priceSpots(input: PriceSpotsInput): { price: InstantPrice; sizin
     }
 
     // The area kept on the spot's record is of the surface that was measured.
-    const byMeasured: Record<string, Size | null> = { lawn: plan.lawn, water: plan.water, wash: washSize };
+    const byMeasured: Record<string, Size | null> = { lawn: plan.lawn, water: plan.water, leaves: plan.leaves, wash: washSize };
     const recordArea = BED_CHOICES.includes(plan.measured)
       ? plan.bed
       : COUNT_ORDER.includes(plan.measured)
         ? countBed
-        : (byMeasured[plan.measured] ?? plan.bed ?? plan.lawn ?? plan.water ?? washSize);
+        : (byMeasured[plan.measured] ?? plan.bed ?? plan.lawn ?? plan.water ?? plan.leaves ?? washSize);
     return { plan, entries, sizes, recordCount, recordArea };
   });
 

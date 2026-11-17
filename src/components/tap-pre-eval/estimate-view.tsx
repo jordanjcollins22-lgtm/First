@@ -195,8 +195,9 @@ export function EstimateView({
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Scope of work</h2>
+      {estimate.price.lines.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Scope of work</h2>
         <ul className="flex flex-col gap-2 rounded-2xl border border-border p-4">
           {priced.map((line, i) => (
             <li key={`p-${i}`} className="flex items-start justify-between gap-3 border-t border-border/60 pt-2 first:border-0 first:pt-0">
@@ -214,7 +215,8 @@ export function EstimateView({
             </li>
           ))}
         </ul>
-      </section>
+        </section>
+      )}
 
       {hasPrice ? (
         <section className="flex flex-col items-center gap-1 rounded-2xl border border-primary/30! bg-primary/5 p-6 text-center">

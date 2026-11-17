@@ -146,7 +146,7 @@ export function countMeaning(choices: string[]): string | null {
  * each of them on the two together. spot-price reads the answer by this same
  * order, so the two must not drift apart.
  */
-export const AREA_ORDER = ["mulch", "rock", "weeds", "lawn", "water", "wash", "plants", "trim", "remove", "patio", "other"] as const;
+export const AREA_ORDER = ["mulch", "rock", "weeds", "lawn", "water", "leaves", "wash", "plants", "trim", "remove", "patio", "other"] as const;
 
 export function areaChoiceFor(choices: string[]): string {
   return AREA_ORDER.find((c) => choices.includes(c)) ?? "other";
@@ -162,6 +162,7 @@ const AREA_MEANING: Record<string, string> = {
   remove: "the bed or ground the bushes come out of",
   lawn: "the lawn that needs fixing (the bare or poor part, not the whole yard unless the whole yard is poor)",
   wash: "the house's siding to be washed, as wall area all the way round the house (the length of its walls times their height, every storey)",
+  leaves: "the ground at the pin covered in leaves to be cleared (the bed, or the lawn around the pin)",
   water: "the low or wet patch at the pin that would need regrading, not the whole yard it drains from",
   patio: "the patio or walkway",
   other: "whatever is at the pin that looks like it needs work",
