@@ -41,7 +41,7 @@ import type { Database } from "./database.types";
 // role page. Signed out, it must reach that form, not the plain sign-in page.
 // /stop is the way out of a cold email to a property manager. Same reason as
 // /u: they have no account and must never meet a sign-in wall.
-export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop", "/privacy", "/site", "/rate", "/review", "/p"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/r", "/u", "/my", "/tip", "/receipt", "/done", "/careers", "/stop", "/privacy", "/rate", "/p"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

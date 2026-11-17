@@ -45,7 +45,7 @@ describe("public route layouts", () => {
   it("covers the pages a customer opens", () => {
     // Named outright: these three are the ones sent to people outside the
     // business, where an unstyled page costs a job rather than a shrug.
-    for (const path of ["src/app/proposal/layout.tsx", "src/app/flyer/layout.tsx", "src/app/book/layout.tsx"]) {
+    for (const path of ["src/app/proposal/layout.tsx", "src/app/book/layout.tsx"]) {
       expect(LAYOUTS, path).toContain(path);
     }
   });
@@ -64,7 +64,7 @@ describe("routes a customer opens", () => {
     .map((e) => `/${e.name}`);
 
   it("finds the public route folders", () => {
-    expect(TOP_LEVEL).toContain("/flyer");
+    expect(TOP_LEVEL).toContain("/careers");
     expect(TOP_LEVEL).toContain("/proposal");
     expect(TOP_LEVEL).toContain("/book");
   });
@@ -104,11 +104,6 @@ describe("routes a customer opens", () => {
 
   // Somebody answering a job ad has no account. A sign-in screen in front of
   // the apply form is an ad nobody can answer.
-  it("lets somebody from a post buy a mow without an account", () => {
-    expect(isPublic("/mow")).toBe(true);
-    expect(needsAuthCheck("/mow/done/abc")).toBe(false);
-  });
-
   it("lets an applicant reach the careers pages", () => {
     expect(isPublic("/careers")).toBe(true);
     expect(isPublic("/careers/project-lead")).toBe(true);
@@ -125,7 +120,7 @@ describe("public pages do not wait on the auth server", () => {
   it("asks nobody about a page we hand to a customer", () => {
     // decideAccess allows a public path whoever is asking, so the call was a
     // round trip to Supabase on every load of a prerendered booking page.
-    for (const pathname of ["/book", "/book/options", "/proposal/abc", "/flyer", "/login"]) {
+    for (const pathname of ["/book", "/book/options", "/proposal/abc", "/login"]) {
       expect(needsAuthCheck(pathname)).toBe(false);
     }
   });
