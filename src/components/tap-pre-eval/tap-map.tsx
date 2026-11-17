@@ -22,7 +22,7 @@ import {
   SPOT_NOW,
   type TapSpot,
 } from "@/lib/tap-estimate";
-import { satelliteUrl, type LngLat, type LotData } from "@/lib/lot-map";
+import { groundToPicture, satelliteUrl, type LngLat, type LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -38,6 +38,15 @@ const DRAW_STEP_PX = 4;
 function aboutSqft(sqft: number): string {
   const n = sqft >= 100 ? Math.round(sqft / 10) * 10 : Math.round(sqft);
   return `About ${n.toLocaleString("en-US")} sq ft`;
+}
+
+/** The property line's colour: bright enough to read on any satellite photo. */
+const LOT_LINE = "#a3e635";
+
+/** A ring that ends where it starts, as GeoJSON wants. */
+function closedRing(ring: LngLat[]): LngLat[] {
+  const [first, last] = [ring[0], ring[ring.length - 1]];
+  return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
 }
 
 function outlinesData(spots: LocalSpot[]): GeoJSON.FeatureCollection {
@@ -145,9 +154,18 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
 
     map.on("load", () => {
       // Their property line from the county, so "the back bed" has a frame.
+      // Drawn bold, with the neighbours dimmed, so they can tell at a glance
+      // which house is theirs before they tap anything.
       if (lot?.ring?.length) {
-        map.addSource("lot", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [lot.ring] } } });
-        map.addLayer({ id: "lot-line", type: "line", source: "lot", paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [2, 1.5], "line-opacity": 0.85 } });
+        const ring = closedRing(lot.ring);
+        const world: LngLat[] = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+        map.addSource("lot-mask", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [world, ring] } } });
+        map.addLayer({ id: "lot-mask", type: "fill", source: "lot-mask", paint: { "fill-color": "#000000", "fill-opacity": 0.35 } });
+        map.addSource("lot", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } } });
+        map.addLayer({ id: "lot-halo", type: "line", source: "lot", paint: { "line-color": "#000000", "line-width": 7, "line-opacity": 0.45 } });
+        map.addLayer({ id: "lot-line", type: "line", source: "lot", paint: { "line-color": LOT_LINE, "line-width": 3.5 } });
+        const bounds = ring.reduce((b, p) => b.extend(p), new mapboxgl.LngLatBounds(ring[0], ring[0]));
+        map.fitBounds(bounds, { padding: 48, maxZoom: 20, duration: 0 });
       }
       // What they drew round, so they can see the size they gave matches the bed.
       map.addSource("outlines", { type: "geojson", data: outlinesData(spotsRef.current) });
@@ -387,7 +405,10 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
 
   if (step === "intro") {
     const [lng, lat] = home;
-    const picture = satelliteUrl({ center: [lng, lat], zoom: 19, bearing: 0, width: 640, height: 420 });
+    const view = { center: [lng, lat] as LngLat, zoom: 19, bearing: 0, width: 640, height: 420 };
+    const picture = satelliteUrl(view);
+    // Their property line on the picture, so the first thing they see is which house is theirs.
+    const lotPoints = lot?.ring?.length ? closedRing(lot.ring).map((p) => groundToPicture(view, p).map((n) => n.toFixed(1)).join(",")).join(" ") : null;
     const steps = [
       { icon: MapPin, title: "Tap a spot", text: "Beds, lawn, trees, anything on your property." },
       { icon: ListChecks, title: "Pick what you want", text: "Fresh mulch, new plants, cleanup and more." },
@@ -399,6 +420,12 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
           {/* A satellite picture of their own property: they see it's theirs before they start. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={picture} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
+          {lotPoints && (
+            <svg viewBox="0 0 640 420" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 h-full w-full" aria-hidden>
+              <polygon points={lotPoints} fill="none" stroke="#000" strokeOpacity={0.45} strokeWidth={7} strokeLinejoin="round" />
+              <polygon points={lotPoints} fill={LOT_LINE} fillOpacity={0.12} stroke={LOT_LINE} strokeWidth={3.5} strokeLinejoin="round" />
+            </svg>
+          )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-background" />
           <span className="absolute left-1/2 top-[42%] flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-primary text-primary-foreground shadow-lg">
             <Sprout className="size-6" />
@@ -462,6 +489,11 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-5 pb-10 pt-5 text-center text-white">
         <h1 className="text-2xl font-bold drop-shadow">{drawing ? "Draw round the area with your finger" : "Tap where you want work done"}</h1>
         {drawing && <p className="mt-1 text-base drop-shadow">One loop round the edge is plenty. It doesn&apos;t have to be neat.</p>}
+        {!drawing && lot?.ring?.length ? (
+          <p className="mt-1 flex items-center justify-center gap-1.5 text-sm font-medium drop-shadow">
+            <span className="inline-block h-0.5 w-5 rounded-full" style={{ background: LOT_LINE }} /> Your property is outlined in green
+          </p>
+        ) : null}
         {/* When the photo is from, and a quiet way to say it's wrong. One tap,
             nothing to fill in, and the map carries on as it was. */}
         {!drawing && (
