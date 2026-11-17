@@ -81,7 +81,7 @@ export default function StartPage() {
       </section>
 
       <footer className="mt-auto border-t border-neutral-200 py-4 text-center text-xs text-neutral-700">
-        Free on-site evaluation, no obligation
+        Free instant estimate, no obligation
         <Link href="/book" className="ml-4 font-semibold text-neutral-900 underline underline-offset-2">
           Book now
         </Link>

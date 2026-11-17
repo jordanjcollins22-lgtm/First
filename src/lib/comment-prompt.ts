@@ -86,7 +86,7 @@ export function introComment(roles: readonly string[], businessName: string): st
     "Hi everyone!",
     `${commenterIntro(roles, businessName)}.`,
     "We do landscaping, bed cleanups, mulch, lawn care and more around Harford County.",
-    `Free on-site evaluation, no obligation, and you get a written price for each area: ${LINK_MARKER}`,
+    `Free instant estimate, no obligation: mark what you want on a map of your property and see the price in minutes: ${LINK_MARKER}`,
   ].join(" ");
 }
 

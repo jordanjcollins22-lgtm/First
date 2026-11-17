@@ -73,7 +73,7 @@ export const DEFAULT_WEBSITE: WebsiteContent = {
     { name: "Snow removal & salting", blurb: "Driveways and walks cleared before you leave for work." },
   ],
   whyUs: [
-    "Free on-site evaluation with a written price",
+    "Free instant estimate, priced online in minutes",
     "Photos of every finished job",
     "Locally owned in Harford County",
   ],
