@@ -27,13 +27,13 @@ export default async function Home({
   const { new: wantsForm } = await searchParams;
   const { allowed, profile } = await checkTabAccess("new-property");
 
-  // Everybody but the owner opens the app on the new layout: their own home
-  // screen, and the first-open tutorial the first time. The owner keeps this
-  // page until the old screens are all placed in the new layout.
+  // Everybody opens the app on the new build (/me): their own home screen.
+  // Evaluators, who have no home there yet, still go to their v2 page.
   if (profile && !wantsForm) {
     const roles = v2RolesOf(profile);
     const pages = v2PagesFor(roles);
-    if (!roles.includes("owner") && roleHomePath(roles) === "/me") redirect("/me");
+    // One app, one link: everyone with a home in the new build (owner too) opens on it.
+    if (roleHomePath(roles) === "/me") redirect("/me");
     if (!roles.includes("owner") && pages.length) redirect(`/v2/${pages[0]}`);
   }
 
