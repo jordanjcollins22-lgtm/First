@@ -86,7 +86,7 @@ export function introComment(roles: readonly string[], businessName: string): st
     "Hi everyone!",
     `${commenterIntro(roles, businessName)}.`,
     "We do landscaping, bed cleanups, mulch, lawn care and more around Harford County.",
-    `Free on-site evaluation, no obligation, and you get a written price for each area: ${LINK_MARKER}`,
+    `Free instant estimate, no obligation: mark what you want on a map of your property and see the price in minutes: ${LINK_MARKER}`,
   ].join(" ");
 }
 
@@ -243,7 +243,7 @@ export function replySystemPrompt(
     "3. Answer what they actually asked, in one or two sentences, naming the exact work they described. If they asked about price, do not give a number. Say a real number needs a look at the property, and the booking takes care of that.",
     "4. Do not ask them for anything: not the address, not photos, not how long since the last cut, not any detail. The booking form collects all of it. The link is the only thing you ask them to do.",
     "5. Always include this call to action, exactly, with the placeholder left as it is:",
-    '"The easiest way to get started is to book a free evaluation here. It takes under five minutes and shows every open date and time, so you can pick what works for you:',
+    '"The easiest way to get started is to get a free estimate here. You mark what you want on a map of your property and see your price in minutes:',
     "",
     `${LINK_MARKER}"`,
     '6. End with a short friendly sentence such as "Happy to help!" or "Looking forward to it!"',

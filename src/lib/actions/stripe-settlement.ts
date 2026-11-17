@@ -1,6 +1,9 @@
 "use server";
 
 import type Stripe from "stripe";
+import { isTierId } from "@/lib/evaluation-tiers";
+import { recordFunnelStep } from "@/lib/data/funnel-events";
+import { notifyJobTeam } from "@/lib/notifications";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
@@ -96,6 +99,49 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
   const mowOrderId = session.metadata?.mow_order_id ?? null;
   if (mowOrderId) {
     await settleMowOrder(mowOrderId).catch((err) => console.error("settleMowOrder failed:", err));
+  }
+
+  // Paid on the estimate from the map pre-evaluation: its deposit, or a paid
+  // evaluation. It carries the job_id too, so the money itself lands on the
+  // job below like any payment, and comes off the job's price.
+  const estimateId = session.metadata?.estimate_id ?? null;
+  if (estimateId) {
+    const { data: settled } = await admin
+      .from("job_estimates")
+      .update({
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        // What this payment was for, from the session itself.
+        ...(session.metadata?.estimate_choice === "deposit" || session.metadata?.estimate_choice === "evaluation"
+          ? { choice: session.metadata.estimate_choice }
+          : {}),
+        ...(isTierId(session.metadata?.estimate_tier) ? { evaluation_tier: session.metadata.estimate_tier } : {}),
+        ...(Number(session.metadata?.work_cents) > 0 ? { charged_cents: Number(session.metadata?.work_cents) } : {}),
+      })
+      .eq("id", estimateId)
+      .is("paid_at", null)
+      .select("job_id, organization_id");
+    // Counted once, the first time it lands, for the admin Funnel page.
+    const landed = Array.isArray(settled) ? settled[0] : null;
+    if (landed) {
+      const choice = session.metadata?.estimate_choice;
+      // A deposit is a sale: the first visit is the crew coming to work, so
+      // the job goes to approved and into the scheduler's queue, and the team
+      // is told to reach out and set the start day. A paid evaluation is not a sale yet.
+      if (choice === "deposit") {
+        await admin.from("jobs").update({ status: "approved" }).eq("id", landed.job_id).in("status", ["estimating", "quoted"]);
+        // The client was told a team member will reach out to set the day.
+        await notifyJobTeam(landed.job_id, "proposal_responses", "Deposit paid. Reach out to the client to set their start day.", {
+          dedupeKey: `estimate-deposit-paid-${estimateId}`,
+        }).catch(() => {});
+      }
+      await recordFunnelStep(admin, {
+        organizationId: landed.organization_id,
+        step: "paid",
+        jobId: landed.job_id,
+        detail: choice === "deposit" ? "deposit" : (session.metadata?.estimate_tier ?? null),
+      });
+    }
   }
 
   const proposalId = session.metadata?.proposal_id ?? null;

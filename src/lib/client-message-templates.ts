@@ -46,7 +46,7 @@ function core(kind: ReminderKind, facts: MessageFacts): { subject: string; lines
       return {
         subject: `Your evaluation is booked${facts.when ? ` for ${facts.when}` : ""}`,
         lines: [
-          `${hi}your free evaluation${place} is booked${when}.`,
+          `${hi}your evaluation${place} is booked${when}.`,
           "We will walk the property and put together what we would recommend. You do not need to be home, but it helps if you are.",
         ],
       };

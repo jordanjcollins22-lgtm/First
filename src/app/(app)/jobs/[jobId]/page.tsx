@@ -83,6 +83,9 @@ import { IntakeSummary } from "@/components/intake/intake-summary";
 import { ProposalSquare } from "@/components/proposal/proposal-square";
 import { getJobCustomerContact } from "@/lib/job-customer";
 import { getIntakeForJob } from "@/lib/data/evaluation-intake";
+import { estimatePath, getEstimateForJob } from "@/lib/data/tap-estimate";
+import { ClientEstimateCard } from "@/components/tap-pre-eval/client-estimate-card";
+import { readTiers, tierById } from "@/lib/evaluation-tiers";
 import { intakeHeadline, isGrounds } from "@/lib/evaluation-intake";
 import { MessageThread } from "@/components/job/message-thread";
 import { CallClientButton } from "@/components/job/call-client-button";
@@ -396,6 +399,8 @@ export default async function JobPage({
   );
   // What they told us before the visit. Null when this job has no evaluation.
   const intake = job.evaluation_date ? await getIntakeForJob(jobId).catch(() => null) : null;
+  // The estimate the client saw after the map pre-evaluation, and its deposit.
+  const clientEstimate = intake ? await getEstimateForJob(jobId).catch(() => null) : null;
   const hasClientRequest = Boolean(intake) || requestedServiceNames.length > 0 || job.client_notes || job.budget_range;
 
   const zones = design ? ((design.zones as unknown as WorkZone[]).filter((z) => z.service)) : [];
@@ -643,9 +648,12 @@ export default async function JobPage({
         )
       : null;
   // The form is in and the visit has not been written up: enough for a
-  // general number over the phone first. Staff who see money only.
+  // general number over the phone first. Staff who see money only. Not when
+  // the client marked their map: that estimate prices each spot at its own
+  // size and is what they were shown, so a second, pooled number from the
+  // same answers would only disagree with it.
   const phoneQuote =
-    intake?.submittedAt && job.evaluation_status !== "completed" && !proposal && seen.jobMoney
+    intake?.submittedAt && job.evaluation_status !== "completed" && !proposal && seen.jobMoney && !clientEstimate
       ? instantPrice(intake.answers, await lotForProperty(job.property_id).catch(() => null), catalog)
       : null;
   // While the job is being worked: who is in which area, and at what stage.
@@ -784,6 +792,16 @@ export default async function JobPage({
             photos={intake.photoUrls}
           />
         </section>
+      )}
+
+      {clientEstimate && intake && (
+        <ClientEstimateCard
+          estimate={clientEstimate}
+          tierName={tierById(readTiers(organization.evaluation_tiers), clientEstimate.evaluationTier)?.name ?? null}
+          clientHref={estimatePath(intake.token)}
+          showMoney={seen.jobMoney}
+          photo={{ outdated: Boolean(intake.photoOutdatedAt), wrongProperty: Boolean(intake.wrongPropertyAt), seen: intake.photoSeen ?? null }}
+        />
       )}
 
       {/* Everything for changing the project: the drawing tool, the

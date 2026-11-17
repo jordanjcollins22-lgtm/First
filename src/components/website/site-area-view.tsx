@@ -115,7 +115,7 @@ export function SiteAreaView({
       )}
 
       <section className="bg-[#0f766e] px-5 py-12 text-center text-white @3xl:px-12">
-        <h2 className="text-2xl font-extrabold">Free evaluation in {area.town}</h2>
+        <h2 className="text-2xl font-extrabold">Free estimate in {area.town}</h2>
         <p className="mt-2 text-white/85">Pick a time that works and we&apos;ll come take a look. No cost, no pressure.</p>
         <a href={links.book} {...target} className="mt-6 inline-block rounded-xl bg-white px-6 py-3 font-bold text-[#0f766e] hover:bg-stone-100">
           {c.ctaLabel}

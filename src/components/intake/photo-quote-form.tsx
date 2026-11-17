@@ -273,7 +273,7 @@ function SpotMap({
       <div className="relative overflow-hidden rounded-xl border border-border bg-muted" style={{ aspectRatio: `${view.width} / ${view.height}` }}>
         {/* A static Mapbox photo: next/image has nothing to optimise. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={satelliteUrl(view, publicEnv.mapboxToken)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={satelliteUrl(view)} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
         <svg
           ref={svg}
           viewBox={`0 0 ${view.width} ${view.height}`}

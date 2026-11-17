@@ -41,7 +41,7 @@ export function broughtInStep(job: BroughtInJob): BroughtInStep {
 }
 
 const LABEL: Record<BroughtInStep, string> = {
-  lead: "New lead: the office is booking the free evaluation",
+  lead: "New lead: the office is reaching out about their estimate",
   evaluation: "Evaluation booked",
   proposal: "Priced, waiting on the client",
   sold: "Sold: you earn 4% when it's paid",

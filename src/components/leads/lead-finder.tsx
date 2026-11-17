@@ -230,7 +230,7 @@ function Detail({
   const anyTicked = Object.values(checks).some(Boolean);
   const picture =
     mapboxToken && row.lat != null && row.lng != null
-      ? satelliteUrl({ center: [row.lng, row.lat], zoom: satelliteZoom(row.acreage), bearing: 0, width: 600, height: 360 }, mapboxToken)
+      ? satelliteUrl({ center: [row.lng, row.lat], zoom: satelliteZoom(row.acreage), bearing: 0, width: 600, height: 360 })
       : null;
   const savedScore = row.score;
 

@@ -110,6 +110,21 @@ export default async function AdminPage() {
                     View the app as somebody else
                   </Link>
                 </li>
+                <li>
+                  <Link href="/admin/funnel" className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary">
+                    Funnel: each page and how it converts
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/pricing-health" className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary">
+                    Pricing health: is the client estimate right?
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/admin/test-runs" className="flex min-h-12 items-center rounded-lg border border-border bg-card/60 px-3 py-2.5 text-sm font-medium hover:border-primary hover:text-primary">
+                    Test runs: people trying the booking funnel
+                  </Link>
+                </li>
               </ul>
             </section>
           )}

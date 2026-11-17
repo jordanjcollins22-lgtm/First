@@ -13,11 +13,9 @@ import type { BookingOptions } from "../booking-options";
  * for once it is on screen — who the link belongs to, what that business
  * offers, and which hours are still free.
  *
- * It is deliberately not cached. Open times are the one thing on this page
- * that must not be stale: a client picking an hour that was taken two minutes
- * ago gets sent back to the calendar by the server-side re-check in
- * submitPublicBooking, which is a worse first impression than the second this
- * query costs. Everything that *can* be stale was moved into the shell.
+ * It is deliberately not cached: which business, and whether it can be
+ * booked at all, must not be stale. Everything that *can* be stale was moved
+ * into the shell.
  */
 export async function GET(request: NextRequest): Promise<NextResponse<BookingOptions>> {
   const answer = (body: BookingOptions) =>

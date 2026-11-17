@@ -32,17 +32,17 @@ import type { IntakeAnswers } from "@/lib/evaluation-intake";
 export const UNSEEN_PREMIUM = 0.2;
 
 /** Assumed when the county has no lot for the address. */
-const TYPICAL_LOT_SQFT = 10_000;
+export const TYPICAL_LOT_SQFT = 10_000;
 
 /** How much of the yard each part is, roughly. */
-const AREA_SHARE: Record<string, number> = { front: 0.3, back: 0.45, sides: 0.15, foundation: 0.1 };
+export const AREA_SHARE: Record<string, number> = { front: 0.3, back: 0.45, sides: 0.15, foundation: 0.1 };
 
 /**
  * Crew-minutes per square foot (or per item, for things counted), for a
  * service whose rate card has no timing yet. Rough, and marked as typical
  * wherever it is used.
  */
-const TYPICAL_MINUTES: Record<string, number> = {
+export const TYPICAL_MINUTES: Record<string, number> = {
   "landscape-bed": 0.3,
   "lawn-care": 0.004,
   "lawn-restoration": 0.05,
@@ -59,7 +59,7 @@ const TYPICAL_MINUTES: Record<string, number> = {
 };
 
 /** A material's cost per unit, in cents, when the inventory has none. */
-const TYPICAL_MATERIAL_CENTS: { name: RegExp; cents: number }[] = [
+export const TYPICAL_MATERIAL_CENTS: { name: RegExp; cents: number }[] = [
   { name: /mulch/i, cents: 3500 },
   { name: /seed/i, cents: 170 },
   { name: /rock|stone/i, cents: 15000 },
@@ -114,13 +114,13 @@ export interface InstantPrice {
   usesTypical: boolean;
 }
 
-type Catalog = Pick<CanvasCatalog, "servicePricing" | "serviceMaterialRules" | "materials" | "crewCostPerHourCents" | "markup" | "measurementUnit" | "measurementBasis">;
+export type InstantCatalog = Pick<CanvasCatalog, "servicePricing" | "serviceMaterialRules" | "materials" | "crewCostPerHourCents" | "markup" | "measurementUnit" | "measurementBasis">;
 
 /** The parts of the yard, as a size is explained. */
-const PART_NAME: Record<string, string> = { front: "front yard", back: "back yard", sides: "side yards", foundation: "ground around the house" };
+export const PART_NAME: Record<string, string> = { front: "front yard", back: "back yard", sides: "side yards", foundation: "ground around the house" };
 
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
-const sqft = (n: number) => `${Math.round(n).toLocaleString("en-US")} sq ft`;
+export const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+export const sqft = (n: number) => `${Math.round(n).toLocaleString("en-US")} sq ft`;
 
 function yardShare(areas: string[]): number {
   if (areas.includes("whole")) return 1;
@@ -129,7 +129,7 @@ function yardShare(areas: string[]): number {
 }
 
 /** One piece of work to price: a size (or a count), and what it uses. */
-interface Work {
+export interface InstantWork {
   service: string;
   label: string;
   /** The rate card service, or a key into TYPICAL_MINUTES for work with none. */
@@ -142,13 +142,28 @@ interface Work {
   values?: Record<string, string>;
   /** Multiplies the hours: two storeys take longer than one. */
   hoursFactor?: number;
+  /** What the hours factor is for, in words. Unset: the height (washing) or the size. */
+  hoursWhy?: string;
+  /**
+   * A typical timing to use in place of TYPICAL_MINUTES when the rate card
+   * has none, with where it is from. The spot pricer sets it from the
+   * production rates; the form's price never does.
+   */
+  typicalRate?: { minutes: number; from: string };
+  /**
+   * For a service the rate card times as a flat number of hours for the
+   * job: this line's part of those hours, when the job's work of that
+   * service is split over several lines (one per spot). Without it every
+   * spot would be charged the whole job's hours.
+   */
+  flatShare?: { fraction: number; of: number };
   note?: string;
 }
 
 export function instantPrice(
   answers: IntakeAnswers,
   lot: { lotSqft: number | null; structureSqft: number | null } | null,
-  catalog: Catalog
+  catalog: InstantCatalog
 ): InstantPrice {
   const lotSqft = lot?.lotSqft ?? TYPICAL_LOT_SQFT;
   const structureSqft = lot?.structureSqft ?? 2000;
@@ -167,7 +182,7 @@ export function instantPrice(
   };
   const has = (id: string, value: string) => picked(id).includes(value);
 
-  const work: Work[] = answers.services.flatMap((service): Work[] => {
+  const work: InstantWork[] = answers.services.flatMap((service): InstantWork[] => {
     switch (service) {
       case "beds": {
         const bed = clamp(yard * 0.12, 100, 2000);
@@ -175,7 +190,7 @@ export function instantPrice(
         const now = picked("beds_now");
         const mulch = has("beds_add", "mulch");
         const stone = has("beds_add", "stone");
-        const out: Work[] = [];
+        const out: InstantWork[] = [];
         if (now.includes("stone") && mulch && !stone)
           out.push({ service, label: "Remove the old stone", typeId: "stone-removal", areaSqft: bed, sizeFrom: bedFrom });
         if (now.includes("old_mulch") && stone && !mulch)
@@ -198,7 +213,7 @@ export function instantPrice(
         const need = picked("lawn_need");
         const lawnArea = clamp(yard * 0.7, 500, 40_000);
         const lawnFrom = `70% of ${yardFrom}`;
-        const out: Work[] = [];
+        const out: InstantWork[] = [];
         if (need.includes("redo") || need.includes("patch")) {
           const whole = need.includes("redo");
           const sod = picked("lawn_method")[0] === "sod";
@@ -218,7 +233,7 @@ export function instantPrice(
       }
       case "cleanup": {
         const what = picked("cleanup_what");
-        const out: Work[] = [{ service, label: "Cleanup", typeId: "landscape-cleanup", areaSqft: clamp(yard * 0.25, 200, 10_000), sizeFrom: `25% of ${yardFrom}` }];
+        const out: InstantWork[] = [{ service, label: "Cleanup", typeId: "landscape-cleanup", areaSqft: clamp(yard * 0.25, 200, 10_000), sizeFrom: `25% of ${yardFrom}` }];
         if (what.includes("trim") || what.includes("tall"))
           out.push({ service, label: "Trim shrubs and hedges", typeId: "trimming", count: 8, countOf: "shrubs", sizeFrom: "a typical yard", hoursFactor: what.includes("tall") ? 1.5 : 1 });
         return out;
@@ -258,73 +273,10 @@ export function instantPrice(
   });
 
   let usesTypical = false;
-  const lines = work.map((w): InstantLine => {
-    const pricing = w.typeId ? active.find((p) => p.service_type_id === w.typeId) ?? null : null;
-    const typicalKey = w.typeId && TYPICAL_MINUTES[w.typeId] != null ? w.typeId : w.typeId?.startsWith("custom-") && w.service === "snow" ? "snow" : null;
-    const units = w.count ?? w.areaSqft ?? 0;
-    const per = w.count != null ? (w.countOf ?? "item").replace(/s$/, "") : "sq ft";
-    const size = w.count != null ? `${w.count} ${w.countOf ?? "items"}` : w.areaSqft != null ? sqft(w.areaSqft) : null;
-
-    // The rate card's timing when it has one, and a typical rate otherwise.
-    let crewHours = 0;
-    let rate: string | null = null;
-    let rateTypical = false;
-    const cardMinutes = pricing?.minutes_per_sqft != null ? Number(pricing.minutes_per_sqft) : null;
-    if (pricing && cardMinutes != null && (pricing.pricing_basis === "area" || pricing.pricing_basis === "count" || w.count != null)) {
-      const crew = pricing.crew_size ?? 1;
-      crewHours = (cardMinutes / 60) * units * crew;
-      rate = `${cardMinutes} min per ${per}${crew > 1 ? ` × ${crew} crew` : ""}, from the rate card`;
-    } else if (pricing?.estimated_hours != null) {
-      crewHours = Number(pricing.estimated_hours);
-      rate = `${crewHours} crew-hours, from the rate card`;
-    } else if (typicalKey) {
-      crewHours = (TYPICAL_MINUTES[typicalKey] / 60) * units;
-      rate = `${TYPICAL_MINUTES[typicalKey]} crew-min per ${per}, typical`;
-      rateTypical = true;
-    }
-    if (w.hoursFactor && w.hoursFactor !== 1) {
-      crewHours *= w.hoursFactor;
-      rate = `${rate}, × ${w.hoursFactor} for ${w.service === "washing" ? "the height" : "the size"}`;
-    }
-
-    if (!w.typeId || crewHours <= 0) {
-      return { service: w.service, label: w.label, priceAs: pricing?.name ?? null, size, sizeFrom: w.sizeFrom ?? null, crewHours: 0, rate: null, rateTypical: false, labourCents: 0, materials: [], materialsCents: 0, markupCents: 0, priceCents: null, note: w.note ?? "Priced on the visit." };
-    }
-    if (rateTypical) usesTypical = true;
-
-    // The materials the rate card's rules give this size, with a typical
-    // cost standing in for one the inventory has no cost for.
-    const materials: InstantMaterial[] = [];
-    if (pricing && w.areaSqft != null) {
-      const zone = { id: "instant", name: w.label, service: { typeId: pricing.service_type_id, values: w.values ?? {}, notes: "", photos: [], tools: [] } } as unknown as WorkZone;
-      for (const item of zoneMaterialLineItems(zone, w.areaSqft, catalog as CanvasCatalog)) {
-        const material = catalog.materials.find((m) => m.id === item.materialId);
-        const typicalCents = TYPICAL_MATERIAL_CENTS.find((t) => t.name.test(item.material))?.cents ?? null;
-        const cents = item.totalCost != null ? Math.round(item.totalCost * 100) : typicalCents != null ? Math.round(item.quantity * typicalCents) : null;
-        const typical = item.totalCost == null && typicalCents != null;
-        if (typical) usesTypical = true;
-        const qty = item.quantity < 10 ? item.quantity.toFixed(1) : Math.round(item.quantity).toLocaleString("en-US");
-        materials.push({ name: material?.name ?? item.material, amount: `${qty} ${item.unit}`, cents, typical });
-      }
-    }
-    const materialsCents = materials.reduce((sum, m) => sum + (m.cents ?? 0), 0);
-    const cost = priceZone({ materialsCents, crewHours, crewCostPerHourCents: catalog.crewCostPerHourCents }, catalog.markup);
-    return {
-      service: w.service,
-      label: w.label,
-      priceAs: pricing?.name ?? null,
-      size,
-      sizeFrom: w.sizeFrom ?? null,
-      crewHours,
-      rate,
-      rateTypical,
-      labourCents: cost.labourCents,
-      materials,
-      materialsCents: cost.materialsCents,
-      markupCents: cost.priceCents - cost.directCostCents,
-      priceCents: cost.priceCents > 0 ? cost.priceCents : null,
-      note: w.note ?? (materials.some((m) => m.cents == null) ? "A material has no cost yet, so it is left out." : null),
-    };
+  const lines = work.map((w) => {
+    const priced = priceWork(w, catalog);
+    if (priced.typical) usesTypical = true;
+    return priced.line;
   });
 
   const subtotalCents = lines.reduce((sum, l) => sum + (l.priceCents ?? 0), 0);
@@ -341,6 +293,114 @@ export function instantPrice(
     markup: `× ${m.multiplier}, then ${overhead}`,
     usesTypical,
   };
+}
+
+/**
+ * One piece of work priced the way a proposal prices a zone: the crew-hours
+ * its size takes (the rate card's timing, or a typical one, said as such),
+ * the materials the rate card's rules give it, then markup and overhead.
+ * Shared by the form's price and the per-spot price, so both work a size
+ * into dollars the same way. `typical` is whether a stand-in was used.
+ */
+/**
+ * How the rate card times a piece of work: per unit when it has minutes and
+ * the work is measured, otherwise the card's flat hours for the job.
+ */
+function cardTiming(w: InstantWork, catalog: InstantCatalog) {
+  const active = catalog.servicePricing.filter((p) => p.status === "active");
+  const pricing = w.typeId ? active.find((p) => p.service_type_id === w.typeId) ?? null : null;
+  const cardMinutes = pricing?.minutes_per_sqft != null ? Number(pricing.minutes_per_sqft) : null;
+  const perUnit = Boolean(pricing && cardMinutes != null && (pricing.pricing_basis === "area" || pricing.pricing_basis === "count" || w.count != null));
+  const flatHours = !perUnit && pricing?.estimated_hours != null ? Number(pricing.estimated_hours) : null;
+  return { pricing, cardMinutes, perUnit, flatHours };
+}
+
+/**
+ * The rate card's flat hours for this work, when that is how the card times
+ * it, else null. The spot pricer uses it to split one job's hours over the
+ * spots of that service rather than charge them on every spot.
+ */
+export function flatHoursFor(w: InstantWork, catalog: InstantCatalog): number | null {
+  return w.typeId ? cardTiming(w, catalog).flatHours : null;
+}
+
+export function priceWork(w: InstantWork, catalog: InstantCatalog): { line: InstantLine; typical: boolean } {
+  const { pricing, cardMinutes, perUnit, flatHours } = cardTiming(w, catalog);
+  const typicalKey = w.typeId && TYPICAL_MINUTES[w.typeId] != null ? w.typeId : w.typeId?.startsWith("custom-") && w.service === "snow" ? "snow" : null;
+  const units = w.count ?? w.areaSqft ?? 0;
+  const per = w.count != null ? (w.countOf ?? "item").replace(/s$/, "") : "sq ft";
+  const size = w.count != null ? `${w.count} ${w.countOf ?? "items"}` : w.areaSqft != null ? sqft(w.areaSqft) : null;
+
+  // The rate card's timing when it has one, and a typical rate otherwise.
+  let crewHours = 0;
+  let rate: string | null = null;
+  let rateTypical = false;
+  if (pricing && perUnit && cardMinutes != null) {
+    const crew = pricing.crew_size ?? 1;
+    crewHours = (cardMinutes / 60) * units * crew;
+    rate = `${cardMinutes} min per ${per}${crew > 1 ? ` × ${crew} crew` : ""}, from the rate card`;
+  } else if (flatHours != null) {
+    const share = w.flatShare && w.flatShare.of > 1 && w.flatShare.fraction > 0 && w.flatShare.fraction <= 1 ? w.flatShare : null;
+    crewHours = share ? flatHours * share.fraction : flatHours;
+    rate = share
+      ? `${+crewHours.toFixed(2)} of the rate card's ${flatHours} crew-hours for the job, shared over ${share.of} spots by size`
+      : `${crewHours} crew-hours, from the rate card`;
+  } else if (w.typicalRate) {
+    crewHours = (w.typicalRate.minutes / 60) * units;
+    rate = `${+w.typicalRate.minutes.toFixed(3)} crew-min per ${per}, ${w.typicalRate.from}`;
+    rateTypical = true;
+  } else if (typicalKey) {
+    crewHours = (TYPICAL_MINUTES[typicalKey] / 60) * units;
+    rate = `${TYPICAL_MINUTES[typicalKey]} crew-min per ${per}, typical`;
+    rateTypical = true;
+  }
+  if (w.hoursFactor && w.hoursFactor !== 1) {
+    crewHours *= w.hoursFactor;
+    rate = `${rate}, × ${w.hoursFactor} for ${w.hoursWhy ?? (w.service === "washing" ? "the height" : "the size")}`;
+  }
+
+  if (!w.typeId || crewHours <= 0) {
+    return {
+      line: { service: w.service, label: w.label, priceAs: pricing?.name ?? null, size, sizeFrom: w.sizeFrom ?? null, crewHours: 0, rate: null, rateTypical: false, labourCents: 0, materials: [], materialsCents: 0, markupCents: 0, priceCents: null, note: w.note ?? "Priced on the visit." },
+      typical: false,
+    };
+  }
+  let usesTypical = rateTypical;
+
+  // The materials the rate card's rules give this size, with a typical
+  // cost standing in for one the inventory has no cost for.
+  const materials: InstantMaterial[] = [];
+  if (pricing && w.areaSqft != null) {
+    const zone = { id: "instant", name: w.label, service: { typeId: pricing.service_type_id, values: w.values ?? {}, notes: "", photos: [], tools: [] } } as unknown as WorkZone;
+    for (const item of zoneMaterialLineItems(zone, w.areaSqft, catalog as CanvasCatalog)) {
+      const material = catalog.materials.find((m) => m.id === item.materialId);
+      const typicalCents = TYPICAL_MATERIAL_CENTS.find((t) => t.name.test(item.material))?.cents ?? null;
+      const cents = item.totalCost != null ? Math.round(item.totalCost * 100) : typicalCents != null ? Math.round(item.quantity * typicalCents) : null;
+      const typical = item.totalCost == null && typicalCents != null;
+      if (typical) usesTypical = true;
+      const qty = item.quantity < 10 ? item.quantity.toFixed(1) : Math.round(item.quantity).toLocaleString("en-US");
+      materials.push({ name: material?.name ?? item.material, amount: `${qty} ${item.unit}`, cents, typical });
+    }
+  }
+  const materialsCents = materials.reduce((sum, m) => sum + (m.cents ?? 0), 0);
+  const cost = priceZone({ materialsCents, crewHours, crewCostPerHourCents: catalog.crewCostPerHourCents }, catalog.markup);
+  const line: InstantLine = {
+    service: w.service,
+    label: w.label,
+    priceAs: pricing?.name ?? null,
+    size,
+    sizeFrom: w.sizeFrom ?? null,
+    crewHours,
+    rate,
+    rateTypical,
+    labourCents: cost.labourCents,
+    materials,
+    materialsCents: cost.materialsCents,
+    markupCents: cost.priceCents - cost.directCostCents,
+    priceCents: cost.priceCents > 0 ? cost.priceCents : null,
+    note: w.note ?? (materials.some((m) => m.cents == null) ? "A material has no cost yet, so it is left out." : null),
+  };
+  return { line, typical: usesTypical };
 }
 
 /* ------------------------------------------------ asked for, then found */
