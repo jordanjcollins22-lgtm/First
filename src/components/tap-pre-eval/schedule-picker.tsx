@@ -7,7 +7,6 @@ import { Check, CheckCircle2, Loader2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RecommendedTimes } from "@/components/booking/recommended-times";
 import { bookPaidEvaluationVisit } from "@/lib/actions/public-booking-actions";
-import { chooseStartDay } from "@/lib/actions/tap-estimate-actions";
 import type { BookingTimes, OfferedTime } from "@/lib/data/booking-times";
 import type { EvaluationTier } from "@/lib/evaluation-tiers";
 import { cn } from "@/lib/utils";
@@ -23,10 +22,6 @@ export interface SchedulePickerProps {
   tier: EvaluationTier | null;
   /** "Tuesday, November 3 at 10:00 am", once an evaluation is booked. */
   booked: string | null;
-  /** After a deposit: the start day they picked, YYYY-MM-DD. */
-  startDay: string | null;
-  /** After a deposit: the days they can pick to start. */
-  startDays: string[];
   times: BookingTimes | null;
   noticeText: string;
   /** Said when the visit is a video call, before they pick. */
@@ -49,9 +44,9 @@ function timeLabel(time: string): string {
 /**
  * The last page of the funnel: they have paid, so now the first visit.
  *
- * After a deposit that visit is the crew coming to work: they pick the day
- * they'd like to start, and the team confirms it with them. After a paid
- * evaluation it is the evaluator: recommended times first (the ones next to
+ * After a deposit nothing is picked: a team member reaches out to set the
+ * start day. After a paid evaluation they pick its time with an account
+ * manager: recommended times first (the ones next to
  * a visit already nearby), every free time a tap away. Either way a choice
  * is picked then confirmed, so a slip of the thumb is not a booking. Once
  * done, it says so and what happens next.
@@ -65,8 +60,6 @@ export function SchedulePicker({
   choice,
   tier,
   booked,
-  startDay,
-  startDays,
   times,
   noticeText,
   digital,
@@ -75,7 +68,6 @@ export function SchedulePicker({
 }: SchedulePickerProps) {
   const router = useRouter();
   const [picked, setPicked] = useState<OfferedTime | null>(null);
-  const [pickedDay, setPickedDay] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -85,16 +77,6 @@ export function SchedulePicker({
     setError(null);
     startTransition(async () => {
       const result = await bookPaidEvaluationVisit({ token, date: picked.date, time: picked.time, candidateEvaluatorIds: picked.evaluatorIds });
-      if (!result.ok) setError(result.error);
-      else router.refresh();
-    });
-  }
-
-  function confirmStartDay() {
-    if (!pickedDay) return;
-    setError(null);
-    startTransition(async () => {
-      const result = await chooseStartDay({ token, day: pickedDay });
       if (!result.ok) setError(result.error);
       else router.refresh();
     });
@@ -120,20 +102,22 @@ export function SchedulePicker({
     );
   }
 
-  if (choice === "deposit" && startDay) {
+  if (choice === "deposit") {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-6 px-4 py-10">
         {header}
         <div className="flex flex-col items-center gap-2 text-center">
           <CheckCircle2 className="size-14 text-primary" />
-          <h1 className="text-3xl font-bold">You&apos;re on the schedule{clientFirstName ? `, ${clientFirstName}` : ""}</h1>
-          <p className="text-lg">You&apos;d like us to start {dayLabel(startDay)}</p>
-          <p className="text-sm text-muted-foreground">We&apos;ll text you to confirm the day and a start time.</p>
+          <h1 className="text-3xl font-bold">
+            {test ? "Deposit chosen (test, nothing charged)" : `Deposit received${clientFirstName ? `, ${clientFirstName}` : ""}`}
+          </h1>
+          <p className="text-lg">A team member will reach out to you shortly.</p>
+          <p className="text-sm text-muted-foreground">We&apos;ll call or text to set your start day and answer any questions.</p>
         </div>
         <section className="rounded-2xl border border-border p-4 text-sm">
           <h2 className="font-semibold">What happens next</h2>
           <ol className="mt-2 flex list-decimal flex-col gap-1.5 pl-5 text-muted-foreground">
-            <li>We confirm your start day with you.</li>
+            <li>A team member reaches out to set your start day.</li>
             <li>On the day, we walk the spots with you and confirm the price before starting.</li>
             <li>Then we get to work. Your deposit comes off the final price.</li>
           </ol>
@@ -143,52 +127,9 @@ export function SchedulePicker({
         </a>
         {businessPhone && (
           <p className="text-center text-sm text-muted-foreground">
-            Questions? Call or text <a className="font-semibold text-primary" href={`tel:${businessPhone}`}>{businessPhone}</a>
+            Questions now? Call or text <a className="font-semibold text-primary" href={`tel:${businessPhone}`}>{businessPhone}</a>
           </p>
         )}
-      </main>
-    );
-  }
-
-  if (choice === "deposit") {
-    return (
-      <main className="mx-auto flex min-h-dvh max-w-md flex-col gap-5 px-4 py-8">
-        {header}
-        <div className="flex items-start gap-3 rounded-2xl border-2 border-primary/40! bg-primary/5 p-4">
-          <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
-          <div>
-            <p className="font-semibold">{test ? "Deposit chosen (test, nothing charged)." : "Deposit received. Thank you!"}</p>
-            <p className="text-sm text-muted-foreground">Last step: when should we start?</p>
-          </div>
-        </div>
-        <div>
-          <h1 className="text-xl font-bold">Pick your start day</h1>
-          <p className="text-sm text-muted-foreground">
-            On the day we walk the spots with you, confirm the price, and get to work. We&apos;ll text you to confirm the day.
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {startDays.map((day) => {
-            const on = day === pickedDay;
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => setPickedDay(day)}
-                className={cn(
-                  "min-h-12 rounded-lg border px-3 text-left text-sm font-medium",
-                  on ? "border-primary! bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary!"
-                )}
-              >
-                {dayLabel(day)}
-              </button>
-            );
-          })}
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button size="xl" className="w-full" disabled={!pickedDay || isPending} onClick={confirmStartDay}>
-          {isPending ? <Loader2 className="size-6 animate-spin" /> : pickedDay ? `Start ${dayLabel(pickedDay)}` : "Pick a day above"}
-        </Button>
       </main>
     );
   }

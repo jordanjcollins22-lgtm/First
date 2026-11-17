@@ -6,20 +6,18 @@ import { recordFunnelStep } from "@/lib/data/funnel-events";
 import { estimatePath, getTapPreEval, tapMapPath } from "@/lib/data/tap-estimate";
 import { settleEstimateIfPaid } from "@/lib/data/estimate-settle";
 import { bookingTimesFor } from "@/lib/data/booking-times";
-import { getBookingNotice, listOrgEvaluatorIds } from "@/lib/data/public-booking";
+import { getBookingNotice, listOrgAccountManagerIds } from "@/lib/data/public-booking";
 import { tierById } from "@/lib/evaluation-tiers";
 import { describeNotice } from "@/lib/booking-notice";
-import { startDayOptions } from "@/lib/start-day";
 import { modeForAddress } from "@/lib/evaluation-mode";
 import { dayOnly, timeOnly } from "@/lib/time-zone";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { SchedulePicker } from "@/components/tap-pre-eval/schedule-picker";
 
 /**
- * The first visit, picked once they have paid. After a deposit that is the
- * day the crew starts work (a preferred day the team confirms); after a paid
- * evaluation it is the evaluation, in an evaluator's time slot. Stripe sends
- * them here from checkout.
+ * Where Stripe sends them back to. After a deposit nothing is picked: they
+ * are told a team member will reach out to set the work day. After a paid
+ * evaluation they pick its time, on an account manager's calendar.
  */
 export const dynamic = "force-dynamic";
 
@@ -52,21 +50,19 @@ export default async function SchedulePage({
   const booked = visitAt && !data.intake.cancelled ? `${dayOnly(visitAt)} at ${timeOnly(visitAt).toLowerCase()}` : null;
 
   const orgId = data.organizationId;
-  // After a deposit the first visit is the work, picked as a preferred start
-  // day; after a paid evaluation it is the evaluation, in an evaluator's slot.
+  // After a deposit there is nothing to pick: a team member reaches out.
   const deposit = estimate.choice === "deposit";
-  const done = deposit ? Boolean(estimate.startDay) : Boolean(booked);
+  const done = deposit || Boolean(booked);
   if (orgId && estimate.paidAt && !done) {
     await recordFunnelStep(createAdminClient(), { organizationId: orgId, step: "schedule_viewed", jobId: data.intake.jobId });
   }
   const [times, notice] =
     !done && !deposit && estimate.paidAt && orgId
       ? await Promise.all([
-          listOrgEvaluatorIds(orgId).then((ids) => bookingTimesFor(orgId, ids, { lat: data.home?.[1] ?? null, lng: data.home?.[0] ?? null })),
+          listOrgAccountManagerIds(orgId).then((ids) => bookingTimesFor(orgId, ids, { lat: data.home?.[1] ?? null, lng: data.home?.[0] ?? null })),
           getBookingNotice(orgId),
         ])
       : [null, null];
-  const startNotice = deposit && orgId ? await getBookingNotice(orgId) : null;
   const mode = data.home && data.intake.address ? modeForAddress(data.home[1], data.home[0], data.intake.address) : null;
 
   return (
@@ -79,8 +75,6 @@ export default async function SchedulePage({
       choice={estimate.choice}
       tier={tier}
       booked={booked}
-      startDay={estimate.startDay}
-      startDays={deposit && !done ? startDayOptions(new Date(), startNotice?.timeZone) : []}
       times={times}
       noticeText={notice ? describeNotice(notice) : ""}
       digital={mode?.mode === "digital" ? mode.says : null}

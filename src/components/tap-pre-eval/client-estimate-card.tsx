@@ -38,7 +38,7 @@ export function ClientEstimateCard({
   const status = estimate.paidAt
     ? estimate.choice === "evaluation"
       ? `Paid evaluation: ${tierName ?? "evaluation"}, ${paid} (comes off the job)`
-      : `Deposit paid: ${paid}. ${estimate.startDay ? `Wants to start ${startDayLabel(estimate.startDay)}: confirm with them` : "No start day picked yet"}`
+      : `Deposit paid: ${paid}. ${estimate.startDay ? `Wants to start ${startDayLabel(estimate.startDay)}: confirm with them` : "Reach out to set their start day"}`
     : estimate.acceptedAt
       ? `Started paying (${estimate.choice === "evaluation" ? `${tierName ?? "evaluation"}` : "deposit"}), not paid yet`
       : "Hasn't paid yet";

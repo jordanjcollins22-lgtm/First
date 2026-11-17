@@ -173,7 +173,7 @@ export default async function AccountManagerJourneyPage() {
     postedAt: at(-3),
     matchReason: "Asking for bed clean up and mulch",
     addedByHand: false,
-    draft: "@Megan we'd be glad to help. Jace here from JS Landscaping, we do bed clean ups and mulch around Bel Air. You can book a free evaluation here: [your link]",
+    draft: "@Megan we'd be glad to help. Jace here from JS Landscaping, we do bed clean ups and mulch around Bel Air. You can get a free estimate here: [your link]",
     ageLabel: "Posted 3 hours ago",
     freshness: "fresh",
     ageHint: "Fresh: answer it today.",

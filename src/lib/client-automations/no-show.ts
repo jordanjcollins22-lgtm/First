@@ -80,7 +80,7 @@ export function rebookMessage(input: {
       ? input.kind === "no_show"
         ? `${hi}sorry we missed each other today. Pick a new time that suits you here:`
         : `${hi}no problem about the visit. When you're ready, pick a new time here:`
-      : `${hi}still want that free evaluation? It takes two minutes to pick a time:`;
+      : `${hi}still want that free estimate? It takes a few minutes on your phone:`;
   if (input.channel === "sms") {
     const text = `${input.businessName}: ${line} ${input.link}`;
     return { subject: "", body: input.includeOptOut ? `${text} Reply STOP to stop.` : text };

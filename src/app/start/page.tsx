@@ -57,8 +57,8 @@ export default function StartPage() {
             <Image src="/logo-mark.png" alt="" width={32} height={32} className="h-8 w-8" priority />
             JS Landscaping
           </p>
-          <h1 className="mt-4 whitespace-nowrap text-[1.6rem] font-black uppercase leading-none tracking-tight sm:text-[2.6rem]">Free yard evaluation</h1>
-          <p className="mt-1.5 text-[11px] font-semibold text-white/85">No obligation. Book in a minute.</p>
+          <h1 className="mt-4 whitespace-nowrap text-[1.6rem] font-black uppercase leading-none tracking-tight sm:text-[2.6rem]">Free instant estimate</h1>
+          <p className="mt-1.5 text-[11px] font-semibold text-white/85">See your price in minutes. No obligation.</p>
           <Suspense fallback={<div className="mt-6 h-14 w-full max-w-md rounded-full bg-white/90" />}>
             <StartAddress />
           </Suspense>

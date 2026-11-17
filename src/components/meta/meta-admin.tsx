@@ -461,7 +461,7 @@ function Conversation({ thread, bookingUrl, onBack }: { thread: MetaThread; book
           <Button
             variant="outline"
             disabled={!windowOpen}
-            onClick={() => setText((t) => `${t.trim()}${t.trim() ? "\n\n" : ""}Pick a time for a free evaluation here: ${bookingUrl}`)}
+            onClick={() => setText((t) => `${t.trim()}${t.trim() ? "\n\n" : ""}Get a free estimate here: ${bookingUrl}`)}
           >
             Add booking link
           </Button>

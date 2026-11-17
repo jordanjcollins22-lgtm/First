@@ -7,7 +7,7 @@ import { getProductionPricing } from "@/lib/data/production-pricing";
 import { getMaterialSuppliers } from "@/lib/data/material-suppliers";
 import { travelForProperty } from "@/lib/data/job-travel";
 import { zipOf } from "@/lib/material-suppliers";
-import { equationWithTeamPay, type ForwardSetup } from "@/lib/spot-forward";
+import type { ForwardSetup } from "@/lib/spot-forward";
 import { cleanAnswers } from "@/lib/evaluation-intake";
 import { priceSpots, type SpotInput } from "@/lib/spot-price";
 import { sizePriorsFor } from "@/lib/data/size-priors";
@@ -72,8 +72,7 @@ async function formFor(token: string) {
 
 /**
  * What the proposal's calculator needs to price this job: the business's
- * production rates and pricing equation (with the team's real pay when it
- * hasn't saved its own), its suppliers, and the drive to the property.
+ * production rates and pricing equation, its suppliers, and the drive to the property.
  * Null when it can't be put together, and the estimate is then priced the
  * old way rather than not at all.
  */
@@ -84,17 +83,16 @@ async function forwardSetupFor(
 ): Promise<ForwardSetup | null> {
   try {
     const point = property.lat != null && property.lng != null ? { lat: property.lat, lng: property.lng } : null;
-    const [pricing, bulk, team, org, travel] = await Promise.all([
+    const [pricing, bulk, travel] = await Promise.all([
       getProductionPricing(admin, organizationId),
       getMaterialSuppliers(admin, organizationId),
-      admin.from("profiles").select("pay_type, pay_rate_per_hour").eq("organization_id", organizationId),
-      admin.from("organizations").select("crew_size").eq("id", organizationId).maybeSingle(),
       travelForProperty(admin, organizationId, point).catch(() => null),
     ]);
-    const pay = (team.data ?? []).filter((p) => p.pay_type !== "commission").map((p) => Number(p.pay_rate_per_hour));
-    const equation = pricing.saved ? pricing.equation : equationWithTeamPay(pricing.equation, pay, org.data?.crew_size ?? null);
+    // The same rates a proposal charges: every job budgeted for 2 technicians
+    // at $95 a tech-hour unless the business saved its own. Never the team's
+    // pay, which is what the crew earns, not what the work is charged at.
     return {
-      equation,
+      equation: pricing.equation,
       services: pricing.services,
       suppliers: bulk.suppliers,
       site: point ? { ...point, zip: zipOf(property.address) } : null,

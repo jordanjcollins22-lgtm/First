@@ -59,8 +59,8 @@ export const DEFAULT_AREA_TOWNS = [
 export const DEFAULT_WEBSITE: WebsiteContent = {
   businessName: "JS Landscaping",
   heroHeadline: "A yard you're proud to come home to.",
-  heroSub: "Lawn care, landscaping and seasonal work across Harford County, Maryland. Book a free evaluation online in under a minute.",
-  ctaLabel: "Book a free evaluation",
+  heroSub: "Lawn care, landscaping and seasonal work across Harford County, Maryland. Get a free instant estimate online in minutes.",
+  ctaLabel: "Get a free estimate",
   phone: "",
   email: "",
   serviceArea: "Bel Air, Forest Hill, Fallston, Abingdon, Aberdeen, Havre de Grace and the rest of Harford County.",
@@ -149,7 +149,7 @@ export function areaBySlug(content: WebsiteContent, slug: string): WebsiteArea |
 
 /** The paragraph a town page says when the owner hasn't written one. */
 export function defaultAreaIntro(town: string, businessName: string): string {
-  return `${businessName} looks after lawns and yards in ${town}, Maryland: weekly mowing, mulch and bed refreshes, aeration and overseeding, fall cleanup, and snow removal when winter comes. We're local to Harford County, so a crew is usually already working near you. Book a free evaluation and we'll come take a look, measure up and send a written price.`;
+  return `${businessName} looks after lawns and yards in ${town}, Maryland: weekly mowing, mulch and bed refreshes, aeration and overseeding, fall cleanup, and snow removal when winter comes. We're local to Harford County, so a crew is usually already working near you. Mark what you want on a map of your property and get a free estimate in minutes.`;
 }
 
 /** Where a town page lives, keeping ?org= when there is one. */
@@ -228,8 +228,8 @@ export function serviceIntro(service: WebsiteService, town: string | null, busin
   const detail = SERVICE_DETAIL[serviceSlug(service.name)] ?? (service.blurb ? `${service.blurb}` : "");
   const lead = `${businessName} does ${service.name.toLowerCase()} in ${where}.`;
   const close = town
-    ? `We're local to Harford County, so a crew is usually already working near ${town}. Book a free evaluation and we'll come look, measure and send a written price.`
-    : "Book a free evaluation and we'll come look, measure and send a written price.";
+    ? `We're local to Harford County, so a crew is usually already working near ${town}. Get a free estimate online in minutes.`
+    : "Get a free estimate online in minutes.";
   return [lead, detail, close].filter(Boolean).join(" ");
 }
 

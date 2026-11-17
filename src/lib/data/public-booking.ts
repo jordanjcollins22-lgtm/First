@@ -217,6 +217,29 @@ export async function listOrgEvaluatorIds(organizationId: string): Promise<strin
 }
 
 /**
+ * Who a paid evaluation is booked with: the account managers. The evaluator
+ * role is off for now, so the visit someone pays for goes on an account
+ * manager's calendar. With no account manager set up, the owners take it.
+ */
+export async function listOrgAccountManagerIds(organizationId: string): Promise<string[]> {
+  const admin = createAdminClient();
+  const { data: profiles, error } = await admin.from("profiles").select("id").eq("organization_id", organizationId);
+  if (error) throw error;
+  if (!profiles || profiles.length === 0) return [];
+  const { data: roleRows, error: roleError } = await admin
+    .from("profile_roles")
+    .select("profile_id, role_name")
+    .in(
+      "profile_id",
+      profiles.map((p) => p.id)
+    );
+  if (roleError) throw roleError;
+  const withRole = (names: string[]) => [...new Set((roleRows ?? []).filter((r) => names.includes(r.role_name)).map((r) => r.profile_id))];
+  const managers = withRole(["account manager"]);
+  return managers.length > 0 ? managers : withRole(["owner", "admin"]);
+}
+
+/**
  * How much warning this business wants before a visit.
  *
  * Read on the service role like everything else the booking page needs:

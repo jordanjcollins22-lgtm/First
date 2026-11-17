@@ -70,7 +70,7 @@ export const MISSION_CATEGORIES: MissionCategory[] = [
           "Tap +1 when it's up, then reply to every comment.",
         ],
         scripts: ({ link }) => [
-          { label: "Post", text: `Big news: I'm part of the JS Landscaping crew now 🌿 We do bed cleanups, mulch, planting and installs around Harford County. If your yard needs some love, book a free evaluation with me here: ${link}` },
+          { label: "Post", text: `Big news: I'm part of the JS Landscaping crew now 🌿 We do bed cleanups, mulch, planting and installs around Harford County. If your yard needs some love, get a free estimate with my link: ${link}` },
         ],
       },
       {
@@ -135,7 +135,7 @@ export const MISSION_CATEGORIES: MissionCategory[] = [
           "Recommend JS Landscaping on posts asking for help.",
           "Tap +1 for each one.",
         ],
-        scripts: ({ link }) => [{ label: "Recommendation", text: `JS Landscaping did great work around here: cleanups, mulch, planting. Free evaluation: ${link}` }],
+        scripts: ({ link }) => [{ label: "Recommendation", text: `JS Landscaping did great work around here: cleanups, mulch, planting. Free estimate: ${link}` }],
       },
     ],
   },
@@ -155,7 +155,7 @@ export const MISSION_CATEGORIES: MissionCategory[] = [
           "Post on your own page and tag the town.",
           "Add your link. Tap +1 for each post.",
         ],
-        scripts: ({ link }) => [{ label: "Caption", text: `My crew did this today 💪 Before and after. Want yours done? Free evaluation: ${link}` }],
+        scripts: ({ link }) => [{ label: "Caption", text: `My crew did this today 💪 Before and after. Want yours done? Free estimate: ${link}` }],
       },
       {
         key: "posts-video",
@@ -181,7 +181,7 @@ export const MISSION_CATEGORIES: MissionCategory[] = [
           "Add one line about your part in it.",
           "Tap +1 for each group.",
         ],
-        scripts: ({ link }) => [{ label: "Line to add", text: `My crew did this one 🌿 Free evaluations around Harford County: ${link}` }],
+        scripts: ({ link }) => [{ label: "Line to add", text: `My crew did this one 🌿 Free estimates around Harford County: ${link}` }],
       },
     ],
   },
@@ -308,7 +308,7 @@ export const MISSION_CATEGORIES: MissionCategory[] = [
           "Call or text the agent on the sign.",
           "Tap +1 for each realtor you reach.",
         ],
-        scripts: ({ first, link }) => [{ label: "Text", text: `Hi, this is ${first} with JS Landscaping. I saw your listing near one of our jobs. If any of your sellers need curb appeal before photos, we do fast cleanups and mulch. Free evaluation: ${link}` }],
+        scripts: ({ first, link }) => [{ label: "Text", text: `Hi, this is ${first} with JS Landscaping. I saw your listing near one of our jobs. If any of your sellers need curb appeal before photos, we do fast cleanups and mulch. Free estimate: ${link}` }],
       },
       {
         key: "business-swap",

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import mapboxgl from "mapbox-gl";
-import { Camera, Check, Loader2, PencilLine, RotateCcw, Sprout, Trash2, X } from "lucide-react";
+import { Camera, Check, ListChecks, Loader2, MapPin, PencilLine, RotateCcw, Sprout, Sun, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { removeIntakePhoto } from "@/lib/actions/evaluation-intake-actions";
@@ -22,7 +22,7 @@ import {
   SPOT_NOW,
   type TapSpot,
 } from "@/lib/tap-estimate";
-import type { LngLat, LotData } from "@/lib/lot-map";
+import { satelliteUrl, type LngLat, type LotData } from "@/lib/lot-map";
 import { cn } from "@/lib/utils";
 
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -386,29 +386,56 @@ export function TapMap({ token, home, lot, initialSpots, photoUrls, firstName, e
   }
 
   if (step === "intro") {
+    const [lng, lat] = home;
+    const picture = satelliteUrl({ center: [lng, lat], zoom: 19, bearing: 0, width: 640, height: 420 });
+    const steps = [
+      { icon: MapPin, title: "Tap a spot", text: "Beds, lawn, trees, anything on your property." },
+      { icon: ListChecks, title: "Pick what you want", text: "Fresh mulch, new plants, cleanup and more." },
+      { icon: Camera, title: "Add a photo if you like", text: "It helps us price it right the first time." },
+    ];
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-6 py-10 text-center">
-        <span className="flex size-20 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <Sprout className="size-10" />
-        </span>
-        <div>
-          <h1 className="text-3xl font-bold">{firstName ? `Thanks, ${firstName}! Now show us what you'd like done` : "Show us what you'd like done"}</h1>
-          <p className="mx-auto mt-3 max-w-sm text-lg text-muted-foreground">
-            It&apos;s easiest outside, where you can look at your garden beds and see what needs to get done. You&apos;ll get
-            your estimate as soon as you&apos;re finished.
-          </p>
+      <div className="min-h-dvh bg-background">
+        <div className="relative h-64 w-full overflow-hidden bg-muted sm:h-72">
+          {/* A satellite picture of their own property: they see it's theirs before they start. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={picture} alt="Your property from above" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-background" />
+          <span className="absolute left-1/2 top-[42%] flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-white bg-primary text-primary-foreground shadow-lg">
+            <Sprout className="size-6" />
+          </span>
+          <span className="absolute left-4 top-4 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+            Step 3 of 4 · Your yard
+          </span>
         </div>
-        <ol className="flex flex-col gap-2 text-left text-base">
-          {["Tap a spot on the map", "Pick what you want done", "Snap a photo of it"].map((text, i) => (
-            <li key={text} className="flex items-center gap-3">
-              <span className="flex size-7 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{i + 1}</span>
-              {text}
-            </li>
-          ))}
-        </ol>
-        <Button size="xl" className="w-full max-w-sm" onClick={() => setStep("map")}>
-          I&apos;m ready
-        </Button>
+        <div className="mx-auto -mt-8 flex max-w-md flex-col gap-5 px-5 pb-10">
+          <div className="relative rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <h1 className="text-2xl font-bold leading-tight text-balance">
+              {firstName ? `${firstName}, show us what you'd like done` : "Show us what you'd like done"}
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              Mark the spots on your own property and your price shows up right after. About 3 minutes.
+            </p>
+          </div>
+          <ul className="flex flex-col gap-3">
+            {steps.map(({ icon: Icon, title, text }) => (
+              <li key={title} className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon className="size-5" />
+                </span>
+                <span>
+                  <span className="block font-semibold">{title}</span>
+                  <span className="block text-sm text-muted-foreground">{text}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Sun className="size-4 shrink-0 text-primary" /> Tip: it&apos;s easiest standing in your yard, but anywhere works.
+          </p>
+          <Button size="xl" className="w-full" onClick={() => setStep("map")}>
+            Start on my property
+          </Button>
+        </div>
       </div>
     );
   }

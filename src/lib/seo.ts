@@ -140,13 +140,13 @@ function postFor(kind: GbpWeek["post"]["kind"], service: string, town: string, s
       return {
         kind,
         title: `Before and after: ${s} in ${town}`,
-        body: `Use a finished job's approved before and after from ${town}. "Another ${s} job finished in ${town}. Book a free evaluation and we'll send a written price." Button: Book.`,
+        body: `Use a finished job's approved before and after from ${town}. "Another ${s} job finished in ${town}. Get a free estimate online in minutes." Button: Book.`,
       };
     case "offer":
       return {
         kind,
         title: `Book now: ${s} this ${season}`,
-        body: `An offer post for ${s} this ${season}: what's included, the window it's best done in, and "free evaluation, written price". Mention ${town} and nearby towns. Button: Book.`,
+        body: `An offer post for ${s} this ${season}: what's included, the window it's best done in, and "free estimate in minutes". Mention ${town} and nearby towns. Button: Book.`,
       };
     case "update":
       return {

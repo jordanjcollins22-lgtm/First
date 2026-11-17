@@ -39,12 +39,6 @@ export interface EstimateViewProps {
   test?: boolean;
 }
 
-/** "Tuesday, Nov 3" from YYYY-MM-DD, without the day slipping across time zones. */
-function startDayLabel(day: string): string {
-  const [y, m, d] = day.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-}
-
 /**
  * The estimate, laid out like the proposal a client gets after the visit
  * (same header, same scope then price then questions), and plain that it is
@@ -130,7 +124,7 @@ export function EstimateView({
           <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" />
           <div className="flex flex-1 flex-col gap-2">
             <p className="font-semibold">
-              {estimate.choice === "evaluation" ? `${paidTier?.name ?? "Evaluation"} booked and paid.` : "Deposit received. You're all set."}
+              {estimate.choice === "evaluation" ? `${paidTier?.name ?? "Evaluation"} booked and paid.` : "Deposit received. A team member will reach out."}
             </p>
             {estimate.choice === "evaluation" ? (
               <p className="text-sm text-muted-foreground">
@@ -138,13 +132,12 @@ export function EstimateView({
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">
-                {estimate.startDay ? `You'd like us to start ${startDayLabel(estimate.startDay)}; we'll text you to confirm. ` : ""}
-                On the day we confirm the price with you and get to work. Your deposit comes off it.
+                We&apos;ll call or text to set your start day. On the day we confirm the price with you and get to work. Your deposit comes off it.
               </p>
             )}
-            {(estimate.choice === "evaluation" ? !visit : !estimate.startDay) && (
+            {estimate.choice === "evaluation" && !visit && (
               <Button asChild size="lg" className="self-start">
-                <a href={scheduleHref}>{estimate.choice === "evaluation" ? "Pick your visit time" : "Pick your start day"}</a>
+                <a href={scheduleHref}>Pick your visit time</a>
               </Button>
             )}
           </div>
@@ -261,8 +254,8 @@ export function EstimateView({
               <div>
                 <h2 className="text-lg font-semibold">Ready to go ahead?</h2>
                 <p className="text-sm text-muted-foreground">
-                  Put down {dollars(estimate.depositCents)} (one third) and pick your start day. On the day we walk the spots with you,
-                  confirm the price, and get to work. The deposit comes off your final price.
+                  Put down {dollars(estimate.depositCents)} (one third) and a team member will reach out to set your start day. On the
+                  day we walk the spots with you, confirm the price, and get to work. The deposit comes off your final price.
                 </p>
               </div>
               <Button size="xl" className="w-full" disabled={paying} onClick={() => pay("deposit")}>

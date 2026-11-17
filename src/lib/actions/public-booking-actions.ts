@@ -560,8 +560,8 @@ export async function bookPaidEvaluationVisit(input: {
 
   const { data: estimate } = await admin.from("job_estimates").select("paid_at, choice").eq("job_id", intake.job_id).maybeSingle();
   if (!estimate?.paid_at) return { ok: false, error: "Your payment hasn't come through yet. Give it a minute and try again." };
-  // After a deposit the first visit is the crew coming to work, picked as a start day, not an evaluation.
-  if (estimate.choice === "deposit") return { ok: false, error: "Pick the day you'd like us to start instead." };
+  // A deposit books no visit here: a team member reaches out to set the day.
+  if (estimate.choice !== "evaluation") return { ok: false, error: "A team member will reach out to set your day." };
 
   const notice = await getBookingNotice(intake.organization_id);
   const at = zonedToUtc(input.date, input.time, notice.timeZone);

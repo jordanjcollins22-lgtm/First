@@ -112,5 +112,5 @@ export async function addBroughtInLead(input: {
   });
 
   revalidatePath("/my-day");
-  return { ok: true, message: "Saved. The office will book their free evaluation, and it's on your list below." };
+  return { ok: true, message: "Saved. The office will reach out about their estimate, and it's on your list below." };
 }

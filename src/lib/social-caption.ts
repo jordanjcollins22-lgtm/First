@@ -22,7 +22,7 @@ import { checkComment } from "@/lib/comment-prompt";
 export const CaptionSchema = z.object({
   hook: z.string().describe("One line. The transformation, said so somebody stops scrolling. No question marks, no emoji."),
   meat: z.string().describe("Two to four short sentences: what was done here and why it looks better."),
-  cta: z.string().describe("One or two sentences: book a free evaluation, with the link and the phone number exactly as given."),
+  cta: z.string().describe("One or two sentences: get a free estimate, with the link and the phone number exactly as given."),
   seo: z
     .string()
     .describe("A short line saying the service and the area the way people search for them, then 5 to 8 hashtags on the same line."),
@@ -72,7 +72,7 @@ export function captionSystemPrompt(businessName: string): string {
     "Write it in four parts:",
     "1. Hook: one line that stops somebody scrolling. Lead with the transformation. Plain words, no clickbait, no question.",
     "2. Meat: two to four short sentences on what was done in this area and why it looks better. Use the details given: the service, the materials, the colour, the size. Nothing invented.",
-    "3. CTA: book a free evaluation. Give the booking link and the phone number exactly as given.",
+    "3. CTA: get a free estimate. Give the booking link and the phone number exactly as given.",
     "4. SEO: one short line saying the service and the area the way somebody would search for it (for example: mulching and bed edging in Bel Air, MD 21014), then 5 to 8 hashtags on that same line: the service, the town, the county, and landscaping.",
     "",
     "Privacy, without exception:",
@@ -179,7 +179,7 @@ export function fallbackCaption(input: { service: string; area: CaptionArea | nu
   return composeCaption({
     hook: `Same yard, new look. ${service} in ${town}.`,
     meat: `Swipe to see the before. Clean lines, fresh finish, and a front that looks cared for again.`,
-    cta: `Book a free evaluation in under 5 minutes: ${input.bookingUrl} or call or text ${input.phone}.`,
+    cta: `Get a free estimate in minutes: ${input.bookingUrl} or call or text ${input.phone}.`,
     seo: `${service} in ${where}. ${[tag(service), tag(town), "#HarfordCounty", "#MarylandLandscaping", "#Landscaping", "#BeforeAndAfter"].join(" ")}`,
   });
 }

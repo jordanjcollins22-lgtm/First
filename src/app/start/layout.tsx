@@ -8,8 +8,8 @@ import "../globals.css";
  */
 export const metadata: Metadata = {
   metadataBase: new URL("https://app.jslandscapingmd.com"),
-  title: "JS Landscaping MD · Free yard evaluation",
-  description: "Lawn care, landscaping and cleanups in Harford County. Book a free evaluation in a minute.",
+  title: "JS Landscaping MD · Free instant estimate",
+  description: "Lawn care, landscaping and cleanups in Harford County. See your price in minutes.",
 };
 
 export const viewport = {

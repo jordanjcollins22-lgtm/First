@@ -206,7 +206,7 @@ export function draftPosts(boasts: Boasts, link: string): PostDraft[] {
     `They did our place and the crew turned up when they said they would, which is half the battle.`,
     news ? `They were ${news}.` : null,
     reviews ? `${sentenceCase(reviews)}.` : null,
-    `Free evaluation, no pressure, here's the link: ${link}`,
+    `Free estimate in minutes, no pressure, here's the link: ${link}`,
   ]
     .filter(Boolean)
     .join(" ");

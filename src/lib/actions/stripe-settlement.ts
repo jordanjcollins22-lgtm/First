@@ -3,6 +3,7 @@
 import type Stripe from "stripe";
 import { isTierId } from "@/lib/evaluation-tiers";
 import { recordFunnelStep } from "@/lib/data/funnel-events";
+import { notifyJobTeam } from "@/lib/notifications";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { saltOrdersForPaidProposal } from "@/lib/data/salt-from-proposal";
@@ -125,10 +126,14 @@ export async function recordCheckoutSession(session: Stripe.Checkout.Session): P
     if (landed) {
       const choice = session.metadata?.estimate_choice;
       // A deposit is a sale: the first visit is the crew coming to work, so
-      // the job goes to approved and into the scheduler's queue (with the
-      // start day the client picks next). A paid evaluation is not a sale yet.
+      // the job goes to approved and into the scheduler's queue, and the team
+      // is told to reach out and set the start day. A paid evaluation is not a sale yet.
       if (choice === "deposit") {
         await admin.from("jobs").update({ status: "approved" }).eq("id", landed.job_id).in("status", ["estimating", "quoted"]);
+        // The client was told a team member will reach out to set the day.
+        await notifyJobTeam(landed.job_id, "proposal_responses", "Deposit paid. Reach out to the client to set their start day.", {
+          dedupeKey: `estimate-deposit-paid-${estimateId}`,
+        }).catch(() => {});
       }
       await recordFunnelStep(admin, {
         organizationId: landed.organization_id,
