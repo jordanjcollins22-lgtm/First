@@ -45,6 +45,7 @@ import { ReviewsPanel, ReviewsWaitingPanel } from "@/components/v2/panels/review
 import { PhysicalAutoPanel, PhysicalNeedsPanel, PhysicalPlaysPanel, PhysicalResultsPanel } from "@/components/v2/panels/physical-marketing";
 import { AffiliateHomePanel } from "@/components/v2/panels/role/affiliate-home";
 import { MyLinksPanel } from "@/components/v2/panels/role/my-links";
+import { TechHomePanel } from "@/components/v2/panels/role/tech-home";
 import { AccountManagerSalesPanel } from "@/components/v2/panels/role/am-sales";
 import { AccountManagerAccountsPanel } from "@/components/v2/panels/role/am-accounts";
 import { EvaluatorHomePanel } from "@/components/v2/panels/role/evaluator-home";
@@ -152,6 +153,7 @@ export const PANELS: Record<string, () => Promise<JSX.Element>> = {
   // Each role's own home screen
   "affiliate-home": AffiliateHomePanel,
   "my-links": MyLinksPanel,
+  "tech-home": TechHomePanel,
   "am-sales": AccountManagerSalesPanel,
   "am-accounts": AccountManagerAccountsPanel,
   "evaluator-home": EvaluatorHomePanel,

@@ -1371,7 +1371,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
         { keys: ["panel:projects-auto", "panel:weather-auto", "panel:snow-auto"] },
         { label: "Schedule & projects", keys: ["part:scheduling", "part:projects", "part:closeout"] },
       ],
-      rolePanels: { "project-lead": ["lead-home", "my-links"], "project-technician": ["crew-home", "my-links"] },
+      rolePanels: { "project-lead": ["lead-home", "my-links"], "project-technician": ["tech-home"] },
     },
     {
       id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"],

@@ -14,12 +14,12 @@ import { ClockControl } from "@/components/crew/clock-control";
  * The crew keep the clock above it, since their hours are paid from it.
  * Drawn as the person shown, so Preview as shows exactly this.
  */
-export async function MyCalendarPanel({ mode }: { mode: "evaluator" | "crew" }) {
+export async function MyCalendarPanel({ mode, withClock = true }: { mode: "evaluator" | "crew"; withClock?: boolean }) {
   const schedule = await getMyScheduleData();
   if (!schedule) return <p className="rounded-2xl border bg-card p-5 text-sm text-muted-foreground">Sign in to see your calendar.</p>;
   const [workSessions, clock] = await Promise.all([
     listWorkSessionsByJob(),
-    mode === "crew" ? Promise.all([myOpenEntry(schedule.profile.id).catch(() => null), getCrewDay().catch(() => null)]) : Promise.resolve(null),
+    mode === "crew" && withClock ? Promise.all([myOpenEntry(schedule.profile.id).catch(() => null), getCrewDay().catch(() => null)]) : Promise.resolve(null),
   ]);
 
   return (

@@ -98,6 +98,7 @@ export const PANEL_LABEL: Record<string, string> = {
   // Each role's own home screen
   "affiliate-home": "My links & earnings",
   "my-links": "My links",
+  "tech-home": "My day",
   "am-sales": "My sales",
   "am-accounts": "My accounts",
   "evaluator-home": "My visits",

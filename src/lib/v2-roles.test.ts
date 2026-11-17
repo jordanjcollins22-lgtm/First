@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { roleHomes } from "./v2-roles";
 
 describe("roleHomes", () => {
-  const projects = { "project-lead": ["lead-home"], "project-technician": ["crew-home"] };
+  const projects = { "project-lead": ["lead-home"], "project-technician": ["tech-home"] };
 
   it("gives each role its own home", () => {
-    expect(roleHomes(projects, ["project-technician"])).toEqual(["crew-home"]);
+    expect(roleHomes(projects, ["project-technician"])).toEqual(["tech-home"]);
     expect(roleHomes(projects, ["project-lead"])).toEqual(["lead-home"]);
   });
 
