@@ -23,8 +23,8 @@ type Xy = [number, number];
 
 /** How far the yard reaches past the back of the home. About 26 feet. */
 export const BACK_M = 8;
-/** How far past the front, at most: out to the sidewalk on most townhouses. About 33 feet. */
-export const FRONT_M = 10;
+/** How far past the front, at most. The sidewalk or the street stops it sooner on most homes. About 50 feet. */
+export const FRONT_M = 15;
 /** How far past an open side, on an end home. About 16 feet. */
 export const SIDE_M = 5;
 /** A yard stops this far from a road's centerline: the curb and the sidewalk. About 20 feet. */
@@ -55,7 +55,7 @@ export interface YardInput {
    * take it in up to the sidewalk.
    */
   parcels?: LngLat[][];
-  /** The county's outlines of sidewalks and roads, when it has them: the yard stops at the sidewalk. */
+  /** The county's outlines of sidewalks, when it sent them: the yard stops at the sidewalk. */
   pavement?: LngLat[][] | null;
 }
 
@@ -146,10 +146,11 @@ export function yardAround(input: YardInput): LngLat[] | null {
   const parcels = input.parcels?.map((r) => r.map(to));
   const roadStrip = (p: Xy) => parcels != null && streets.length > 0 && !parcels.some((ring) => inside(p, ring));
   const pavement = input.pavement?.map((r) => r.map(to)) ?? null;
-  const onPavement = (p: Xy) => (pavement ?? []).some((ring) => inside(p, ring));
-  // Without the county's sidewalks, a set distance from the road's centerline stands in for them.
+  // Even-odd: a sidewalk network comes as an outer ring with the blocks it goes round as holes.
+  const onPavement = (p: Xy) => (pavement ?? []).filter((ring) => inside(p, ring)).length % 2 === 1;
+  // Where the county has no sidewalk here, a set distance from the road's centerline stands in for one.
   const nearStreet = (p: Xy) =>
-    pavement == null &&
+    (pavement == null || pavement.length === 0) &&
     streets.some((line) => line.some((q, i) => i > 0 && segmentDistance(p, line[i - 1], q) < STREET_M));
 
   // The home's two wall directions; u runs front to back (the longer way for a townhouse).

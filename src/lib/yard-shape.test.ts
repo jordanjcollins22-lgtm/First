@@ -24,7 +24,7 @@ describe("a home's own yard where the county has no line round it", () => {
     // Front and back yard, but not the whole community.
     expect(pointInRing(m(16, 13), yard!)).toBe(true);
     expect(pointInRing(m(16, -3), yard!)).toBe(true);
-    expect(ringSqft(yard!)).toBeLessThan(2000);
+    expect(ringSqft(yard!)).toBeLessThan(2600);
   });
 
   it("runs the front yard out to the sidewalk and no further", () => {
@@ -44,6 +44,16 @@ describe("a home's own yard where the county has no line round it", () => {
     const yard = yardAround({ pin: m(3, 5), home, splitRow: false, neighbours: [rect(-6, 0, 0, 10), rect(6, 0, 12, 10)], allowed: [community], front: m(3, -20), pavement: [sidewalk, frontWalk] });
     expect(pointInRing(m(1, -5), yard!)).toBe(true);
     expect(pointInRing(m(1, -6.5), yard!)).toBe(false);
+  });
+
+  it("reads a sidewalk network with holes as paved only on the walk itself", () => {
+    const home = rect(0, 0, 6, 10);
+    // The county sends a block's sidewalk as an outer ring with the block as a hole.
+    const outer = rect(-60, -60, 60, 60);
+    const block = rect(-50, -5.5, 50, 50);
+    const yard = yardAround({ pin: m(3, 5), home, splitRow: false, neighbours: [rect(-6, 0, 0, 10), rect(6, 0, 12, 10)], allowed: [community], front: m(3, -20), pavement: [outer, block] });
+    expect(pointInRing(m(1, -5), yard!)).toBe(true);
+    expect(pointInRing(m(1, -6), yard!)).toBe(false);
   });
 
   it("keeps a clean strip behind a home whose neighbour sticks out further back", () => {
