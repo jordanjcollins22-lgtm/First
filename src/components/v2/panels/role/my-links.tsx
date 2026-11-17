@@ -1,8 +1,5 @@
-import { ChevronDown } from "lucide-react";
-
 import { CopyLine } from "@/components/v2/panels/role/copy-line";
-import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
-import { ReferralList } from "@/components/v2/panels/role/referral-list";
+import { SendLinkBlock } from "@/components/v2/panels/role/send-link-block";
 import { Drop } from "@/components/v2/panels/role/affiliate-home";
 import { withProgress } from "@/lib/affiliate-home";
 import { appUrl } from "@/lib/app-url";
@@ -49,26 +46,7 @@ export async function MyLinksPanel() {
 
   return (
     <div className="mx-auto grid w-full max-w-md gap-5">
-      <section aria-labelledby="my-aff-link" className="rounded-2xl border bg-card p-4 text-sm">
-        <h3 id="my-aff-link" className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Send your link to someone</h3>
-        <ReferralMessageCard />
-        <details className="group mt-3 border-t pt-3">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-            <span className="font-semibold">People you sent it to</span>
-            <span className="flex items-center gap-1 font-semibold text-primary">
-              {people.length}
-              <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden />
-            </span>
-          </summary>
-          <div className="mt-3">
-            {people.length > 0 ? (
-              <ReferralList rows={people} titled={false} />
-            ) : (
-              <p className="text-muted-foreground">Nobody yet. Everyone you send your link to shows up here, with how far they got.</p>
-            )}
-          </div>
-        </details>
-      </section>
+      <SendLinkBlock people={people} />
 
       <section aria-labelledby="my-page-link">
         <h3 id="my-page-link" className="text-lg font-semibold">Your page</h3>
