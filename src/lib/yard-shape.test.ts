@@ -37,6 +37,15 @@ describe("a home's own yard where the county has no line round it", () => {
     expect(pointInRing(m(3, 17), yard!)).toBe(true);
   });
 
+  it("stops at the county's sidewalk, but not at a front walk crossing the lawn", () => {
+    const home = rect(0, 0, 6, 10);
+    const sidewalk = rect(-50, -7, 50, -5.5);
+    const frontWalk = rect(2.5, -5.5, 3.5, 0);
+    const yard = yardAround({ pin: m(3, 5), home, splitRow: false, neighbours: [rect(-6, 0, 0, 10), rect(6, 0, 12, 10)], allowed: [community], front: m(3, -20), pavement: [sidewalk, frontWalk] });
+    expect(pointInRing(m(1, -5), yard!)).toBe(true);
+    expect(pointInRing(m(1, -6.5), yard!)).toBe(false);
+  });
+
   it("keeps a clean strip behind a home whose neighbour sticks out further back", () => {
     // An end home with the next home in the row 6 m deeper.
     const home = rect(0, 0, 6, 10);
