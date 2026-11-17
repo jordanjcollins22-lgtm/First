@@ -24,6 +24,8 @@ export interface FileJob {
   endDate: string | null;
   completedAt: string | null;
   proposal: { token: string; status: string; total: number; sentAt: string | null; respondedAt: string | null } | null;
+  /** The free-estimate map's link for this job, and what it priced. */
+  estimate: { token: string | null; total: number | null; deposit: number | null; paidAt: string | null; choice: string | null } | null;
   invoices: { id: string; amount: number; status: string; sentAt: string | null; paidAt: string | null; url: string | null }[];
   messages: FileMessage[];
 }
@@ -68,13 +70,17 @@ export async function loadClientFile(customerId: string): Promise<ClientFile | n
   const jobs = (jobRows ?? []) as Row[];
   const jobIds = jobs.map((j) => str(j.id));
 
-  const [proposals, invoices, messages] = jobIds.length
+  const [proposals, invoices, messages, intakes, estimates] = jobIds.length
     ? await Promise.all([
         sb.from("job_proposals").select("job_id,token,status,total_cost,discount_amount,sent_at,responded_at").in("job_id", jobIds),
         sb.from("invoices").select("id,job_id,amount,status,sent_at,paid_at,hosted_invoice_url,created_at").in("job_id", jobIds).order("created_at", { ascending: true }),
         sb.from("job_messages").select("job_id,body,author_name,author_type,created_at").in("job_id", jobIds).order("created_at", { ascending: false }).limit(200),
+        sb.from("evaluation_intakes").select("job_id,token").in("job_id", jobIds),
+        sb.from("job_estimates").select("job_id,total_cents,deposit_cents,paid_at,choice").in("job_id", jobIds),
       ])
-    : [{ data: [] }, { data: [] }, { data: [] }];
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }];
+  const intakeBy = new Map(((intakes.data ?? []) as Row[]).map((r) => [str(r.job_id), str(r.token)]));
+  const estimateBy = new Map(((estimates.data ?? []) as Row[]).map((r) => [str(r.job_id), r]));
 
   const proposalBy = new Map(((proposals.data ?? []) as Row[]).map((p) => [str(p.job_id), p]));
   const group = <T,>(rows: Row[], map: (r: Row) => T) => {
@@ -126,6 +132,18 @@ export async function loadClientFile(customerId: string): Promise<ClientFile | n
               respondedAt: str(p.responded_at) || null,
             }
           : null,
+        estimate: (() => {
+          const token = intakeBy.get(str(j.id)) || null;
+          const e = estimateBy.get(str(j.id));
+          if (!token && !e) return null;
+          return {
+            token,
+            total: e ? num(e.total_cents) / 100 : null,
+            deposit: e ? num(e.deposit_cents) / 100 : null,
+            paidAt: e ? str(e.paid_at) || null : null,
+            choice: e ? str(e.choice) || null : null,
+          };
+        })(),
         invoices: invoicesBy.get(str(j.id)) ?? [],
         messages: messagesBy.get(str(j.id)) ?? [],
       };

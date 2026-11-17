@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Row, Screen, Sub, money } from "@/components/phone/parts";
+import { EstimateButton } from "@/components/phone/estimate-button";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
 
@@ -67,6 +68,7 @@ function Contact({ file }: { file: ClientFile }) {
 
 function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
   const p = job.proposal;
+  const est = job.estimate;
   const open = job.invoices.filter((i) => i.status === "open");
   return (
     <div className="vx-card">
@@ -78,14 +80,24 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
         {job.messages.length ? job.messages.slice(0, 8).map((m, i) => <Row key={i} a={`${day(m.at)} · ${m.fromClient ? "them" : "us"}`} b={`"${m.body.length > 80 ? `${m.body.slice(0, 80)}…` : m.body}"`} />) : <Row a="No messages yet" />}
       </Sub>
 
-      <Sub title="Proposals" sum={p ? 1 : 0}>
+      <Sub title="Proposals" sum={(p ? 1 : 0) + (est?.total != null ? 1 : 0)}>
+        {est?.total != null && (
+          <Row
+            a={`Estimate · ${money(est.total)}`}
+            b={est.paidAt ? (est.choice === "evaluation" ? "Paid for a visit" : "Deposit paid") : "Not paid yet"}
+            href={est.token ? `/prep/${est.token}/estimate` : undefined}
+          />
+        )}
+        {job.status !== "completed" && job.status !== "cancelled" && !est?.paidAt && (
+          <EstimateButton jobId={job.id} label={est?.total != null ? "Change it on the map" : "Price it on the map"} />
+        )}
         {p ? (
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
           </>
         ) : (
-          <Row a="No proposal yet" />
+          !est?.total && <Row a="No proposal yet" />
         )}
       </Sub>
 
