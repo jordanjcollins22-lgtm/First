@@ -274,6 +274,8 @@ export interface Profile {
   pay_rate_per_hour: number | null;
   commission_pct: number | null;
   affiliate_slug: string | null;
+  /** Their own link to their page: app.jslandscapingmd.com/p/<dashboard_slug>. Still asks them to sign in. */
+  dashboard_slug?: string | null;
   /** Granted by an admin — gives them their own booking link. */
   is_affiliate: boolean;
   /**

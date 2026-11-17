@@ -2009,6 +2009,7 @@ export interface Database {
           pay_rate_per_hour: number | null;
           commission_pct: number | null;
           affiliate_slug: string | null;
+          dashboard_slug?: string | null;
           is_affiliate: boolean;
           does_evaluations: boolean | null;
           can_edit_tools?: boolean;

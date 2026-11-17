@@ -11,6 +11,8 @@ import { affiliateMoney, affiliateResults, privateBoard } from "@/lib/affiliate-
 import { outboundBaseUrl } from "@/lib/base-url";
 import type { BroughtInRow } from "@/lib/brought-in";
 import { getBroughtIn, myBookingLink } from "@/lib/data/brought-in";
+import { myDashboardLink } from "@/lib/data/personal-link";
+import { CopyLine } from "@/components/v2/panels/role/copy-line";
 import { getCommissionFor } from "@/lib/data/commission";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { answeredToday, getPostBoard } from "@/lib/data/post-board";
@@ -47,7 +49,7 @@ export async function AffiliateHomePanel() {
   const now = new Date();
   const baseUrl = await outboundBaseUrl().catch(() => "");
 
-  const [posts, today, projects, clickCounts, link, commission, sent] = await Promise.all([
+  const [posts, today, projects, clickCounts, link, commission, sent, page] = await Promise.all([
     getCurrentOrganization()
       .then((o) => getPostBoard(org, profile.id, now, { roles: profile.roles, businessName: o.name }))
       .catch((err) => {
@@ -63,6 +65,7 @@ export async function AffiliateHomePanel() {
       return null;
     }),
     myReferrals(org, profile.id),
+    myDashboardLink(profile, baseUrl).catch(() => null),
   ]);
   const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
   // As Posts to Answer does: anything the finder brought in that is not
@@ -148,6 +151,12 @@ export async function AffiliateHomePanel() {
           <Card>Your earnings couldn&apos;t load just now. Reload the page.</Card>
         )}
       </Drop>
+
+      {page && (
+        <Drop title="Your page link" hint="Your own link to this page. It still asks you to sign in.">
+          <CopyLine link={page} personal={page.split("/p/")[1]} />
+        </Drop>
+      )}
     </div>
   );
 }

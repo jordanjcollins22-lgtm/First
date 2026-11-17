@@ -1349,7 +1349,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
     },
   ],
   sales: [
-    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-needs", "photo-quotes", "pipeline-numbers", "pipeline-rates", "pipeline-auto"], rolePanels: { "account-manager": ["am-sales"] } },
+    { id: "pipeline", label: "Pipeline", title: "Pipeline", sub: "Every opportunity, and the proposals that close it.", ids: ["pipeline", "proposals"], panels: ["pipeline-needs", "photo-quotes", "pipeline-numbers", "pipeline-rates", "pipeline-auto"], rolePanels: { "account-manager": ["am-sales", "my-links"] } },
     {
       id: "evaluations", label: "Evaluations", title: "Evaluations", sub: "Visits, the proposals that come from them, and the people who do them.", ids: ["booking", "myevals", "evaluators"],
       panels: ["evaluator-needs", "territories-needs", "evaluator-scorecard", "territory-routing", "territories"],
@@ -1371,7 +1371,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
         { keys: ["panel:projects-auto", "panel:weather-auto", "panel:snow-auto"] },
         { label: "Schedule & projects", keys: ["part:scheduling", "part:projects", "part:closeout"] },
       ],
-      rolePanels: { "project-lead": ["lead-home"], "project-technician": ["crew-home"] },
+      rolePanels: { "project-lead": ["lead-home", "my-links"], "project-technician": ["crew-home", "my-links"] },
     },
     {
       id: "supplies", label: "Materials & equipment", title: "Materials & equipment", sub: "What the jobs use, and what the crews carry.", ids: ["materials", "equipment"],
@@ -1397,7 +1397,7 @@ export const V2_GROUPS: Record<V2Section["key"], Group[]> = {
         { keys: ["panel:finance-auto", "panel:commissions-auto"] },
       ],
     },
-    { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people-needs", "people-onboarding", "people-roles", "people-auto"] },
+    { id: "people", label: "Team & access", title: "Team & access", sub: "Who can use the app, and the managers.", ids: ["users", "managers", "hiring"], panels: ["people-needs", "people-onboarding", "people-roles", "my-links", "people-auto"] },
     {
       id: "settings", label: "Settings", title: "Settings", sub: "Logins for outside services, licences and deadlines, your business details, and fix-it tickets for the app.", ids: ["integrations", "company"],
       panels: ["integrations-needs", "compliance-needs", "integrations", "compliance", "compliance-auto", "fixit"],
