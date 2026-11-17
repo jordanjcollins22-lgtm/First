@@ -23,10 +23,12 @@ type Xy = [number, number];
 
 /** How far the yard reaches past the back of the home. About 26 feet. */
 export const BACK_M = 8;
-/** How far past the front: a front bed and walk, not the parking. About 7 feet. */
-export const FRONT_M = 2;
+/** How far past the front, at most: out to the sidewalk on most townhouses. About 26 feet. */
+export const FRONT_M = 8;
 /** How far past an open side, on an end home. About 16 feet. */
 export const SIDE_M = 5;
+/** A yard stops this far from a road's centerline: the curb and the sidewalk. About 20 feet. */
+export const STREET_M = 6;
 /** How close two homes' claims can be and still count as a tie, in metres. */
 const TIE_M = 0.6;
 /** A townhouse is usually 18 to 24 feet wide; this is the middle of that. */
@@ -43,8 +45,10 @@ export interface YardInput {
   neighbours: LngLat[][];
   /** Land the yard may be on: the home's own lot and the common land round it. */
   allowed: LngLat[][];
-  /** The point on the road the home faces, when known: that side gets the short front yard. */
+  /** The point on the road the home faces, when known: that end gets the front yard. */
   front?: LngLat | null;
+  /** Road centerlines nearby: the yard stops at the sidewalk. */
+  streets?: LngLat[][];
 }
 
 function frame(origin: LngLat) {
@@ -130,6 +134,9 @@ export function yardAround(input: YardInput): LngLat[] | null {
   if (mine.length < 4) return null;
   const neighbours = [...split.rest, ...input.neighbours.map((r) => r.map(to))];
   const allowed = input.allowed.map((r) => r.map(to));
+  const streets = (input.streets ?? []).map((r) => r.map(to));
+  const nearStreet = (p: Xy) =>
+    streets.some((line) => line.some((q, i) => i > 0 && segmentDistance(p, line[i - 1], q) < STREET_M));
 
   // The home's two wall directions; u runs front to back (the longer way for a townhouse).
   const rad = ((axis ?? 0) * Math.PI) / 180;
@@ -154,6 +161,7 @@ export function yardAround(input: YardInput): LngLat[] | null {
   const ok = (p: Xy): boolean => {
     if (inside(p, mine)) return true;
     if (!allowed.some((ring) => inside(p, ring))) return false;
+    if (nearStreet(p)) return false;
     if (rowMates.some((n) => inside(p, n))) return false;
     const mineD = distanceTo(p, mine);
     // Clearly nearer another home. Ground level with a shared wall is a tie, and stays in.

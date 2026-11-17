@@ -176,6 +176,12 @@ export function pickFront(body: unknown, house: LngLat, address: { number: numbe
   return best ? { point: best.point, road: best.road } : null;
 }
 
+/** The road centerlines in a county answer, as lines on the ground. */
+export function roadLines(body: unknown): LngLat[][] {
+  const features = (body as { features?: Feature[] } | null)?.features ?? [];
+  return features.flatMap((f) => (f.geometry?.paths ?? []).map((path) => path.map((p) => [p[0], p[1]] as LngLat)));
+}
+
 /* ---------------------------------------------------------------- drawing */
 
 export type AreaKey = "front" | "back" | "sides" | "foundation" | "whole";
