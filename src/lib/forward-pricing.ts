@@ -550,12 +550,18 @@ function sized(line: PriceLine, size: string): PriceLine {
   return line.quantity > 0 ? { ...line, note: `${line.note}, priced as ${size}` } : line;
 }
 
+/** A service's material for this much work, at its set cost per unit. */
+export function materialCentsFor(service: ProductionService | null | undefined, quantity: number): number {
+  if (!service?.materialCentsPerUnit || !(quantity > 0)) return 0;
+  return Math.round(quantity * service.materialCentsPerUnit);
+}
+
 /** Only services that are on, each with its material at its set cost. */
 function withMaterials(lines: PriceLine[], services: ProductionService[]): PriceLine[] {
   return lines.flatMap((l) => {
     const s = productionService(l.key, services);
     if (!isOn(s)) return [];
-    return [s.materialCentsPerUnit ? { ...l, materialCents: Math.round(l.quantity * s.materialCentsPerUnit) } : l];
+    return [s.materialCentsPerUnit ? { ...l, materialCents: materialCentsFor(s, l.quantity) } : l];
   });
 }
 
