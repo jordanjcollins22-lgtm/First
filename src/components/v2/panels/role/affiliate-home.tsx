@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { ChevronDown } from "lucide-react";
 
 import { CommentCard } from "@/components/marketing/comment-card";
 import { RecentAnswers } from "@/components/marketing/recent-answers";
@@ -80,7 +81,9 @@ export async function AffiliateHomePanel() {
           <ReferralMessageCard />
         </Card>
         <div className="mt-3 grid gap-3">
-          <ReferralList rows={sent} />
+          <Drop title={`People you sent it to (${sent.length})`}>
+            {sent.length > 0 ? <ReferralList rows={sent} titled={false} /> : <p className="text-sm text-muted-foreground">Nobody yet. Everyone you send your link to shows up here, with whether they opened it.</p>}
+          </Drop>
           <details className="rounded-2xl border bg-card p-4 text-sm">
             <summary className="cursor-pointer font-medium">Just your link, or a QR code</summary>
             <div className="mt-3">
@@ -102,8 +105,12 @@ export async function AffiliateHomePanel() {
         )}
       </section>
 
-      <section data-tour="affiliate-results" aria-labelledby="aff-results">
-        <Heading id="aff-results" step={3} title="What came of it" sub="Your links and your bookings only." />
+      <Drop
+        tour="affiliate-results"
+        title="What came of it"
+        hint={`${results.clicks} clicks · ${projects ? results.booked : "—"} booked · ${projects ? results.sold : "—"} sold`}
+      >
+        <p className="mb-3 text-sm text-muted-foreground">Your links and your bookings only.</p>
         <div className="grid grid-cols-3 gap-2">
           <Stat label="Clicks" value={String(results.clicks)} />
           <Stat label="Booked" value={projects ? String(results.booked) : "—"} />
@@ -122,10 +129,10 @@ export async function AffiliateHomePanel() {
             </ul>
           )}
         </div>
-      </section>
+      </Drop>
 
-      <section data-tour="affiliate-money" aria-labelledby="aff-money">
-        <Heading id="aff-money" step={4} title="Your money" sub="You earn 4% of what each project you brought in is paid." />
+      <Drop tour="affiliate-money" title="Your money" hint={commission ? `${money(pay.earned)} earned · ${money(pay.owed)} still owed` : undefined}>
+        <p className="mb-3 text-sm text-muted-foreground">You earn 4% of what each project you brought in is paid.</p>
         {commission ? (
           <>
             <div className="grid grid-cols-3 gap-2">
@@ -140,7 +147,7 @@ export async function AffiliateHomePanel() {
         ) : (
           <Card>Your earnings couldn&apos;t load just now. Reload the page.</Card>
         )}
-      </section>
+      </Drop>
     </div>
   );
 }
@@ -175,6 +182,22 @@ function Heading({ id, step, title, sub }: { id: string; step: number; title: st
         <p className="text-sm text-muted-foreground">{sub}</p>
       </div>
     </div>
+  );
+}
+
+/** A section that stays closed until it's tapped, so the top of the screen is the one thing to do. */
+export function Drop({ title, hint, tour, children }: { title: string; hint?: string; tour?: string; children: React.ReactNode }) {
+  return (
+    <details data-tour={tour} className="group rounded-2xl border bg-card text-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0">
+          <span className="block font-bold">{title}</span>
+          {hint ? <span className="block text-xs text-muted-foreground">{hint}</span> : null}
+        </span>
+        <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+      </summary>
+      <div className="px-4 pb-4">{children}</div>
+    </details>
   );
 }
 

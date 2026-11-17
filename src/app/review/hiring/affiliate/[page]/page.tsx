@@ -17,6 +17,7 @@ import { referralMessage } from "@/lib/referral-message";
 import { trackedLink } from "@/lib/outreach-links";
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
 import { ReferralList } from "@/components/v2/panels/role/referral-list";
+import { Drop } from "@/components/v2/panels/role/affiliate-home";
 import { ApplicantCalls } from "@/components/hiring/applicant-calls";
 import { RoleDocView } from "@/components/hiring/role-doc-view";
 import { PositionView } from "@/components/hiring/position-view";
@@ -162,7 +163,17 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
             <ReferralMessageCard sample={{ name: "Pat Neighbor", affiliation: "neighbor", message }} />
           </div>
         </Inert>
-        <ReferralList rows={sampleReferrals(today)} />
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Below it, closed until they tap</p>
+        <Drop title={`People you sent it to (${sampleReferrals(today).length})`}>
+          <ReferralList rows={sampleReferrals(today)} titled={false} />
+        </Drop>
+        <p className="text-xs text-muted-foreground">Then 2. Answer a post, open as now, and these two drop-downs:</p>
+        <Drop title="What came of it" hint="5 clicks · 1 booked · 1 sold">
+          <p className="text-sm text-muted-foreground">Clicks, bookings and every project they brought in, with where it has got to and their 4%.</p>
+        </Drop>
+        <Drop title="Your money" hint="$64 earned · $64 still owed">
+          <p className="text-sm text-muted-foreground">Earned, paid to them and still owed. Earned once the client pays.</p>
+        </Drop>
       </main>
     );
   } else {
