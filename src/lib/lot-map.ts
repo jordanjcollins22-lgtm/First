@@ -43,10 +43,15 @@ export interface LotData {
 
 type Feature = { attributes?: Record<string, unknown>; geometry?: { rings?: number[][][]; paths?: number[][][] } };
 
-export function ringsOf(body: unknown): { ring: LngLat[]; attributes: Record<string, unknown> }[] {
+export function ringsOf(body: unknown): { ring: LngLat[]; parts: LngLat[][]; attributes: Record<string, unknown> }[] {
   return ((body as { features?: Feature[] } | null)?.features ?? [])
-    .map((f) => ({ ring: ringOf(f), attributes: f.attributes ?? {} }))
-    .filter((f): f is { ring: LngLat[]; attributes: Record<string, unknown> } => Boolean(f.ring));
+    .map((f) => ({
+      ring: ringOf(f),
+      // Every ring: a community's common land often comes in several pieces.
+      parts: (f.geometry?.rings ?? []).filter((r) => r.length >= 4).map((r) => r.map((p) => [p[0], p[1]] as LngLat)),
+      attributes: f.attributes ?? {},
+    }))
+    .filter((f): f is { ring: LngLat[]; parts: LngLat[][]; attributes: Record<string, unknown> } => Boolean(f.ring));
 }
 
 function ringOf(feature: Feature | undefined): LngLat[] | null {

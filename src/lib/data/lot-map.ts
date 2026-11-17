@@ -46,7 +46,7 @@ function boxAround([lng, lat]: LngLat, padMetres: number): string {
 }
 
 /** Bumped whenever the way a lot is worked out changes, so stored copies are worked out again. */
-export const LOT_VERSION = 2;
+export const LOT_VERSION = 3;
 
 /** Everything the lot picture needs, straight from the county. Null when the address is not on a Harford parcel. */
 export async function fetchLotFromCounty(lat: number, lng: number, address: string): Promise<LotData | null> {
@@ -74,14 +74,15 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
     const middle = centroidOf(parcel.ring);
     const isHome = (p: { attributes: Record<string, unknown> }) => typeof p.attributes.P_ST_NO === "number" && p.attributes.P_ST_NO > 0;
     const homes = all.filter((p) => isHome(p) && !pointInRing(middle, p.ring)).map((p) => p.ring);
-    const common = all.filter((p) => !isHome(p)).map((p) => p.ring);
+    const common = all.filter((p) => !isHome(p)).flatMap((p) => p.parts);
     const yard = yardAround({
       pin,
-      building: parcel.ring,
+      home: parcel.ring,
       splitRow: false,
       // Buildings that aren't this home's row: the row itself is covered by the other homes' lots.
-      others: [...homes, ...near.filter((r) => !pointInRing(middle, r))],
+      neighbours: [...homes, ...near.filter((r) => !pointInRing(middle, r))],
       allowed: [parcel.ring, ...common],
+      front: roads ? pickFront(roads, middle, streetOf(address))?.point ?? null : null,
     });
     if (yard) {
       ring = yard;
@@ -95,11 +96,10 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
     if (building) {
       const yard = yardAround({
         pin,
-        building,
-        others: near.filter((r) => r !== building),
+        home: building,
+        neighbours: near.filter((r) => r !== building),
         allowed: [parcel.ring],
-        // The lot runs to the middle of its own private streets.
-        reachMetres: SHARED_REACH_M,
+        front: roads ? pickFront(roads, centroidOf(building), streetOf(address))?.point ?? null : null,
       });
       if (yard) {
         ring = yard;
@@ -123,9 +123,6 @@ export async function fetchLotFromCounty(lat: number, lng: number, address: stri
     v: LOT_VERSION,
   };
 }
-
-/** How far a yard reaches on a community's shared lot, which includes its streets. About 30 feet. */
-const SHARED_REACH_M = 9;
 
 /** How far round the pin to look for neighbouring homes and common land. */
 const YARD_SEARCH_M = 45;

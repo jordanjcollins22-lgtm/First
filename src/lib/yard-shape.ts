@@ -21,23 +21,30 @@ import { houseAxis, pointInRing, type LngLat } from "@/lib/lot-map";
 
 type Xy = [number, number];
 
-/** How far a yard reaches from the house, at most. About 50 feet. */
-export const YARD_REACH_M = 15;
+/** How far the yard reaches past the back of the home. About 26 feet. */
+export const BACK_M = 8;
+/** How far past the front: a front bed and walk, not the parking. About 7 feet. */
+export const FRONT_M = 2;
+/** How far past an open side, on an end home. About 16 feet. */
+export const SIDE_M = 5;
+/** How close two homes' claims can be and still count as a tie, in metres. */
+const TIE_M = 0.6;
 /** A townhouse is usually 18 to 24 feet wide; this is the middle of that. */
 export const TOWNHOUSE_WIDTH_M = 6.5;
 
 export interface YardInput {
   /** Where the client's home is: the address pin. */
   pin: LngLat;
-  /** The building the home is in: a house, or a whole townhouse row. */
-  building: LngLat[];
-  /** Every other building nearby. */
-  others: LngLat[][];
+  /** The home: its own lot where the county has one, or the building it's in. */
+  home: LngLat[];
+  /** Cut a long building into townhouses and keep the pin's one. Off when `home` is already just this home. */
+  splitRow?: boolean;
+  /** Other homes next door: their lots, or their buildings. */
+  neighbours: LngLat[][];
   /** Land the yard may be on: the home's own lot and the common land round it. */
   allowed: LngLat[][];
-  reachMetres?: number;
-  /** Cut a long building into townhouses and keep the pin's one. Off when the building is already just this home. */
-  splitRow?: boolean;
+  /** The point on the road the home faces, when known: that side gets the short front yard. */
+  front?: LngLat | null;
 }
 
 function frame(origin: LngLat) {
@@ -61,7 +68,7 @@ function segmentDistance(p: Xy, a: Xy, b: Xy): number {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
-/** Metres from a point to a building: 0 inside it. */
+/** Metres from a point to a shape: 0 inside it. */
 function distanceTo(p: Xy, ring: Xy[]): number {
   if (inside(p, ring)) return 0;
   let best = Infinity;
@@ -106,50 +113,89 @@ export function homesInBuilding(building: Xy[], pin: Xy, axisDegrees: number | n
 }
 
 /**
- * The yard, as a ring on the ground. Rays go out from the home in every
- * direction and stop at the first point that is past the reach, nearer
- * another home than this one, inside another building, or off the land the
- * yard may be on. Null when there is too little to draw.
+ * The yard, as a ring on the ground: a rectangle squared to the home's own
+ * walls. It starts as the home and grows out the back, the front and any
+ * open side (an end home's), a little at a time, and each side stops before
+ * it would take in another home, another home's lot, land that isn't common
+ * (a street, somebody else's lot), or ground nearer the next home than this
+ * one. Walls shared with the next townhouse don't grow at all. Straight
+ * edges, so it reads as a lot line, not a blob.
  */
 export function yardAround(input: YardInput): LngLat[] | null {
-  const reach = input.reachMetres ?? YARD_REACH_M;
   const { to, from } = frame(input.pin);
-  const building = input.building.map(to);
   const pin = to(input.pin);
-  const { mine, rest } = input.splitRow === false ? { mine: building, rest: [] } : homesInBuilding(building, pin, houseAxis(input.building));
-  const others = [...rest, ...input.others.map((r) => r.map(to))];
+  const axis = houseAxis(input.home);
+  const split = input.splitRow === false ? { mine: input.home.map(to), rest: [] as Xy[][] } : homesInBuilding(input.home.map(to), pin, axis);
+  const mine = split.mine;
+  if (mine.length < 4) return null;
+  const neighbours = [...split.rest, ...input.neighbours.map((r) => r.map(to))];
   const allowed = input.allowed.map((r) => r.map(to));
-  const centre: Xy = [
-    mine.slice(0, -1).reduce((s, p) => s + p[0], 0) / (mine.length - 1),
-    mine.slice(0, -1).reduce((s, p) => s + p[1], 0) / (mine.length - 1),
-  ];
 
+  // The home's two wall directions; u runs front to back (the longer way for a townhouse).
+  const rad = ((axis ?? 0) * Math.PI) / 180;
+  const d1: Xy = [Math.sin(rad), Math.cos(rad)];
+  const d2: Xy = [Math.cos(rad), -Math.sin(rad)];
+  const dot = (p: Xy, d: Xy) => p[0] * d[0] + p[1] * d[1];
+  const span = (d: Xy) => {
+    const v = mine.map((p) => dot(p, d));
+    return [Math.min(...v), Math.max(...v)] as [number, number];
+  };
+  const s1 = span(d1);
+  const s2 = span(d2);
+  const [u, v, su, sv] = s1[1] - s1[0] >= s2[1] - s2[0] ? [d1, d2, s1, s2] : [d2, d1, s2, s1];
+  const at = (a: number, b: number): Xy => [u[0] * a + v[0] * b, u[1] * a + v[1] * b];
+
+  // Homes right against this one: the rest of its row. Their walls carry on
+  // as the yard's sides, so the yard only stops where it would run into one;
+  // a row is often staggered, and ground beside a neighbour's deeper end is
+  // still this home's own strip. Every other home splits the ground halfway.
+  const rowMates = neighbours.filter((n) => mine.some((p) => distanceTo(p, n) < TIE_M));
+  const others = neighbours.filter((n) => !rowMates.includes(n));
   const ok = (p: Xy): boolean => {
-    const d = distanceTo(p, mine);
-    if (d === 0) return true;
-    if (d > reach) return false;
+    if (inside(p, mine)) return true;
     if (!allowed.some((ring) => inside(p, ring))) return false;
-    for (const other of others) if (distanceTo(p, other) < d) return false;
-    return true;
+    if (rowMates.some((n) => inside(p, n))) return false;
+    const mineD = distanceTo(p, mine);
+    // Clearly nearer another home. Ground level with a shared wall is a tie, and stays in.
+    return !others.some((n) => distanceTo(p, n) < mineD - TIE_M);
   };
 
-  const RAYS = 96;
+  // Which end is the front: the one nearer the road it faces.
+  const frontAtMax = input.front ? dot(to(input.front), u) > (su[0] + su[1]) / 2 : null;
+  // A side is shared when another home is right against it.
+  const shared = (b: number, out: number) =>
+    [0.25, 0.5, 0.75].some((f) => {
+      const p = at(su[0] + (su[1] - su[0]) * f, b + out);
+      return neighbours.some((n) => distanceTo(p, n) < 0.6);
+    });
+
+  const box = { u0: su[0], u1: su[1], v0: sv[0], v1: sv[1] };
   const STEP = 0.5;
-  const MAX = 80;
-  const ring: Xy[] = [];
-  for (let i = 0; i < RAYS; i++) {
-    const angle = (i / RAYS) * 2 * Math.PI;
-    const dir: Xy = [Math.cos(angle), Math.sin(angle)];
-    let last: Xy = centre;
-    for (let s = STEP; s <= MAX; s += STEP) {
-      const p: Xy = [centre[0] + dir[0] * s, centre[1] + dir[1] * s];
-      if (!ok(p)) break;
-      last = p;
+  // Checked a little in from each end: lots are drawn by hand and their
+  // corners overlap the next one's by a hair.
+  const clean = (strip: (t: number) => Xy, length: number) => {
+    for (let t = TIE_M; t <= length - TIE_M + 1e-9; t += STEP) if (!ok(strip(t))) return false;
+    return true;
+  };
+  const grow = (side: "u0" | "u1" | "v0" | "v1", limit: number) => {
+    for (let e = STEP; e <= limit + 1e-9; e += STEP) {
+      if (side === "u0" || side === "u1") {
+        const a = side === "u0" ? su[0] - e : su[1] + e;
+        if (!clean((t) => at(a, box.v0 + t), box.v1 - box.v0)) return;
+        box[side] = a;
+      } else {
+        const b = side === "v0" ? sv[0] - e : sv[1] + e;
+        if (!clean((t) => at(box.u0 + t, b), box.u1 - box.u0)) return;
+        box[side] = b;
+      }
     }
-    ring.push(last);
-  }
-  if (ring.length < 3) return null;
-  ring.push(ring[0]);
+  };
+  grow("u1", frontAtMax === true ? FRONT_M : frontAtMax === false ? BACK_M : (FRONT_M + BACK_M) / 2);
+  grow("u0", frontAtMax === false ? FRONT_M : frontAtMax === true ? BACK_M : (FRONT_M + BACK_M) / 2);
+  if (!shared(sv[0], -0.4)) grow("v0", SIDE_M);
+  if (!shared(sv[1], 0.4)) grow("v1", SIDE_M);
+
+  const ring = [at(box.u0, box.v0), at(box.u1, box.v0), at(box.u1, box.v1), at(box.u0, box.v1), at(box.u0, box.v0)];
   return ring.map(from);
 }
 
