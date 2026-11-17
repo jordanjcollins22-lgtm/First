@@ -58,3 +58,5 @@
 .vx-app .vx-send .rounded-2xl,.vx-app .vx-send section{border:0;padding:0;background:transparent}
 .vx-app .vx-send>button{height:auto;width:100%;background:var(--teal);color:var(--surface);font:700 14px var(--display);border-radius:10px;padding:10px}
 .vx-app .vx-clock>div{margin-bottom:0;border-color:var(--line);background:var(--bg);border-radius:10px}
+.vx-app a.vx-cl-back{color:var(--teal)}
+.vx-app a.vx-cta.vx-alt{color:var(--teal);background:transparent}
