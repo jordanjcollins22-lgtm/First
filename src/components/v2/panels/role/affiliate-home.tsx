@@ -1,23 +1,20 @@
-import { after } from "next/server";
 import { ChevronDown } from "lucide-react";
 
-import { CommentCard } from "@/components/marketing/comment-card";
-import { RecentAnswers } from "@/components/marketing/recent-answers";
 import { AffiliateLinkCard } from "@/components/v2/panels/role/affiliate-link-card";
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
 import { ReferralList } from "@/components/v2/panels/role/referral-list";
 import { myReferrals } from "@/lib/data/referrals";
-import { affiliateMoney, affiliateResults, privateBoard } from "@/lib/affiliate-home";
+import { affiliateStage, withProgress, type AffiliateStage } from "@/lib/affiliate-home";
+import { POSITIONS } from "@/lib/hiring/positions";
+import { WalletCard } from "@/components/v2/panels/role/wallet-card";
+import { listPayoutRequests, myPaidOut } from "@/lib/data/payout-requests";
+import { walletFor } from "@/lib/wallet";
 import { outboundBaseUrl } from "@/lib/base-url";
 import type { BroughtInRow } from "@/lib/brought-in";
 import { getBroughtIn, myBookingLink } from "@/lib/data/brought-in";
 import { getCommissionFor } from "@/lib/data/commission";
-import { getCurrentOrganization } from "@/lib/data/organizations";
-import { answeredToday, getPostBoard } from "@/lib/data/post-board";
-import { sweepPosts } from "@/lib/data/post-sweep";
 import { getCurrentProfile } from "@/lib/data/team";
 import { qrSvg } from "@/lib/qr";
-import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
 const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
@@ -27,63 +24,53 @@ const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigi
  * phone screen, top to bottom in the order they do it.
  *
  * 1. Send your link to someone: who it's for and how they know them, then a
- *    message ready to copy with its own tracked link, and whether each
- *    person they sent it to opened it. Their plain link and QR code sit
- *    underneath.
- * 2. Posts to answer: the next neighbor asking for yard work, with a reply
- *    written for them carrying their own tracked link. "Copy & go to post"
- *    copies it, opens the post and marks it posted.
- * 3. What came of it: clicks, bookings, and each project they brought in.
- * 4. Their money: earned, paid, and still owed.
+ *    message ready to copy with its own tracked link. Someone they found
+ *    online asking for yard work goes in here too ("Someone online", with a
+ *    screenshot). Their plain link and QR code sit underneath.
+ * 2. People you sent it to: each one with how far they got (sent, opened,
+ *    booked, sold) and their 4% once it's sold.
+ * 3. Their wallet: ready to pay out, waiting on the client, and a payout request.
+ * 4. Their stage on the Stages of Success, and what the next one asks.
  *
  * Drawn as getCurrentProfile(), so Preview as shows exactly this person.
- * Everything here is theirs alone: other people on a post show as a first
- * name only, and no company or other affiliate's numbers are read.
+ * Everything here is theirs alone: no company or other affiliate's numbers
+ * are read.
  */
 export async function AffiliateHomePanel() {
   const profile = await getCurrentProfile();
   if (!profile) return <Card>Sign in again to see your day.</Card>;
   const org = profile.organization_id;
-  const now = new Date();
   const baseUrl = await outboundBaseUrl().catch(() => "");
 
-  const [posts, today, projects, clickCounts, link, commission, sent] = await Promise.all([
-    getCurrentOrganization()
-      .then((o) => getPostBoard(org, profile.id, now, { roles: profile.roles, businessName: o.name }))
-      .catch((err) => {
-        console.error("Affiliate home: posts failed to load:", err);
-        return null;
-      }),
-    answeredToday(org, profile.id, now).catch(() => 0),
+  const [projects, link, commission, sent, requests, paidOut] = await Promise.all([
     getBroughtIn(profile.id).catch(() => null),
-    myClicks(org, profile.id),
     myBookingLink(profile, baseUrl).catch(() => null),
     getCommissionFor(profile).catch((err) => {
       console.error("Affiliate home: commission failed to load:", err);
       return null;
     }),
     myReferrals(org, profile.id),
+    // Before the payout migration has run, the wallet simply has no requests yet.
+    listPayoutRequests({ profileId: profile.id }).catch(() => []),
+    myPaidOut(profile.id).catch(() => []),
   ]);
   const qr = link ? await qrSvg(link, 256).catch(() => null) : null;
-  // As Posts to Answer does: anything the finder brought in that is not
-  // sorted or written yet is, after this page is sent, so it is here next look.
-  after(() => sweepPosts(org).then(() => undefined));
-
-  const board = posts ? privateBoard(posts) : null;
-  const results = affiliateResults(clickCounts, projects ?? []);
-  const pay = affiliateMoney(commission);
+  const people = withProgress(sent, projects ?? []);
+  const wallet = walletFor(commission, requests, paidOut);
+  const track = POSITIONS.find((p) => p.key === "affiliate")?.growth;
+  const stage = track ? affiliateStage({ stages: track.stages, hasLink: !!link, projects: projects ?? [], paid: commission?.paid ?? 0 }) : null;
+  const sold = people.filter((p) => p.progress === "sold").length;
 
   return (
-    <div className="mx-auto grid w-full max-w-md gap-5">
+    <div className="mx-auto grid w-full max-w-md gap-4">
       <section data-tour="affiliate-link" aria-labelledby="aff-link">
-        <Heading id="aff-link" step={1} title="Send your link to someone" sub="Say who it's for and how you know them. You get a message to copy and send, with your own link in it." />
         <Card>
+          <h2 id="aff-link" className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            1. Send your link to someone
+          </h2>
           <ReferralMessageCard />
         </Card>
         <div className="mt-3 grid gap-3">
-          <Drop title={`People you sent it to (${sent.length})`}>
-            {sent.length > 0 ? <ReferralList rows={sent} titled={false} /> : <p className="text-sm text-muted-foreground">Nobody yet. Everyone you send your link to shows up here, with whether they opened it.</p>}
-          </Drop>
           <details className="rounded-2xl border bg-card p-4 text-sm">
             <summary className="cursor-pointer font-medium">Just your link, or a QR code</summary>
             <div className="mt-3">
@@ -93,102 +80,68 @@ export async function AffiliateHomePanel() {
         </div>
       </section>
 
-      <section data-tour="affiliate-posts" aria-labelledby="aff-posts">
-        <Heading id="aff-posts" step={2} title="Answer a post" sub="Neighbors asking for yard work. Use the reply, copy it, paste it under their post." />
-        {board ? (
-          <div className="grid gap-4">
-            <CommentCard posts={board} pinned={null} answeredToday={today} />
-            <RecentAnswers posts={board} />
-          </div>
+      <Drop tour="affiliate-results" title="People you sent it to" hint={`${people.length} sent · ${sold} sold`}>
+        {people.length > 0 ? (
+          <ReferralList rows={people} titled={false} />
         ) : (
-          <Card>The posts couldn&apos;t load just now. Reload the page.</Card>
+          <p className="text-sm text-muted-foreground">Nobody yet. Everyone you send your link to shows up here, with how far they got.</p>
         )}
-      </section>
-
-      <Drop
-        tour="affiliate-results"
-        title="What came of it"
-        hint={`${results.clicks} clicks · ${projects ? results.booked : "—"} booked · ${projects ? results.sold : "—"} sold`}
-      >
-        <p className="mb-3 text-sm text-muted-foreground">Your links and your bookings only.</p>
-        <div className="grid grid-cols-3 gap-2">
-          <Stat label="Clicks" value={String(results.clicks)} />
-          <Stat label="Booked" value={projects ? String(results.booked) : "—"} />
-          <Stat label="Sold" value={projects ? String(results.sold) : "—"} />
-        </div>
-        <div className="mt-3">
-          {projects == null ? (
-            <Card>Your projects couldn&apos;t load just now. Reload the page.</Card>
-          ) : projects.length === 0 ? (
-            <Card>No bookings yet. Every one that comes through your replies or your link shows up here.</Card>
-          ) : (
-            <ul className="grid gap-2">
-              {projects.map((p) => (
-                <ProjectRow key={p.jobId} row={p} />
-              ))}
-            </ul>
-          )}
-        </div>
+        {projects && projects.length > 0 && <OtherBookings projects={projects} people={people} />}
       </Drop>
 
-      <Drop tour="affiliate-money" title="Your money" hint={commission ? `${money(pay.earned)} earned · ${money(pay.owed)} still owed` : undefined}>
-        <p className="mb-3 text-sm text-muted-foreground">You earn 4% of what each project you brought in is paid.</p>
-        {commission ? (
-          <>
-            <div className="grid grid-cols-3 gap-2">
-              <Stat label="Earned" value={money(pay.earned)} strong />
-              <Stat label="Paid to you" value={money(pay.paid)} />
-              <Stat label="Still owed" value={money(pay.owed)} alert={pay.owed > 0} />
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Earned once the client pays. Still owed is paid out to you by the office.
-            </p>
-          </>
-        ) : (
-          <Card>Your earnings couldn&apos;t load just now. Reload the page.</Card>
-        )}
+      <Drop tour="affiliate-money" title="Wallet" hint={commission ? `${money(wallet.ready)} ready` : undefined}>
+        {commission ? <WalletCard wallet={wallet} /> : <Card>Your wallet couldn&apos;t load just now. Reload the page.</Card>}
       </Drop>
+
+      {stage && <StageCard stage={stage} />}
     </div>
   );
 }
 
-/** Opens of every link this person put out. Their own rows only. */
-async function myClicks(organizationId: string, profileId: string): Promise<number[]> {
-  try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("outreach_links")
-      .select("click_count")
-      .eq("organization_id", organizationId)
-      .eq("profile_id", profileId)
-      .limit(5000);
-    if (error) return [];
-    return (data ?? []).map((r) => r.click_count ?? 0);
-  } catch {
-    return [];
-  }
+/** Bookings that came another way (their plain link or QR code), so none go missing from the list. */
+function OtherBookings({ projects, people }: { projects: BroughtInRow[]; people: { code?: string }[] }) {
+  const codes = new Set(people.map((p) => p.code).filter(Boolean));
+  const other = projects.filter((p) => !p.referralCode || !codes.has(p.referralCode));
+  if (other.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Booked another way</p>
+      <ul className="grid gap-2">
+        {other.map((p) => (
+          <ProjectRow key={p.jobId} row={p} />
+        ))}
+      </ul>
+    </div>
+  );
 }
 
-function Heading({ id, step, title, sub }: { id: string; step: number; title: string; sub: string }) {
+export function StageCard({ stage }: { stage: AffiliateStage }) {
   return (
-    <div className="mb-2 flex items-start gap-3">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-        {step}
-      </span>
-      <div>
-        <h2 id={id} className="text-lg font-extrabold leading-tight">
-          {title}
-        </h2>
-        <p className="text-sm text-muted-foreground">{sub}</p>
+    <section data-tour="affiliate-stage" className="rounded-2xl border bg-card p-4 text-sm">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Stages of Success</p>
+      <div className="my-2 flex gap-1" aria-hidden>
+        {Array.from({ length: stage.total }, (_, i) => (
+          <span key={i} className={cn("h-2 flex-1 rounded-full", i < stage.done ? "bg-primary" : i === stage.done ? "bg-primary/40" : "bg-muted")} />
+        ))}
       </div>
-    </div>
+      <p className="font-semibold">
+        {stage.done} of {stage.total} stages done
+      </p>
+      {stage.next ? (
+        <p className="text-muted-foreground">
+          Next: {stage.next}.{stage.nextNeedsAManager ? " Your account manager marks this one when it happens." : ""}
+        </p>
+      ) : (
+        <p className="text-muted-foreground">Track done. Stage 7 is optional: join the crew as a project technician when you&apos;re ready.</p>
+      )}
+    </section>
   );
 }
 
 /** A section that stays closed until it's tapped, so the top of the screen is the one thing to do. */
-export function Drop({ title, hint, tour, children }: { title: string; hint?: string; tour?: string; children: React.ReactNode }) {
+export function Drop({ title, hint, tour, open, children }: { title: string; hint?: string; tour?: string; open?: boolean; children: React.ReactNode }) {
   return (
-    <details data-tour={tour} className="group rounded-2xl border bg-card text-sm">
+    <details data-tour={tour} open={open} className="group rounded-2xl border bg-card text-sm">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4 [&::-webkit-details-marker]:hidden">
         <span className="min-w-0">
           <span className="block font-bold">{title}</span>
@@ -203,15 +156,6 @@ export function Drop({ title, hint, tour, children }: { title: string; hint?: st
 
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border bg-card p-4 text-sm">{children}</div>;
-}
-
-function Stat({ label, value, strong, alert }: { label: string; value: string; strong?: boolean; alert?: boolean }) {
-  return (
-    <div className={cn("rounded-xl border bg-card p-3", alert && "border-amber-400/70 bg-amber-50/60 dark:bg-amber-500/10")}>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn("tabular-nums", strong ? "text-xl font-extrabold" : "text-lg font-bold")}>{value}</p>
-    </div>
-  );
 }
 
 function ProjectRow({ row }: { row: BroughtInRow }) {

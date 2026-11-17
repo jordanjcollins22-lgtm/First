@@ -1,8 +1,9 @@
 import type { Tour } from "@/lib/tutorials/types";
 
 /**
- * The first-open tutorial for the affiliate role (a "commenter" too): answer
- * send the link to someone, answer a post, see what came of it and what it paid. Each step
+ * The first-open tutorial for the affiliate role (a "commenter" too): send
+ * the link to someone, see how far each person got, the wallet
+ * and the next stage. Each step
  * points at the affiliate home screen (affiliate-home.tsx) or the comment
  * card inside it (comment-card.tsx: "card", "found").
  */
@@ -12,37 +13,27 @@ export const affiliateTour: Tour = {
   steps: [
     {
       title: "Your day, on one screen",
-      body: "Send your link to people you know, answer neighbors asking for yard work, and see what you earn. Tap Help any time to see this again.",
+      body: "Send your link to people you know, see how far each one got, and watch your wallet. Tap Help any time to see this again.",
     },
     {
       title: "Send your link to someone",
       target: "affiliate-link",
-      body: "Type who you're sending it to and pick how you know them. You get a message with your own link in it: tap Copy and send it. You'll see when they open it.",
+      body: "Tap the button, type their name and pick how you know them. Found someone asking online? Pick Someone online and add a screenshot. You get a message with your link in it to copy and send.",
     },
     {
-      title: "Answer a post",
-      target: "affiliate-posts",
-      body: "Each card is a neighbor asking for yard help. Tap Use this comment and your own tracked link is added. Not a job? Tap Can't respond.",
-    },
-    {
-      title: "Copy, paste, done",
-      target: "card",
-      body: "Tap Copy & go to post. Your reply is copied and the post opens. Paste it under the post; it's marked posted for you. Then tap Next post.",
-    },
-    {
-      title: "Found one yourself?",
-      target: "found",
-      body: "Saw a post asking for yard work? Paste its link under Found a post. It comes to you next, with a reply written.",
-    },
-    {
-      title: "See what came of it",
+      title: "People you sent it to",
       target: "affiliate-results",
-      body: "Clicks on your links, bookings, and every project you brought in, with where it has got to and your 4%.",
+      body: "Everyone you sent your link to, and how far they got: sent, opened, booked, sold. Once it's sold you see your 4%.",
     },
     {
-      title: "Your money",
+      title: "Your wallet",
       target: "affiliate-money",
-      body: "What you've earned, what's been paid to you, and what's still owed. Only you see these numbers.",
+      body: "Your 4% lands here once the client pays. Tap Request payout and the office approves it and sends it to your bank.",
+    },
+    {
+      title: "Your next stage",
+      target: "affiliate-stage",
+      body: "Where you are on the Stages of Success, and what the next one asks.",
     },
   ],
 };

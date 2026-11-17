@@ -29,24 +29,34 @@ export function firstNameOf(name: string): string {
   return first ? first[0].toUpperCase() + first.slice(1) : "";
 }
 
+/**
+ * Laid out like a text from a person: the greeting on its own line, a blank
+ * line between parts, and their link on a line of its own so it stays tappable.
+ */
 export function referralMessage(input: { name: string; affiliation: Affiliation; link: string; business: string; from: string | null }): string {
   const them = firstNameOf(input.name);
-  const hi = them ? `Hey ${them}` : "Hey";
   const me = input.from ? firstNameOf(input.from) : null;
-  const ask = `If you ever need help with your yard, here's my link to get an estimate set up: ${input.link}`;
-  const after = "They'll reach out to you, and take it from there.";
+  const hi = input.affiliation === "online" ? `Hi ${them || "there"}!` : them ? `Hey ${them}!` : "Hey!";
+  const crew = `${input.business}, a local landscaping crew in Harford County`;
+  let intro: string;
   switch (input.affiliation) {
     case "neighbor":
-      return `${hi}, it's ${me ?? "your neighbor"} from down the street! I work with ${input.business}, a local crew here in Harford County. ${ask}\n\n${after}`;
+      intro = `It's ${me ?? "your neighbor"} from down the street. I work with ${input.business}, a local crew here in Harford County.`;
+      break;
     case "friend":
-      return `${hi}! I've been working with ${input.business}, a local landscaping crew in Harford County. ${ask}\n\n${after}`;
+      intro = `I've been working with ${crew}.`;
+      break;
     case "family":
-      return `${hi}! You know I've been working with ${input.business}. ${ask}\n\n${after}`;
+      intro = `You know I've been working with ${input.business}.`;
+      break;
     case "coworker":
-      return `${hi}, it's ${me ?? "me"} from work. I also work with ${input.business}, a local landscaping crew in Harford County. ${ask}\n\n${after}`;
+      intro = `It's ${me ?? "me"} from work. I also work with ${crew}.`;
+      break;
     case "online":
-      return `Hi ${them || "there"}, I saw you were looking for yard help. I work with ${input.business}, a local crew in Harford County. ${ask}\n\n${after}`;
+      intro = `I saw you were looking for yard help. I work with ${input.business}, a local crew here in Harford County.`;
+      break;
     default:
-      return `${hi}${me ? `, it's ${me}` : ""}. I work with ${input.business}, a local landscaping crew in Harford County. ${ask}\n\n${after}`;
+      intro = me ? `It's ${me}. I work with ${crew}.` : `I work with ${crew}.`;
   }
+  return [hi, intro, `If you ever need help with your yard, here's my link to get an estimate set up:\n${input.link}`, "They'll reach out to you from there. Thanks!"].join("\n\n");
 }

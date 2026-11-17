@@ -19,8 +19,17 @@ describe("referral message", () => {
   });
 
   it("fits how they know them", () => {
-    expect(referralMessage({ ...base, affiliation: "neighbor" })).toContain("it's Morgan from down the street");
+    expect(referralMessage({ ...base, affiliation: "neighbor" })).toContain("It's Morgan from down the street");
     expect(referralMessage({ ...base, affiliation: "coworker" })).toContain("from work");
+  });
+
+  it("is laid out like a text: greeting alone, blank lines between parts, link on its own line", () => {
+    const m = referralMessage({ ...base, affiliation: "neighbor" });
+    const parts = m.split("\n\n");
+    expect(parts[0]).toBe("Hey Pat!");
+    expect(parts).toHaveLength(4);
+    expect(m.split("\n")).toContain(base.link);
+    expect(m).not.toMatch(/\n{3,}/);
   });
 
   it("knows the relationships", () => {

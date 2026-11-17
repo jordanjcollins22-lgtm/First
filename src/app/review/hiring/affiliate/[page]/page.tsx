@@ -12,12 +12,14 @@ import { applicantEmail, welcomeEmail } from "@/lib/hiring/emails";
 import { journeyProps } from "@/lib/hiring/journey-props";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
-import { previewPage, sampleApplicant, sampleApplicants, sampleJourney, sampleNewHires, sampleReferrals } from "@/lib/hiring/affiliate-preview";
+import { previewPage, sampleApplicant, sampleApplicants, sampleJourney, sampleNewHires, samplePayoutRequest, sampleReferrals, sampleWallet, sampleWalletAsked } from "@/lib/hiring/affiliate-preview";
 import { referralMessage } from "@/lib/referral-message";
 import { trackedLink } from "@/lib/outreach-links";
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
 import { ReferralList } from "@/components/v2/panels/role/referral-list";
-import { Drop } from "@/components/v2/panels/role/affiliate-home";
+import { Drop, StageCard } from "@/components/v2/panels/role/affiliate-home";
+import { WalletCard } from "@/components/v2/panels/role/wallet-card";
+import { PayoutRequests } from "@/components/payments/payout-requests";
 import { ApplicantCalls } from "@/components/hiring/applicant-calls";
 import { RoleDocView } from "@/components/hiring/role-doc-view";
 import { PositionView } from "@/components/hiring/position-view";
@@ -143,37 +145,71 @@ export default async function AffiliatePreviewPage({ params }: { params: Promise
     );
   } else if (key === "app") {
     const link = trackedLink(await outboundBaseUrl(), "k7m2qx9");
-    const message = referralMessage({ name: "Pat Neighbor", affiliation: "neighbor", link, business: BUSINESS, from: "Morgan Sample" });
+    const message = referralMessage({ name: "Pat Miller", affiliation: "neighbor", link, business: BUSINESS, from: "Morgan Sample" });
     body = (
       <main className="mx-auto grid w-full max-w-md gap-4 px-4 py-6">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Top of the affiliate&apos;s app</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">The affiliate&apos;s app, top to bottom</p>
           <h1 className="text-lg font-extrabold leading-tight">1. Send your link to someone</h1>
-          <p className="text-sm text-muted-foreground">Say who it&apos;s for and how you know them. You get a message to copy and send, with your own link in it.</p>
+          <p className="text-sm text-muted-foreground">One button, then one question per screen. They end with a message to copy and send, with their own tracked link on its own line.</p>
         </div>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">They fill it in</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">1. They tap the button</p>
         <Inert>
           <div className="rounded-2xl border bg-card p-4 text-sm">
-            <ReferralMessageCard sample={{ name: "Pat Neighbor", affiliation: "neighbor" }} />
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
+            <ReferralMessageCard sample={{ step: "start" }} />
           </div>
         </Inert>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">They tap Get my message</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2. Type their name, then Next</p>
         <Inert>
           <div className="rounded-2xl border bg-card p-4 text-sm">
-            <ReferralMessageCard sample={{ name: "Pat Neighbor", affiliation: "neighbor", message }} />
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
+            <ReferralMessageCard sample={{ step: "name", name: "Pat Miller" }} />
           </div>
         </Inert>
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Below it, closed until they tap</p>
-        <Drop title={`People you sent it to (${sampleReferrals(today).length})`}>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">3. Pick how they know them, then Next</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
+            <ReferralMessageCard sample={{ step: "how", name: "Pat Miller", affiliation: "neighbor" }} />
+          </div>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">4. A screenshot if they have one (optional), then Submit</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
+            <ReferralMessageCard sample={{ step: "shot", name: "Pat Miller", affiliation: "neighbor", shotName: "post.png" }} />
+          </div>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">5. Copy and send</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">1. Send your link to someone</p>
+            <ReferralMessageCard sample={{ step: "message", name: "Pat Miller", affiliation: "neighbor", message }} />
+          </div>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">2. People you sent it to (closed until they tap)</p>
+        <Drop title="People you sent it to" hint={`${sampleReferrals(today).length} sent · 1 sold`} open>
           <ReferralList rows={sampleReferrals(today)} titled={false} />
         </Drop>
-        <p className="text-xs text-muted-foreground">Then 2. Answer a post, open as now, and these two drop-downs:</p>
-        <Drop title="What came of it" hint="5 clicks · 1 booked · 1 sold">
-          <p className="text-sm text-muted-foreground">Clicks, bookings and every project they brought in, with where it has got to and their 4%.</p>
-        </Drop>
-        <Drop title="Your money" hint="$64 earned · $64 still owed">
-          <p className="text-sm text-muted-foreground">Earned, paid to them and still owed. Earned once the client pays.</p>
-        </Drop>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">3. Wallet (closed until they tap)</p>
+        <Inert>
+          <Drop title="Wallet" hint="$212 ready" open>
+            <WalletCard wallet={sampleWallet(today)} />
+          </Drop>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">After they tap Request payout</p>
+        <Inert>
+          <div className="rounded-2xl border bg-card p-4 text-sm">
+            <WalletCard wallet={sampleWalletAsked(today)} />
+          </div>
+        </Inert>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">4. Their stage</p>
+        <StageCard stage={{ done: 3, total: 7, next: "A client you sent leaves us a review", nextNeedsAManager: true }} />
+        <p className="mt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">The office&apos;s side, on the Money page</p>
+        <Inert>
+          <PayoutRequests requests={[samplePayoutRequest(today)]} />
+        </Inert>
       </main>
     );
   } else {

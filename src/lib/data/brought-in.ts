@@ -14,7 +14,7 @@ export async function getBroughtIn(profileId: string): Promise<BroughtInRow[]> {
   const admin = createAdminClient();
   const { data } = await admin
     .from("jobs")
-    .select("id, status, evaluation_date, created_at, properties(address, customers(name)), job_proposals(status, total_cost, discount_amount)")
+    .select("id, status, evaluation_date, created_at, referral_code, properties(address, customers(name)), job_proposals(status, total_cost, discount_amount)")
     .eq("referred_by_profile_id", profileId)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -24,6 +24,7 @@ export async function getBroughtIn(profileId: string): Promise<BroughtInRow[]> {
     status: string;
     evaluation_date: string | null;
     created_at: string;
+    referral_code: string | null;
     properties: { address: string | null; customers: { name: string | null } | null } | null;
     job_proposals: { status: string; total_cost: number | string | null; discount_amount: number | string | null }[] | { status: string; total_cost: number | string | null; discount_amount: number | string | null } | null;
   }[]).map((j) => {
@@ -37,6 +38,7 @@ export async function getBroughtIn(profileId: string): Promise<BroughtInRow[]> {
       proposalStatus: proposal?.status ?? null,
       price: proposal?.total_cost == null ? null : Number(proposal.total_cost) - Number(proposal.discount_amount ?? 0),
       createdAt: j.created_at,
+      referralCode: j.referral_code,
     };
   });
   return broughtInRows(jobs);

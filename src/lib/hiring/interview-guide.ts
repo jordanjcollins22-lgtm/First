@@ -85,7 +85,7 @@ const AFFILIATE_OWNER: readonly GuideSection[] = [
     say: [
       "It's commission only: 4% of each job that books through your link, paid after the client pays. There's no hourly pay, and nothing for a job that doesn't close.",
       "Most people you send will say no, or not yet. That's normal.",
-      "It takes steady effort: sharing your link and answering posts most days, not once in a while.",
+      "It takes steady effort: sharing your link and answering people online most days, not once in a while.",
       "We only work in Harford County, so we can't help people farther away.",
     ],
     ask: ["Knowing all that, do you still want to do this?"],
