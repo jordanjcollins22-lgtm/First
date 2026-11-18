@@ -1,4 +1,5 @@
-import type { Position } from "@/lib/hiring/positions";
+import { interviewKind, type Growth, type Position } from "@/lib/hiring/positions";
+import { CULTURE } from "@/lib/hiring/role-docs";
 
 /**
  * The Indeed ad for a position, as plain text to paste into Indeed's job
@@ -17,9 +18,9 @@ export interface AdInput {
 
 /** The pay, as the ad and our careers page say it. Commission-only roles say so first, so nobody expects a wage. */
 function payText(position: Position, missing: string | null): string | null {
-  if (position.commissionOnly) return position.commission ? `Commission only, no hourly pay: ${position.commission}` : missing;
+  if (position.commissionOnly) return position.commission ? `Paid on results (commission only, no hourly pay): ${position.commission}.` : missing;
   const parts = [position.pay ?? missing, position.commission].filter(Boolean);
-  return parts.length ? parts.join(", plus ") : null;
+  return parts.length ? parts.map((part) => `${part!.charAt(0).toUpperCase()}${part!.slice(1)}.`).join(" ") : null;
 }
 
 export function payLine(position: Position): string {
@@ -44,7 +45,9 @@ export function indeedPayFields(position: Position): string {
   if (position.commissionOnly) {
     return "Pay: commission only, no hourly wage. Under supplemental pay, tick Commission pay. The description states the rate.";
   }
-  const rates = [...(position.pay ?? "").matchAll(/\$\s?([\d.,]+)/g)].map((m) => Number(m[1].replace(/,/g, "")).toFixed(2));
+  const rates = position.payRange
+    ? position.payRange.map((n) => n.toFixed(2))
+    : [...(position.pay ?? "").matchAll(/\$\s?([\d.,]+)/g)].map((m) => Number(m[1].replace(/,/g, "")).toFixed(2));
   const hourly =
     rates.length >= 2 ? `Range, $${rates[0]} to $${rates[1]} per hour` : rates.length === 1 ? `Exact amount, $${rates[0]} per hour` : PAY_MISSING;
   return `Pay: ${hourly}.${position.commission ? " Under supplemental pay, tick Commission pay." : ""}`;
@@ -52,33 +55,51 @@ export function indeedPayFields(position: Position): string {
 
 /** Indeed's own benefit tick boxes, named as Indeed names them. */
 export function indeedBenefitFields(position: Position): string {
-  const boxes = position.benefits.map((b) => (b === "Performance bonuses" ? "Performance bonus (under supplemental pay)" : b));
+  const boxes = position.benefits.map((b) => (/^Performance (bonuses|pay)/.test(b) ? "Performance bonus (under supplemental pay)" : b));
   return `Benefits: tick ${boxes.join(", ")}.`;
+}
+
+export const GROWTH_INTRO = "Every milestone you hit gets celebrated at our team huddle:";
+
+/** "Then move up: ...", the line after the milestones. */
+export function growthThen(growth: Growth): string {
+  return `Then ${growth.then}.`;
+}
+
+/** The job's track on the Stages of Success, for the ad: each milestone spelled out. */
+export function growthLine(growth: Growth): string {
+  return [GROWTH_INTRO, ...growth.stages.map((s) => `• ${s}`), growthThen(growth)].join("\n");
 }
 
 export function indeedAd(position: Position, input: AdInput): { title: string; body: string; payFields: string } {
   const bullets = (items: readonly string[]) => items.map((item) => `• ${item}`).join("\n");
   const body = [
-    `${input.business} is a growing landscaping company serving ${input.area}. ${position.tagline}`,
+    `${position.tagline}`,
+    "",
+    `${input.business} is a growing landscaping company serving ${input.area}, and we're looking for people who want to grow with us.`,
     "",
     "What you'll do",
     bullets(position.duties),
     "",
-    "What we're looking for",
+    "Who we're looking for",
     bullets(position.lookingFor),
     "",
-    "Pay",
+    "What we care about",
+    bullets(CULTURE.map((c) => c.value)),
+    "",
+    "What you'll earn",
     payLine(position),
     "",
-    "Benefits",
+    "What you get",
     bullets(position.benefits),
     "",
+    ...(position.growth ? ["Where this goes", growthLine(position.growth), ""] : []),
     "Schedule",
     position.schedule,
     "",
     "How to apply",
     `Apply here: ${input.applyUrl}`,
-    "It takes about 3 minutes. If you're a fit, you'll be asked to record a short video from your phone (about a minute) so we can meet you before an in-person interview.",
+    `It takes about 3 minutes. If you're a fit, you'll be asked to record a short video from your phone (about a minute) so we can meet you before ${interviewKind(position)}.`,
   ].join("\n");
   return { title: position.title, body, payFields: `${indeedPayFields(position)}\n${indeedBenefitFields(position)}` };
 }

@@ -32,7 +32,7 @@ describe("applicant emails", () => {
   });
 
   it("uses no dashes anywhere an applicant reads", () => {
-    for (const kind of ["interview", "not_a_fit", "video_request", "offer"] as const) {
+    for (const kind of ["interview", "not_a_fit", "video_request", "offer", "skills_question"] as const) {
       const { subject, body } = applicantEmail({ ...BASE, kind, when: "Tue, Oct 6, 10:00 AM", videoUrl: "https://example.com/v" });
       expect(`${subject} ${body}`).not.toMatch(/[—–]/);
     }
@@ -43,6 +43,22 @@ describe("applicant emails", () => {
     expect(stageAfter("not_a_fit")).toBe("not_a_fit");
     expect(stageAfter("video_request")).toBe("video_requested");
     expect(stageAfter("offer")).toBe("offer_sent");
+    expect(stageAfter("skills_question")).toBe("working_interview");
+  });
+
+  it("invites an affiliate to a call, never in person", () => {
+    const { body } = applicantEmail({ ...BASE, kind: "interview", when: "Tue, Oct 6, 10:00 AM", place: null, remote: true });
+    expect(body).toContain("quick phone or video call");
+    expect(body).toContain("We'll call you at the number you gave us");
+    expect(body).not.toMatch(/in person|address/);
+    expect(applicantEmail({ ...BASE, kind: "interview", when: null, place: "https://meet.example.com/x", remote: true }).body).toContain("Join here: https://meet.example.com/x");
+  });
+
+  it("sends the skills question with its link", () => {
+    const { subject, body } = applicantEmail({ ...BASE, kind: "skills_question", positionTitle: "Affiliate", skillsQuestion: "What would you say?", skillsUrl: "https://example.com/careers/skills/abc" });
+    expect(subject).toContain("One question");
+    expect(body).toContain("The question: What would you say?");
+    expect(body).toContain("https://example.com/careers/skills/abc");
   });
 
   it("makes the offer with the pay, the first days, the gear and how to accept", () => {
@@ -80,5 +96,15 @@ describe("accepting an offer", () => {
     expect(body).toContain("trainer");
     expect(body).toContain("(410) 555-0100");
     expect(`${subject} ${body}`).not.toMatch(/[—–]/);
+  });
+});
+
+describe("recording notice", () => {
+  it("is in the interview, offer and welcome emails", () => {
+    const base = { firstName: "Dana", positionTitle: "Affiliate", business: "JS Landscaping MD", phone: null, sender: "Jordan" };
+    const line = "are recorded for training and quality.";
+    expect(applicantEmail({ ...base, kind: "interview", when: "Tue", remote: true }).body).toContain(line);
+    expect(applicantEmail({ ...base, kind: "offer", positionKey: "affiliate" }).body).toContain(line);
+    expect(welcomeEmail({ ...base, positionKey: "affiliate" }).body).toContain(line);
   });
 });

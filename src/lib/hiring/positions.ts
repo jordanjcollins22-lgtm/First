@@ -27,6 +27,13 @@ export interface Question {
   optional?: boolean;
 }
 
+export interface Growth {
+  /** Each milestone on the job's Stages of Success track, spelled out. */
+  stages: readonly string[];
+  /** The last, optional stage: the move to the next job, said after "Then". */
+  then: string;
+}
+
 export interface Position {
   key: PositionKey;
   title: string;
@@ -38,14 +45,36 @@ export interface Position {
   commission: string | null;
   /** Paid by commission alone, with no hourly pay: said plainly, so nobody applies expecting a wage. */
   commissionOnly: boolean;
+  /**
+   * The lowest and highest hourly pay, for Indeed's own pay fields (Maryland
+   * job ads have to show a range). Kept apart from the ad's wording, which
+   * leads with what a good week pays rather than the floor.
+   */
+  payRange?: readonly [number, number];
   /** What comes with the job besides pay. Maryland job ads must describe it. */
   benefits: readonly string[];
+  /**
+   * Where the job goes: its track on the Stages of Success, in order, and the
+   * stage after the track. Said in the ad and on the careers page.
+   */
+  growth?: Growth;
   schedule: string;
   duties: readonly string[];
   lookingFor: readonly string[];
   questions: readonly Question[];
   /** What to say in the video, after who they are. */
   videoPrompt: string;
+  /**
+   * Interviews by phone or video call, never in person: a job done from
+   * anywhere is hired from anywhere.
+   */
+  remoteInterviews?: boolean;
+  /**
+   * The skills step done from their phone, by link: one real situation they
+   * answer by tapping Record and saying it, live in the page. Set for a job
+   * with no crew or desk to try out on.
+   */
+  skillsQuestion?: string;
   /**
    * Why we're not taking applications for it right now. When set, the job is
    * off the careers page and its apply form, but past applicants still show on
@@ -123,29 +152,41 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "project-technician",
     title: "Landscape Project Technician",
-    tagline: "Hands-on landscaping work: bed cleanups, mulch, planting, lawn work and installs.",
-    pay: `$${TECH_FLOOR_PER_HOUR} to $${TECH_ON_BUDGET_PER_HOUR} an hour`,
-    commission: `your crew splits ${Math.round(CREW_SPLIT * 100)}% of the labor on every job you finish. Each tech gets their share or $${TECH_FLOOR_PER_HOUR} an hour, whichever is higher`,
+    tagline: "Turn tired yards into ones people stop to look at, on a crew that's paid on results. We teach you the trade, and the better your crew gets, the more you earn.",
+    pay: `About $${TECH_ON_BUDGET_PER_HOUR} an hour when your crew finishes a job on budget, and more when you beat it`,
+    commission: `Your crew shares ${Math.round(CREW_SPLIT * 100)}% of the labor on every job you finish, so a faster, sharper crew means a bigger paycheck. On a slow job you're still guaranteed at least $${TECH_FLOOR_PER_HOUR} an hour`,
     commissionOnly: false,
+    payRange: [TECH_FLOOR_PER_HOUR, TECH_ON_BUDGET_PER_HOUR],
     benefits: [
-      "Paid training",
-      "Performance bonuses",
-      "Your own referral link: 4% of every job you bring in",
-      "Room to grow: do the work, then teach it, then build the system that teaches it",
+      "Paid training from your first day",
+      "Performance pay: the better your crew does the job, the more you take home",
+      "Your own referral link: earn 4% of every job you bring in",
+      "Crew hoodie, gloves, and eye and ear protection provided",
     ],
+    growth: {
+      stages: [
+        "You complete in-field training with a trainer",
+        "Two pay weeks in a row where your 38% share beats the minimum-wage floor",
+        "5 online reviews that mention you, your crew or your work",
+        "You lead two morning team meetings",
+        "You're a trainer for a new technician",
+        "You earn two profit sharing checks",
+      ],
+      then: "mentor three new technicians through their first four milestones, and move up to account manager when you're ready",
+    },
     schedule: "Weekdays, starting around 7 AM. Some Saturdays in busy season.",
     duties: [
-      "Clean up beds, pull weeds, edge, and lay mulch and rock",
-      "Plant shrubs and flowers, seed and topsoil lawns",
-      "Load and unload tools and materials, and keep them clean and organized",
-      "Take before and after photos on the job in our app",
+      "Bring yards back to life: clean up beds, pull weeds, edge, and lay fresh mulch and rock",
+      "Plant shrubs and flowers, and seed and topsoil lawns",
+      "Work with your crew from loading the truck to the final walkthrough",
+      "Snap before and after photos in our app, so your work speaks for itself",
       "Leave every property cleaner than we found it",
     ],
     lookingFor: [
-      "Shows up on time, every time",
-      "Can lift 50 lb bags and work outside in heat and cold",
-      "Landscaping experience is a plus, not required. We train",
-      "Respectful with clients and their property",
+      "You show up on time, every time",
+      "You like hard work outside and can lift 50 lb bags",
+      "No experience needed: we teach you everything, and you're paid while you learn",
+      "You treat clients and their homes with respect",
     ],
     questions: [
       ...BASICS,
@@ -253,25 +294,41 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "account-manager",
     title: "Account Manager",
-    tagline: "Run the location day to day: the team, the schedule and every client, so the work gets done right.",
+    tagline: "Be the person who makes a growing landscaping location run: the team, the schedule and every client. You earn on every job your location finishes.",
     pay: null,
     commission: "7% commission on every job your location completes",
     commissionOnly: true,
-    benefits: ["Paid training", "Performance bonuses", "Your own referral link: 4% of every job you bring in"],
+    benefits: [
+      "Paid training on our app and how we run a location",
+      "Performance bonuses",
+      "Your income grows with your location: every job it finishes pays you",
+      "Your own referral link: earn 4% of every job you bring in",
+    ],
+    growth: {
+      stages: [
+        "You complete all the foundational account manager training and pass the test",
+        "You recruit two new team members and keep them for 3 months",
+        "You lead the team through a busy season",
+        "In the offseason, monthly revenue stays at 50% or more of the peak month",
+        "Profit distributions for four straight quarters",
+        "You support a new account manager through their first four milestones",
+      ],
+      then: "become a partner: run your own JS Landscaping location through the Location Partner program, at no cost to start",
+    },
     schedule: "Weekdays, from the office, your phone and on site. Longer weeks in busy season.",
     duties: [
-      "Approve or edit the replies our AI front desk drafts for clients, crews and new leads",
-      "Run the schedule for every crew and keep jobs on their day",
+      "Keep every client happy: approve or tweak the replies our AI front desk writes for you",
+      "Run the schedule for every crew so jobs land on their day",
       "Handle invoices, estimate requests and paid site visits",
-      "Recruit, onboard and keep the team, and mark the stage steps the system can't check",
-      "Review the location's weekly scorecard with the partner or owner",
+      "Build the team: recruit, onboard and keep great people",
+      "Review the weekly scorecard with the owner and steer the location",
     ],
     lookingFor: [
-      "Customer service, office or crew management experience",
+      "Experience in customer service, an office, or running a crew",
       "Organized: nothing falls through the cracks",
-      "Clear, friendly writer for texts and emails",
+      "A clear, friendly writer for texts and emails",
       "Comfortable leading people and having the hard conversation",
-      "Commission only: you earn 7% of every job your location completes, not hours",
+      "Paid on results: you earn 7% of every job your location completes, not hours",
     ],
     questions: [
       ...BASICS,
@@ -298,22 +355,40 @@ export const POSITIONS: readonly Position[] = [
   {
     key: "affiliate",
     title: "Affiliate",
-    tagline: "Help neighbors who are asking for yard work find us online, and earn on every job that books.",
+    tagline: "Get paid for every client you send us: the neighbor next door, a friend, a coworker, someone asking online. Anyone who needs yard work, and every job that books through your link pays you.",
     pay: null,
     commission: "4% commission on every job that books through your link",
     commissionOnly: true,
-    benefits: ["Flexible schedule", "Performance bonuses"],
-    schedule: "Work from your phone, any time. As many or as few hours as you like.",
+    benefits: [
+      "Flexible schedule: any time, from anywhere",
+      "Performance bonuses",
+      "No hard selling: share your link, and we handle the estimate, the job and the follow-up",
+      "Ready-made replies for people asking online, so you never start from scratch",
+    ],
+    growth: {
+      stages: [
+        "You get your own referral link",
+        "Your first referred job is done, and your first 4% is paid",
+        "5 referred jobs booked",
+        "A client you sent leaves us a review",
+        "At least one referred job every month for 3 months",
+        "$10,000 of booked work from your referrals ($400 earned)",
+      ],
+      then: "move up: join the crew as a project technician",
+    },
+    schedule: "Any time, anywhere. As many or as few hours as you like.",
     duties: [
-      "Answer local Facebook posts from people asking for yard work, using comments we write for you",
-      "Share your own link so jobs are counted for you",
-      "Track every post you answered and how it went in our app",
+      "Send us anyone who needs yard work: neighbors, friends, family, coworkers, people you meet",
+      "Share your own link so every job they book counts for you",
+      "Answer people asking for yard work online, with replies we write for you",
+      "Watch in our app as the people you sent turn into booked jobs",
     ],
     lookingFor: [
-      "Active on Facebook and in local community groups",
+      "Knows a lot of people, in person or online",
       "Lives in or near Harford County, Maryland",
-      "Friendly and genuine online",
-      "Commission only: you're paid on jobs, not hours",
+      "Friendly and genuine, never pushy",
+      "No experience needed: we train you step by step, and our app writes the replies for you",
+      "Paid on results: 4% of every job that books through your link, not hours",
     ],
     questions: [
       ...BASICS,
@@ -325,10 +400,12 @@ export const POSITIONS: readonly Position[] = [
         failReason: "Doesn't want commission-only pay",
       },
       { key: "local", label: "Do you live in or near Harford County, Maryland?", kind: "yesno", passes: YES, failReason: "Not local to Harford County" },
-      { key: "facebook", label: "Are you active on Facebook and in local community groups?", kind: "yesno" },
+      { key: "facebook", label: "Do you know a lot of people around here, in person or online (neighbors, friends, local Facebook groups)?", kind: "yesno" },
       ...ABOUT.filter((q) => q.key !== "availability"),
     ],
-    videoPrompt: "Someone in a local Facebook group asks, \"Anyone know a good landscaper?\" Tell us what you'd write back, and why.",
+    videoPrompt: "Tell us a bit about yourself: who you know around here, and why you'd be good at sending people our way.",
+    remoteInterviews: true,
+    skillsQuestion: "Your neighbor says their yard is a mess and they don't know who to call. Tap record and tell us what you'd say.",
   },
 ];
 
@@ -343,4 +420,9 @@ export const OPEN_POSITIONS: readonly Position[] = POSITIONS.filter((p) => !p.cl
 export function openPositionFor(key: string): Position | null {
   const p = positionFor(key);
   return p && !p.closed ? p : null;
+}
+
+/** How we meet an applicant for interviews, said the way an applicant reads it. */
+export function interviewKind(position: Pick<Position, "remoteInterviews"> | null | undefined): string {
+  return position?.remoteInterviews ? "a phone or video interview" : "an in-person interview";
 }

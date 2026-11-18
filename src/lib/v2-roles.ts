@@ -42,6 +42,9 @@ export function v2PagesFor(roles: readonly V2Role[]) {
  */
 export function roleHomes(rolePanels: Partial<Record<V2Role, string[]>> | undefined, roles: readonly V2Role[]): string[] {
   const keys = new Set(roles.flatMap((r) => rolePanels?.[r] ?? []));
-  if (keys.has("lead-home")) keys.delete("crew-home");
+  if (keys.has("lead-home")) {
+    keys.delete("crew-home");
+    keys.delete("tech-home");
+  }
   return [...keys];
 }

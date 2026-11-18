@@ -851,3 +851,10 @@ body {
 .mapboxgl-ctrl-bottom-right .mapboxgl-ctrl-attrib {
   display: none !important;
 }
+
+/* The fresh app's frame, in the phone pages' colours. */
+.vx-body { background: #f5f8f6; }
+.dark .vx-body { background: #0d1714; }
+.vx-top { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #d6e2dc; font: 800 16px "Archivo", system-ui, sans-serif; color: #0e7c74; }
+.dark .vx-top { background: #14211d; border-color: #25362f; color: #3fc2b6; }
+.vx-top button { font: 600 13px system-ui, sans-serif; color: inherit; background: none; border: 0; cursor: pointer; }

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { login } from "@/lib/actions/auth-actions";
 
-export function LoginForm({ next }: { next?: string } = {}) {
+export function LoginForm({ next, email }: { next?: string; email?: string } = {}) {
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -37,7 +37,8 @@ export function LoginForm({ next }: { next?: string } = {}) {
           type="email"
           required
           autoComplete="email"
-          autoFocus
+          defaultValue={email}
+          autoFocus={!email}
           className="h-12 text-base"
         />
       </div>
@@ -49,6 +50,7 @@ export function LoginForm({ next }: { next?: string } = {}) {
           type="password"
           required
           autoComplete="current-password"
+          autoFocus={Boolean(email)}
           className="h-12 text-base"
         />
       </div>

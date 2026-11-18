@@ -7,12 +7,16 @@ import { POSITIONS, positionFor } from "@/lib/hiring/positions";
 import { STAGES, isStage, type Stage } from "@/lib/hiring/screening";
 import { shortWhen } from "@/lib/time-zone";
 import { IndeedAds } from "@/components/hiring/indeed-ads";
+import type { AdCheck } from "@/lib/hiring/ad-review";
+import type { NewHireLine } from "@/lib/data/journey";
+import { roleDocFor } from "@/lib/hiring/role-docs";
+import { INTERVIEWS_PER_HIRE, countFunnel, targetFor } from "@/lib/hiring/volume";
 
 /** The Hiring page itself, given what to show. Kept apart from the loading so it can be previewed with sample applicants. */
 
 const BOARD: Stage[] = ["video_submitted", "video_requested", "interview", "working_interview", "owner_talk", "offer_sent", "hired", "screened_out", "not_a_fit"];
 
-export type AdCard = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean };
+export type AdCard = { key: string; title: string; body: string; payFields: string; applyUrl: string; needsPay: boolean; checks?: AdCheck[] };
 
 export function HiringBoard({
   applicants,
@@ -22,6 +26,7 @@ export function HiringBoard({
   hiringInbox,
   positionFilter,
   stageFilter,
+  newHires = [],
 }: {
   applicants: ApplicantRow[] | null;
   ads: AdCard[];
@@ -32,6 +37,8 @@ export function HiringBoard({
   hiringInbox?: string;
   positionFilter?: string;
   stageFilter?: string;
+  /** Everyone with a new-hire checklist, for their journey to fully operating. */
+  newHires?: NewHireLine[] | null;
 }) {
   const toWatch = (applicants ?? []).filter((a) => a.stage === "video_submitted").sort((a, b) => (a.videoSubmittedAt ?? "").localeCompare(b.videoSubmittedAt ?? ""));
   const shown = (applicants ?? []).filter(
@@ -114,6 +121,24 @@ export function HiringBoard({
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <NewHires hires={newHires} />
+
+      <Volume stages={(applicants ?? []).map((a) => a.stage)} />
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">Job documents</h2>
+        <p className="text-sm text-muted-foreground">
+          Each job written down: the role, the Four Rs, a perfect day, the 30-60-90 plan, our culture and the task checklists training runs on.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {POSITIONS.filter((p) => !p.closed && roleDocFor(p.key)).map((p) => (
+            <Link key={p.key} href={`/admin/hiring/jobs/${p.key}`} className="rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium hover:bg-muted/40">
+              {p.title}
+            </Link>
+          ))}
         </div>
       </section>
 
@@ -227,6 +252,73 @@ function IndeedInvites({ invites, inbox }: { invites: IndeedInviteRow[] | null; 
           })}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Everyone hired, each linking to their way from day one to fully operating. */
+function NewHires({ hires }: { hires: NewHireLine[] | null }) {
+  return (
+    <section id="new-hires" className="space-y-2">
+      <h2 className="text-base font-semibold">New hires</h2>
+      <p className="text-sm text-muted-foreground">
+        Their 30-60-90 plan, their connection, check-ins, training sign-offs, reviews, and when they&apos;re fully operating.
+      </p>
+      {hires === null ? (
+        <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">Couldn&apos;t load new hires just now. Reload the page.</p>
+      ) : hires.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+          Nobody yet. Someone shows up here once they accept an offer and their new-hire checklist starts.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+          {hires.map((h) => (
+            <li key={h.id}>
+              <Link href={`/admin/hiring/team/${h.id}`} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{h.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {[positionFor(h.position ?? "")?.title, `started ${h.startDate}`].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** Frontline hiring is a numbers game: what one hire takes, against what has come in. */
+function Volume({ stages }: { stages: string[] }) {
+  const target = targetFor(1);
+  const now = countFunnel(stages);
+  const rows: { label: string; aim: string; have: number }[] = [
+    { label: "Applications", aim: `at least ${target.applications}`, have: now.applications },
+    { label: "Videos", aim: `at least ${target.videos}`, have: now.videos },
+    { label: "Interviews", aim: `at least ${target.interviews}`, have: now.interviews },
+    { label: "Hires", aim: String(target.hires), have: now.hires },
+  ];
+  return (
+    <section className="space-y-2">
+      <h2 className="text-base font-semibold">How many applicants one hire takes</h2>
+      <p className="text-sm text-muted-foreground">
+        At least {INTERVIEWS_PER_HIRE} interviews for every hire, in every job, affiliates included. That&apos;s Alex Hormozi&apos;s number and it&apos;s a
+        minimum, not a cap: keep going until you find the right person. Working back through our steps gives the applications and videos it takes.
+        Those rates are first guesses and get better as real applicants come in.
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {rows.map((r) => (
+          <div key={r.label} className="rounded-xl border border-border bg-card p-3">
+            <p className="text-xs text-muted-foreground">{r.label}</p>
+            <p className="text-lg font-semibold tabular-nums">
+              {r.have} <span className="text-sm font-normal text-muted-foreground">of {r.aim}</span>
+            </p>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

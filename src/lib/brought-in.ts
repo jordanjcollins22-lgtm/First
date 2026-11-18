@@ -19,6 +19,8 @@ export interface BroughtInJob {
   /** What the client pays, in dollars, once there is a price. */
   price: number | null;
   createdAt: string;
+  /** The tracked link it came through, when it did. */
+  referralCode?: string | null;
 }
 
 export type BroughtInStep = "lead" | "evaluation" | "proposal" | "sold" | "done" | "lost";

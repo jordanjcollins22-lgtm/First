@@ -20,7 +20,7 @@ export default async function ViewAsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
   const real = await getRealProfile();
-  if (!real?.roles.includes("admin")) redirect("/my-day");
+  if (!real?.roles.includes("admin")) redirect("/me");
 
   const profiles = await listProfiles().catch(() => []);
 

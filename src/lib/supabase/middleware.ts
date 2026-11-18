@@ -36,9 +36,12 @@ import type { Database } from "./database.types";
 // work here yet.
 // /review is a Flow Board review page: sample data only, and it 404s
 // anywhere but a preview deployment (see review-pages.ts).
+// /p is each person's own link to their page. It is not a way in: it shows
+// the sign-in form with their email filled in, then sends them to their own
+// role page. Signed out, it must reach that form, not the plain sign-in page.
 // /stop is the way out of a cold email to a property manager. Same reason as
 // /u: they have no account and must never meet a sign-in wall.
-export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/flyer", "/promote", "/r", "/w", "/u", "/my", "/tip", "/salt", "/receipt", "/prep", "/offer", "/quote", "/done", "/crew", "/careers", "/mow", "/stop", "/privacy", "/site", "/rate", "/review"] as const;
+export const PUBLIC_PREFIXES = ["/login", "/start", "/book", "/proposal", "/r", "/u", "/my", "/tip", "/receipt", "/prep", "/done", "/careers", "/stop", "/privacy", "/rate", "/p"] as const;
 
 export function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

@@ -110,8 +110,8 @@ export async function applyForPosition(input: {
 /**
  * The storage's own cap on one upload (the project setting, 50 MB), so a
  * video over it is turned away before it is sent rather than after. The
- * page records at a bitrate that keeps a couple of minutes well under it;
- * a full-quality phone recording can be bigger and goes as a link.
+ * page records at a bitrate that keeps a couple of minutes well under it.
+ * Videos are recorded in the page only: no file uploads, no links.
  */
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const VIDEO_TYPES: Record<string, string> = {
@@ -135,12 +135,13 @@ const CLOSED = "This application is closed. If that's a surprise, reply to our e
  * A place in storage for the video, which the phone uploads to directly. A
  * video is far too big to pass through a server action.
  */
-export async function startApplicantVideo(input: { token: string; type: string; size: number }): Promise<
+export async function startApplicantVideo(input: { token: string; type: string; size: number; purpose?: "intro" | "skills" }): Promise<
   { ok: true; path: string; uploadToken: string } | { ok: false; error: string }
 > {
   const applicant = await applicantFor(input.token);
   if (!applicant) return { ok: false, error: "That link has expired or was never ours." };
-  if (applicant.stage !== "video_requested" && applicant.stage !== "video_submitted") return { ok: false, error: CLOSED };
+  const open = input.purpose === "skills" ? applicant.stage === "working_interview" : applicant.stage === "video_requested" || applicant.stage === "video_submitted";
+  if (!open) return { ok: false, error: CLOSED };
   const ext = VIDEO_TYPES[input.type.split(";")[0].trim().toLowerCase()];
   if (!ext) return { ok: false, error: "That isn't a video we can play. Try an MP4 or a video from your phone's camera." };
   if (!(input.size > 0)) return { ok: false, error: "Choose a video first." };
@@ -168,18 +169,26 @@ export async function finishApplicantVideo(input: { token: string; path: string 
   return markVideoIn(applicant, { video_path: input.path, video_link: null });
 }
 
-/** A video too big to upload, sent as a link instead (Google Drive, YouTube unlisted, iCloud). */
-export async function submitApplicantVideoLink(input: { token: string; link: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * Their recorded answer to the skills question, kept with the application.
+ * Recorded in the page only: there is no upload or link path for it.
+ */
+export async function finishSkillsVideo(input: { token: string; path: string }): Promise<{ ok: true } | { ok: false; error: string }> {
   const applicant = await applicantFor(input.token);
   if (!applicant) return { ok: false, error: "That link has expired or was never ours." };
-  let url: URL;
-  try {
-    url = new URL(input.link.trim());
-  } catch {
-    return { ok: false, error: "That doesn't look like a link. Copy the whole thing, starting with https://" };
+  if (applicant.stage !== "working_interview") return { ok: false, error: CLOSED };
+  if (!new RegExp(`^${applicant.id}/[0-9a-f-]{36}\\.(mp4|mov|webm|3gp|m4v)$`).test(input.path)) {
+    return { ok: false, error: "That recording isn't from this application." };
   }
-  if (url.protocol !== "https:") return { ok: false, error: "Use the https:// link to your video." };
-  return markVideoIn(applicant, { video_path: null, video_link: url.toString().slice(0, 500) });
+  const { data: signed } = await applicant.admin.storage.from("applicant-videos").createSignedUrl(input.path, 60);
+  if (!signed?.signedUrl) return { ok: false, error: "Your recording didn't finish sending. Check your signal and try again." };
+  const { data } = await applicant.admin.from("job_applicants").select("answers").eq("id", applicant.id).maybeSingle();
+  const now = new Date().toISOString();
+  const answers = { ...((data?.answers ?? {}) as Record<string, string>), skills_path: input.path, skills_at: now };
+  const { error } = await applicant.admin.from("job_applicants").update({ answers, updated_at: now }).eq("id", applicant.id);
+  if (error) return { ok: false, error: "Couldn't save your recording. Try again in a moment." };
+  await applicant.admin.from("applicant_events").insert({ applicant_id: applicant.id, kind: "skills_answered", detail: null });
+  return { ok: true };
 }
 
 async function markVideoIn(

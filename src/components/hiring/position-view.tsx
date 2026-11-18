@@ -2,7 +2,8 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import type { Position } from "@/lib/hiring/positions";
-import { publicPayLine } from "@/lib/hiring/indeed-ad";
+import { GROWTH_INTRO, growthThen, publicPayLine } from "@/lib/hiring/indeed-ad";
+import { CULTURE } from "@/lib/hiring/role-docs";
 import { careersHref } from "@/lib/hiring/links";
 import { ApplyForm } from "@/components/hiring/apply-form";
 
@@ -44,10 +45,30 @@ export function PositionView({
             ))}
           </ul>
         </div>
+        <div>
+          <h2 className="font-semibold">What we care about</h2>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            {CULTURE.map((c) => (
+              <li key={c.value}>{c.value}</li>
+            ))}
+          </ul>
+        </div>
         {publicPayLine(position) && (
           <div>
             <h2 className="font-semibold">Pay</h2>
             <p>{publicPayLine(position)}</p>
+          </div>
+        )}
+        {position.growth && (
+          <div>
+            <h2 className="font-semibold">Where this goes</h2>
+            <p>{GROWTH_INTRO}</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {position.growth.stages.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+            <p className="mt-1">{growthThen(position.growth)}</p>
           </div>
         )}
         <div>

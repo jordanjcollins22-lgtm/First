@@ -6,6 +6,8 @@ import { SetupRequiredNotice } from "@/components/setup-required-notice";
 import { listApplicants } from "@/lib/data/hiring";
 import { OPEN_POSITIONS } from "@/lib/hiring/positions";
 import { indeedAd, needsPay } from "@/lib/hiring/indeed-ad";
+import { reviewAd } from "@/lib/hiring/ad-review";
+import { listNewHires } from "@/lib/data/journey";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { appUrl } from "@/lib/app-url";
 import { HiringBoard } from "@/components/hiring/hiring-board";
@@ -31,7 +33,7 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
     await catchUpIndeedMail(createAdminClient(), profile.organization_id).catch((err) => console.error("Indeed catch-up failed:", err));
   }
 
-  const [applicants, base, org, invites] = await Promise.all([
+  const [applicants, base, org, invites, newHires] = await Promise.all([
     listApplicants(profile.organization_id).catch((err) => {
       console.error("Hiring failed to load:", err);
       return null;
@@ -42,11 +44,13 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
       console.error("Indeed invites failed to load:", err);
       return null;
     }),
+    listNewHires(profile.organization_id).catch(() => null),
   ]);
 
   const ads = OPEN_POSITIONS.map((p) => {
     const applyUrl = appUrl(base, `/careers/${p.key}?src=indeed`);
-    return { key: p.key, ...indeedAd(p, { business: org?.name ?? "JS Landscaping MD", area: "Harford County, Maryland", applyUrl }), applyUrl, needsPay: needsPay(p) };
+    const ad = indeedAd(p, { business: org?.name ?? "JS Landscaping MD", area: "Harford County, Maryland", applyUrl });
+    return { key: p.key, ...ad, applyUrl, needsPay: needsPay(p), checks: reviewAd(p, ad.body) };
   });
 
   return (
@@ -56,6 +60,7 @@ export default async function HiringPage({ searchParams }: { searchParams?: Prom
       careersUrl={appUrl(base, "/careers")}
       indeedInvites={invites}
       hiringInbox={HIRING_INBOX}
+      newHires={newHires}
       positionFilter={positionFilter}
       stageFilter={stageFilter}
     />

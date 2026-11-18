@@ -17,6 +17,7 @@ import { publicPayLine } from "@/lib/hiring/indeed-ad";
 import { applicantEmail, stageAfter, type ApplicantEmailKind } from "@/lib/hiring/emails";
 import { isStage, nextStages, type Stage } from "@/lib/hiring/screening";
 import { onApplicantHired } from "@/lib/data/onboarding";
+import { APPLICANT_CALLS, callNeededToMove } from "@/lib/hiring/recordings";
 
 /**
  * The reviewer's side of hiring: rate and note, move an application along,
@@ -88,6 +89,20 @@ async function moveTo(
   profile: { id: string; full_name: string | null },
   interviewAt: string | null
 ): Promise<Result> {
+  // Every interview call is recorded: going forward waits on the recording.
+  const needed = callNeededToMove(from, to);
+  if (needed) {
+    const { data: recorded } = await admin
+      .from("applicant_events")
+      .select("id")
+      .eq("applicant_id", id)
+      .eq("kind", "call_recorded")
+      .filter("detail->>call", "eq", needed)
+      .limit(1);
+    if (!recorded || recorded.length === 0) {
+      return { ok: false, message: `Record the ${APPLICANT_CALLS[needed].toLowerCase()} first. Every interview call is recorded, with their OK.` };
+    }
+  }
   const now = new Date().toISOString();
   const decided = to === "hired" || to === "not_a_fit" || to === "withdrawn";
   const { error } = await admin
@@ -135,7 +150,9 @@ export async function previewApplicantEmail(input: { id: string; kind: Applicant
   if (!position || !isStage(row.stage)) return { ok: false, message: "That application is for a job we no longer list." };
   if (!allowedFor(input.kind, row.stage)) return { ok: false, message: "That email isn't a step this application can take from where it is." };
   if (input.kind === "interview" && !input.interviewAt) return { ok: false, message: "Pick the interview day and time first." };
+  if (input.kind === "skills_question" && !position.skillsQuestion) return { ok: false, message: "That job's skills step isn't a question by link." };
 
+  const base = await outboundBaseUrl();
   const { data: org } = await found.admin.from("organizations").select("name, business_phone").eq("id", profile.organization_id).maybeSingle();
   const business = (org as { name?: string } | null)?.name ?? "JS Landscaping MD";
   const when = input.interviewAt ? shortWhen(parseAsBusinessTime(input.interviewAt)) : null;
@@ -148,7 +165,10 @@ export async function previewApplicantEmail(input: { id: string; kind: Applicant
     sender: profile.full_name?.trim().split(/\s+/)[0] ?? null,
     when,
     place: input.place?.trim() || null,
-    videoUrl: appUrl(await outboundBaseUrl(), `/careers/video/${row.token}`),
+    videoUrl: appUrl(base, `/careers/video/${row.token}`),
+    skillsUrl: appUrl(base, `/careers/skills/${row.token}`),
+    skillsQuestion: position.skillsQuestion ?? null,
+    remote: position.remoteInterviews ?? false,
     pay: publicPayLine(position),
     positionKey: position.key,
   });
@@ -208,7 +228,7 @@ export async function sendApplicantEmail(input: {
   await admin.from("applicant_events").insert({
     applicant_id: row.id,
     kind: "email_sent",
-    detail: { kind: input.kind, subject, provider_id: sent.id },
+    detail: { kind: input.kind, subject, body, provider_id: sent.id },
     actor: profile.id,
     actor_name: profile.full_name || null,
   });

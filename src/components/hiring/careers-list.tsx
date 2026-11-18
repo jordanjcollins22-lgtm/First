@@ -20,7 +20,7 @@ export function CareersList({ orgName, keep }: { orgName: string; keep: { org: s
       </header>
       <p className="text-sm text-muted-foreground">
         Pick the job you want. Applying takes about 3 minutes. If you&apos;re a fit, we&apos;ll ask for a short video from your
-        phone, then meet you in person.
+        phone, then interview you (by phone or video call for affiliates).
       </p>
       <ul className="flex flex-col gap-3">
         {OPEN_POSITIONS.map((p) => (

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { previewApplicantEmail, saveApplicantReview, sendApplicantEmail, setApplicantStage } from "@/lib/actions/hiring-actions";
 import type { ApplicantEmailKind } from "@/lib/hiring/emails";
 import type { Stage } from "@/lib/hiring/screening";
+import { skillsStepFor } from "@/lib/hiring/screening";
 
 type Draft = { kind: ApplicantEmailKind; to: string; subject: string; body: string; interviewAt: string | null };
 
@@ -34,7 +35,31 @@ const QUIET_LABEL: Partial<Record<Stage, string>> = {
  * What you thought of them, and what happens next. An email is always shown
  * word for word, can be changed, and goes only on Send.
  */
-export function ApplicantReview({ id, stage, next, rating, note }: { id: string; stage: Stage; next: Stage[]; rating: number | null; note: string }) {
+export function ApplicantReview({
+  id,
+  stage,
+  next,
+  rating,
+  note,
+  position = null,
+}: {
+  id: string;
+  stage: Stage;
+  next: Stage[];
+  rating: number | null;
+  note: string;
+  /** The job they applied for: an affiliate's skills step is a question by link, and their interviews are calls. */
+  position?: string | null;
+}) {
+  // An affiliate is hired from anywhere: the skills step is a question sent by
+  // email, and the owner talk is a call.
+  const remote = position === "affiliate";
+  const emailFor = (s: Stage) => (remote && s === "working_interview" ? { kind: "skills_question" as const, label: "Send the skills question" } : EMAIL_FOR[s]);
+  const quietLabel = (s: Stage) => {
+    if (remote && s === "working_interview") return undefined;
+    if (remote && s === "owner_talk") return "On to the owner call (phone or video)";
+    return QUIET_LABEL[s];
+  };
   const router = useRouter();
   const [stars, setStars] = useState<number | null>(rating);
   const [text, setText] = useState(note);
@@ -118,8 +143,8 @@ export function ApplicantReview({ id, stage, next, rating, note }: { id: string;
                 <Input type="datetime-local" value={interviewAt} onChange={(e) => setInterviewAt(e.target.value)} />
               </label>
               <label className="grid gap-1 text-sm font-medium">
-                Where (optional)
-                <Input placeholder="Address, or leave blank" value={place} onChange={(e) => setPlace(e.target.value)} />
+                {remote ? "Video call link (optional)" : "Where (optional)"}
+                <Input placeholder={remote ? "Leave blank to phone them" : "Address, or leave blank"} value={place} onChange={(e) => setPlace(e.target.value)} />
               </label>
               <Button type="button" className="sm:col-span-2" disabled={busy || !interviewAt} onClick={() => preview("interview")}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -129,20 +154,23 @@ export function ApplicantReview({ id, stage, next, rating, note }: { id: string;
           )}
           <div className="flex flex-wrap gap-2">
             {next
-              .filter((s) => s !== "interview" && EMAIL_FOR[s])
+              .filter((s) => s !== "interview" && emailFor(s))
               .map((s) => (
-                <Button key={`email-${s}`} type="button" variant={s === "not_a_fit" ? "outline" : "secondary"} disabled={busy} onClick={() => preview(EMAIL_FOR[s]!.kind)}>
-                  {EMAIL_FOR[s]!.label}
+                <Button key={`email-${s}`} type="button" variant={s === "not_a_fit" ? "outline" : "secondary"} disabled={busy} onClick={() => preview(emailFor(s)!.kind)}>
+                  {emailFor(s)!.label}
                 </Button>
               ))}
             {next
-              .filter((s) => QUIET_LABEL[s])
+              .filter((s) => quietLabel(s))
               .map((s) => (
                 <Button key={`quiet-${s}`} type="button" variant="ghost" disabled={busy} onClick={() => quiet(s)}>
-                  {QUIET_LABEL[s]}
+                  {quietLabel(s)}
                 </Button>
               ))}
           </div>
+          {(stage === "interview" || stage === "working_interview") && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">{skillsStepFor(position)}</p>
+          )}
         </div>
       )}
 

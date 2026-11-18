@@ -90,6 +90,28 @@ export const STAGES = {
 
 export type Stage = keyof typeof STAGES;
 
+/**
+ * A stage's name for one job. The skills step is a paid half-day working
+ * interview on a crew, but an affiliate works from anywhere, so theirs is one
+ * skills question they answer from their phone by link.
+ */
+export function stageLabel(stage: Stage, position: string | null | undefined): string {
+  if (stage === "working_interview" && position === "affiliate") return "Skills question";
+  if (stage === "owner_talk" && position === "affiliate") return "Owner call";
+  return STAGES[stage];
+}
+
+/** What happens at the skills step, for the person running it. */
+export function skillsStepFor(position: string | null | undefined): string {
+  if (position === "affiliate") {
+    return "Skills question: one real situation, sent by email. They tap record and answer out loud from their phone, and the recording shows up on this page. Look for friendly and natural, not salesy, and their link shared. Interviews for this job are phone or video calls, never in person.";
+  }
+  if (position === "account-manager") {
+    return "Working interview: a paid half-day running the front desk and next week's schedule with you. Look for clear, kind replies and nothing missed.";
+  }
+  return "Working interview: a paid half-day on a real crew. Look for showing up on time, keeping pace, and leaving the site clean.";
+}
+
 export function isStage(value: string): value is Stage {
   return value in STAGES;
 }
@@ -97,9 +119,9 @@ export function isStage(value: string): value is Stage {
 /**
  * Where an application can go from where it is. The two ends are the person's
  * call, not the form's. The middle follows the hiring steps: first interview,
- * a paid half-day working interview, the owner talk, then the offer. An
- * affiliate never works on a crew, so they can go from the first interview
- * straight to the owner talk.
+ * a paid half-day working interview (a practice round for an affiliate), the
+ * owner talk, then the offer. Going from the first interview straight to the
+ * owner talk is still allowed, for someone the owner already knows.
  */
 export function nextStages(stage: Stage): Stage[] {
   switch (stage) {

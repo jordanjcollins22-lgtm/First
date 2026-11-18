@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     const result = await syncLink(admin, link as BankLinkRow);
     const { error: refreshError } = await admin.rpc("summary_refresh", { org: profile.organization_id, the_key: "ops_pulse" });
     if (refreshError) console.error("[bank] pulse refresh after link:", refreshError.message);
-    for (const page of ["/my-day", "/dashboard"]) revalidatePath(page);
+    for (const page of ["/me", "/dashboard"]) revalidatePath(page);
     return NextResponse.json({ ok: true, institution: body.institution?.name ?? null, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

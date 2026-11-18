@@ -1,3 +1,5 @@
+import { recordingNotice } from "@/lib/hiring/recordings";
+
 /**
  * The emails an applicant can get, word for word. Each one the reviewer
  * starts is shown to them first, can be changed, and goes when they press
@@ -5,7 +7,7 @@
  * someone replies "I accept" to their offer.
  */
 
-export type ApplicantEmailKind = "interview" | "not_a_fit" | "video_request" | "offer";
+export type ApplicantEmailKind = "interview" | "not_a_fit" | "video_request" | "offer" | "skills_question";
 
 /** How long an offer stays open, in hours. */
 export const OFFER_OPEN_HOURS = 48;
@@ -23,6 +25,11 @@ export interface ApplicantEmailInput {
   place?: string | null;
   /** The video page. Video request only. */
   videoUrl?: string | null;
+  /** The skills question page and the question. Skills question only. */
+  skillsUrl?: string | null;
+  skillsQuestion?: string | null;
+  /** Interviews by phone or video call, not in person. */
+  remote?: boolean;
   /** The pay, as the careers page says it. Offer only. */
   pay?: string | null;
   /** Which job, for what the first days look like. Offer only. */
@@ -57,14 +64,22 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
 
   if (input.kind === "interview") {
     const when = input.when ? ` on ${input.when}` : "";
-    const where = input.place ? `\n\nWhere: ${input.place}` : "\n\nWe'll send you the address the day before.";
+    const where = input.remote
+      ? input.place
+        ? `\n\nJoin here: ${input.place}`
+        : "\n\nWe'll call you at the number you gave us."
+      : input.place
+        ? `\n\nWhere: ${input.place}`
+        : "\n\nWe'll send you the address the day before.";
+    const meet = input.remote ? "talk with you on a quick phone or video call" : "meet you in person";
     return {
       subject: `Interview for ${input.positionTitle} with ${input.business}`,
       body:
         `Hi ${input.firstName},\n\n` +
-        `Thanks for your video. We'd like to meet you in person for the ${input.positionTitle} job${when}.` +
+        `Thanks for your video. We'd like to ${meet} for the ${input.positionTitle} job${when}.` +
         where +
         `\n\nPlease reply to confirm that time works.${call}\n\n` +
+        `${recordingNotice(input.business)}\n\n` +
         `See you soon,\n${sign}`,
     };
   }
@@ -80,7 +95,21 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
         `${firstDaysFor(input.positionKey)}\n\n` +
         (gear ? `${gear}\n\n` : "") +
         `To accept, just reply to this email with "I accept". This offer is open for ${OFFER_OPEN_HOURS} hours, and you can start within a week of saying yes.${call}\n\n` +
+        `${recordingNotice(input.business)}\n\n` +
         `We're glad you're joining us,\n${sign}`,
+    };
+  }
+
+  if (input.kind === "skills_question") {
+    return {
+      subject: `One question for the ${input.positionTitle} job with ${input.business}`,
+      body:
+        `Hi ${input.firstName},\n\n` +
+        `Thanks for talking with us. The next step is one quick question you answer from your phone: open the link, tap record and tell us what you'd say. It takes about five minutes.\n\n` +
+        `The question: ${input.skillsQuestion ?? ""}\n\n` +
+        `Record your answer here: ${input.skillsUrl ?? ""}\n\n` +
+        `Answer the way you really would. There's no wrong way to say it.${call}\n\n` +
+        `Thanks,\n${sign}`,
     };
   }
 
@@ -107,8 +136,9 @@ export function applicantEmail(input: ApplicantEmailInput): { subject: string; b
 }
 
 /** Where an email moves the application once it is sent. */
-export function stageAfter(kind: ApplicantEmailKind): "interview" | "not_a_fit" | "video_requested" | "offer_sent" {
+export function stageAfter(kind: ApplicantEmailKind): "interview" | "not_a_fit" | "video_requested" | "offer_sent" | "working_interview" {
   if (kind === "interview") return "interview";
+  if (kind === "skills_question") return "working_interview";
   if (kind === "not_a_fit") return "not_a_fit";
   if (kind === "offer") return "offer_sent";
   return "video_requested";
@@ -155,6 +185,7 @@ export function welcomeEmail(input: { firstName: string; positionTitle: string; 
       `Before day one:\n${before.map((b) => `- ${b}`).join("\n")}\n\n` +
       `Day one:\n${dayOne.map((b) => `- ${b}`).join("\n")}\n\n` +
       `${call}` +
+      `${recordingNotice(input.business)}\n\n` +
       `See you soon,\n${sign}`,
   };
 }

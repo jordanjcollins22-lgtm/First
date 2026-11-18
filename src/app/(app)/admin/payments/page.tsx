@@ -5,6 +5,9 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { getCurrentProfile, listProfiles } from "@/lib/data/team";
 import { advanceOwed, listAdvances, type AdvanceRow } from "@/lib/data/commission-advances";
 import { AdvanceApprovals } from "@/components/payments/commission-advances";
+import { PayoutRequests } from "@/components/payments/payout-requests";
+import { listPayoutRequests } from "@/lib/data/payout-requests";
+import type { PayoutRequestRow } from "@/lib/wallet";
 import { getPaymentsData } from "@/lib/data/payments";
 import { getCommissionByManager, type ManagerCommission } from "@/lib/data/commission";
 import { SetupRequiredNotice } from "@/components/setup-required-notice";
@@ -45,7 +48,7 @@ export default async function PaymentsPage({
   const profile = await getCurrentProfile();
   const isAdmin = Boolean(profile?.roles.includes("admin"));
   const allowed = isAdmin || profile?.roles.includes("overhead");
-  if (!allowed) redirect("/my-day");
+  if (!allowed) redirect("/me");
 
   // Before the numbers are read, ask Stripe for anything it was paid that we
   // have no row for. The webhook is how this is meant to arrive and for a
@@ -81,6 +84,8 @@ export default async function PaymentsPage({
     console.error("Advances failed to load:", err);
     return [] as AdvanceRow[];
   });
+  // Wallet payout requests: a table of its own, so a missing migration costs only this.
+  const payoutRequests = await listPayoutRequests().catch(() => [] as PayoutRequestRow[]);
   const health = organization
     ? await paymentsHealthFor(organization.id).catch(() => null)
     : null;
@@ -129,6 +134,12 @@ export default async function PaymentsPage({
         since={downSince}
       />
       <WebhookBanner verdict={webhook} />
+      {/* Wallet payouts: approve, send, then mark sent. */}
+      {payoutRequests.length > 0 && (
+        <div className="mb-4">
+          <PayoutRequests requests={payoutRequests} />
+        </div>
+      )}
       {/* Advances on commission: approve, pay, and the ones done with. */}
       {advances.length > 0 && (
         <div className="mb-4">
