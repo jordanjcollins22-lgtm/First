@@ -88,7 +88,8 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
               {zips.rows.map((z) => (
                 <Place key={z.zip} title={`${z.zip} · ${z.town}`} b={z} clients={z.clients} />
               ))}
-              {zips.elsewhere.amount > 0 && <Place title="Outside Harford County" b={zips.elsewhere} />}
+              {zips.elsewhere.amount > 0 && <Place title="Outside Harford County or no address" b={zips.elsewhere} />}
+              {zips.unmatched > 0 && <Row a="Checks and Zelle, no client yet" b={money(zips.unmatched)} />}
             </Sub>
           </>
         ) : (
