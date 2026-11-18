@@ -39,6 +39,10 @@ export async function PartnerPhone({ profile }: { profile: Profile }) {
   );
 }
 
+/** The company fee: 8% of every dollar of revenue, every location (home included). */
+export const COMPANY_FEE_RATE = 0.08;
+export const companyFee = (revenue: number) => Math.round(revenue * COMPANY_FEE_RATE * 100) / 100;
+
 /** One location or ZIP code: its revenue on the line, and tap to see jobs and average ticket. */
 function Place({ title, b, clients }: { title: string; b: Billed; clients?: number }) {
   return (
@@ -97,8 +101,8 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
         )}
       </Card>
       <Card title="Company fee earned">
-        <Big>$0</Big>
-        <Sm>this year, 8% of every dollar a partner location bills. No partner locations yet.</Sm>
+        <Big>{zips ? money(companyFee(zips.amount)) : "—"}</Big>
+        <Sm>{zips ? `8% of all revenue, ${range.label}` : "Couldn't load"}</Sm>
       </Card>
       <Card title="Waiting on you">
         {asked.map((p) => (
