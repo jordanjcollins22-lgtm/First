@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ImagePlus, Loader2, Share2, X } from "lucide-react";
+import { Check, ClipboardPaste, Copy, ImagePlus, Loader2, Share2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,36 @@ export function ReferralMessageCard({
   const topRef = useRef<HTMLDivElement>(null);
   const shotName = shot?.name ?? sample?.shotName ?? null;
   const them = firstNameOf(name) || "them";
+
+  // On the screenshot step, a pasted image (Ctrl+V, or Paste from the phone's menu) becomes the screenshot.
+  useEffect(() => {
+    if (step !== "shot") return;
+    const onPaste = (e: ClipboardEvent) => {
+      const file = imageFrom(e.clipboardData);
+      if (!file) return;
+      e.preventDefault();
+      setError(null);
+      setShot(file);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [step]);
+
+  async function pasteShot() {
+    setError(null);
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (!type) continue;
+        const blob = await item.getType(type);
+        return setShot(new File([blob], `pasted-screenshot.${type.split("/")[1] || "png"}`, { type }));
+      }
+      setError("There's no picture copied. Copy the screenshot first, then tap Paste.");
+    } catch {
+      setError("Your phone didn't allow pasting here. Press and hold the box below, then tap Paste.");
+    }
+  }
 
   function go(next: ReferralStep) {
     setError(null);
@@ -202,7 +232,7 @@ export function ReferralMessageCard({
         <>
           <Eyebrow>Step 3 of 3</Eyebrow>
           <p className="text-base font-semibold">Add a screenshot of who you&apos;re answering</p>
-          <p className="-mt-2 text-sm text-muted-foreground">Optional. A post or text from them, so we can see who you sent it to.</p>
+          <p className="-mt-2 text-sm text-muted-foreground">Optional. A post or text from them, so we can see who you sent it to. Paste it or upload it.</p>
           <input
             ref={fileRef}
             type="file"
@@ -226,9 +256,24 @@ export function ReferralMessageCard({
               </button>
             </div>
           ) : (
-            <Button type="button" variant="outline" className="h-11" onClick={() => fileRef.current?.click()}>
-              <ImagePlus className="mr-1 h-5 w-5" /> Add a screenshot
-            </Button>
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" className="h-11" onClick={pasteShot}>
+                  <ClipboardPaste className="mr-1 h-5 w-5" /> Paste
+                </Button>
+                <Button type="button" variant="outline" className="h-11" onClick={() => fileRef.current?.click()}>
+                  <ImagePlus className="mr-1 h-5 w-5" /> Upload
+                </Button>
+              </div>
+              <textarea
+                aria-label="Paste a screenshot here"
+                rows={1}
+                value=""
+                onChange={() => undefined}
+                placeholder="Or press and hold here, then Paste"
+                className="w-full resize-none rounded-lg border border-dashed bg-background px-3 py-2 text-center text-sm text-muted-foreground"
+              />
+            </>
           )}
           <Button type="button" className="h-12 text-base" disabled={busy} onClick={submit}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -245,6 +290,18 @@ export function ReferralMessageCard({
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
+}
+
+/** The first picture in a paste, if there is one. */
+function imageFrom(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const item of Array.from(data.items)) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) return file.name && file.name !== "image.png" ? file : new File([file], `pasted-screenshot.${item.type.split("/")[1] || "png"}`, { type: item.type });
+    }
+  }
+  return null;
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
