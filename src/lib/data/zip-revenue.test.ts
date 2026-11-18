@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { billed, isFamily, pickRange, zipOf } from "./zip-revenue";
+import { billed, isClientDeposit, isFamily, pickRange, zipOf } from "./zip-revenue";
 
 describe("zipOf", () => {
   it("reads the ZIP at the end of an address", () => {
@@ -40,5 +40,15 @@ describe("billed", () => {
   });
   it("is zero with nothing billed", () => {
     expect(billed(undefined)).toEqual({ amount: 0, jobs: 0, payers: 0, avgTicket: 0 });
+  });
+});
+
+describe("isClientDeposit", () => {
+  it("counts checks, deposits and Zelle", () => {
+    for (const n of ["MOBILE BANKING DEPOSIT", "Deposit", "Zelle JILL LATTERI"]) expect(isClientDeposit(n)).toBe(true);
+  });
+  it("skips Stripe payouts, transfers, corrections and refunds", () => {
+    for (const n of ["STRIPE TRANSFER", "838683 INTERNET XFER FR BUSINESS CHECKING", "POSTING CORRECTION", "ATM SURCHARGE FEE REFUND", "MOBILE PAYMENT - THANK YOU"])
+      expect(isClientDeposit(n)).toBe(false);
   });
 });
