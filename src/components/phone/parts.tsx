@@ -79,9 +79,9 @@ export function Drop({ title, sum, children, tour }: { title: string; sum?: Reac
 }
 
 /** A drop-down inside a card (a crew, a list). Every one starts closed. */
-export function Sub({ title, sum, children, style }: { title: React.ReactNode; sum?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
+export function Sub({ title, sum, children, style, open }: { title: React.ReactNode; sum?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; open?: boolean }) {
   return (
-    <details className="vx-crew" style={style}>
+    <details className="vx-crew" style={style} open={open}>
       <summary>
         <span>{title}</span>
         <b>{sum}</b>
