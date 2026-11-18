@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AFFILIATIONS, affiliationLabel, isAffiliation, referralMessage } from "@/lib/referral-message";
+import { AFFILIATIONS, affiliationLabel, affiliationOf, isAffiliation, referralMessage } from "@/lib/referral-message";
 
 const base = { name: "pat smith", link: "https://example.com/r/abc1234", business: "JS Landscaping MD", from: "Morgan Sample" };
 
@@ -23,6 +23,16 @@ describe("referral message", () => {
     expect(referralMessage({ ...base, affiliation: "coworker" })).toContain("from work");
   });
 
+  it("answers a message differently from a post", () => {
+    const dm = referralMessage({ ...base, affiliation: "online_message" });
+    const post = referralMessage({ ...base, affiliation: "online_post" });
+    expect(dm).toContain("Thanks for reaching out");
+    expect(dm).not.toContain("post");
+    expect(post).toContain("I saw your post");
+    expect(dm.startsWith("Hi Pat!")).toBe(true);
+    expect(post.startsWith("Hi Pat!")).toBe(true);
+  });
+
   it("is laid out like a text: greeting alone, blank lines between parts, link on its own line", () => {
     const m = referralMessage({ ...base, affiliation: "neighbor" });
     const parts = m.split("\n\n");
@@ -36,5 +46,10 @@ describe("referral message", () => {
     expect(isAffiliation("neighbor")).toBe(true);
     expect(isAffiliation("boss")).toBe(false);
     expect(affiliationLabel("online")).toBe("Someone online");
+    expect(isAffiliation("online")).toBe(false);
+    expect(affiliationOf("Someone online")).toBe("online_post");
+    expect(affiliationOf("Messaged me online")).toBe("online_message");
+    expect(affiliationOf("Neighbor")).toBe("neighbor");
+    expect(affiliationOf(null)).toBe("other");
   });
 });

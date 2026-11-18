@@ -70,3 +70,8 @@
 .vx-app .vx-dates button{font:700 13px var(--display);background:var(--teal);color:var(--surface);border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
 .vx-app .vx-seg a .vx-pending{opacity:.45;animation:vx-blink 1s ease-in-out infinite}@keyframes vx-blink{50%{opacity:1}}
 .vx-app .vx-fee{border-top:1px solid var(--line,#dde3dd);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:2px}
+/* People you sent it to: tap a person to copy their message again. */
+.vx-app button.vx-sent{width:100%;background:none;border-left:0;border-right:0;border-bottom:0;color:inherit;font:inherit;font-size:13px;text-align:left;padding-left:0;padding-right:0;padding-bottom:0;cursor:pointer}
+.vx-app .vx-sent-open{display:flex;flex-direction:column;gap:6px;margin:6px 0 4px}
+.vx-app .vx-sent-open textarea{width:100%;resize:vertical;font:inherit;font-size:13px;line-height:1.45;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+.vx-app .vx-sent-open .vx-cta{display:flex;align-items:center;justify-content:center;gap:6px}
