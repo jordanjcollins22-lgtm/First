@@ -7,7 +7,8 @@ import { getCurrentProfile } from "@/lib/data/team";
 import { bookingSlug, getCurrentOrganization } from "@/lib/data/organizations";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { makeCode, trackedLink } from "@/lib/outreach-links";
-import { affiliationLabel, isAffiliation, referralMessage } from "@/lib/referral-message";
+import { affiliationLabel, isAffiliation, referralMessage, senderRoleOf } from "@/lib/referral-message";
+import { v2RolesOf } from "@/lib/v2-roles";
 
 /**
  * An affiliate sending their link to someone they know. Each one gets its own
@@ -43,7 +44,7 @@ export async function startReferral(input: { name: string; affiliation: string; 
     if (!error) {
       const link = trackedLink(baseUrl, code);
       revalidatePath("/");
-      return { ok: true, link, message: referralMessage({ name, affiliation: input.affiliation, link, business: organization.name, from: profile.full_name ?? null }) };
+      return { ok: true, link, message: referralMessage({ name, affiliation: input.affiliation, link, business: organization.name, from: profile.full_name ?? null, role: senderRoleOf(v2RolesOf(profile)) }) };
     }
     if (!/duplicate|unique/i.test(error.message)) return { ok: false, error: "Couldn't make your link just now. Try again." };
     code = makeCode();

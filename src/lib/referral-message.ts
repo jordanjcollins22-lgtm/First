@@ -41,38 +41,66 @@ export function firstNameOf(name: string): string {
   return first ? first[0].toUpperCase() + first.slice(1) : "";
 }
 
+/** The sender's position, so the message says who they are to the business. */
+export type SenderRole = "owner" | "account-manager" | "technician" | "affiliate";
+
+/** Their highest position, from the app's role list. */
+export function senderRoleOf(roles: readonly string[]): SenderRole {
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("account-manager")) return "account-manager";
+  if (roles.includes("project-lead") || roles.includes("project-technician")) return "technician";
+  return "affiliate";
+}
+
+/** "I'm the owner of …", "I work with …": who the sender is, by their position. */
+export function whoIAm(role: SenderRole | null | undefined, business: string): string {
+  switch (role) {
+    case "owner":
+      return `I'm the owner of ${business}`;
+    case "account-manager":
+      return `I'm an account manager at ${business}`;
+    case "technician":
+      return `I'm a technician with ${business}`;
+    default:
+      return `I work with ${business}`;
+  }
+}
+
 /**
  * Laid out like a text from a person: the greeting on its own line, a blank
  * line between parts, and their link on a line of its own so it stays tappable.
+ * A post gets a comment under it, so that one answers the post directly rather
+ * than saying it was seen.
  */
-export function referralMessage(input: { name: string; affiliation: Affiliation; link: string; business: string; from: string | null }): string {
+export function referralMessage(input: { name: string; affiliation: Affiliation; link: string; business: string; from: string | null; role?: SenderRole | null }): string {
   const them = firstNameOf(input.name);
   const me = input.from ? firstNameOf(input.from) : null;
   const online = input.affiliation === "online_message" || input.affiliation === "online_post";
   const hi = online ? `Hi ${them || "there"}!` : them ? `Hey ${them}!` : "Hey!";
-  const crew = `${input.business}, a local landscaping crew in Harford County`;
+  const who = whoIAm(input.role, input.business);
+  const local = "a local crew here in Harford County";
   let intro: string;
   switch (input.affiliation) {
     case "neighbor":
-      intro = `It's ${me ?? "your neighbor"} from down the street. I work with ${input.business}, a local crew here in Harford County.`;
+      intro = `It's ${me ?? "your neighbor"} from down the street. ${who}, ${local}.`;
       break;
     case "friend":
-      intro = `I've been working with ${crew}.`;
+      intro = `${who}, a local landscaping crew in Harford County.`;
       break;
     case "family":
-      intro = `You know I've been working with ${input.business}.`;
+      intro = `As you know, ${who}.`;
       break;
     case "coworker":
-      intro = `It's ${me ?? "me"} from work. I also work with ${crew}.`;
+      intro = `It's ${me ?? "me"} from work. ${who}, a local landscaping crew in Harford County.`;
       break;
     case "online_message":
-      intro = `Thanks for reaching out! I work with ${input.business}, a local crew here in Harford County.`;
+      intro = `Thanks for reaching out! ${who}, ${local}.`;
       break;
     case "online_post":
-      intro = `I saw your post asking for help with your yard. I work with ${input.business}, a local crew here in Harford County.`;
+      intro = `${who}, ${local}, and we'd be glad to help with this.`;
       break;
     default:
-      intro = me ? `It's ${me}. I work with ${crew}.` : `I work with ${crew}.`;
+      intro = me ? `It's ${me}. ${who}, a local landscaping crew in Harford County.` : `${who}, a local landscaping crew in Harford County.`;
   }
   const ask = online
     ? `You can get an instant estimate here, and we'll reach out to set up the rest:\n${input.link}`

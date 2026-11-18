@@ -11,7 +11,8 @@ import { myReferrals, type ReferralRow } from "@/lib/data/referrals";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { getCurrentOrganization } from "@/lib/data/organizations";
 import { trackedLink } from "@/lib/outreach-links";
-import { affiliationLabel, affiliationOf, referralMessage } from "@/lib/referral-message";
+import { affiliationLabel, affiliationOf, referralMessage, senderRoleOf } from "@/lib/referral-message";
+import { v2RolesOf } from "@/lib/v2-roles";
 import { walletFor, type Wallet } from "@/lib/wallet";
 import type { Profile } from "@/types/domain";
 
@@ -31,9 +32,10 @@ export async function loadLinkAndWallet(profile: Profile) {
       .catch(() => null),
   ]);
   // The same message they were given when they sent it, so they can copy it again.
+  const role = senderRoleOf(v2RolesOf(profile));
   const withMessage = sent.map((r) =>
     r.code && baseUrl && business
-      ? { ...r, message: referralMessage({ name: r.name, affiliation: affiliationOf(r.affiliation), link: trackedLink(baseUrl, r.code), business, from: profile.full_name ?? null }) }
+      ? { ...r, message: referralMessage({ name: r.name, affiliation: affiliationOf(r.affiliation), link: trackedLink(baseUrl, r.code), business, from: profile.full_name ?? null, role }) }
       : r
   );
   return {

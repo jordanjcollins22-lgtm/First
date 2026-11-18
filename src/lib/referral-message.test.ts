@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AFFILIATIONS, affiliationLabel, affiliationOf, isAffiliation, referralMessage } from "@/lib/referral-message";
+import { AFFILIATIONS, affiliationLabel, affiliationOf, isAffiliation, referralMessage, senderRoleOf } from "@/lib/referral-message";
 
 const base = { name: "pat smith", link: "https://example.com/r/abc1234", business: "JS Landscaping MD", from: "Morgan Sample" };
 
@@ -28,7 +28,8 @@ describe("referral message", () => {
     const post = referralMessage({ ...base, affiliation: "online_post" });
     expect(dm).toContain("Thanks for reaching out");
     expect(dm).not.toContain("post");
-    expect(post).toContain("I saw your post");
+    expect(post).not.toContain("saw your post");
+    expect(post).toContain("glad to help with this");
     expect(dm.startsWith("Hi Pat!")).toBe(true);
     expect(post.startsWith("Hi Pat!")).toBe(true);
   });
@@ -40,6 +41,17 @@ describe("referral message", () => {
     expect(parts).toHaveLength(4);
     expect(m.split("\n")).toContain(base.link);
     expect(m).not.toMatch(/\n{3,}/);
+  });
+
+  it("says who the sender is by their position", () => {
+    expect(referralMessage({ ...base, affiliation: "online_post", role: "owner" })).toContain("I'm the owner of JS Landscaping MD");
+    expect(referralMessage({ ...base, affiliation: "online_message", role: "account-manager" })).toContain("I'm an account manager at JS Landscaping MD");
+    expect(referralMessage({ ...base, affiliation: "neighbor", role: "technician" })).toContain("I'm a technician with JS Landscaping MD");
+    expect(referralMessage({ ...base, affiliation: "friend", role: "affiliate" })).toContain("I work with JS Landscaping MD");
+    expect(senderRoleOf(["owner"])).toBe("owner");
+    expect(senderRoleOf(["account-manager", "affiliate"])).toBe("account-manager");
+    expect(senderRoleOf(["project-technician"])).toBe("technician");
+    expect(senderRoleOf(["affiliate"])).toBe("affiliate");
   });
 
   it("knows the relationships", () => {
