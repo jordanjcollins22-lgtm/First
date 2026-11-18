@@ -42,7 +42,7 @@ yarn-error.log*
 next-env.d.ts
 
 # the extension download, packed from extension/ on every build
-/public/downloads/js-post-finder.zip
+/public/downloads/js-lead-finder.zip
 
 # Research notes and reports from Claude sessions, not app code.
 research_notes/

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lead finder</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="28" height="28" />
+    <div>
+      <div class="title">JS Landscaping lead finder</div>
+      <div class="who" id="who">Checking your app sign-in…</div>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab on" data-tab="find">Find leads</button>
+    <button class="tab" data-tab="posts">Posts <span id="post-count"></span></button>
+    <button class="tab" data-tab="settings">Settings</button>
+  </nav>
+
+  <section id="find">
+    <div class="row">
+      <button id="start" class="primary">Start finding leads</button>
+      <button id="stop" class="ghost" hidden>Stop</button>
+    </div>
+    <p class="state" id="state">Stopped.</p>
+
+    <div class="card turn" id="turn" hidden>
+      <div class="label">Your turn</div>
+      <div class="who-post" id="turn-who"></div>
+      <div class="quote" id="turn-text"></div>
+      <div class="label small">The comment</div>
+      <div class="comment" id="turn-comment"></div>
+      <p class="hint" id="turn-hint">It's typed in the comment box. Read it, change anything, then press Enter on Facebook to post it.</p>
+      <div class="row">
+        <button id="copy" class="ghost">Copy comment</button>
+        <button id="posted" class="primary">I posted it</button>
+        <button id="skip" class="ghost">Skip</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Feed vs search <button id="reset-stats" class="link">reset</button></div>
+      <table class="stats">
+        <thead><tr><th></th><th>Posts read</th><th>Leads</th><th>Leads / hour</th></tr></thead>
+        <tbody id="stats"></tbody>
+      </table>
+      <p class="hint" id="winner"></p>
+    </div>
+
+    <div class="card">
+      <div class="label">Today</div>
+      <p class="hint" id="today"></p>
+    </div>
+
+    <div class="card">
+      <div class="label">What it's doing</div>
+      <ol class="log" id="log"></ol>
+    </div>
+
+    <div class="card">
+      <div class="label">Leads found</div>
+      <ol class="leads" id="leads"></ol>
+    </div>
+  </section>
+
+  <section id="posts" hidden>
+    <div class="card">
+      <div class="label">Scheduling</div>
+      <p class="hint" id="sched-state">Loading…</p>
+      <div class="row">
+        <button id="schedule" class="primary">Schedule approved posts now</button>
+      </div>
+      <p class="hint">Each time you press Start, approved posts are also scheduled, one per open day, on the business Facebook page through Meta's own scheduling. You'll find them in Meta Business Suite's Planner.</p>
+    </div>
+
+    <div class="card" id="meta-setup" hidden>
+      <div class="label">Connect the Facebook page</div>
+      <ol class="steps">
+        <li>On <a href="https://developers.facebook.com/apps" target="_blank">developers.facebook.com/apps</a>, make an app (type: Business) and add Facebook Login for Business.</li>
+        <li>In its Facebook Login settings, add <code>https://app.jslandscapingmd.com/api/meta/callback</code> as a valid redirect address.</li>
+        <li>Paste its App ID and App secret here and press Save.</li>
+        <li>Press Connect and choose the JS Landscaping page.</li>
+      </ol>
+      <label>App ID <input id="app-id" inputmode="numeric" autocomplete="off" /></label>
+      <label>App secret <input id="app-secret" type="password" autocomplete="off" /></label>
+      <div class="row">
+        <button id="save-app" class="ghost">Save</button>
+        <button id="connect" class="primary">Connect Facebook page</button>
+      </div>
+    </div>
+
+    <div id="review"></div>
+  </section>
+
+  <section id="settings" hidden>
+    <div class="card">
+      <div class="label">Keeping the account safe</div>
+      <label>Most comments a day <input id="dailyCap" type="number" min="1" max="20" /></label>
+      <label>Minutes between comments <input id="minutesBetween" type="number" min="2" max="60" /></label>
+      <label>Only posts from the last … days <input id="maxAgeDays" type="number" min="1" max="14" /></label>
+      <label>Minutes on feed or search before comparing <input id="minutesPerVisit" type="number" min="2" max="20" /></label>
+      <p class="hint">You press post on every comment yourself. It stops for a day on its own if Facebook ever says an action is blocked.</p>
+    </div>
+    <div class="card">
+      <div class="label">Searches (one per line)</div>
+      <textarea id="searches" rows="12"></textarea>
+    </div>
+    <div class="row">
+      <button id="save-settings" class="primary">Save</button>
+      <span class="hint" id="saved"></span>
+    </div>
+  </section>
+
+  <script src="shared.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
