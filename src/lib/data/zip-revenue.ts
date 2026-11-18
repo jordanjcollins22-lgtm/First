@@ -113,9 +113,31 @@ export function isClientDeposit(name: string): boolean {
   return /deposit|zelle/i.test(name);
 }
 
+type Charge = { pi: string; amount: number; email: string | null; customer: string | null; zip: string | null; day: string };
+const chargeCache = new Map<string, { at: number; charges: Charge[] }>();
+const CACHE_MS = 5 * 60_000;
+const STRIPE_WAIT_MS = 6_000;
+
+/**
+ * Stripe card payments in the range, kept for 5 minutes so switching periods
+ * is quick. If Stripe takes longer than 6 seconds the page uses the app's own
+ * payment records instead of waiting.
+ */
+async function stripeCharges(fromTs: number, toTs: number): Promise<Charge[] | null> {
+  const key = `${fromTs}-${toTs}`;
+  const hit = chargeCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.charges;
+  const load = listStripeCharges(fromTs, toTs).then((charges) => {
+    chargeCache.set(key, { at: Date.now(), charges });
+    return charges;
+  });
+  const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), STRIPE_WAIT_MS));
+  return Promise.race([load, timeout]);
+}
+
 /** Stripe card payments in the range: amount kept (less refunds), who paid, and the ZIP they gave. */
-async function stripeCharges(fromTs: number, toTs: number) {
-  const out: { pi: string; amount: number; email: string | null; customer: string | null; zip: string | null; day: string }[] = [];
+async function listStripeCharges(fromTs: number, toTs: number): Promise<Charge[]> {
+  const out: Charge[] = [];
   const stripe = stripeClient();
   for await (const c of stripe.charges.list({ created: { gte: fromTs, lt: toTs }, limit: 100 })) {
     if (c.status !== "succeeded" || !c.paid) continue;
