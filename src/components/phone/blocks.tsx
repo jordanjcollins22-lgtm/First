@@ -1,4 +1,5 @@
 import { ReferralMessageCard } from "@/components/v2/panels/role/referral-message-card";
+import { SentPerson } from "@/components/phone/sent-person";
 import { Card, Drop, Row, Sub, money } from "@/components/phone/parts";
 import { PayoutButton } from "@/components/phone/live";
 import { withProgress } from "@/lib/affiliate-home";
@@ -7,7 +8,10 @@ import { getBroughtIn } from "@/lib/data/brought-in";
 import { getCommissionFor } from "@/lib/data/commission";
 import { listPayoutRequests, myPaidOut } from "@/lib/data/payout-requests";
 import { myReferrals, type ReferralRow } from "@/lib/data/referrals";
-import { affiliationLabel } from "@/lib/referral-message";
+import { outboundBaseUrl } from "@/lib/base-url";
+import { getCurrentOrganization } from "@/lib/data/organizations";
+import { trackedLink } from "@/lib/outreach-links";
+import { affiliationLabel, affiliationOf, referralMessage } from "@/lib/referral-message";
 import { walletFor, type Wallet } from "@/lib/wallet";
 import type { Profile } from "@/types/domain";
 
@@ -15,15 +19,25 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: 
 
 /** What every position with a link reads: who they sent it to, what it brought in, and their wallet. */
 export async function loadLinkAndWallet(profile: Profile) {
-  const [sent, projects, commission, requests, paidOut] = await Promise.all([
+  const [sent, projects, commission, requests, paidOut, baseUrl, business] = await Promise.all([
     myReferrals(profile.organization_id, profile.id).catch(() => [] as ReferralRow[]),
     getBroughtIn(profile.id).catch(() => [] as BroughtInRow[]),
     getCommissionFor(profile).catch(() => null),
     listPayoutRequests({ profileId: profile.id }).catch(() => []),
     myPaidOut(profile.id).catch(() => []),
+    outboundBaseUrl().catch(() => ""),
+    getCurrentOrganization()
+      .then((o) => o.name)
+      .catch(() => null),
   ]);
+  // The same message they were given when they sent it, so they can copy it again.
+  const withMessage = sent.map((r) =>
+    r.code && baseUrl && business
+      ? { ...r, message: referralMessage({ name: r.name, affiliation: affiliationOf(r.affiliation), link: trackedLink(baseUrl, r.code), business, from: profile.full_name ?? null }) }
+      : r
+  );
   return {
-    people: withProgress(sent, projects),
+    people: withProgress(withMessage, projects),
     projects,
     commission,
     wallet: commission ? walletFor(commission, requests, paidOut) : null,
@@ -44,13 +58,9 @@ export function SendLink({ people }: { people: ReferralRow[] }) {
         {people.length ? (
           people.map((p, i) => {
             const step = p.progress ?? (p.clicks > 0 ? "opened" : "sent");
-            return (
-              <Row
-                key={p.code ?? i}
-                a={`${p.name} · ${affiliationLabel(p.affiliation)}`}
-                b={`${STEP[step]}${step === "sold" && p.yours != null ? ` · ${money(p.yours)}` : ""}`}
-              />
-            );
+            const a = `${p.name} · ${affiliationLabel(p.affiliation)}`;
+            const b = `${STEP[step]}${step === "sold" && p.yours != null ? ` · ${money(p.yours)}` : ""}`;
+            return p.message ? <SentPerson key={p.code ?? i} a={a} b={b} message={p.message} /> : <Row key={p.code ?? i} a={a} b={b} />;
           })
         ) : (
           <Row a="Nobody yet" />

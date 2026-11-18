@@ -13,6 +13,8 @@ export interface ReferralRow {
   /** How far they got: sent, opened, booked or sold, and the 4% once there's a price. */
   progress?: ReferralProgress;
   yours?: number | null;
+  /** The message that went with it, rebuilt from the row so it can be copied again. */
+  message?: string;
 }
 
 export type ReferralProgress = "sent" | "opened" | "booked" | "sold" | "lost";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ImagePlus, Loader2, Share2, X } from "lucide-react";
 
@@ -37,9 +37,10 @@ export function ReferralMessageCard({
   const [message, setMessage] = useState<string | null>(sample?.message ?? null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, start] = useTransition();
+  const [busy, setBusy] = useState(false);
   const [shot, setShot] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const shotName = shot?.name ?? sample?.shotName ?? null;
   const them = firstNameOf(name) || "them";
 
@@ -52,22 +53,32 @@ export function ReferralMessageCard({
     setError(null);
     if (!name.trim()) return go("name");
     if (!affiliation) return go("how");
-    start(async () => {
-      let screenshotPath: string | null = null;
-      if (shot) {
-        const small = await shrinkImage(shot).catch(() => shot);
-        const slot = await createShotUpload({ fileType: small.type, fileSize: small.size });
-        if (!slot.ok) return setError(slot.error);
-        const sent = await createClient().storage.from("recommendation-shots").uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
-        if (sent.error) return setError("That screenshot wouldn't upload. Try a smaller one, or leave it off.");
-        screenshotPath = slot.path;
+    if (busy) return;
+    setBusy(true);
+    // Not inside a transition: the next one has to be startable straight away,
+    // without waiting on the page to reload its lists.
+    void (async () => {
+      try {
+        let screenshotPath: string | null = null;
+        if (shot) {
+          const small = await shrinkImage(shot).catch(() => shot);
+          const slot = await createShotUpload({ fileType: small.type, fileSize: small.size });
+          if (!slot.ok) return setError(slot.error);
+          const sent = await createClient().storage.from("recommendation-shots").uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
+          if (sent.error) return setError("That screenshot wouldn't upload. Try a smaller one, or leave it off.");
+          screenshotPath = slot.path;
+        }
+        const r = await startReferral({ name, affiliation, screenshotPath });
+        if (!r.ok) return setError(r.error);
+        setMessage(r.message);
+        setStep("message");
+        router.refresh();
+      } catch {
+        setError("Couldn't make your link just now. Try again.");
+      } finally {
+        setBusy(false);
       }
-      const r = await startReferral({ name, affiliation, screenshotPath });
-      if (!r.ok) return setError(r.error);
-      setMessage(r.message);
-      setStep("message");
-      router.refresh();
-    });
+    })();
   }
 
   async function copy() {
@@ -100,7 +111,10 @@ export function ReferralMessageCard({
     setError(null);
     setShot(null);
     if (fileRef.current) fileRef.current.value = "";
-    setStep("start");
+    setBusy(false);
+    // Straight to who it's for: they already said they're sending another.
+    setStep("name");
+    topRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
   }
 
   if (step === "start") {
@@ -113,7 +127,7 @@ export function ReferralMessageCard({
 
   if (step === "message" && message) {
     return (
-      <div className="grid gap-3">
+      <div ref={topRef} className="grid gap-3">
         <Eyebrow>Copy and paste this message</Eyebrow>
         <Textarea rows={13} value={message} onChange={(e) => setMessage(e.target.value)} aria-label="Your message" className="text-base leading-snug" />
         <p className="text-xs text-muted-foreground">Change anything so it sounds like you. Keep the link as it is: that&apos;s how it counts for you.</p>
@@ -124,8 +138,8 @@ export function ReferralMessageCard({
         <Button type="button" variant="outline" className="h-12 text-base" onClick={share}>
           <Share2 className="mr-1 h-5 w-5" /> Share
         </Button>
-        <Button type="button" variant="ghost" onClick={another}>
-          Send to someone else
+        <Button type="button" variant="outline" className="h-12 text-base" onClick={another}>
+          Send to the next person
         </Button>
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
@@ -133,7 +147,7 @@ export function ReferralMessageCard({
   }
 
   return (
-    <div className="grid gap-3">
+    <div ref={topRef} className="grid gap-3">
       {step === "name" && (
         <>
           <Eyebrow>Step 1 of 3</Eyebrow>
