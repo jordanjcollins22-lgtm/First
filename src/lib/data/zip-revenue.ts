@@ -73,16 +73,36 @@ export function pickRange(q: { range?: string; from?: string; to?: string }, now
 export interface ZipRow {
   zip: string;
   town: string;
-  amount: number;
   /** Clients with a property in this ZIP (not counting family). */
   clients: number;
 }
 
-export interface ZipRevenue {
-  total: number;
-  rows: ZipRow[];
+/** What was billed in the chosen days: the money, how many jobs it was for, and the average ticket. */
+export interface Billed {
+  amount: number;
+  jobs: number;
+  /** Clients who were billed. */
+  payers: number;
+  /** Revenue ÷ clients billed (Jordan's definition, 2026-11-16). 0 when nobody was billed. */
+  avgTicket: number;
+}
+
+export interface ZipRevenue extends Billed {
+  rows: (ZipRow & Billed)[];
   /** Billed to addresses outside Harford County, or with no ZIP on file. */
-  elsewhere: number;
+  elsewhere: Billed;
+}
+
+interface Tally {
+  amount: number;
+  jobs: Set<string>;
+  payers: Set<string>;
+}
+const newTally = (): Tally => ({ amount: 0, jobs: new Set(), payers: new Set() });
+const r2 = (n: number) => Math.round(n * 100) / 100;
+export function billed(t: Tally | undefined): Billed {
+  if (!t) return { amount: 0, jobs: 0, payers: 0, avgTicket: 0 };
+  return { amount: r2(t.amount), jobs: t.jobs.size, payers: t.payers.size, avgTicket: t.payers.size ? r2(t.amount / t.payers.size) : 0 };
 }
 
 type Row = Record<string, unknown>;
@@ -97,13 +117,13 @@ export async function loadZipRevenue(organizationId: string, range: DayRange): P
     db.from("properties").select("customer_id, address, customers!inner(name, organization_id)").eq("customers.organization_id", organizationId),
     db
       .from("invoices")
-      .select("amount, sent_at, created_at, jobs(properties(address, customers(name)))")
+      .select("job_id, amount, sent_at, created_at, jobs(properties(address, customer_id, customers(name)))")
       .eq("organization_id", organizationId)
       .neq("status", "void")
       .or(`and(sent_at.gte.${fromTs},sent_at.lt.${toTs}),and(sent_at.is.null,created_at.gte.${fromTs},created_at.lt.${toTs})`),
     db
       .from("client_invoices")
-      .select("amount, issued_on, customer_id, customers(name)")
+      .select("id, amount, issued_on, customer_id, customers(name)")
       .eq("organization_id", organizationId)
       .gte("issued_on", range.from)
       .lte("issued_on", range.to),
@@ -121,12 +141,17 @@ export async function loadZipRevenue(organizationId: string, range: DayRange): P
     clientsBy.set(zip, (clientsBy.get(zip) ?? new Set()).add(id));
   }
 
-  const amountBy = new Map<string, number>();
-  let elsewhere = 0;
-  const add = (zip: string | null | undefined, amount: number) => {
+  const byZip = new Map<string, Tally>();
+  const elsewhere = newTally();
+  const all = newTally();
+  const add = (zip: string | null | undefined, amount: number, job: string, payer: string) => {
     if (!amount) return;
-    if (zip && HARFORD_ZIPS[zip]) amountBy.set(zip, (amountBy.get(zip) ?? 0) + amount);
-    else elsewhere += amount;
+    const t = zip && HARFORD_ZIPS[zip] ? byZip.get(zip) ?? byZip.set(zip, newTally()).get(zip)! : elsewhere;
+    for (const x of [t, all]) {
+      x.amount += amount;
+      x.jobs.add(job);
+      x.payers.add(payer);
+    }
   };
 
   for (const i of (invs ?? []) as Row[]) {
@@ -134,17 +159,17 @@ export async function loadZipRevenue(organizationId: string, range: DayRange): P
     if (day < range.from || day > range.to) continue;
     const prop = one(one(i.jobs as Row | Row[] | null)?.properties as Row | Row[] | null);
     if (isFamily(one(prop?.customers as Row | Row[] | null)?.name as string)) continue;
-    add(zipOf(prop?.address as string), Number(i.amount) || 0);
+    add(zipOf(prop?.address as string), Number(i.amount) || 0, `job:${i.job_id}`, String(prop?.customer_id ?? `job:${i.job_id}`));
   }
+  // A client invoice isn't tied to a job, so each one counts as its own job.
   for (const c of (cinvs ?? []) as Row[]) {
     if (isFamily(one(c.customers as Row | Row[] | null)?.name as string)) continue;
-    add(zipOfCustomer.get(String(c.customer_id)), Number(c.amount) || 0);
+    add(zipOfCustomer.get(String(c.customer_id)), Number(c.amount) || 0, `ci:${c.id}`, String(c.customer_id));
   }
 
-  const zips = new Set([...clientsBy.keys(), ...amountBy.keys()]);
+  const zips = new Set([...clientsBy.keys(), ...byZip.keys()]);
   const rows = [...zips]
-    .map((zip) => ({ zip, town: HARFORD_ZIPS[zip], amount: Math.round((amountBy.get(zip) ?? 0) * 100) / 100, clients: clientsBy.get(zip)?.size ?? 0 }))
+    .map((zip) => ({ zip, town: HARFORD_ZIPS[zip], clients: clientsBy.get(zip)?.size ?? 0, ...billed(byZip.get(zip)) }))
     .sort((a, b) => b.amount - a.amount || b.clients - a.clients || a.zip.localeCompare(b.zip));
-  const total = Math.round((rows.reduce((s, r) => s + r.amount, 0) + elsewhere) * 100) / 100;
-  return { total, rows, elsewhere: Math.round(elsewhere * 100) / 100 };
+  return { ...billed(all), rows, elsewhere: billed(elsewhere) };
 }

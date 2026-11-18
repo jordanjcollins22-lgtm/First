@@ -5,7 +5,7 @@ import { RangePicker } from "@/components/phone/range-picker";
 import { loadApprovalQueue } from "@/lib/data/approval-queue";
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listPayoutRequests } from "@/lib/data/payout-requests";
-import { loadZipRevenue, pickRange } from "@/lib/data/zip-revenue";
+import { loadZipRevenue, pickRange, type Billed } from "@/lib/data/zip-revenue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/types/domain";
 
@@ -39,6 +39,18 @@ export async function PartnerPhone({ profile }: { profile: Profile }) {
   );
 }
 
+/** One location or ZIP code: its revenue on the line, and tap to see jobs and average ticket. */
+function Place({ title, b, clients }: { title: string; b: Billed; clients?: number }) {
+  return (
+    <Sub title={title} sum={money(b.amount)}>
+      <Row a="Revenue" b={money(b.amount)} />
+      <Row a="Total jobs" b={String(b.jobs)} />
+      <Row a="Average ticket" b={b.payers ? money(b.avgTicket) : "—"} />
+      {clients != null && <Row a="Clients here" b={String(clients)} />}
+    </Sub>
+  );
+}
+
 const ROLES: [string, string][] = [
   ["affiliate", "Affiliate"],
   ["technician", "Technician"],
@@ -69,16 +81,19 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
         <RangePicker range={range} />
-        <Row a="Forest Hill (home)" b={zips ? `${money(zips.total)} ${range.key === "custom" ? "" : range.label}`.trim() : "Couldn't load"} />
-        {zips && (
-          <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
-            {zips.rows.map((z) => (
-              <Row key={z.zip} a={`${z.zip} · ${z.town}`} b={money(z.amount)} />
-            ))}
-            {zips.elsewhere > 0 && <Row a="Outside Harford County or no ZIP" b={money(zips.elsewhere)} />}
-          </Sub>
+        {zips ? (
+          <>
+            <Place title="Forest Hill (home)" b={zips} />
+            <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
+              {zips.rows.map((z) => (
+                <Place key={z.zip} title={`${z.zip} · ${z.town}`} b={z} clients={z.clients} />
+              ))}
+              {zips.elsewhere.amount > 0 && <Place title="Outside Harford County" b={zips.elsewhere} />}
+            </Sub>
+          </>
+        ) : (
+          <Row a="Forest Hill (home)" b="Couldn't load" />
         )}
-        <Sm>What was invoiced {range.key === "custom" ? `from ${range.label}` : range.label}. Family jobs aren&apos;t counted.</Sm>
       </Card>
       <Card title="Company fee earned">
         <Big>$0</Big>
