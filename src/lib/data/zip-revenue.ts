@@ -42,7 +42,7 @@ export function zipOf(address: string | null | undefined): string | null {
 
 export const isFamily = (name: string | null | undefined) => /heffner/i.test(name ?? "");
 
-export type RangeKey = "month" | "90d" | "custom";
+export type RangeKey = "30d" | "month" | "ytd" | "custom";
 export interface DayRange {
   key: RangeKey;
   from: string;
@@ -53,10 +53,11 @@ export interface DayRange {
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const nice = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
-/** This month (default), the last 90 days, or a custom from/to, from the page's search params. */
+/** Last 30 days, this month (default), year to date, or a custom from/to, from the page's search params. */
 export function pickRange(q: { range?: string; from?: string; to?: string }, now = new Date()): DayRange {
   const today = localDay(now);
-  if (q.range === "90d") return { key: "90d", from: addDays(today, -89), to: today, label: "last 90 days" };
+  if (q.range === "30d") return { key: "30d", from: addDays(today, -29), to: today, label: "last 30 days" };
+  if (q.range === "ytd") return { key: "ytd", from: `${today.slice(0, 4)}-01-01`, to: today, label: "year to date" };
   if (q.range === "custom") {
     let from = q.from && DAY.test(q.from) ? q.from : `${today.slice(0, 7)}-01`;
     let to = q.to && DAY.test(q.to) ? q.to : today;

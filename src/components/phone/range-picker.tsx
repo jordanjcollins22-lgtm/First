@@ -3,12 +3,13 @@ import Link from "next/link";
 import type { DayRange } from "@/lib/data/zip-revenue";
 
 const OPTIONS: [DayRange["key"], string][] = [
+  ["30d", "Last 30 days"],
   ["month", "This month"],
-  ["90d", "Last 90 days"],
+  ["ytd", "Year to date"],
   ["custom", "Custom"],
 ];
 
-/** This month · Last 90 days · Custom, as links, so the page redraws with that window. Custom opens two dates and a Show button. */
+/** Last 30 days · This month · Year to date · Custom, as links, so the page redraws with that window. Custom opens two dates and a Show button. */
 export function RangePicker({ range, base = "/me" }: { range: DayRange; base?: string }) {
   return (
     <div className="vx-range">

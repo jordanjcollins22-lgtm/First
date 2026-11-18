@@ -50,6 +50,7 @@ function Place({ title, b, clients }: { title: string; b: Billed; clients?: numb
       <Row a="Revenue" b={money(b.amount)} />
       <Row a="Total jobs" b={String(b.jobs)} />
       <Row a="Average ticket" b={b.payers ? money(b.avgTicket) : "—"} />
+      <Row a="Company fee (8%)" b={money(companyFee(b.amount))} />
       {clients != null && <Row a="Clients here" b={String(clients)} />}
     </Sub>
   );
@@ -87,6 +88,7 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
         <RangePicker range={range} />
         {zips ? (
           <>
+            <Row a="Company fee earned" b={money(companyFee(zips.amount))} />
             <Place title="Forest Hill (home)" b={zips} />
             <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
               {zips.rows.map((z) => (
@@ -99,10 +101,6 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
         ) : (
           <Row a="Forest Hill (home)" b="Couldn't load" />
         )}
-      </Card>
-      <Card title="Company fee earned">
-        <Big>{zips ? money(companyFee(zips.amount)) : "—"}</Big>
-        <Sm>{zips ? `8% of all revenue, ${range.label}` : "Couldn't load"}</Sm>
       </Card>
       <Card title="Waiting on you">
         {asked.map((p) => (

@@ -19,8 +19,9 @@ describe("pickRange", () => {
   it("defaults to this month", () => {
     expect(pickRange({}, now)).toMatchObject({ key: "month", from: "2026-11-01", to: "2026-11-17" });
   });
-  it("covers the last 90 days including today", () => {
-    expect(pickRange({ range: "90d" }, now)).toMatchObject({ from: "2026-08-20", to: "2026-11-17" });
+  it("covers the last 30 days including today, and the year to date", () => {
+    expect(pickRange({ range: "30d" }, now)).toMatchObject({ from: "2026-10-19", to: "2026-11-17" });
+    expect(pickRange({ range: "ytd" }, now)).toMatchObject({ from: "2026-01-01", to: "2026-11-17" });
   });
   it("takes custom dates, swapped if backwards, and ignores junk", () => {
     expect(pickRange({ range: "custom", from: "2026-10-31", to: "2026-10-01" }, now)).toMatchObject({ from: "2026-10-01", to: "2026-10-31" });
