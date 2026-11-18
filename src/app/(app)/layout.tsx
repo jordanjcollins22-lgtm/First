@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ImpersonationBanner } from "@/components/impersonation-banner";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { logout } from "@/lib/actions/auth-actions";
 import { getCurrentProfile, getRealProfile } from "@/lib/data/team";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -35,8 +36,8 @@ export const viewport = {
 };
 
 /**
- * The fresh app's frame: one thin bar (the name, which goes home, and Sign
- * out) over each person's page. No menu: everything a person uses is on
+ * The fresh app's frame: one thin bar (the name, which goes home, the
+ * light/dark switch, and Sign out) over each person's page. No menu: everything a person uses is on
  * their own page or one tap from it.
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -67,11 +68,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {viewingAs && <ImpersonationBanner name={viewingAs} />}
         <header className="vx-top">
           <Link href={signedIn ? "/me" : "/login"}>JS Landscaping</Link>
-          {signedIn && (
-            <form action={logout}>
-              <button type="submit">Sign out</button>
-            </form>
-          )}
+          <div className="vx-top-r">
+            <ThemeToggle />
+            {signedIn && (
+              <form action={logout}>
+                <button type="submit">Sign out</button>
+              </form>
+            )}
+          </div>
         </header>
         <main className="flex-1 pb-[env(safe-area-inset-bottom)]">{children}</main>
       </body>

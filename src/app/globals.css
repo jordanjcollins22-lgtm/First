@@ -858,3 +858,7 @@ body {
 .vx-top { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: #ffffff; border-bottom: 1px solid #d6e2dc; font: 800 16px "Archivo", system-ui, sans-serif; color: #0e7c74; }
 .dark .vx-top { background: #14211d; border-color: #25362f; color: #3fc2b6; }
 .vx-top button { font: 600 13px system-ui, sans-serif; color: inherit; background: none; border: 0; cursor: pointer; }
+.vx-top-r { display: flex; align-items: center; gap: 12px; }
+.vx-top .vx-theme { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid #d6e2dc; border-radius: 10px; }
+.dark .vx-top .vx-theme { border-color: #25362f; }
+.vx-theme svg { width: 18px; height: 18px; }
