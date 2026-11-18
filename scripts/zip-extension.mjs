@@ -1,5 +1,5 @@
-// Packs the Chrome extension into public/downloads/js-post-finder.zip, so
-// Where Posts Come From can offer it as one download. Run before every
+// Packs the Chrome extension into public/downloads/js-lead-finder.zip, so
+// it can be downloaded from the app in one piece. Run before every
 // build, so the download is always the extension in this commit.
 import { readdirSync, readFileSync, statSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -7,8 +7,8 @@ import { deflateRawSync } from "node:zlib";
 
 const root = new URL("..", import.meta.url).pathname;
 const source = join(root, "extension");
-const out = join(root, "public", "downloads", "js-post-finder.zip");
-const folder = "js-post-finder";
+const out = join(root, "public", "downloads", "js-lead-finder.zip");
+const folder = "js-lead-finder";
 
 const table = new Uint32Array(256).map((_, n) => {
   let c = n;

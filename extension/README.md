@@ -1,47 +1,37 @@
-# JS Landscaping: post finder
+# JS Landscaping: lead finder
 
-A Chrome extension that finds the posts; the team answers them. It reads your Facebook groups feed, a Facebook search for the phrases set in the app, and any groups listed there, and sends every post it reads to the app. The app sorts each one into somebody asking for work, somebody advertising, or neither. The people asking for work go on the **Posts to answer** board (app → Marketing → Posts to Answer), and the businesses advertising go on the Businesses list for subcontracting.
+A Chrome extension that finds recent Facebook posts from neighbors in Harford County asking for yard work, and gets a comment with your tracked link in front of them. You press post on every comment yourself. It also schedules approved before-and-after posts on the business page.
 
-It never comments, likes, shares or messages. One account answering every lead in the county is what gets an account banned, so the answering is shared out: each person takes a post off the board, gets a comment written for them with their own tracked link, and posts it from their own Facebook. The only thing the finder presses on Facebook is a post's Share → **Copy link**, to bring back a link for a post the page showed without one. It never presses Share now.
+## What you see
 
-It runs as you, in your Chrome, on your Facebook account, with your app sign-in. Nothing here logs in anywhere. Close Chrome and it stops.
+Press the extension's button and a side panel opens next to Facebook. Press **Start finding leads**. In your Facebook tab, it:
 
-## What it does
+1. Reads your groups feed, or searches Facebook for recent posts ("landscaper Bel Air", "leaf removal Bel Air" and the rest of the list in Settings). A pointer moves over each post and outlines it blue while it reads it.
+2. Skips ads, posts outside Harford County, posts older than 3 days, and posts it has already seen. Posts that pass the keyword check are read by the app to make sure it's a neighbor asking, not a business advertising.
+3. On a lead, scrolls to it, outlines it green, opens the comment box and types the comment where you can watch.
+4. Stops and waits for you. Read it, change anything, press **Enter** to post it, or press **Skip** in the panel. When you post, it goes into your **People you sent it to** in the app, with its own tracked link.
 
-One button starts and stops it: **Start finding posts** on **app → Marketing → Where Posts Come From**. The extension in your Chrome hears it at once and opens one window of its own, to the right of yours, and keeps it open. The button works from any device; the finding happens in the Chrome where the extension is installed.
+**Feed vs search:** it tries both, counts leads per hour for each, and then spends about 4 looks in 5 on whichever finds more. The panel shows both numbers.
 
-1. Once a minute it asks the app whether it is still on, then scrolls further down the page in that window and sends every post it read to the app. The app keeps the new ones and sorts them. The same post is never sent twice.
-2. After about ten minutes on your groups feed it moves on to a search or a listed group for a few minutes, then back to the top of the feed for whatever is new.
-3. When more posts are waiting for the team than last time, it shows a notification; click it to open the board.
-4. When the app lists one of the business's own review pages as due (a Facebook page or a Google Maps listing, set on **app → Marketing → Booking Page**), it reads those reviews in a separate small window, and the app keeps only the five-star ones with something written. This happens even while the finder is off, because the owner asked for it, and again every week.
+## The comment
 
-Press **Stop finding posts** and the window closes straight away. Outside the looking hours set in the app, the window closes too and opens again when they start. If you close the window yourself while it is on, it opens again within a minute; use Stop finding posts to stop it.
-
-The window has to stay on screen, not minimized: Chrome only loads a Facebook page it is drawing. It never takes focus from what you're doing.
-
-A post found by search in a group you haven't joined still goes on the board. The group also goes on the **Groups to join** list on the Where Posts Come From page, with a count of the leads seen in it.
-
-## Install
-
-1. Open `chrome://extensions` in Chrome.
-2. Turn on **Developer mode** (top right).
-3. Press **Load unpacked** and choose this folder (unzipped from the download on Where Posts Come From).
-4. Pin it from the puzzle-piece menu.
-5. Sign in to the app in this Chrome, and stay signed in to Facebook.
-6. In the app, check where it looks (app → Marketing → Where Posts Come From) and press Save.
-
-The popup shows what it is doing, how many posts are waiting for the team, and a link to the button in the app.
+Same wording rules as the affiliate "Posted asking for help" message: says who you are by role ("I'm the owner of JS Landscaping MD"), answers the post instead of saying you saw it, never promises "free", and carries your tracked link. One paragraph, because Enter posts a comment on Facebook.
 
 ## Keeping the account safe
 
-- It never posts more than the caps in the app (two an hour and six a day to start), never outside the hours set there, and never twice on one post.
-- If Facebook shows anything like "temporarily blocked" or "action blocked", it stops for a day on its own and says so in the app. Do not turn it back on the same day.
-- Facebook's terms do not allow automated posting. Running this is a risk to the account it runs on. Keep the caps low, keep the comments honest, and leave **Post without asking me** off if you would rather see each one first.
+- You press post. It never posts, likes, shares or messages on its own.
+- At most 8 comments a day and 6 minutes apart to start (Settings).
+- If Facebook ever shows "temporarily blocked", "action blocked" or similar, it stops for 24 hours on its own.
+- Never comments twice on one post.
 
-## Updates
+## Posts tab (owner)
 
-You should rarely need to download this again. Every selector and every wait the extension uses on a Facebook page comes from the app each minute (the "recipe" in `src/lib/outreach-agent-recipe.ts`), so when Facebook moves a button the fix is deployed to the app and every copy has it within a minute. When a change does need new extension code, the popup shows "A newer version is ready" with a download link, and the old copy keeps running until you swap it. To swap: download, unzip, and in `chrome://extensions` either replace the files in the folder you loaded and press the reload arrow, or remove the old one and Load unpacked again.
+Before-and-after drafts waiting for an OK. Tick **the before-and-after looks good** and **the caption looks good** (edit it if you like), then Approve. Each time you press Start, every approved post is scheduled on the next open day (one post a day, at the best-time slot for that weekday, else 10 AM) through Meta's own scheduling on the business page. They show up in Meta Business Suite's Planner. A caption that says "free" can't be approved.
 
-## If it stops finding posts
+The first time, connect the Facebook page in the Posts tab: make a Meta app, paste its App ID and secret, press Connect.
 
-Where Posts Come From shows its last look: how many posts it read and what the page looked like. A look that reads nothing means Facebook's page has changed. That is a recipe fix in the app, not a download.
+## Install
+
+1. Unzip it (or use the folder), open `chrome://extensions`, turn on **Developer mode**.
+2. **Load unpacked** and choose this folder. Pin it from the puzzle-piece menu.
+3. Stay signed in to app.jslandscapingmd.com and to Facebook in this Chrome.

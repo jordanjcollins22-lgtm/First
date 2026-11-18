@@ -1,0 +1,9 @@
+/* What the lead finder shows on the Facebook page, so you can see it work. */
+.jsl-reading { outline: 3px solid #4a90d9 !important; outline-offset: 4px; border-radius: 10px; transition: outline-color .3s; }
+.jsl-read { outline: 2px dashed #b9c3cc !important; outline-offset: 4px; border-radius: 10px; }
+.jsl-lead { outline: 4px solid #2e9e4f !important; outline-offset: 4px; border-radius: 10px; box-shadow: 0 0 0 10px rgba(46,158,79,.12) !important; }
+.jsl-badge { position: absolute; z-index: 9999; top: -14px; left: 12px; background: #2e9e4f; color: #fff; font: 600 13px/1.3 system-ui, sans-serif; padding: 4px 10px; border-radius: 999px; box-shadow: 0 2px 8px rgba(0,0,0,.2); pointer-events: none; max-width: 80%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jsl-pointer { position: fixed; z-index: 2147483646; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: rgba(46,158,79,.35); border: 2px solid #2e9e4f; pointer-events: none; transition: top .6s ease, left .6s ease, transform .2s; }
+.jsl-pointer.jsl-click { transform: scale(.7); background: rgba(46,158,79,.7); }
+.jsl-bar { position: fixed; z-index: 2147483646; left: 50%; bottom: 18px; transform: translateX(-50%); background: #1d2a1f; color: #fff; font: 500 14px/1.35 system-ui, sans-serif; padding: 10px 16px; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.3); max-width: min(560px, 92vw); pointer-events: none; }
+.jsl-bar b { color: #8be0a4; }
