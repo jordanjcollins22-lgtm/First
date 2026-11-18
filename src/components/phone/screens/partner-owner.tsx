@@ -63,7 +63,6 @@ async function AllLocations({ organizationId, range }: { organizationId: string;
   if (!zips) return <Row a="Forest Hill (home)" b="Couldn't load" />;
   return (
     <>
-      <Row a="Company fee earned" b={money(companyFee(zips.amount))} />
       <Place title="Forest Hill (home)" b={zips} />
       <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
         {zips.rows.map((z) => (
@@ -72,6 +71,11 @@ async function AllLocations({ organizationId, range }: { organizationId: string;
         {zips.elsewhere.amount > 0 && <Place title="Outside Harford County or no address" b={zips.elsewhere} />}
         {zips.unmatched > 0 && <Row a="Checks and Zelle, no client yet" b={money(zips.unmatched)} />}
       </Sub>
+      <div className="vx-fee">
+        <div className="vx-ct">Company fee earned</div>
+        <Big>{money(companyFee(zips.amount))}</Big>
+        <Sm>8% of all revenue, {range.label}</Sm>
+      </div>
     </>
   );
 }
