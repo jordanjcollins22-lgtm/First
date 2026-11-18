@@ -1,11 +1,12 @@
+import { Suspense } from "react";
+
 import { SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { Big, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { RangePicker } from "@/components/phone/range-picker";
 import { loadApprovalQueue } from "@/lib/data/approval-queue";
-import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listPayoutRequests } from "@/lib/data/payout-requests";
-import { loadZipRevenue, pickRange, type Billed } from "@/lib/data/zip-revenue";
+import { loadZipRevenue, pickRange, type Billed, type DayRange } from "@/lib/data/zip-revenue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/types/domain";
 
@@ -56,6 +57,25 @@ function Place({ title, b, clients }: { title: string; b: Billed; clients?: numb
   );
 }
 
+/** Revenue, company fee and the ZIP ranking for the chosen days. */
+async function AllLocations({ organizationId, range }: { organizationId: string; range: DayRange }) {
+  const zips = await loadZipRevenue(organizationId, range).catch(() => null);
+  if (!zips) return <Row a="Forest Hill (home)" b="Couldn't load" />;
+  return (
+    <>
+      <Row a="Company fee earned" b={money(companyFee(zips.amount))} />
+      <Place title="Forest Hill (home)" b={zips} />
+      <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
+        {zips.rows.map((z) => (
+          <Place key={z.zip} title={`${z.zip} · ${z.town}`} b={z} clients={z.clients} />
+        ))}
+        {zips.elsewhere.amount > 0 && <Place title="Outside Harford County or no address" b={zips.elsewhere} />}
+        {zips.unmatched > 0 && <Row a="Checks and Zelle, no client yet" b={money(zips.unmatched)} />}
+      </Sub>
+    </>
+  );
+}
+
 const ROLES: [string, string][] = [
   ["affiliate", "Affiliate"],
   ["technician", "Technician"],
@@ -72,35 +92,21 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
   const now = new Date();
   const range = pickRange(q, now);
   const admin = createAdminClient();
-  const [finance, zips, queue, payouts, lw] = await Promise.all([
-    loadFinanceDashboard(profile.organization_id, now).catch(() => null),
-    loadZipRevenue(profile.organization_id, range).catch(() => null),
+  const [queue, payouts, lw] = await Promise.all([
     loadApprovalQueue(admin, profile.organization_id, now).catch(() => []),
     listPayoutRequests().catch(() => []),
     loadLinkAndWallet(profile),
   ]);
   const asked = payouts.filter((p) => p.status === "requested");
-  const ytd = finance?.revenue.ytd.invoiced ?? 0;
 
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
         <RangePicker range={range} />
-        {zips ? (
-          <>
-            <Row a="Company fee earned" b={money(companyFee(zips.amount))} />
-            <Place title="Forest Hill (home)" b={zips} />
-            <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
-              {zips.rows.map((z) => (
-                <Place key={z.zip} title={`${z.zip} · ${z.town}`} b={z} clients={z.clients} />
-              ))}
-              {zips.elsewhere.amount > 0 && <Place title="Outside Harford County or no address" b={zips.elsewhere} />}
-              {zips.unmatched > 0 && <Row a="Checks and Zelle, no client yet" b={money(zips.unmatched)} />}
-            </Sub>
-          </>
-        ) : (
-          <Row a="Forest Hill (home)" b="Couldn't load" />
-        )}
+        {/* The numbers load on their own, so the page and the picker answer straight away. */}
+        <Suspense key={`${range.from}-${range.to}`} fallback={<Row a="Adding up…" />}>
+          <AllLocations organizationId={profile.organization_id} range={range} />
+        </Suspense>
       </Card>
       <Card title="Waiting on you">
         {asked.map((p) => (
@@ -119,7 +125,7 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
       </Card>
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />
-      <Stage done={0} next="Grow the home location past $500,000 a year" note={finance ? `${money(ytd)} billed so far this year` : undefined} />
+      <Stage done={0} next="Grow the home location past $500,000 a year" />
     </Screen>
   );
 }

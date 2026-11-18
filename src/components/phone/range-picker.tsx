@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import Link, { useLinkStatus } from "next/link";
 
 import type { DayRange } from "@/lib/data/zip-revenue";
 
@@ -8,6 +10,12 @@ const OPTIONS: [DayRange["key"], string][] = [
   ["ytd", "Year to date"],
   ["custom", "Custom"],
 ];
+
+/** Lights the tapped option at once, while the numbers load. */
+function Label({ children }: { children: React.ReactNode }) {
+  const { pending } = useLinkStatus();
+  return <span className={pending ? "vx-pending" : undefined}>{children}</span>;
+}
 
 /** Last 30 days · This month · Year to date · Custom, as links, so the page redraws with that window. Custom opens two dates and a Show button. */
 export function RangePicker({ range, base = "/me" }: { range: DayRange; base?: string }) {
@@ -20,9 +28,10 @@ export function RangePicker({ range, base = "/me" }: { range: DayRange; base?: s
             href={key === "custom" ? `${base}?range=custom&from=${range.from}&to=${range.to}` : `${base}?range=${key}`}
             className={range.key === key ? "on" : undefined}
             aria-current={range.key === key ? "true" : undefined}
+            prefetch={false}
             scroll={false}
           >
-            {label}
+            <Label>{label}</Label>
           </Link>
         ))}
       </div>
