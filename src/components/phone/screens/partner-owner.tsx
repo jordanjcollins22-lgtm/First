@@ -1,9 +1,11 @@
 import { SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
-import { Big, Card, Row, Screen, Sm, Stage, money } from "@/components/phone/parts";
+import { Big, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
+import { RangePicker } from "@/components/phone/range-picker";
 import { loadApprovalQueue } from "@/lib/data/approval-queue";
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listPayoutRequests } from "@/lib/data/payout-requests";
+import { loadZipRevenue, pickRange } from "@/lib/data/zip-revenue";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Profile } from "@/types/domain";
 
@@ -44,12 +46,18 @@ const ROLES: [string, string][] = [
   ["partner", "Location partner"],
 ];
 
-/** The owner: every location, the company fee, what's waiting on them, and every role's screen a tap away. */
-export async function OwnerPhone({ profile }: { profile: Profile }) {
+/**
+ * The owner: every location (the home location's ZIP codes ranked by what
+ * they billed in the chosen days), the company fee, what's waiting on them,
+ * and every role's screen a tap away.
+ */
+export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { range?: string; from?: string; to?: string } }) {
   const now = new Date();
+  const range = pickRange(q, now);
   const admin = createAdminClient();
-  const [finance, queue, payouts, lw] = await Promise.all([
+  const [finance, zips, queue, payouts, lw] = await Promise.all([
     loadFinanceDashboard(profile.organization_id, now).catch(() => null),
+    loadZipRevenue(profile.organization_id, range).catch(() => null),
     loadApprovalQueue(admin, profile.organization_id, now).catch(() => []),
     listPayoutRequests().catch(() => []),
     loadLinkAndWallet(profile),
@@ -60,7 +68,17 @@ export async function OwnerPhone({ profile }: { profile: Profile }) {
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
-        <Row a="Forest Hill (home)" b={finance ? `${money(finance.revenue.month.invoiced)} this month` : "Couldn't load"} />
+        <RangePicker range={range} />
+        <Row a="Forest Hill (home)" b={zips ? `${money(zips.total)} ${range.key === "custom" ? "" : range.label}`.trim() : "Couldn't load"} />
+        {zips && (
+          <Sub title="By ZIP code, most billed first" sum={zips.rows.length} open>
+            {zips.rows.map((z) => (
+              <Row key={z.zip} a={`${z.zip} · ${z.town}`} b={money(z.amount)} />
+            ))}
+            {zips.elsewhere > 0 && <Row a="Outside Harford County or no ZIP" b={money(zips.elsewhere)} />}
+          </Sub>
+        )}
+        <Sm>What was invoiced {range.key === "custom" ? `from ${range.label}` : range.label}. Family jobs aren&apos;t counted.</Sm>
       </Card>
       <Card title="Company fee earned">
         <Big>$0</Big>

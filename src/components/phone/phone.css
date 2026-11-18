@@ -60,3 +60,11 @@
 .vx-app .vx-clock>div{margin-bottom:0;border-color:var(--line);background:var(--bg);border-radius:10px}
 .vx-app a.vx-cl-back{color:var(--teal)}
 .vx-app a.vx-cta.vx-alt{color:var(--teal);background:transparent}
+.vx-app .vx-range{display:flex;flex-direction:column;gap:8px;margin:6px 0 4px}
+.vx-app .vx-seg{display:flex;background:var(--bg,#f4f6f4);border-radius:10px;padding:3px;gap:3px}
+.vx-app .vx-seg a{flex:1;text-align:center;font:600 12px var(--display);color:var(--muted);padding:7px 4px;border-radius:8px;text-decoration:none}
+.vx-app .vx-seg a.on{background:var(--surface);color:var(--fg,inherit);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.vx-app .vx-dates{display:flex;gap:6px;align-items:flex-end}
+.vx-app .vx-dates label{flex:1;display:flex;flex-direction:column;gap:2px;font:500 10px var(--mono);text-transform:uppercase;color:var(--muted)}
+.vx-app .vx-dates input{font:500 13px var(--body,inherit);padding:6px;border:1px solid var(--line,#dde3dd);border-radius:8px;background:var(--surface);color:inherit;min-width:0}
+.vx-app .vx-dates button{font:700 13px var(--display);background:var(--teal);color:var(--surface);border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
