@@ -104,7 +104,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
 
   /* Do now ------------------------------------------------------------ */
   const items: OneItem[] = [];
-  // Follow-ups owed today come first: who to get back to and why.
+  // Sales follow-ups come first: who to get back to and why.
   for (const f of followUps) {
     items.push({ tag: "Follow up", who: f.title, body: f.note ? <div className="vx-q" style={{ whiteSpace: "pre-line" }}>{f.note}</div> : undefined, main: { label: "Done" }, followUp: f.id });
   }
@@ -125,38 +125,11 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       closeProposal: p.proposalId,
     });
   }
-  for (const m of accounts?.messages ?? []) {
-    items.push({ tag: "Reply", who: m.customerName, whoHref: `/jobs/${m.jobId}`, body: <div className="vx-q">&ldquo;{m.body}&rdquo;</div>, main: { label: "Reply", href: `/jobs/${m.jobId}` } });
-  }
   for (const p of sales?.toApprove ?? []) {
     items.push({ tag: "Proposal to send", who: p.customerName, whoHref: `/jobs/${p.jobId}`, body: <Row a="Total" b={money(p.total)} />, main: { label: "Open proposal", href: `/jobs/${p.jobId}` } });
   }
-  for (const i of accounts?.issues ?? []) {
-    items.push({ tag: "Callback", who: i.customerName, whoHref: `/clients/${i.customerId}`, body: <Row a="Issue" b={i.title} />, main: { label: "Set a time", href: `/clients/${i.customerId}` } });
-  }
-  for (const inv of accounts?.invoices ?? []) {
-    items.push({
-      tag: "Not paid",
-      who: inv.customerName,
-      whoHref: `/jobs/${inv.jobId}`,
-      body: (
-        <>
-          <Row a="Invoice" b={money(inv.amount)} />
-          <Row a="Sent" b={outstandingFor(inv, now)} />
-        </>
-      ),
-      main: { label: "Open invoice", href: `/jobs/${inv.jobId}` },
-    });
-  }
-  for (const l of sales?.leads ?? []) {
-    items.push({
-      tag: l.reason === "new" ? "New lead" : "Book evaluation",
-      who: l.customerName,
-      whoHref: `/jobs/${l.jobId}`,
-      body: <Row a={l.address || "Asked"} b={l.why} />,
-      main: { label: "Book it", href: `/jobs/${l.jobId}` },
-    });
-  }
+  // Do now is proposals and sales follow-ups only (Jordan, Nov 19). Replies,
+  // callbacks, unpaid invoices and leads to book stay out of it for now.
 
   /* Your schedule ----------------------------------------------------- */
   const all = [...visits, ...interviewsOf(applicants, weeks.from, weeks.to)].sort((a, b) => a.at.localeCompare(b.at));
