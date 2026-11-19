@@ -15,6 +15,8 @@ import { dateKeyIn } from "@/lib/time-zone";
 import type { Profile } from "@/types/domain";
 
 const TZ = "America/New_York";
+/** Only search and Do now on the account manager page for now (Jordan, Nov 19). */
+const TASKS_ONLY = true;
 const DAY = 86_400_000;
 const dayLabel = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -165,6 +167,9 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
 
       <OneAtATime title="Do now" items={items} />
 
+      {/* Jordan, Nov 19: for now the page is only his tasks. The rest comes back when it is wanted. */}
+      {!TASKS_ONLY && (
+      <>
       <Card title="Your schedule">
         {today.length ? (
           today.map((v) => (
@@ -271,6 +276,8 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />
       {track && <Stage done={0} total={track.stages.length + 1} next={track.stages[0]} />}
+      </>
+      )}
     </Screen>
   );
 }
