@@ -63,16 +63,28 @@ export interface ToApprove {
   writtenAt: string;
 }
 
+/** A proposal the client has had and not answered. Each one needs a Yes or a No, and why. */
+export interface OpenProposal {
+  proposalId: string;
+  jobId: string;
+  customerName: string;
+  jobName: string;
+  total: number;
+  sentAt: string | null;
+  expiresAt: string | null;
+}
+
 export interface AmSales {
   leads: LeadToBook[];
   toApprove: ToApprove[];
+  open: OpenProposal[];
 }
 
 export async function loadAmSales(viewer: Profile, now: Date = new Date()): Promise<AmSales> {
   const sb = await db();
   const org = viewer.organization_id;
   const jobCols = "id,status,created_at,evaluation_date,evaluation_status,cancelled_at,declined_at,property:properties!inner(address,customer:customers!inner(id,name,phone,account_manager_id,do_not_contact,organization_id))";
-  const [leadRows, proposalRows] = await Promise.all([
+  const [leadRows, proposalRows, openRows] = await Promise.all([
     read(
       "leads",
       (sb.from("jobs").select(jobCols) as Q)
@@ -90,6 +102,14 @@ export async function loadAmSales(viewer: Profile, now: Date = new Date()): Prom
         .eq("status", "needs_approval")
         .order("created_at", { ascending: true })
         .limit(100)
+    ),
+    read(
+      "open proposals",
+      (sb.from("job_proposals").select("id,job_id,total_cost,discount_amount,created_at,approved_at,sent_at,expires_at,job:jobs!inner(id,name,status,cancelled_at,property:properties!inner(address,customer:customers!inner(name,account_manager_id)))") as Q)
+        .eq("organization_id", org)
+        .eq("status", "sent")
+        .order("created_at", { ascending: true })
+        .limit(200)
     ),
   ]);
 
@@ -125,7 +145,25 @@ export async function loadAmSales(viewer: Profile, now: Date = new Date()): Prom
       };
     });
 
-  return { leads: leadsToBook(leads, viewer.id, now), toApprove };
+  const open: OpenProposal[] = openRows
+    .filter((p) => {
+      const job = (p.job as Row | null) ?? {};
+      return job.status !== "cancelled" && !job.cancelled_at && isMine(str(customerOf(job).account_manager_id) || null, viewer.id);
+    })
+    .map((p) => {
+      const job = (p.job as Row | null) ?? {};
+      return {
+        proposalId: str(p.id),
+        jobId: str(p.job_id),
+        customerName: str(customerOf(job).name) || "Unnamed client",
+        jobName: str(job.name) || shortAddress((job.property as Row | null)?.address),
+        total: num(p.total_cost) - num(p.discount_amount),
+        sentAt: str(p.sent_at) || str(p.approved_at) || str(p.created_at) || null,
+        expiresAt: str(p.expires_at) || null,
+      };
+    });
+
+  return { leads: leadsToBook(leads, viewer.id, now), toApprove, open };
 }
 
 /* ------------------------------------------------------------------ */

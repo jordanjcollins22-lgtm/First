@@ -48,6 +48,7 @@
 .vx-app .vx-note.ok{color:var(--teal)}.vx-app .vx-note.bad{color:var(--warn)}
 .vx-app input.vx-search{width:100%;color:var(--fg);font:inherit;font-size:13px;outline:none}
 .vx-app input.vx-search::placeholder{color:var(--muted)}
+.vx-app textarea.vx-why{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 12px;margin-top:8px;font:inherit;font-size:13px;color:var(--fg);outline:none;resize:vertical}.vx-app textarea.vx-why::placeholder{color:var(--muted)}
 .vx-app .vx-search-w{position:relative}
 .vx-app .vx-search-w:before{content:"";position:absolute;z-index:1;left:11px;top:50%;width:10px;height:10px;margin-top:-7px;border:2px solid var(--muted);border-radius:50%}
 .vx-app .vx-search-w:after{content:"";position:absolute;left:22px;top:50%;width:6px;height:2px;margin-top:4px;background:var(--muted);transform:rotate(45deg)}

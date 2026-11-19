@@ -3,6 +3,7 @@ import { ClientSearch, OneAtATime, type OneItem } from "@/components/phone/live"
 import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
+import { sentAgo, workOf } from "@/lib/proposal-outcome";
 import { loadAmAccounts, loadAmSales } from "@/lib/data/am-home";
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
@@ -102,6 +103,23 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
 
   /* Do now ------------------------------------------------------------ */
   const items: OneItem[] = [];
+  // Every proposal the client has not answered comes first: Yes or No, and why.
+  for (const p of sales?.open ?? []) {
+    const expired = p.expiresAt != null && new Date(p.expiresAt).getTime() < now.getTime();
+    items.push({
+      tag: "Close this proposal",
+      who: p.customerName,
+      whoHref: `/jobs/${p.jobId}`,
+      body: (
+        <>
+          <Row a={workOf(p.jobName)} b={money(p.total)} />
+          <Row a={sentAgo(p.sentAt, now)} b={expired ? "Expired" : ""} />
+        </>
+      ),
+      main: { label: "Open proposal", href: `/jobs/${p.jobId}` },
+      closeProposal: p.proposalId,
+    });
+  }
   for (const m of accounts?.messages ?? []) {
     items.push({ tag: "Reply", who: m.customerName, whoHref: `/jobs/${m.jobId}`, body: <div className="vx-q">&ldquo;{m.body}&rdquo;</div>, main: { label: "Reply", href: `/jobs/${m.jobId}` } });
   }
