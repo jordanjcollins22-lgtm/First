@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { ProposalCloser } from "@/components/phone/proposal-closer";
 import { decidePayout, requestPayout, withdrawPayout } from "@/lib/actions/payout-actions";
 import type { Wallet } from "@/lib/wallet";
 
@@ -19,6 +20,8 @@ export interface OneItem {
   body?: React.ReactNode;
   main: { label: string; href?: string; payout?: string };
   alt?: string;
+  /** An open proposal's id: Yes or No and why, in place of the main button. */
+  closeProposal?: string;
 }
 
 /** Do now: one item at a time, "1 of N". The main button does it, Skip moves on. */
@@ -57,33 +60,37 @@ export function OneAtATime({ title, items, children }: { title: string; items: O
             <div className="vx-who">{it.who}</div>
           )}
           {it.body}
-          <div className="vx-2b">
-            {it.main.href ? (
-              <Link href={it.main.href} className="vx-cta">
-                {it.main.label}
-              </Link>
-            ) : (
-              <button
-                type="button"
-                className="vx-cta"
-                disabled={busy}
-                onClick={() => {
-                  const id = it.main.payout;
-                  if (!id) return next();
-                  start(async () => {
-                    const r = await decidePayout(id, true, "");
-                    setNote(r.ok ? r.message : r.error);
-                    if (r.ok) router.refresh();
-                  });
-                }}
-              >
-                {it.main.label}
+          {it.closeProposal ? (
+            <ProposalCloser key={it.closeProposal} proposalId={it.closeProposal} onSkip={next} />
+          ) : (
+            <div className="vx-2b">
+              {it.main.href ? (
+                <Link href={it.main.href} className="vx-cta">
+                  {it.main.label}
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className="vx-cta"
+                  disabled={busy}
+                  onClick={() => {
+                    const id = it.main.payout;
+                    if (!id) return next();
+                    start(async () => {
+                      const r = await decidePayout(id, true, "");
+                      setNote(r.ok ? r.message : r.error);
+                      if (r.ok) router.refresh();
+                    });
+                  }}
+                >
+                  {it.main.label}
+                </button>
+              )}
+              <button type="button" className="vx-cta vx-alt" onClick={next}>
+                {it.alt ?? "Skip"}
               </button>
-            )}
-            <button type="button" className="vx-cta vx-alt" onClick={next}>
-              {it.alt ?? "Skip"}
-            </button>
-          </div>
+            </div>
+          )}
           {note && <div className="vx-note">{note}</div>}
         </div>
       ) : (

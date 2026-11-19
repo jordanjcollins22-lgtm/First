@@ -3715,6 +3715,9 @@ export interface Database {
           client_response_note: string | null;
           office_declined_by: string | null;
           office_declined_from: string | null;
+          close_reason: string | null;
+          closed_by: string | null;
+          closed_at: string | null;
           valid_days: number;
           expires_at: string | null;
           created_at: string;
