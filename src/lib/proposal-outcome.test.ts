@@ -30,3 +30,12 @@ describe("closing an open proposal", () => {
     expect(workOf("Mulch")).toBe("Mulch");
   });
 });
+
+describe("finishing a follow-up", () => {
+  it("keeps the note and adds what happened", async () => {
+    const { followUpNote } = await import("@/lib/proposal-outcome");
+    const now = new Date("2026-11-19T17:00:00Z");
+    expect(followUpNote("Call Gary", " Left a voicemail ", now)).toBe("Call Gary\n\nDone Nov 19: Left a voicemail");
+    expect(followUpNote(null, "Paid", now)).toBe("Done Nov 19: Paid");
+  });
+});
