@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { FollowUpDone } from "@/components/phone/follow-up-done";
 import { ProposalCloser } from "@/components/phone/proposal-closer";
+import { searchClients, type ClientHit } from "@/lib/actions/client-search-actions";
 import { decidePayout, requestPayout, withdrawPayout } from "@/lib/actions/payout-actions";
 import type { Wallet } from "@/lib/wallet";
 
@@ -106,20 +107,46 @@ export function OneAtATime({ title, items, children }: { title: string; items: O
   );
 }
 
-/** Search clients and projects: type a name, tap it to open their page. */
+/**
+ * Search clients and projects: type a name, phone, email or address and tap
+ * a client to open their page. Searches every client in the company, not
+ * only the ones on this page.
+ */
 export function ClientSearch({ clients }: { clients: { id: string; name: string; href: string; sub?: string }[] }) {
   const [q, setQ] = useState("");
+  const [found, setFound] = useState<{ q: string; hits: ClientHit[] } | null>(null);
+  const t = q.trim();
+
+  useEffect(() => {
+    if (t.length < 2) return;
+    let live = true;
+    const timer = setTimeout(() => {
+      searchClients(t)
+        .then((hits) => live && setFound({ q: t, hits }))
+        .catch(() => live && setFound({ q: t, hits: [] }));
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [t]);
+
   const hits = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (!t) return [];
-    return clients.filter((c) => c.name.toLowerCase().includes(t) || (c.sub ?? "").toLowerCase().includes(t)).slice(0, 8);
-  }, [q, clients]);
+    const low = t.toLowerCase();
+    if (!low) return [];
+    const local = clients.filter((c) => c.name.toLowerCase().includes(low) || (c.sub ?? "").toLowerCase().includes(low));
+    const seen = new Set(local.map((c) => c.id));
+    const remote = found && found.q === t ? found.hits.filter((h) => !seen.has(h.id)) : [];
+    return [...local, ...remote].slice(0, 12);
+  }, [t, clients, found]);
+  const waiting = t.length >= 2 && (!found || found.q !== t);
+
   return (
     <div>
       <div className="vx-search-w">
         <input className="vx-search" placeholder="Search clients and projects" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search clients and projects" />
       </div>
-      {q.trim() && (
+      {t && (
         <div className="vx-hits">
           {hits.length ? (
             hits.map((c) => (
@@ -130,7 +157,7 @@ export function ClientSearch({ clients }: { clients: { id: string; name: string;
             ))
           ) : (
             <div className="vx-row">
-              <span>No match</span>
+              <span>{waiting ? "Searching…" : "No match"}</span>
             </div>
           )}
         </div>
