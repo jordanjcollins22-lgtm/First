@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { FollowUpDone } from "@/components/phone/follow-up-done";
 import { ProposalCloser } from "@/components/phone/proposal-closer";
 import { decidePayout, requestPayout, withdrawPayout } from "@/lib/actions/payout-actions";
 import type { Wallet } from "@/lib/wallet";
@@ -22,6 +23,8 @@ export interface OneItem {
   alt?: string;
   /** An open proposal's id: Yes or No and why, in place of the main button. */
   closeProposal?: string;
+  /** A follow-up's id: Done with what happened, in place of the main button. */
+  followUp?: string;
 }
 
 /** Do now: one item at a time, "1 of N". The main button does it, Skip moves on. */
@@ -62,6 +65,8 @@ export function OneAtATime({ title, items, children }: { title: string; items: O
           {it.body}
           {it.closeProposal ? (
             <ProposalCloser key={it.closeProposal} proposalId={it.closeProposal} onSkip={next} />
+          ) : it.followUp ? (
+            <FollowUpDone key={it.followUp} id={it.followUp} onSkip={next} />
           ) : (
             <div className="vx-2b">
               {it.main.href ? (

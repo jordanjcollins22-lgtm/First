@@ -316,3 +316,34 @@ export async function loadAmAccounts(viewer: Profile, now: Date = new Date()): P
 
   return { messages, invoices, clients, issues };
 }
+
+/* ------------------------------------------------------------------ */
+/* Follow-ups                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Someone to get back to: a call, a text, a payment to chase. Kept in owner_tasks under section "follow_up". */
+export interface FollowUp {
+  id: string;
+  title: string;
+  note: string;
+}
+
+export const FOLLOW_UP_SECTION = "follow_up";
+
+/** Open follow-ups for this account manager, plus any nobody was given, oldest first. */
+export async function loadAmFollowUps(viewer: Profile): Promise<FollowUp[]> {
+  const sb = await db();
+  const rows = await read(
+    "follow ups",
+    (sb.from("owner_tasks").select("id,title,note,assigned_to,position,created_at") as Q)
+      .eq("organization_id", viewer.organization_id)
+      .eq("section", FOLLOW_UP_SECTION)
+      .in("status", ["todo", "in_progress"])
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(100)
+  );
+  return rows
+    .filter((r) => isMine(str(r.assigned_to) || null, viewer.id))
+    .map((r) => ({ id: str(r.id), title: str(r.title), note: str(r.note) }));
+}

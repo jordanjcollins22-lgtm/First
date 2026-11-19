@@ -4,7 +4,7 @@ import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
 import { sentAgo, workOf } from "@/lib/proposal-outcome";
-import { loadAmAccounts, loadAmSales } from "@/lib/data/am-home";
+import { loadAmAccounts, loadAmFollowUps, loadAmSales, type FollowUp } from "@/lib/data/am-home";
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
 import { listBoardJobs } from "@/lib/data/job-board";
@@ -91,7 +91,7 @@ const STATUS: Record<string, string> = { completed: "Completed", in_progress: "I
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const now = new Date();
   const weeks = twoWeeks(now);
-  const [accounts, sales, applicants, board, visits, finance, lw] = await Promise.all([
+  const [accounts, sales, applicants, board, visits, finance, lw, followUps] = await Promise.all([
     loadAmAccounts(profile, now).catch(() => null),
     loadAmSales(profile, now).catch(() => null),
     listApplicants(profile.organization_id).catch(() => [] as ApplicantRow[]),
@@ -99,11 +99,16 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     visitsBetween(profile, weeks.from, weeks.to).catch(() => [] as Visit[]),
     loadFinanceDashboard(profile.organization_id, now).catch(() => null),
     loadLinkAndWallet(profile),
+    loadAmFollowUps(profile).catch(() => [] as FollowUp[]),
   ]);
 
   /* Do now ------------------------------------------------------------ */
   const items: OneItem[] = [];
-  // Every proposal the client has not answered comes first: Yes or No, and why.
+  // Follow-ups owed today come first: who to get back to and why.
+  for (const f of followUps) {
+    items.push({ tag: "Follow up", who: f.title, body: f.note ? <div className="vx-q" style={{ whiteSpace: "pre-line" }}>{f.note}</div> : undefined, main: { label: "Done" }, followUp: f.id });
+  }
+  // Then every proposal the client has not answered: Yes or No, and why.
   for (const p of sales?.open ?? []) {
     const expired = p.expiresAt != null && new Date(p.expiresAt).getTime() < now.getTime();
     items.push({

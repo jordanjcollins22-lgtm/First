@@ -66,3 +66,10 @@ export function workOf(jobName: string): string {
     .filter(Boolean);
   return parts.length > 1 ? parts[parts.length - 1] : jobName;
 }
+
+/** A follow-up's note once it is done: what it said, then what happened and when. */
+export function followUpNote(before: string | null | undefined, happened: string, now: Date): string {
+  const day = now.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
+  const line = `Done ${day}: ${happened.trim()}`;
+  return before?.trim() ? `${before.trim()}\n\n${line}` : line;
+}
