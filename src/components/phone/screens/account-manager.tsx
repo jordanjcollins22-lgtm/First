@@ -163,6 +163,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
 
   return (
     <Screen hello={`Hi ${firstName(profile)}`} role="Account manager">
+      <Btn href="/huddle">Team huddle</Btn>
       <ClientSearch clients={clients} />
 
       <OneAtATime title="Do now" items={items} />
