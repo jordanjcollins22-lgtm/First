@@ -4,6 +4,7 @@ import { Row, Screen, Sub, money } from "@/components/phone/parts";
 import { EstimateButton } from "@/components/phone/estimate-button";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
+import { crewPath } from "@/lib/crew-link";
 
 const TZ = "America/New_York";
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
@@ -99,6 +100,10 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
         ) : (
           !est?.total && <Row a="No proposal yet" />
         )}
+      </Sub>
+
+      <Sub title="Crew map" sum="No login">
+        <Row a="Open the crew map" b="Copy its link to text the crew" href={crewPath(job.id)} />
       </Sub>
 
       <Sub title="Invoices" sum={open.length ? `${open.length} · ${money(open.reduce((s, i) => s + i.amount, 0))}` : job.invoices.length}>
