@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Empty, SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { ClientSearch, OneAtATime, type OneItem } from "@/components/phone/live";
 import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
@@ -8,14 +10,15 @@ import { loadAmAccounts, loadAmFollowUps, loadAmSales, type FollowUp } from "@/l
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
 import { listBoardJobs } from "@/lib/data/job-board";
-import { POSITIONS } from "@/lib/hiring/positions";
+import { POSITIONS, positionFor } from "@/lib/hiring/positions";
+import { stageLabel } from "@/lib/hiring/screening";
 import type { BoardJob } from "@/lib/job-board";
 import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
 import type { Profile } from "@/types/domain";
 
 const TZ = "America/New_York";
-/** Only search and Do now on the account manager page for now (Jordan, Nov 19). */
+/** Only search, Do now and Hiring on the account manager page for now (Jordan, Nov 19 and 21). */
 const TASKS_ONLY = true;
 const DAY = 86_400_000;
 const dayLabel = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "UTC" });
@@ -83,11 +86,35 @@ function interviewsOf(applicants: ApplicantRow[], from: string, to: string): Vis
     .filter((v) => v.day >= from && v.day <= to);
 }
 
+const IN_INTERVIEWS = new Set(["interview", "working_interview", "owner_talk", "offer_sent"]);
+
+/** One applicant: tap the name to open them (record the call, book the interview, say what happened), or Call. */
+function ApplicantLine({ a, b }: { a: ApplicantRow; b: string }) {
+  const p = positionFor(a.position);
+  const tel = a.phone.replace(/[^\d+]/g, "");
+  return (
+    <div className="vx-row">
+      <Link href={`/admin/hiring/${a.id}`} className="vx-tap" style={{ flex: 1, minWidth: 0 }}>
+        <span>
+          {a.name} · {p ? (p.closed ? `${p.title} (role closed)` : p.title) : a.position}
+        </span>
+        <br />
+        <small className="vx-sm">{b}</small>
+      </Link>
+      {tel && (
+        <a href={`tel:${tel}`} className="vx-call">
+          Call
+        </a>
+      )}
+    </div>
+  );
+}
+
 const STATUS: Record<string, string> = { completed: "Completed", in_progress: "In progress", approved: "Not started" };
 
 /**
- * The account manager's home, top to bottom as the Hub draws it: search, Do
- * now one at a time, Your schedule, Crew schedule, Hiring, Business, then the
+ * The account manager's home, top to bottom: search, Do now one at a time,
+ * Hiring, then (hidden for now) Your schedule, Crew schedule, Business, the
  * link, wallet and stage. Every client name opens that client.
  */
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
@@ -148,10 +175,12 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const waitList = board.filter((j) => !j.declined && j.status === "approved" && !j.workStartsOn).sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
 
   /* Hiring ------------------------------------------------------------ */
-  const newApplicants = applicants.filter((a) => a.stage === "video_submitted");
-  const interviews = applicants
-    .filter((a) => a.interviewAt && new Date(a.interviewAt).getTime() > now.getTime() - DAY && (a.stage === "interview" || a.stage === "working_interview"))
-    .sort((a, b) => a.interviewAt!.localeCompare(b.interviewAt!));
+  // Everyone who applied and is waiting on a call: video in first, then the
+  // ones still owing a video. Newest first in each.
+  const toCall = [...applicants.filter((a) => a.stage === "video_submitted"), ...applicants.filter((a) => a.stage === "video_requested")];
+  const inInterviews = applicants
+    .filter((a) => IN_INTERVIEWS.has(a.stage))
+    .sort((a, b) => (a.interviewAt ?? "9").localeCompare(b.interviewAt ?? "9"));
 
   /* Business ---------------------------------------------------------- */
   const month = finance?.revenue.month;
@@ -166,6 +195,40 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       <ClientSearch clients={clients} />
 
       <OneAtATime title="Do now" items={items} />
+
+      {/* Jordan, Nov 21: Jace calls applicants, books interviews and says how they went from here. */}
+      <Card title="Hiring" right={toCall.length ? `${toCall.length} to call` : undefined}>
+        <Sub
+          open
+          title={
+            <>
+              Applied, need a call
+              {toCall.length > 0 && (
+                <>
+                  <br />
+                  <em className="vx-act">Tap a name to record the call and book the interview</em>
+                </>
+              )}
+            </>
+          }
+          sum={toCall.length}
+        >
+          {toCall.length ? toCall.map((a) => <ApplicantLine key={a.id} a={a} b={`${a.stage === "video_submitted" ? "Video in" : "No video yet"} · applied ${shortDay(dateKeyIn(new Date(a.createdAt)))}${a.source ? ` · ${a.source}` : ""}`} />) : <Row a="Nobody waiting on a call" />}
+        </Sub>
+        <Sub open={inInterviews.length > 0} title="Interviews" sum={inInterviews.length}>
+          {inInterviews.length ? (
+            inInterviews.map((a) => (
+              <ApplicantLine
+                key={a.id}
+                a={a}
+                b={`${stageLabel(a.stage, a.position)}${a.interviewAt ? ` · ${dayLabel(dateKeyIn(new Date(a.interviewAt)))} ${timeOf(a.interviewAt)}` : " · no time booked"}`}
+              />
+            ))
+          ) : (
+            <Row a="None booked" />
+          )}
+        </Sub>
+      </Card>
 
       {/* Jordan, Nov 19: for now the page is only his tasks. The rest comes back when it is wanted. */}
       {!TASKS_ONLY && (
@@ -222,35 +285,6 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         ))}
         <Sub title="Wait list" sum={waitList.length}>
           {waitList.length ? waitList.map((j, i) => <Row key={j.id} a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`} b="Not scheduled" href={`/jobs/${j.id}`} />) : <Row a="Nobody waiting" />}
-        </Sub>
-      </Card>
-
-      <Card title="Hiring">
-        <Sub
-          title={
-            <>
-              New applicants
-              {newApplicants.length > 0 && (
-                <>
-                  <br />
-                  <em className="vx-act">{newApplicants.length} need a call</em>
-                </>
-              )}
-            </>
-          }
-          sum={newApplicants.length}
-        >
-          {newApplicants.length ? newApplicants.map((a) => <Row key={a.id} a={`${a.name} · ${a.position.replace("-", " ")}${a.source ? ` · ${a.source}` : ""}`} b="Call" tag="new" href={`/admin/hiring/${a.id}`} />) : <Row a="None waiting" />}
-        </Sub>
-        <Sub title="Interviews" sum={interviews.length}>
-          {interviews.length ? (
-            interviews.map((a) => <Row key={a.id} a={`${dayLabel(dateKeyIn(new Date(a.interviewAt!)))} · ${timeOf(a.interviewAt!)} · ${a.name}`} b={a.stage === "working_interview" ? "Working interview" : "Interview"} href={`/admin/hiring/${a.id}`} />)
-          ) : (
-            <Row a="None booked" />
-          )}
-        </Sub>
-        <Sub title="Check-ins due" sum={0}>
-          <Row a="Check-ins aren't tracked in the app yet" />
         </Sub>
       </Card>
 
