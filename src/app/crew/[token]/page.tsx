@@ -51,7 +51,6 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
         )
       : undefined;
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.address)}`;
-  const firstName = job.clientName.split(/\s+/)[0] ?? "";
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 pb-16 pt-6">
@@ -130,7 +129,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
 
       {job.zones.length === 0 && !job.notes && <p className="text-sm text-muted-foreground">No written scope yet. Check with the office.</p>}
 
-      <p className="text-xs text-muted-foreground">Questions on site? Call the office before changing the plan{firstName ? ` with ${firstName}` : ""}.</p>
+      <p className="text-xs text-muted-foreground">Questions on site? Call the office before changing the plan.</p>
     </main>
   );
 }
