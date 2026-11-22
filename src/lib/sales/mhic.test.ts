@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   atSigningForSnapshot,
+  MHIC_ON_PROPOSALS,
   depositCapCents,
   dueAtSigning,
   isHomeImprovementScope,
@@ -68,9 +69,14 @@ describe("the deposit", () => {
   });
 
   it("reads the cap straight off a snapshot", () => {
-    expect(atSigningForSnapshot(90_000, [{ serviceLabel: "Landscape Bed" }]).dueNowCents).toBe(30_000);
-    expect(atSigningForSnapshot(90_000, [{ serviceLabel: "Lawn Care", lines: [{ key: "mowing-edging" }] }]).dueNowCents).toBe(90_000);
-    expect(atSigningForSnapshot(90_000, null).dueNowCents).toBe(90_000);
+    expect(atSigningForSnapshot(90_000, [{ serviceLabel: "Landscape Bed" }], true).dueNowCents).toBe(30_000);
+    expect(atSigningForSnapshot(90_000, [{ serviceLabel: "Lawn Care", lines: [{ key: "mowing-edging" }] }], true).dueNowCents).toBe(90_000);
+    expect(atSigningForSnapshot(90_000, null, true).dueNowCents).toBe(90_000);
+  });
+
+  it("takes the whole price at signing while the rule is switched off for proposals", () => {
+    expect(MHIC_ON_PROPOSALS).toBe(false);
+    expect(atSigningForSnapshot(90_000, [{ serviceLabel: "Landscape Bed" }]).dueNowCents).toBe(90_000);
   });
 
   it("takes nothing before the contract is signed", () => {
