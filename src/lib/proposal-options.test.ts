@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyOption, readOptions } from "@/lib/proposal-options";
+import { applyOption, readOptions, readRenderings, renderingFor } from "@/lib/proposal-options";
 
 const option = (key: string, totalCents: number, prices: number[]) => ({
   key,
@@ -38,5 +38,30 @@ describe("options on a proposal", () => {
     expect(done.totalCost).toBe(900);
     expect(done.snapshot[0]).toMatchObject({ zoneName: "Lawn", scopeText: "Aerate", priceCents: 90000, priceDerived: true });
     expect(done.snapshot[0].lines).toHaveLength(1);
+  });
+});
+
+describe("renderings", () => {
+  const two = [option("low", 500, [500]), option("high", 900, [900])];
+
+  it("comes through with the options", () => {
+    const read = readOptions(
+      { options: two, renderings: [{ name: "Front", before: "/a.jpg", after: { low: "/l.jpg", high: "/h.jpg" } }] },
+      1
+    );
+    expect(read?.renderings).toEqual([{ name: "Front", before: "/a.jpg", after: { low: "/l.jpg", high: "/h.jpg" } }]);
+  });
+
+  it("drops a broken area without losing the options", () => {
+    const read = readOptions({ options: two, renderings: [{ name: "Front", before: "" , after: { low: "/l.jpg" } }, "junk"] }, 1);
+    expect(read?.options).toHaveLength(2);
+    expect(read?.renderings).toBeUndefined();
+  });
+
+  it("falls back to the picture shared by every option", () => {
+    const [zone] = readRenderings([{ name: "Mailbox", before: "/b.jpg", after: { all: "/m.jpg", high: "/mh.jpg" } }]);
+    expect(renderingFor(zone, "low")).toBe("/m.jpg");
+    expect(renderingFor(zone, "high")).toBe("/mh.jpg");
+    expect(renderingFor(zone, null)).toBe("/m.jpg");
   });
 });

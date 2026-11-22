@@ -36,7 +36,16 @@ export interface CheckoutRequest {
    * price: the webhook must not mark the proposal paid in full on it.
    */
   deposit?: boolean;
+  /**
+   * Paying over time: Klarna only, so the client is handed straight to the
+   * lender. We are paid the whole amount up front and they pay Klarna
+   * monthly. No card fee line, because it is not a card payment.
+   */
+  overTime?: boolean;
 }
+
+/** The only way to pay over time on a proposal: a lender that pays us in full now. */
+export const OVER_TIME_METHODS = ["klarna"] as const;
 
 export interface CheckoutStarted {
   url: string;
@@ -66,7 +75,7 @@ export async function startProposalCheckout(
   if (!baseUrl) return null;
 
   const stripe = stripeClient();
-  const fee = surchargeCents(input.amountCents);
+  const fee = input.overTime ? 0 : surchargeCents(input.amountCents);
 
   // Reuse the contact's Stripe customer where we know it. A fresh customer
   // per payment is what stopped payments reconciling to anybody, and it also
@@ -75,6 +84,7 @@ export async function startProposalCheckout(
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    ...(input.overTime ? { payment_method_types: [...OVER_TIME_METHODS] } : {}),
     ...(existing
       ? { customer: existing }
       : {
@@ -126,6 +136,7 @@ export async function startProposalCheckout(
       ...(input.planId ? { plan_id: input.planId } : {}),
       ...(input.instalmentId ? { instalment_id: input.instalmentId } : {}),
       ...(input.deposit ? { deposit: "1" } : {}),
+      ...(input.overTime ? { over_time: "1" } : {}),
     },
   });
 
