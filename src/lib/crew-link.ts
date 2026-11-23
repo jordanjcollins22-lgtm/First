@@ -19,3 +19,15 @@ export function jobIdFromCrewToken(token: string): string | null {
   const id = decodeURIComponent(token).trim();
   return UUID.test(id) ? id.toLowerCase() : null;
 }
+
+/**
+ * The name a crew sees for an area: its number on the page, when the office
+ * only ever called it "Zone N".
+ *
+ * Zones keep the name they were drawn with, so a job whose zone 3 was
+ * deleted shows markers 1 to 4 next to "Zone 1, 2, 4, 5", and the crew ask
+ * which one is three. A real name ("Front bed") is kept as it is.
+ */
+export function crewZoneLabel(zoneName: string, number: number): string {
+  return /^\s*zone\s*\d+\s*$/i.test(zoneName) || !zoneName.trim() ? `Zone ${number}` : zoneName;
+}
