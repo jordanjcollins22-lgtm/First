@@ -93,6 +93,7 @@ describe("calculateProject on the example", () => {
 describe("scopeLine", () => {
   it("writes only the work, without adding anything", () => {
     expect(scopeLine(lib, project.zones[1].work_items[0])).toBe("Remove 3 existing boxwood.");
+    expect(scopeLine(lib, project.zones[0].work_items[0])).toBe("Remove 1 existing Japanese barberry.");
     expect(scopeLine(lib, project.zones[0].work_items[3])).toBe(
       "Install brown hardwood mulch across approximately 200 square feet at our standard depth.",
     );

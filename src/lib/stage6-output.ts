@@ -22,10 +22,23 @@ const UNIT_WORDS: Record<WorkItem["unit"], string> = {
   hr: "hours",
 };
 
+/** First words that keep their capital mid-sentence (places, people, cultivar names). */
+const PROPER = new Set([
+  "American", "Amur", "Boston", "Christmas", "Chinese", "Colorado", "Delaware", "Eastern", "Emerald", "English", "European",
+  "Japanese", "Joe", "Kentucky", "Knock", "Korean", "Koreanspice", "Kwanzan", "Lenten", "Leyland", "London", "Mexican",
+  "Morrow's", "Nellie", "Norway", "PA", "Pennsylvania", "Russian", "Serbian", "Shasta", "Siberian", "Solomon's", "St.",
+  "Virginia", "Yoshino",
+]);
+
+/** A catalog name inside a sentence: "Brown hardwood mulch" -> "brown hardwood mulch"; "Japanese barberry" stays. */
+export function midSentence(name: string): string {
+  return PROPER.has(name.split(" ")[0]) ? name : name.charAt(0).toLowerCase() + name.slice(1);
+}
+
 export function scopeLine(lib: Library, item: WorkItem): string | null {
   const found = findOperation(lib, item);
   if (!found?.op.scope_template) return null;
-  const name = (found.subtype?.name ?? found.material.name).toLowerCase();
+  const name = midSentence(found.subtype?.name ?? found.material.name);
   return found.op.scope_template
     .replaceAll("{qty}", String(item.quantity))
     .replaceAll("{unit}", UNIT_WORDS[item.unit])
