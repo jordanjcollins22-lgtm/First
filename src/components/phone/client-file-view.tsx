@@ -2,8 +2,10 @@ import Link from "next/link";
 
 import { Row, Screen, Sub, money } from "@/components/phone/parts";
 import { EstimateButton } from "@/components/phone/estimate-button";
+import { NewEstimate } from "@/components/phone/new-estimate";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
+import { crewPath } from "@/lib/crew-link";
 
 const TZ = "America/New_York";
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
@@ -47,6 +49,14 @@ export function ClientFileView({ file, jobId }: { file: ClientFile; jobId?: stri
       {jobs.map((j) => (
         <JobCard key={j.id} job={j} file={file} />
       ))}
+      <NewEstimate
+        customerId={file.id}
+        name={file.name}
+        phone={file.phone ?? ""}
+        email={file.email ?? ""}
+        address={file.jobs[0]?.address ?? ""}
+        label={jobs.length ? "New estimate for this client" : "New estimate"}
+      />
     </Screen>
   );
 }
@@ -64,6 +74,16 @@ function Contact({ file }: { file: ClientFile }) {
       </a>
     </div>
   );
+}
+
+const APP = (process.env.NEXT_PUBLIC_APP_URL || "https://app.jslandscapingmd.com").replace(/\/$/, "");
+
+/** A text to the client with their estimate's link, ready to send from the phone. */
+function estimateText(file: ClientFile, token: string) {
+  const tel = (file.phone ?? "").replace(/[^\d+]/g, "");
+  const first = file.name.trim().split(/\s+/)[0] || "there";
+  const body = `Hi ${first}, here is your estimate from JS Landscaping: ${APP}/prep/${token}/estimate`;
+  return `sms:${tel}?&body=${encodeURIComponent(body)}`;
 }
 
 function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
@@ -88,6 +108,11 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
             href={est.token ? `/prep/${est.token}/estimate` : undefined}
           />
         )}
+        {est?.total != null && est.token && file.phone && !file.doNotContact && !est.paidAt && (
+          <a href={estimateText(file, est.token)} className="vx-cta vx-alt">
+            Text them this estimate
+          </a>
+        )}
         {job.status !== "completed" && job.status !== "cancelled" && !est?.paidAt && (
           <EstimateButton jobId={job.id} label={est?.total != null ? "Change it on the map" : "Price it on the map"} />
         )}
@@ -99,6 +124,10 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
         ) : (
           !est?.total && <Row a="No proposal yet" />
         )}
+      </Sub>
+
+      <Sub title="Crew map" sum="No login">
+        <Row a="Open the crew map" b="Copy its link to text the crew" href={crewPath(job.id)} />
       </Sub>
 
       <Sub title="Invoices" sum={open.length ? `${open.length} · ${money(open.reduce((s, i) => s + i.amount, 0))}` : job.invoices.length}>
