@@ -20,25 +20,34 @@
 --
 -- library_files keeps resources.msgpack: the whole library packed as
 -- MessagePack, versioned, for the calculation stage to load in one read.
--- Until a business has rows of its own the app uses the starting library
--- in src/lib/resource-library.ts.
+-- Every calculation records the version it used. Until a business has rows
+-- of its own the app uses the starting library in src/lib/resource-library.ts
+-- (the Maryland catalog in resource-catalog-md.ts).
+--
+-- Every material, subtype and resource has a permanent number (ref_id) so a
+-- project can reference it instead of copying it.
 
 create table if not exists public.library_materials (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
+  -- Permanent number projects reference: 1 plant, 2 mulch, 3 stone ...
+  ref_id integer not null check (ref_id >= 1),
   key text not null check (key ~ '^[a-z0-9_]+$'),          -- plant, mulch, stone
   name text not null,                                         -- Plant
   -- {"physical": {...}, "chemical_biological": {...}, "financial": {...}}
   properties jsonb not null default '{}' check (jsonb_typeof(properties) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (organization_id, key)
+  unique (organization_id, key),
+  unique (organization_id, ref_id)
 );
 
 create table if not exists public.library_subtypes (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   material_id uuid not null references public.library_materials(id) on delete cascade,
+  -- Permanent number: material ref × 1000 + n, e.g. 1001 japanese_barberry.
+  ref_id integer not null check (ref_id >= 1),
   key text not null check (key ~ '^[a-z0-9_]+$'),          -- japanese_barberry
   name text not null,                                         -- Japanese barberry
   -- Overrides and adds to the material's properties, e.g.
@@ -46,23 +55,28 @@ create table if not exists public.library_subtypes (
   properties jsonb not null default '{}' check (jsonb_typeof(properties) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (material_id, key)
+  unique (material_id, key),
+  unique (organization_id, ref_id)
 );
 
 create table if not exists public.library_resources (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
+  -- Permanent number, 501 and up.
+  ref_id integer not null check (ref_id >= 1),
   key text not null check (key ~ '^[a-z0-9_]+$'),          -- round_point_shovel
   kind text not null check (kind in ('tool', 'equipment', 'labor', 'consumable', 'disposal', 'vehicle')),
   name text not null,
   -- Operating characteristics, e.g. {"capacity_cuyd": 5}.
   properties jsonb not null default '{}' check (jsonb_typeof(properties) = 'object'),
-  -- What it costs to own and use, e.g. {"purchase_cents": 4500, "life_hours": 400}
-  -- or {"per_hour_cents": 9500} or {"per_ton_cents": 6500}.
+  -- What it costs to own and use: the asset's ARC (annual replacement cost)
+  -- and OCS (operational cost per second), or a rate such as
+  -- {"per_ton_cents": 6500} for disposal.
   costs jsonb not null default '{}' check (jsonb_typeof(costs) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (organization_id, key)
+  unique (organization_id, key),
+  unique (organization_id, ref_id)
 );
 
 create table if not exists public.library_operations (
@@ -72,26 +86,33 @@ create table if not exists public.library_operations (
   -- Null: applies to every subtype of the material without its own row.
   subtype_id uuid references public.library_subtypes(id) on delete cascade,
   operation text not null check (operation in ('install', 'remove', 'maintain')),
+  -- Production model id, e.g. shrub_remove. Calculations record it.
+  model_id text not null check (model_id ~ '^[a-z0-9_]+$'),
+  -- For a material-wide row: only subtypes whose properties.kind is listed
+  -- (shrub rates don't fit trees). Empty: every subtype.
+  applies_to text[] not null default '{}',
   -- The unit the evaluator's quantity comes in (Stage 1).
   unit text not null check (unit in ('sqft', 'lnft', 'sqyd', 'cuyd', 'each', 'ton', 'lb', 'gal', 'hr')),
   -- The unit the production rate is per, when it differs (mulch: sqft in, cuyd rated).
   rate_unit text not null check (rate_unit in ('sqft', 'lnft', 'sqyd', 'cuyd', 'each', 'ton', 'lb', 'gal', 'hr')),
-  -- Company standards the evaluator is never asked for, e.g. {"depth_in": 3}.
+  -- Company standards the evaluator is never asked for, e.g. {"depth_in": 2}.
   standards jsonb not null default '{}' check (jsonb_typeof(standards) = 'object'),
-  -- What the evaluator must measure, observe or photograph for this work, e.g.
-  -- [{"key": "size_class", "options": ["small", "medium", "large"], "evidence": "photo"}].
-  measure jsonb not null default '[]' check (jsonb_typeof(measure) = 'array'),
-  -- Words the proposal is written from, e.g. "Remove {qty} existing {subtype}, including root removal and debris disposal."
-  scope_text text,
+  -- What the evaluator must measure, observe or photograph for this work, and
+  -- with which tool, e.g. [{"key": "size_class", "options": ["small", "medium", "large"],
+  -- "evidence": "photo of each plant"}, {"key": "height_ft", "unit": "ft", "tool_id": 511}].
+  required_inputs jsonb not null default '[]' check (jsonb_typeof(required_inputs) = 'array'),
+  -- Customer wording for exactly this work, e.g. "Remove {qty} existing {subtype}."
+  -- Never adds work (root removal, disposal) the approved scope doesn't include.
+  scope_template text,
   -- Anything else: procedures, constraints, dependencies.
   properties jsonb not null default '{}' check (jsonb_typeof(properties) = 'object'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- One row per operation for the material, and one per operation per subtype.
-create unique index if not exists library_operations_material_idx
-  on public.library_operations (material_id, operation) where subtype_id is null;
+create unique index if not exists library_operations_model_idx
+  on public.library_operations (organization_id, model_id);
+-- One row per operation per subtype.
 create unique index if not exists library_operations_subtype_idx
   on public.library_operations (subtype_id, operation) where subtype_id is not null;
 
