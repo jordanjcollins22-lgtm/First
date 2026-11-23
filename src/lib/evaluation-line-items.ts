@@ -59,7 +59,21 @@ const evidenceRef = z.object({
   label: z.string().optional(),
 });
 
+/**
+ * One measurement of a work item that changes how it is done (a shrub's
+ * size, a tree's trunk width). Marked as measured on site, estimated by eye,
+ * or inferred (from a photo or a rule), so later stages know how far to
+ * trust it and can ask for a real measurement.
+ */
+export const measurementSchema = z.object({
+  value: z.union([z.number(), z.string(), z.boolean()]),
+  unit: z.string().optional(),
+  source: z.enum(["measured", "estimated", "inferred"]),
+});
+
 export const workItemSchema = z.object({
+  /** Stable number within the project, so later stages can point back to it. */
+  item_id: z.number().int().positive().optional(),
   operation: z.string().transform(toKey).pipe(z.enum(OPERATIONS)),
   material: key,
   subtype: optionalKey,
@@ -68,6 +82,8 @@ export const workItemSchema = z.object({
     .string()
     .transform((v) => UNIT_ALIASES[toKey(v)] ?? toKey(v))
     .pipe(z.enum(UNITS)),
+  /** e.g. { size_class: { value: "large", source: "measured" } }. */
+  measurements: z.record(z.string().transform(toKey), measurementSchema).optional(),
 });
 
 export const zoneSchema = z.object({
@@ -88,15 +104,24 @@ export const projectSchema = z
     zones: z.array(zoneSchema),
   })
   .superRefine((p, ctx) => {
-    const seen = new Set<number>();
-    for (const z of p.zones) {
-      if (seen.has(z.zone_id)) {
-        ctx.addIssue({ code: "custom", message: `Zone ${z.zone_id} is listed twice`, path: ["zones"] });
+    const zones = new Set<number>();
+    const items = new Set<number>();
+    for (const zone of p.zones) {
+      if (zones.has(zone.zone_id)) {
+        ctx.addIssue({ code: "custom", message: `Zone ${zone.zone_id} is listed twice`, path: ["zones"] });
       }
-      seen.add(z.zone_id);
+      zones.add(zone.zone_id);
+      for (const item of zone.work_items) {
+        if (item.item_id == null) continue;
+        if (items.has(item.item_id)) {
+          ctx.addIssue({ code: "custom", message: `Work item ${item.item_id} is listed twice`, path: ["zones"] });
+        }
+        items.add(item.item_id);
+      }
     }
   });
 
+export type Measurement = z.output<typeof measurementSchema>;
 export type WorkItem = z.output<typeof workItemSchema>;
 export type Zone = z.output<typeof zoneSchema>;
 export type Project = z.output<typeof projectSchema>;
@@ -113,6 +138,21 @@ export function parseProject(input: unknown): Project {
   return projectSchema.parse(input);
 }
 
+/**
+ * Give every work item without a number the next free one, so each has a
+ * stable id before the file is saved. Numbers already given are kept.
+ */
+export function numberWorkItems(project: Project): Project {
+  let next = 1 + Math.max(0, ...project.zones.flatMap((z) => z.work_items.map((i) => i.item_id ?? 0)));
+  return {
+    ...project,
+    zones: project.zones.map((z) => ({
+      ...z,
+      work_items: z.work_items.map((i) => (i.item_id != null ? i : { ...i, item_id: next++ })),
+    })),
+  };
+}
+
 /** Work items across every zone, for item_count and totals. */
 export function countWorkItems(project: Project): number {
   return project.zones.reduce((n, z) => n + z.work_items.length, 0);
@@ -120,7 +160,7 @@ export function countWorkItems(project: Project): number {
 
 /** Pack a job's evaluation into the stage 1 MessagePack file. */
 export function packStage1(input: ProjectInput): Uint8Array {
-  const file: Stage1File = { stage: STAGE_1, schema_version: STAGE_1_SCHEMA_VERSION, ...parseProject(input) };
+  const file: Stage1File = { stage: STAGE_1, schema_version: STAGE_1_SCHEMA_VERSION, ...numberWorkItems(parseProject(input)) };
   return encode(file);
 }
 

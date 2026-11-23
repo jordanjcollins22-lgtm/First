@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   countWorkItems,
   fromByteaHex,
+  numberWorkItems,
   packStage1,
   parseProject,
   sha256Hex,
@@ -92,9 +93,34 @@ describe("parseProject", () => {
 });
 
 describe("stage 1 MessagePack file", () => {
-  it("packs and reads back the same evaluation", () => {
+  it("packs and reads back the same evaluation, numbering every work item", () => {
     const file = unpackStage1(packStage1(example));
-    expect(file).toEqual({ stage: 1, schema_version: 1, ...example });
+    expect(file).toMatchObject({ stage: 1, schema_version: 1, project_id: 1001 });
+    expect(file.zones.flatMap((z) => z.work_items.map((i) => i.item_id))).toEqual([1, 2, 3, 4, 5]);
+    expect(file.zones[1].work_items[1]).toMatchObject(example.zones[1].work_items[1]);
+  });
+
+  it("keeps numbers already given and a work item's measurements", () => {
+    const p = parseProject({
+      project_id: 1,
+      zones: [{
+        zone_id: 1,
+        name: "a",
+        work_items: [
+          { item_id: 7, operation: "remove", material: "plant", subtype: "japanese_barberry", quantity: 1, unit: "each",
+            measurements: { "Size class": { value: "large", source: "measured" } } },
+          { operation: "remove", material: "plant", subtype: "japanese_barberry", quantity: 1, unit: "each" },
+        ],
+      }],
+    });
+    const numbered = numberWorkItems(p);
+    expect(numbered.zones[0].work_items.map((i) => i.item_id)).toEqual([7, 8]);
+    expect(numbered.zones[0].work_items[0].measurements).toEqual({ size_class: { value: "large", source: "measured" } });
+  });
+
+  it("refuses a repeated work item number", () => {
+    const item = { item_id: 1, operation: "remove", material: "plant", quantity: 1, unit: "each" };
+    expect(() => parseProject({ project_id: 1, zones: [{ zone_id: 1, name: "a", work_items: [item, item] }] })).toThrow(/listed twice/);
   });
 
   it("refuses a file from another stage or version", () => {

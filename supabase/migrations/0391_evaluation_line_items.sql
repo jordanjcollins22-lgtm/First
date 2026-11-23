@@ -52,6 +52,9 @@ create table if not exists public.evaluation_line_items (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   job_id uuid not null references public.jobs(id) on delete cascade,
   zone_id uuid not null references public.evaluation_zones(id) on delete cascade,
+  -- Stable number of the work item within the project (1, 2, 3 ...), so
+  -- calculations, photos and completed work stay tied to the right item.
+  item_no integer not null check (item_no >= 1),
   -- Order within the zone.
   position integer not null default 0,
   -- What is done: install, remove or maintain.
@@ -64,6 +67,11 @@ create table if not exists public.evaluation_line_items (
   quantity numeric(12,3) not null check (quantity >= 0),
   -- What the quantity counts: sqft, lnft, cuyd, each, ...
   unit text not null check (unit in ('sqft', 'lnft', 'sqyd', 'cuyd', 'each', 'ton', 'lb', 'gal', 'hr')),
+  -- Measurements of this item that change how it is done, each marked as
+  -- measured, estimated or inferred, e.g.
+  -- {"size_class": {"value": "large", "source": "measured"},
+  --  "height_ft": {"value": 6, "unit": "ft", "source": "estimated"}}.
+  measurements jsonb not null default '{}' check (jsonb_typeof(measurements) = 'object'),
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -71,8 +79,8 @@ create table if not exists public.evaluation_line_items (
 
 create index if not exists evaluation_line_items_zone_idx
   on public.evaluation_line_items (zone_id, position);
-create index if not exists evaluation_line_items_job_idx
-  on public.evaluation_line_items (job_id);
+create unique index if not exists evaluation_line_items_job_item_idx
+  on public.evaluation_line_items (job_id, item_no);
 
 alter table public.evaluation_line_items enable row level security;
 drop policy if exists evaluation_line_items_own_org on public.evaluation_line_items;
