@@ -4,6 +4,7 @@ import { Row, Screen, Sub, money } from "@/components/phone/parts";
 import { EstimateButton } from "@/components/phone/estimate-button";
 import { NewEstimate } from "@/components/phone/new-estimate";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
+import { AddonEditor } from "@/components/phone/addon-editor";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
 import { crewPath } from "@/lib/crew-link";
 
@@ -120,6 +121,9 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
+            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} />}
+            {p.status === "accepted" &&
+              p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}`} b={money(a.priceCents / 100)} />)}
           </>
         ) : (
           !est?.total && <Row a="No proposal yet" />
