@@ -20,7 +20,7 @@ import { notifyJobTeam } from "@/lib/notifications";
 import { reportSaleToMeta } from "@/lib/data/meta-report";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
-import { startProposalCheckout } from "@/lib/proposal-checkout";
+import { OVER_TIME_METHODS, startProposalCheckout } from "@/lib/proposal-checkout";
 import { previewResult, schedulePath } from "@/lib/proposal-flow";
 import { isSameSitting } from "@/lib/proposal-views";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
@@ -510,6 +510,8 @@ export async function choosePaymentPath(input: {
   pathId: string;
   /** How many payments to split it into. Ignored for paying in full. */
   instalments?: number;
+  /** Pay over time through Klarna, which pays us in full now. Paying in full only. */
+  overTime?: boolean;
   /** Set by the internal preview, which reads the client's real proposal. */
   preview?: boolean;
 }): Promise<PublicResult<{ message: string; checkoutUrl?: string; next?: string }>> {
@@ -606,7 +608,9 @@ export async function choosePaymentPath(input: {
     // Paying in full pays the invoice that already exists. Its hosted page
     // takes a card or Apple Pay just as checkout would, and a second
     // charge alongside an open invoice is how a client pays twice.
-    if (option.id === "full") {
+    // Not when paying over time: the invoice's own page takes cards, and the
+    // client asked for the lender.
+    if (option.id === "full" && !input.overTime) {
       let open = await openInvoiceFor(proposal.job_id).catch(() => null);
       // An invoice for a price the proposal no longer says (a discount taken
       // off after it went) is voided and raised again at what is owed now.
@@ -633,6 +637,7 @@ export async function choosePaymentPath(input: {
         planId,
         instalmentId,
         deposit: Boolean(signing?.isDeposit),
+        overTime: option.id === "full" && Boolean(input.overTime),
       });
       if (started) {
         checkoutUrl = started.url;
@@ -985,6 +990,8 @@ export async function startProposalPayment(input: {
   token: string;
   pathId: string;
   instalments?: number;
+  /** Pay over time through Klarna, which pays us in full now. */
+  overTime?: boolean;
   preview?: boolean;
 }): Promise<PublicResult<{ clientSecret: string; amountCents: number }>> {
   try {
@@ -1052,8 +1059,11 @@ export async function startProposalPayment(input: {
       amount: amountCents,
       currency: "usd",
       // Lets Stripe offer the wallets and Link the browser can actually use,
-      // rather than us guessing which and hiding the rest.
-      automatic_payment_methods: { enabled: true },
+      // rather than us guessing which and hiding the rest. Paying over time
+      // is the one exception: only the lender, so that is what they get.
+      ...(input.overTime && option.id === "full"
+        ? { payment_method_types: [...OVER_TIME_METHODS] }
+        : { automatic_payment_methods: { enabled: true } }),
       ...(existing ? { customer: existing } : {}),
       ...(contact?.email ? { receipt_email: contact.email } : {}),
       metadata: {
@@ -1061,6 +1071,7 @@ export async function startProposalPayment(input: {
         organization_id: proposal.organization_id,
         job_id: proposal.job_id,
         ...(signing?.isDeposit ? { deposit: "1" } : {}),
+        ...(input.overTime ? { over_time: "1" } : {}),
       },
     });
 

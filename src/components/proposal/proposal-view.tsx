@@ -40,6 +40,7 @@ import { displayLabel } from "@/lib/zone-scope";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import { readOptions } from "@/lib/proposal-options";
 import { OptionCards } from "@/components/proposal/option-cards";
+import { RenderingGallery } from "@/components/proposal/rendering-gallery";
 import { MhicContractBlock } from "@/components/proposal/mhic-contract-block";
 import type { MhicBlock } from "@/lib/data/mhic-contract";
 import { LotPicker } from "@/components/intake/lot-picker";
@@ -224,6 +225,23 @@ function ProposalBody({
         <Watched section="property-map">
           <h2 className="mb-2 text-lg font-semibold">Your property</h2>
           <LotPicker lot={lot} picked={["whole"]} readOnly caption="Your property line and house from the county map." />
+        </Watched>
+      )}
+
+      {/* Drawn proposals: today beside each package, area by area. Above the
+          scope, because the pictures are what a client is buying. */}
+      {offered?.renderings && offered.renderings.length > 0 && (
+        <Watched section="renderings">
+          <RenderingGallery
+            zones={offered.renderings}
+            options={offered.options}
+            selected={optionKey}
+            onSelect={(key) => {
+              click("choose-option", key);
+              setOptionKey(key);
+            }}
+            locked={status !== "sent" && status !== "needs_approval"}
+          />
         </Watched>
       )}
 

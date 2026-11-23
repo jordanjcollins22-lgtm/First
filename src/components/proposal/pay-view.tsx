@@ -85,13 +85,13 @@ export function PayView({
 
   const options = optionsAfterAccept(context);
 
-  function choose(option: PaymentOption) {
+  function choose(option: PaymentOption, overTime = false) {
     if (preview) {
       setError(PREVIEW_BLOCKED);
       return;
     }
     setError(null);
-    setBusyId(option.id);
+    setBusyId(overTime ? "over_time" : option.id);
 
     // Straight to the wallet sheet where we can. The redirect below is the
     // fallback for a business that has not put its publishable key in yet.
@@ -101,6 +101,7 @@ export function PayView({
           token,
           pathId: option.id,
           instalments: 1,
+          overTime,
         });
         setBusyId(null);
         if (result.ok) setPaying({ clientSecret: result.clientSecret, amount: result.amountCents });
@@ -116,6 +117,7 @@ export function PayView({
         // One. Splitting is arranged by the office against an invoice now,
         // not chosen by a client on the proposal page.
         instalments: 1,
+        overTime,
       });
       if (!result.ok) {
         setBusyId(null);
@@ -202,6 +204,31 @@ export function PayView({
           </div>
         );
       })}
+
+      {/* Paying over time: the lender pays us in full now and the client
+          pays them monthly, so nothing here commits the business to terms.
+          Only where we can take a payment at all. */}
+      {canCharge && options.some((o) => o.id === "full") && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-background p-4">
+          <div>
+            <p className="font-semibold">Pay over time</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Split {money(context.totalCents)} into smaller payments with Klarna. Klarna checks eligibility and shows your
+              monthly amount before you agree to anything.
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="xl"
+            variant="outline"
+            className="w-full"
+            disabled={pending}
+            onClick={() => choose(options.find((o) => o.id === "full")!, true)}
+          >
+            {busyId === "over_time" ? "Opening Klarna…" : "Pay over time"}
+          </Button>
+        </div>
+      )}
 
       {/* The other way to pay, for the client who would rather not pay a
           card fee. Off to the side until asked for: the card button is the

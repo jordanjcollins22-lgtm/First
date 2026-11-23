@@ -166,11 +166,22 @@ export function dueAtSigning(input: { contractCents: number; homeImprovement: bo
 }
 
 /**
+ * Whether proposals carry the Maryland home-improvement rules: the contract
+ * wording and the one-third deposit cap.
+ *
+ * Off (Jordan, 2026-11-22): the business manages the work rather than doing
+ * it, so proposals take the whole price at signing and show no MHIC block.
+ * One switch, so turning it back on is a one-line change.
+ */
+export const MHIC_ON_PROPOSALS = false;
+
+/**
  * What can be taken at signing on a proposal, straight from its snapshot:
  * the whole price for exempt work, at most a third for home improvement.
  * The one call the payment screens make, so they cannot disagree.
  */
-export function atSigningForSnapshot(contractCents: number, snapshot: unknown): DueAtSigning {
+export function atSigningForSnapshot(contractCents: number, snapshot: unknown, applies = MHIC_ON_PROPOSALS): DueAtSigning {
+  if (!applies) return dueAtSigning({ contractCents, homeImprovement: false });
   const zones = Array.isArray(snapshot) ? (snapshot as { serviceLabel?: string | null; lines?: { key: string }[] | null }[]) : [];
   return dueAtSigning({ contractCents, homeImprovement: isHomeImprovementScope(servicesOfSnapshot(zones)) });
 }
