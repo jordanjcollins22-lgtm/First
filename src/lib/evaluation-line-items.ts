@@ -1,14 +1,19 @@
 /**
- * Stage 1 of the job pipeline: the evaluation form's line items, and the
- * MessagePack file they are handed to stage 2 in.
+ * Stage 1 of the job pipeline: what the evaluation form produces, and the
+ * MessagePack file it is handed to stage 2 in.
  *
- * One line is one piece of work:
- *   { operation: "install", material: "mulch", subtype: "brown_hardwood",
- *     quantity: 200, unit: "sqft", location: "front_bed",
- *     site_conditions: {}, evidence: [] }
+ * A project (job) has zones; each zone has its own location, field readings
+ * and evidence, and a list of work items:
  *
- * The file is a MessagePack map: { stage: 1, schema_version, job_id, items }.
- * Pure, so the rules are tested without a database. Table:
+ *   { project_id: 1001, zones: [
+ *     { zone_id: 1, name: "front_mulch_bed", location: null,
+ *       site_conditions: {}, evidence: [],
+ *       work_items: [
+ *         { operation: "remove", material: "plant", subtype: "japanese_barberry", quantity: 2, unit: "each" },
+ *         { operation: "install", material: "mulch", subtype: "brown_hardwood", quantity: 200, unit: "sqft" } ] } ] }
+ *
+ * The file is that object plus { stage: 1, schema_version }, packed as
+ * MessagePack. Pure, so the rules are tested without a database. Tables:
  * supabase/migrations/0391_evaluation_line_items.sql.
  */
 
@@ -16,7 +21,7 @@ import { decode, encode } from "@msgpack/msgpack";
 import { z } from "zod";
 
 export const STAGE_1 = 1;
-export const LINE_ITEMS_SCHEMA_VERSION = 1;
+export const STAGE_1_SCHEMA_VERSION = 1;
 
 export const OPERATIONS = ["install", "remove", "maintain"] as const;
 export const UNITS = ["sqft", "lnft", "sqyd", "cuyd", "each", "ton", "lb", "gal", "hr"] as const;
@@ -42,6 +47,10 @@ const UNIT_ALIASES: Record<string, (typeof UNITS)[number]> = {
 };
 
 const key = z.string().transform(toKey).pipe(z.string().min(1));
+const optionalKey = z
+  .string()
+  .nullish()
+  .transform((v) => (v == null || toKey(v) === "" ? null : toKey(v)));
 
 const evidenceRef = z.object({
   kind: z.enum(["photo", "sample", "video", "document"]),
@@ -50,49 +59,68 @@ const evidenceRef = z.object({
   label: z.string().optional(),
 });
 
-export const lineItemSchema = z.object({
+export const workItemSchema = z.object({
   operation: z.string().transform(toKey).pipe(z.enum(OPERATIONS)),
   material: key,
-  subtype: z
-    .string()
-    .nullish()
-    .transform((v) => (v == null || toKey(v) === "" ? null : toKey(v))),
+  subtype: optionalKey,
   quantity: z.coerce.number().finite().nonnegative(),
   unit: z
     .string()
     .transform((v) => UNIT_ALIASES[toKey(v)] ?? toKey(v))
     .pipe(z.enum(UNITS)),
-  location: key,
+});
+
+export const zoneSchema = z.object({
+  zone_id: z.number().int().positive(),
+  name: key,
+  location: optionalKey,
   /** Field measurements and test results, e.g. { soil_ph: 6.4 }. */
   site_conditions: z.record(z.string(), z.unknown()).default({}),
   /** References to photos and samples. */
   evidence: z.array(evidenceRef).default([]),
+  work_items: z.array(workItemSchema).default([]),
 });
 
-export type LineItem = z.output<typeof lineItemSchema>;
-export type LineItemInput = z.input<typeof lineItemSchema>;
+export const projectSchema = z
+  .object({
+    /** The job. A number like 1001, or the job's id in the app. */
+    project_id: z.union([z.number().int(), z.string().min(1)]),
+    zones: z.array(zoneSchema),
+  })
+  .superRefine((p, ctx) => {
+    const seen = new Set<number>();
+    for (const z of p.zones) {
+      if (seen.has(z.zone_id)) {
+        ctx.addIssue({ code: "custom", message: `Zone ${z.zone_id} is listed twice`, path: ["zones"] });
+      }
+      seen.add(z.zone_id);
+    }
+  });
+
+export type WorkItem = z.output<typeof workItemSchema>;
+export type Zone = z.output<typeof zoneSchema>;
+export type Project = z.output<typeof projectSchema>;
+export type ProjectInput = z.input<typeof projectSchema>;
 export type EvidenceRef = z.output<typeof evidenceRef>;
 
-export interface Stage1File {
+export interface Stage1File extends Project {
   stage: typeof STAGE_1;
   schema_version: number;
-  job_id: string;
-  items: LineItem[];
 }
 
-/** Check and tidy one line from the form. Throws with the field that is wrong. */
-export function parseLineItem(input: unknown): LineItem {
-  return lineItemSchema.parse(input);
+/** Check and tidy the evaluation. Throws with the field that is wrong. */
+export function parseProject(input: unknown): Project {
+  return projectSchema.parse(input);
 }
 
-/** Pack a job's lines into the stage 1 MessagePack file. */
-export function packStage1(jobId: string, items: LineItemInput[]): Uint8Array {
-  const file: Stage1File = {
-    stage: STAGE_1,
-    schema_version: LINE_ITEMS_SCHEMA_VERSION,
-    job_id: jobId,
-    items: items.map(parseLineItem),
-  };
+/** Work items across every zone, for item_count and totals. */
+export function countWorkItems(project: Project): number {
+  return project.zones.reduce((n, z) => n + z.work_items.length, 0);
+}
+
+/** Pack a job's evaluation into the stage 1 MessagePack file. */
+export function packStage1(input: ProjectInput): Uint8Array {
+  const file: Stage1File = { stage: STAGE_1, schema_version: STAGE_1_SCHEMA_VERSION, ...parseProject(input) };
   return encode(file);
 }
 
@@ -100,20 +128,12 @@ export function packStage1(jobId: string, items: LineItemInput[]): Uint8Array {
 export function unpackStage1(bytes: Uint8Array): Stage1File {
   const raw = decode(bytes) as Partial<Stage1File> | null;
   if (!raw || typeof raw !== "object" || raw.stage !== STAGE_1) {
-    throw new Error("Not a stage 1 line items file");
+    throw new Error("Not a stage 1 evaluation file");
   }
-  if (raw.schema_version !== LINE_ITEMS_SCHEMA_VERSION) {
-    throw new Error(`Unknown line items file version ${String(raw.schema_version)}`);
+  if (raw.schema_version !== STAGE_1_SCHEMA_VERSION) {
+    throw new Error(`Unknown evaluation file version ${String(raw.schema_version)}`);
   }
-  if (typeof raw.job_id !== "string" || !Array.isArray(raw.items)) {
-    throw new Error("Line items file is missing its job or items");
-  }
-  return {
-    stage: STAGE_1,
-    schema_version: raw.schema_version,
-    job_id: raw.job_id,
-    items: raw.items.map(parseLineItem),
-  };
+  return { stage: STAGE_1, schema_version: raw.schema_version, ...parseProject(raw) };
 }
 
 /** Hex sha256 of the file, stored next to it so stage 2 can confirm it is intact. */
