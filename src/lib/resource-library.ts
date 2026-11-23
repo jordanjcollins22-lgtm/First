@@ -383,12 +383,12 @@ export const DEFAULT_LIBRARY: LibraryInput = {
         },
         {
           operation: "maintain",
-          model_id: "shrub_trim",
+          model_id: "shrub_maintain",
           applies_to: SHRUB_KINDS,
           unit: "each",
           rate_unit: "each",
           required_inputs: [{ key: "size_class", label: "Size", options: ["small", "medium", "large"], evidence: "photo of each plant" }],
-          scope_template: "Trim {qty} {subtype}.",
+          scope_template: "Maintain {qty} {subtype}.",
           rates: [
             { when: { size_class: "small" }, minutes_per_unit: 10, source: `${SHEET}: Small shrub trimming` },
             { when: { size_class: "medium" }, minutes_per_unit: 20, source: `${SHEET}: Medium shrub trimming` },
