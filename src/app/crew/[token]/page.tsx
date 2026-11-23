@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
-import { jobIdFromCrewToken } from "@/lib/crew-link";
+import { crewZoneLabel, jobIdFromCrewToken } from "@/lib/crew-link";
 import { loadCrewJob } from "@/lib/data/crew-job";
 import { fetchLotFromCounty } from "@/lib/data/lot-map";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -30,7 +30,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
 
   if (!job) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
+      <div className="mx-auto w-full max-w-md px-4 py-16 text-center">
         <p className="text-lg font-semibold">This crew link isn&apos;t valid.</p>
         <p className="mt-1 text-sm text-muted-foreground">Ask the office for a new one.</p>
       </div>
@@ -47,13 +47,13 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
           drawn.flatMap((z) => [...z.points, ...(z.shapes ?? []).flat()]),
           job.siteImageTransform!.canvasWidth,
           job.siteImageTransform!.canvasHeight,
-          { padding: 120 }
+          { padding: 60 }
         )
       : undefined;
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.address)}`;
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-5 px-4 pb-16 pt-6">
+    <main className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-4 pb-16 pt-6">
       <header className="flex flex-col gap-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">JS Landscaping · Crew map</p>
         <h1 className="text-2xl font-bold leading-tight">{job.clientName || "Client"}</h1>
@@ -70,7 +70,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
           <FocusableSiteMap
             imagePath={job.siteImagePath!}
             transform={job.siteImageTransform!}
-            zones={job.zones.map((z, i) => ({ zoneName: z.zoneName, color: z.color, points: z.points, shapes: z.shapes, number: i + 1 }))}
+            zones={job.zones.map((z, i) => ({ zoneName: crewZoneLabel(z.zoneName, i + 1), color: z.color, points: z.points, shapes: z.shapes, number: i + 1 }))}
             defaultFrame={frame}
             numbered
             dimSurroundings
@@ -93,7 +93,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
                   {i + 1}
                 </span>
                 <h3 className="font-semibold">
-                  {z.zoneName}
+                  {crewZoneLabel(z.zoneName, i + 1)}
                   {z.serviceLabel ? <span className="font-normal text-muted-foreground"> · {z.serviceLabel}</span> : null}
                 </h3>
               </div>
@@ -110,7 +110,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
                   {z.photoPaths.map((p) => (
                     <a key={p} href={canvasImageUrl(p)} target="_blank" rel="noopener noreferrer" className="shrink-0 snap-start">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={canvasImageUrl(p, PREVIEW)} alt={`${z.zoneName} photo`} loading="lazy" className="h-56 w-auto max-w-[85vw] rounded-md object-cover" />
+                      <img src={canvasImageUrl(p, PREVIEW)} alt={`${crewZoneLabel(z.zoneName, i + 1)} photo`} loading="lazy" className="h-56 w-auto max-w-[85vw] rounded-md object-cover" />
                     </a>
                   ))}
                 </div>
