@@ -1,5 +1,6 @@
 import { Empty, SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { ClientSearch, OneAtATime, type OneItem } from "@/components/phone/live";
+import { NewEstimate } from "@/components/phone/new-estimate";
 import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
@@ -191,6 +192,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   return (
     <Screen hello={`Hi ${firstName(profile)}`} role="Account manager">
       <ClientSearch clients={clients} />
+      <NewEstimate />
 
       <OneAtATime title="Do now" items={items} />
 
