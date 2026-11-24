@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { readAddons, type ProposalAddon } from "@/lib/proposal-addons";
 
 /**
  * Everything the fresh app shows about one client: their jobs, and for each
@@ -23,7 +24,7 @@ export interface FileJob {
   startDate: string | null;
   endDate: string | null;
   completedAt: string | null;
-  proposal: { token: string; status: string; total: number; sentAt: string | null; respondedAt: string | null } | null;
+  proposal: { token: string; status: string; total: number; sentAt: string | null; respondedAt: string | null; addons: ProposalAddon[] } | null;
   /** The free-estimate map's link for this job, and what it priced. */
   estimate: { token: string | null; total: number | null; deposit: number | null; paidAt: string | null; choice: string | null } | null;
   invoices: { id: string; amount: number; status: string; sentAt: string | null; paidAt: string | null; url: string | null }[];
@@ -72,7 +73,7 @@ export async function loadClientFile(customerId: string): Promise<ClientFile | n
 
   const [proposals, invoices, messages, intakes, estimates] = jobIds.length
     ? await Promise.all([
-        sb.from("job_proposals").select("job_id,token,status,total_cost,discount_amount,sent_at,responded_at").in("job_id", jobIds),
+        sb.from("job_proposals").select("job_id,token,status,total_cost,discount_amount,sent_at,responded_at,options").in("job_id", jobIds),
         sb.from("invoices").select("id,job_id,amount,status,sent_at,paid_at,hosted_invoice_url,created_at").in("job_id", jobIds).order("created_at", { ascending: true }),
         sb.from("job_messages").select("job_id,body,author_name,author_type,created_at").in("job_id", jobIds).order("created_at", { ascending: false }).limit(200),
         sb.from("evaluation_intakes").select("job_id,token").in("job_id", jobIds),
@@ -130,6 +131,7 @@ export async function loadClientFile(customerId: string): Promise<ClientFile | n
               total: num(p.total_cost) - num(p.discount_amount),
               sentAt: str(p.sent_at) || null,
               respondedAt: str(p.responded_at) || null,
+              addons: readAddons(p.options),
             }
           : null,
         estimate: (() => {
