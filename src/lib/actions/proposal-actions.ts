@@ -43,7 +43,8 @@ import { scopesForZones, serviceLabelFor, type ZoneScopeInput } from "@/lib/zone
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from "@/lib/canvas-dimensions";
 import type { WorkZone } from "@/components/canvas/types";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
+import { addonFromForm, readAddons, setAddon, withAddons, type ProposalAddon } from "@/lib/proposal-addons";
 import { listScopeRecommendations, zonesForReview } from "@/lib/data/scope-reviews";
 import { reviewBlocker, reviewsFor } from "@/lib/scope-review";
 import { zeroPriceBlocker } from "@/lib/proposal-guard";
@@ -678,4 +679,51 @@ function zoneFacts(zone: WorkZone): string {
     w: zone.widthFt ?? null,
     k: zone.measurementKind ?? null,
   });
+}
+
+/**
+ * Put an add-on (Christmas lights, say) on a proposal, change it, or take it
+ * off with `form: null`. The client sees it as a box to tick when they
+ * accept, and its price is added only if they tick it. Only while the
+ * proposal is still open: once the client has answered, what they agreed to
+ * stands.
+ */
+export async function saveProposalAddon(
+  jobId: string,
+  key: string,
+  form: { name: string; price: string; decorate: string; lights: string; takedown: string; note: string } | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { ok: false, error: "Not signed in." };
+  if (!(isOwnerLevel(profile.roles) || profile.roles.includes("admin") || isAccountManager(profile.roles))) {
+    return { ok: false, error: "Only the account manager or owner can change this." };
+  }
+
+  const supabase = await createClient();
+  const { data: current, error: readError } = await supabase
+    .from("job_proposals")
+    .select("status, responded_at, options")
+    .eq("job_id", jobId)
+    .maybeSingle();
+  if (readError) return { ok: false, error: "Couldn't load the proposal. Try again." };
+  if (!current) return { ok: false, error: "There is no proposal on this job." };
+  if (current.responded_at || (current.status !== "needs_approval" && current.status !== "sent")) {
+    return { ok: false, error: "The client already answered this proposal, so it can't change now." };
+  }
+
+  let next: ProposalAddon | null = null;
+  if (form) {
+    const made = addonFromForm({ key, ...form });
+    if (typeof made === "string") return { ok: false, error: made };
+    next = made;
+  }
+  const options = withAddons(current.options, setAddon(readAddons(current.options), key, next));
+
+  const { error } = await supabase
+    .from("job_proposals")
+    .update({ options: (Object.keys(options).length ? options : null) as unknown as Json })
+    .eq("job_id", jobId);
+  if (error) return { ok: false, error: "Couldn't save it. Try again." };
+  revalidateJobViews(jobId);
+  return { ok: true };
 }

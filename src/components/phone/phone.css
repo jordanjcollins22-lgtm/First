@@ -77,4 +77,5 @@
 .vx-app .vx-sent-open textarea{width:100%;resize:vertical;font:inherit;font-size:13px;line-height:1.45;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
 .vx-app .vx-sent-open .vx-cta{display:flex;align-items:center;justify-content:center;gap:6px}
 .vx-app a.vx-call{flex:none;font:700 12px var(--display);color:var(--teal);border:2px solid var(--teal);border-radius:8px;padding:4px 12px}
+.vx-app select.vx-field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 12px;font:inherit;font-size:13px;color:var(--fg)}
 .vx-app input.vx-field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 12px;font:inherit;font-size:13px;color:var(--fg);outline:none}.vx-app input.vx-field::placeholder{color:var(--muted)}

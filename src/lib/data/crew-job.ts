@@ -1,3 +1,4 @@
+import { addonLines, readAddons } from "@/lib/proposal-addons";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
@@ -48,7 +49,7 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
 
   const { data: proposals } = await admin
     .from("job_proposals")
-    .select("status, scope_snapshot, site_image_path, site_image_transform, created_at")
+    .select("status, scope_snapshot, site_image_path, site_image_transform, created_at, options")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
   const list = proposals ?? [];
@@ -66,7 +67,7 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
     lng: place?.lng ?? null,
     status: job.status ?? "",
     notes: job.client_notes ?? null,
-    zones: snapshot.map((z) => ({
+    zones: [...snapshot.map((z) => ({
       zoneName: z.zoneName,
       serviceLabel: z.serviceLabel,
       scopeText: z.scopeText,
@@ -76,6 +77,18 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
       shapes: z.shapes,
       color: z.color,
     })),
+    // Add-ons the client ticked when they signed (Christmas lights, say), so
+    // the crew sees them as part of the job. No outline: they are not an area.
+    ...(chosen?.status === "accepted" ? readAddons(chosen.options).filter((a) => a.chosen) : []).map((a) => ({
+      zoneName: a.name,
+      serviceLabel: a.name,
+      scopeText: addonLines(a).join("\n"),
+      details: [] as string[],
+      photoPaths: [] as string[],
+      points: [] as { x: number; y: number }[],
+      shapes: undefined,
+      color: "#c0392b",
+    }))],
     siteImagePath: chosen?.site_image_path ?? null,
     siteImageTransform: (chosen?.site_image_transform as unknown as ProposalSiteImageTransform | null) ?? null,
   };

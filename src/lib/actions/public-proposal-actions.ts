@@ -26,6 +26,7 @@ import { isSameSitting } from "@/lib/proposal-views";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 import { applyOption, readOptions } from "@/lib/proposal-options";
+import { addonsCents, markChosen, pickAddons, readAddons, withAddons } from "@/lib/proposal-addons";
 import { atSigningForSnapshot } from "@/lib/sales/mhic";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -39,7 +40,13 @@ import type { Json } from "@/lib/supabase/database.types";
 /** The client already has an invoice to pay; no checkout needs starting. */
 class AlreadyInvoiced extends Error {}
 
-export async function respondToProposal(token: string, response: "accepted" | "declined", note: string, optionKey?: string | null) {
+export async function respondToProposal(
+  token: string,
+  response: "accepted" | "declined",
+  note: string,
+  optionKey?: string | null,
+  addonKeys?: string[] | null
+) {
   if (response !== "accepted" && response !== "declined") throw new Error("Invalid response.");
 
   const admin = createAdminClient();
@@ -73,28 +80,36 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     chosen = applyOption(snapshot, option);
   }
 
+  // Add-ons they ticked (Christmas lights, say): their price goes on top of
+  // the proposal's, and they are marked as chosen for the crew and the office.
+  // Only add-ons that are on the proposal count, so a tampered key adds nothing.
+  const addons = readAddons(proposal.options);
+  const ticked = response === "accepted" ? pickAddons(addons, addonKeys) : [];
+  const baseTotal = chosen ? chosen.totalCost : Number(proposal.total_cost ?? 0);
+  const newTotal = baseTotal + addonsCents(ticked) / 100;
+  let newOptions: Record<string, unknown> | null = chosen ? { ...(proposal.options as Record<string, unknown>), chosen: optionKey } : null;
+  if (response === "accepted" && addons.length) {
+    newOptions = withAddons(newOptions ?? proposal.options, markChosen(addons, ticked.map((a) => a.key)));
+  }
+
   const { error: updateError } = await admin
     .from("job_proposals")
     .update({
       status: response,
       responded_at: new Date().toISOString(),
       client_response_note: note.trim() || null,
-      ...(chosen
-        ? {
-            total_cost: chosen.totalCost,
-            scope_snapshot: chosen.snapshot as unknown as Json,
-            options: { ...(proposal.options as Record<string, unknown>), chosen: optionKey } as unknown as Json,
-          }
-        : {}),
+      ...(chosen ? { scope_snapshot: chosen.snapshot as unknown as Json } : {}),
+      ...(chosen || ticked.length ? { total_cost: newTotal } : {}),
+      ...(newOptions ? { options: newOptions as unknown as Json } : {}),
     })
     .eq("id", proposal.id);
   if (updateError) throw updateError;
-  if (chosen) proposal.total_cost = chosen.totalCost;
+  if (chosen || ticked.length) proposal.total_cost = newTotal;
 
   notifyJobTeam(
     proposal.job_id,
     "proposal_responses",
-    `A client ${response} their proposal.`,
+    `A client ${response} their proposal${ticked.length ? `, with ${ticked.map((a) => a.name).join(" and ")} added` : ""}.`,
     { dedupeKey: proposal.id }
   ).catch(() => {
     // Best-effort — the client's response is already recorded.
