@@ -31,6 +31,13 @@ export interface LeadJob {
   createdAt: string;
   evaluationDate: string | null;
   evaluationStatus: string | null;
+  /** The client, so the same client's jobs at one address count as one lead. */
+  customerId?: string | null;
+  email?: string | null;
+  /** The job's own name: test bookings are named "TEST · ...". */
+  jobName?: string | null;
+  /** A later job at the same address has gone past estimating (quoted, signed, done). */
+  movedOn?: boolean;
 }
 
 export type LeadReason = "new" | "rebook" | "missed";
@@ -73,16 +80,36 @@ const REASON_ORDER: Record<LeadReason, number> = { new: 0, rebook: 1, missed: 2 
  * not contact, and other people's clients, are left off.
  */
 export function leadsToBook(jobs: LeadJob[], viewerId: string, now: Date = new Date()): LeadToBook[] {
-  const out: LeadToBook[] = [];
+  // One lead per client per address: the same yard booked twice, or an
+  // estimate started again, is one visit to book (Jordan, Nov 25).
+  const groups = new Map<string, LeadJob[]>();
   for (const j of jobs) {
-    if (j.doNotContact || !isMine(j.managerId, viewerId)) continue;
-    const reason = leadReason(j, now);
-    if (!reason) continue;
+    if (j.doNotContact || !isMine(j.managerId, viewerId) || isTestLead(j)) continue;
+    const key = j.customerId ? `${j.customerId}|${j.address.trim().toLowerCase()}` : j.jobId;
+    groups.set(key, [...(groups.get(key) ?? []), j]);
+  }
+  const out: LeadToBook[] = [];
+  for (const group of groups.values()) {
+    // Already booked, visited, quoted or done under any of its jobs: nothing to book.
+    if (group.some((j) => j.movedOn || leadReason(j, now) == null)) continue;
+    // The job that carries the visit history speaks for the rest, else the newest.
+    const pick = [...group].sort((a, b) => Number(!!b.evaluationDate) - Number(!!a.evaluationDate) || b.createdAt.localeCompare(a.createdAt))[0];
+    const reason = leadReason(pick, now)!;
     const why =
-      reason === "new" ? `New lead, came in ${age(j.createdAt, now)}` : reason === "rebook" ? "Visit called off, book another" : "Visit date passed, nothing written up";
-    out.push({ ...j, reason, why });
+      reason === "new" ? `New lead, came in ${age(pick.createdAt, now)}` : reason === "rebook" ? "Visit called off, book another" : "Visit date passed, nothing written up";
+    out.push({ ...pick, reason, why });
   }
   return out.sort((a, b) => REASON_ORDER[a.reason] - REASON_ORDER[b.reason] || b.createdAt.localeCompare(a.createdAt));
+}
+
+/**
+ * A booking made to try the app, not a client: named TEST, a made-up
+ * example.com address, or one of the team booking themselves.
+ */
+export function isTestLead(j: Pick<LeadJob, "customerName" | "email" | "jobName">): boolean {
+  if (/^\s*test\b/i.test(j.customerName) || /^\s*test\b/i.test(j.jobName ?? "")) return true;
+  const email = (j.email ?? "").trim().toLowerCase();
+  return email.endsWith("@example.com") || email.endsWith("@jslandscapingmd.com");
 }
 
 /* ------------------------------------------------------------------ */
