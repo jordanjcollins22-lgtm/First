@@ -79,3 +79,11 @@
 .vx-app a.vx-call{flex:none;font:700 12px var(--display);color:var(--teal);border:2px solid var(--teal);border-radius:8px;padding:4px 12px}
 .vx-app select.vx-field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 12px;font:inherit;font-size:13px;color:var(--fg)}
 .vx-app input.vx-field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:9px 12px;font:inherit;font-size:13px;color:var(--fg);outline:none}.vx-app input.vx-field::placeholder{color:var(--muted)}
+/* Schedule a job: day, days, crew */
+.vx-app .vx-sched{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 4px}
+.vx-app .vx-sched label{display:flex;flex-direction:column;gap:3px;font:600 11px var(--mono);text-transform:uppercase;color:var(--muted)}
+.vx-app .vx-sched input,.vx-app .vx-sched select{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);padding:7px 8px;font:500 14px var(--body,inherit);text-transform:none}
+.vx-app .vx-sched input[type=number]{width:64px}
+.vx-app .vx-sched-crew{flex:1 1 140px}
+.vx-app .vx-sched .vx-2b{flex-basis:100%}
+.vx-app .vx-sched-open{margin:2px 0 6px;padding:6px !important;font-size:13px !important}

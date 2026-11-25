@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { sectionId } from "./section-id";
 import "./phone.css";
 
 /**
@@ -31,7 +32,7 @@ export function Screen({ hello, role, children }: { hello: string; role: string;
 
 export function Card({ title, right, children, tour }: { title: string; right?: string; children?: React.ReactNode; tour?: string }) {
   return (
-    <div className="vx-card" data-tour={tour}>
+    <div className="vx-card" data-tour={tour} id={sectionId(title)}>
       {right ? (
         <div className="vx-one-h">
           <span className="vx-ct">{title}</span>
@@ -68,7 +69,7 @@ export function Row({ a, b, tag, href }: { a: React.ReactNode; b?: React.ReactNo
 /** A whole card that stays closed until tapped (Wallet). */
 export function Drop({ title, sum, children, tour }: { title: string; sum?: React.ReactNode; children: React.ReactNode; tour?: string }) {
   return (
-    <details className="vx-card vx-drop" data-tour={tour}>
+    <details className="vx-card vx-drop" data-tour={tour} id={sectionId(title)}>
       <summary>
         <span>{title}</span>
         <b>{sum}</b>
