@@ -86,3 +86,6 @@
 .vx-app .vx-sched-crew{flex:1 1 140px}
 .vx-app .vx-sched .vx-2b{flex-basis:100%}
 .vx-app .vx-sched-open{margin:2px 0 6px;padding:6px !important;font-size:13px !important}
+.vx-app .vx-visit{padding:6px 0 10px;border-bottom:1px solid var(--line)}
+.vx-app .vx-visit:last-of-type{border-bottom:0}
+.vx-app .vx-sched > .vx-2b,.vx-app .vx-sched > .vx-cta,.vx-app .vx-sched > .vx-note{flex-basis:100%}
