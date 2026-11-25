@@ -97,12 +97,9 @@ export function HiringBoard({
               </tr>
             </thead>
             <tbody>
-              {POSITIONS.filter((p) => !p.closed || (applicants ?? []).some((a) => a.position === p.key)).map((p) => (
+              {POSITIONS.filter((p) => !p.closed).map((p) => (
                 <tr key={p.key} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2 font-medium" title={p.closed}>
-                    {p.title}
-                    {p.closed && <span className="ml-1 text-xs font-normal text-muted-foreground">(closed)</span>}
-                  </td>
+                  <td className="px-3 py-2 font-medium">{p.title}</td>
                   {BOARD.map((s) => {
                     const n = count(p.key, s);
                     return (
@@ -177,8 +174,14 @@ export function HiringBoard({
   );
 }
 
+/** The job someone applied for. Jobs we've closed (project lead, evaluator) aren't named any more. */
+function jobLabel(key: string | null | undefined): string | null {
+  const p = positionFor(key ?? "");
+  if (!p) return key ?? null;
+  return p.closed ? "Applied for a job we closed" : p.title;
+}
+
 function ApplicantLine({ applicant, when, showStage }: { applicant: ApplicantRow; when: string | null; showStage?: boolean }) {
-  const position = positionFor(applicant.position);
   return (
     <li>
       <Link href={`/admin/hiring/${applicant.id}`} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/40">
@@ -188,7 +191,7 @@ function ApplicantLine({ applicant, when, showStage }: { applicant: ApplicantRow
             {applicant.rating ? <span className="ml-2 text-xs text-amber-600">{"★".repeat(applicant.rating)}</span> : null}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            {[position?.title, showStage ? STAGES[applicant.stage] : null, applicant.source ? `from ${applicant.source}` : null, when ? shortWhen(when) : null]
+            {[jobLabel(applicant.position), showStage ? STAGES[applicant.stage] : null, applicant.source ? `from ${applicant.source}` : null, when ? shortWhen(when) : null]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -245,7 +248,7 @@ function IndeedInvites({ invites, inbox }: { invites: IndeedInviteRow[] | null; 
               <li key={i.id} className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm ${progress.waiting ? "bg-amber-500/5" : ""}`}>
                 <span className="font-medium">{i.name ?? "Name not given"}</span>
                 <span className={`text-xs ${progress.waiting ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}>
-                  {[positionFor(i.position)?.title ?? i.position, progress.label, shortWhen(i.createdAt)].join(" · ")}
+                  {[jobLabel(i.position), progress.label, shortWhen(i.createdAt)].join(" · ")}
                 </span>
               </li>
             );

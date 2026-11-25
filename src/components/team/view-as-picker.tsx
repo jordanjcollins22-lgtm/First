@@ -1,5 +1,19 @@
 import { startImpersonation } from "@/lib/actions/impersonation-actions";
+import { meScreenFor, type MeScreen } from "@/lib/me-screen";
 import type { Profile } from "@/types/domain";
+
+const ROLE_NAME: Record<MeScreen, string> = {
+  owner: "Owner",
+  "account-manager": "Account manager",
+  technician: "Technician",
+  affiliate: "Affiliate",
+  partner: "Location partner",
+};
+/** The role by the names we use now (old labels like crew or office aren't shown). */
+const roleName = (p: Profile) => {
+  const screen = meScreenFor(p);
+  return screen ? ROLE_NAME[screen] : "No role yet";
+};
 
 /**
  * Everyone you can see the app as, one button each.
@@ -9,7 +23,10 @@ import type { Profile } from "@/types/domain";
  * a phone is a feature that has been taken away.
  */
 export function ViewAsPicker({ profiles, selfId }: { profiles: Profile[]; selfId: string | null }) {
-  const others = profiles.filter((p) => p.id !== selfId);
+  // People with a role first, then the ones still waiting for one.
+  const others = profiles
+    .filter((p) => p.id !== selfId)
+    .sort((a, b) => Number(!meScreenFor(a)) - Number(!meScreenFor(b)));
   if (others.length === 0) {
     return <p className="text-sm text-muted-foreground">Nobody else on the team yet.</p>;
   }
@@ -24,8 +41,8 @@ export function ViewAsPicker({ profiles, selfId }: { profiles: Profile[]; selfId
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{p.full_name || p.email}</span>
-                <span className="block truncate text-xs capitalize text-muted-foreground">
-                  {p.roles.join(", ") || "No role yet"}
+                <span className="block truncate text-xs text-muted-foreground">
+                  {roleName(p)}
                 </span>
               </span>
               <span className="shrink-0 text-xs font-semibold text-primary">View as</span>

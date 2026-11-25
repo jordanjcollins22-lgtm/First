@@ -19,6 +19,9 @@ const TZ = "America/New_York";
 const DAY = 86_400_000;
 const dayLabel = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+/** "Nov 23 to Dec 5", or "Dec 1 to 12" when both days are in one month. */
+const spanLabel = (from: string, to: string) =>
+  `${shortDay(from)} to ${from.slice(0, 7) === to.slice(0, 7) ? shortDay(to).replace(/^[A-Za-z]+ /, "") : shortDay(to)}`;
 const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }).replace(":00", "").replace(" AM", " am").replace(" PM", " pm");
 const shortTime = (iso: string) => timeOf(iso).replace(" am", "a").replace(" pm", "p");
@@ -205,7 +208,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
           <Row a="Nothing booked today" />
         )}
         {nextVisit && <Btn href={`/jobs/${nextVisit.jobId}`}>Start {timeOf(nextVisit.at)} visit</Btn>}
-        <Sub title={`Next 2 weeks · ${shortDay(weeks.from)} to ${shortDay(weeks.to).replace(/^[A-Za-z]+ /, "")}`} sum={all.length}>
+        <Sub title={`Next 2 weeks · ${spanLabel(weeks.from, weeks.to)}`} sum={all.length}>
           <div className="vx-cal">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((h) => (
               <span key={h} className="h">
@@ -234,7 +237,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         </Sub>
       </Card>
 
-      <Card title="Crew schedule · next 2 weeks" right={`${shortDay(weeks.from)} to ${shortDay(weeks.to).replace(/^[A-Za-z]+ /, "")}`}>
+      <Card title="Crew schedule · next 2 weeks" right={spanLabel(weeks.from, weeks.to)}>
         <Big>{inWindow.length} booked</Big>
         <Sm>
           projects in the next 2 weeks, {waitList.length} on the wait list
