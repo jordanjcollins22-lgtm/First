@@ -85,19 +85,12 @@ async function AllLocations({ organizationId, range }: { organizationId: string;
   );
 }
 
-const ROLES: [string, string][] = [
-  ["affiliate", "Affiliate"],
-  ["technician", "Technician"],
-  ["account-manager", "Account manager"],
-  ["partner", "Location partner"],
-];
-
 /**
  * The owner: every location (the home location's ZIP codes ranked by what
  * they billed in the chosen days), the company fee, what's waiting on them,
  * and every role's screen a tap away.
  */
-export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { range?: string; from?: string; to?: string } }) {
+export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { range?: string; from?: string; to?: string; app?: string } }) {
   const now = new Date();
   const range = pickRange(q, now);
   const admin = createAdminClient();
@@ -114,7 +107,7 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
-        <RangePicker range={range} base="/me/full" />
+        <RangePicker range={range} base="/me/full" keep={q.app ? { app: q.app } : undefined} />
         {/* The numbers load on their own, so the page and the picker answer straight away. */}
         <Suspense key={`${range.from}-${range.to}`} fallback={<Row a="Adding up…" />}>
           <AllLocations organizationId={profile.organization_id} range={range} />
@@ -135,11 +128,6 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
           </Sub>
         )}
         {!asked.length && !yes.length && <Row a="Nothing waiting" />}
-      </Card>
-      <Card title="See what they see">
-        {ROLES.map(([k, label]) => (
-          <Row key={k} a={label} b="Open" href={`/me?role=${k}`} />
-        ))}
       </Card>
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />

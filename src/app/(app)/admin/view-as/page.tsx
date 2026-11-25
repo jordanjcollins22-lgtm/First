@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/env";
@@ -16,6 +17,13 @@ import { BackLink } from "@/components/ui/back-link";
  */
 export const dynamic = "force-dynamic";
 
+const ROLE_PREVIEWS: [string, string][] = [
+  ["account-manager", "Account manager"],
+  ["technician", "Technician"],
+  ["affiliate", "Affiliate"],
+  ["partner", "Location partner"],
+];
+
 export default async function ViewAsPage() {
   if (!isSupabaseConfigured) return <SetupRequiredNotice />;
 
@@ -32,6 +40,27 @@ export default async function ViewAsPage() {
         Pick someone and the whole app becomes what they see: their tabs, their day, their jobs. A
         banner stays at the top until you return to your own account.
       </p>
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Each role&apos;s screen</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-muted-foreground">The home screen each role gets, filled with your own numbers.</p>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {ROLE_PREVIEWS.map(([key, label]) => (
+              <li key={key}>
+                <Link
+                  href={`/me?role=${key}`}
+                  className="flex min-h-12 items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+                >
+                  {label}
+                  <span className="text-xs font-semibold text-primary">Open</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Team</CardTitle>

@@ -143,7 +143,7 @@ export function ClientSearch({ clients }: { clients: { id: string; name: string;
   const waiting = t.length >= 2 && (!found || found.q !== t);
 
   return (
-    <div id="s-clients">
+    <div>
       <div className="vx-search-w">
         <input className="vx-search" placeholder="Search clients and projects" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search clients and projects" />
       </div>
