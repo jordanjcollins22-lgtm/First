@@ -1,35 +1,24 @@
 import { redirect } from "next/navigation";
 
-import { AccountManagerPhone } from "@/components/phone/screens/account-manager";
-import { AffiliatePhone, TechnicianPhone } from "@/components/phone/screens/affiliate-tech";
-import { OwnerPhone, PartnerPhone } from "@/components/phone/screens/partner-owner";
+import { HomeScreen } from "@/components/phone/home-screen";
 import { Screen } from "@/components/phone/parts";
+import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { getCurrentProfile } from "@/lib/data/team";
-import { v2RolesOf } from "@/lib/v2-roles";
+import { meScreenFor } from "@/lib/me-screen";
 
 export const dynamic = "force-dynamic";
 
-type Screen = "owner" | "account-manager" | "technician" | "affiliate" | "partner";
-const SCREENS: Screen[] = ["owner", "account-manager", "technician", "affiliate", "partner"];
-
 /**
- * Everyone's home, drawn exactly as the Project Hub's phone mock-ups draw
- * each role, with their own real data. Their personal link (/p/<slug>) lands
- * here after they sign in. Drawn as getCurrentProfile(), so Preview as shows
- * exactly that person. The owner can also open any role's layout with
- * ?role=, filled with their own data.
+ * Everyone's home: a phone home screen. The four in the dock are what this
+ * role uses all the time; the icons above are what they use sometimes. Each
+ * opens its part of the full page (/me/full) or its own page. Their personal
+ * link (/p/<slug>) lands here after they sign in.
  */
-export default async function MePage({ searchParams }: { searchParams: Promise<{ role?: string; range?: string; from?: string; to?: string }> }) {
+export default async function MePage({ searchParams }: { searchParams: Promise<{ role?: string }> }) {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login?next=/me");
-  const roles = v2RolesOf(profile);
-  const { role: asked, ...q } = await searchParams;
-
-  let screen: Screen | null = null;
-  if (roles.includes("owner")) screen = SCREENS.includes(asked as Screen) ? (asked as Screen) : "owner";
-  else if (roles.includes("account-manager")) screen = "account-manager";
-  else if (roles.includes("project-lead") || roles.includes("project-technician")) screen = "technician";
-  else if (roles.includes("affiliate")) screen = "affiliate";
+  const { role: asked } = await searchParams;
+  const screen = meScreenFor(profile, asked);
   if (!screen) {
     return (
       <Screen hello={profile.first_name || "Hi"} role="">
@@ -39,17 +28,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
       </Screen>
     );
   }
-
-  switch (screen) {
-    case "owner":
-      return <OwnerPhone profile={profile} q={q} />;
-    case "account-manager":
-      return <AccountManagerPhone profile={profile} />;
-    case "technician":
-      return <TechnicianPhone profile={profile} />;
-    case "partner":
-      return <PartnerPhone profile={profile} />;
-    default:
-      return <AffiliatePhone profile={profile} />;
-  }
+  // The owner looking at another role keeps that role on every icon.
+  const previewing = asked && asked === screen && screen !== "owner" ? screen : null;
+  return <HomeScreen role={screen} name={firstName(profile)} previewing={previewing} />;
 }

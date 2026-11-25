@@ -51,7 +51,7 @@ const STEP = { sent: "Sent", opened: "Opened", booked: "Booked", sold: "Sold", l
 /** Send your link to someone, with People you sent it to inside it. One block. */
 export function SendLink({ people }: { people: ReferralRow[] }) {
   return (
-    <div className="vx-card" data-tour="affiliate-link">
+    <div className="vx-card" data-tour="affiliate-link" id="s-send-your-link">
       <div className="vx-ct">Send your link to someone</div>
       <div className="vx-send">
         <ReferralMessageCard />

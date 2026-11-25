@@ -106,7 +106,7 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
-        <RangePicker range={range} />
+        <RangePicker range={range} base="/me/full" />
         {/* The numbers load on their own, so the page and the picker answer straight away. */}
         <Suspense key={`${range.from}-${range.to}`} fallback={<Row a="Adding up…" />}>
           <AllLocations organizationId={profile.organization_id} range={range} />

@@ -34,7 +34,7 @@ export function ClientFileView({ file, jobId }: { file: ClientFile; jobId?: stri
   const jobs = jobId ? [...file.jobs].sort((a, b) => (a.id === jobId ? -1 : b.id === jobId ? 1 : 0)) : file.jobs;
   return (
     <Screen hello="Client" role={file.doNotContact ? "Do not contact" : ""}>
-      <Link href="/me" className="vx-cl-back">
+      <Link href="/me/full" className="vx-cl-back">
         ‹ Back
       </Link>
       <div>
