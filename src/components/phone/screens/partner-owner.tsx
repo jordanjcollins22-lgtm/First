@@ -40,6 +40,11 @@ export async function PartnerPhone({ profile }: { profile: Profile }) {
   );
 }
 
+const GONE = new Set(["play", "social", "pm_draft"]);
+/** Only link to pages the app still has; anything else stays a plain line. */
+const livePage = (href: string | null | undefined) =>
+  href && /^\/(jobs|clients)\/|^\/admin\/(payments|hiring|view-as)/.test(href) ? href : undefined;
+
 /** The company fee: 8% of every dollar of revenue, every location (home included). */
 export const COMPANY_FEE_RATE = 0.08;
 export const companyFee = (revenue: number) => Math.round(revenue * COMPANY_FEE_RATE * 100) / 100;
@@ -80,19 +85,12 @@ async function AllLocations({ organizationId, range }: { organizationId: string;
   );
 }
 
-const ROLES: [string, string][] = [
-  ["affiliate", "Affiliate"],
-  ["technician", "Technician"],
-  ["account-manager", "Account manager"],
-  ["partner", "Location partner"],
-];
-
 /**
  * The owner: every location (the home location's ZIP codes ranked by what
  * they billed in the chosen days), the company fee, what's waiting on them,
  * and every role's screen a tap away.
  */
-export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { range?: string; from?: string; to?: string } }) {
+export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { range?: string; from?: string; to?: string; app?: string } }) {
   const now = new Date();
   const range = pickRange(q, now);
   const admin = createAdminClient();
@@ -102,11 +100,14 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
     loadLinkAndWallet(profile),
   ]);
   const asked = payouts.filter((p) => p.status === "requested");
+  // Door hanger rounds, social posts and marketing email drafts belonged to
+  // pages the fresh app no longer has, so they can't be acted on from here.
+  const yes = queue.filter((q) => !GONE.has(q.type));
 
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
       <Card title="All locations">
-        <RangePicker range={range} base="/me/full" />
+        <RangePicker range={range} base="/me/full" keep={q.app ? { app: q.app } : undefined} />
         {/* The numbers load on their own, so the page and the picker answer straight away. */}
         <Suspense key={`${range.from}-${range.to}`} fallback={<Row a="Adding up…" />}>
           <AllLocations organizationId={profile.organization_id} range={range} />
@@ -116,16 +117,17 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
         {asked.map((p) => (
           <Row key={p.id} a={`${p.person} · payout`} b={money(p.amount)} tag="new" href="/admin/payments" />
         ))}
-        {queue.slice(0, 6).map((q) => (
-          <Row key={`${q.type}-${q.id}`} a={q.title} tag="new" />
+        {yes.slice(0, 5).map((q) => (
+          <Row key={`${q.type}-${q.id}`} a={q.title} tag="new" href={livePage(q.href)} />
         ))}
-        {queue.length > 6 && <Row a={`${queue.length - 6} more`} />}
-        {!asked.length && !queue.length && <Row a="Nothing waiting" />}
-      </Card>
-      <Card title="See what they see">
-        {ROLES.map(([k, label]) => (
-          <Row key={k} a={label} b="Open" href={`/me?role=${k}`} />
-        ))}
+        {yes.length > 5 && (
+          <Sub title={`${yes.length - 5} more`}>
+            {yes.slice(5).map((q) => (
+              <Row key={`${q.type}-${q.id}`} a={q.title} tag="new" href={livePage(q.href)} />
+            ))}
+          </Sub>
+        )}
+        {!asked.length && !yes.length && <Row a="Nothing waiting" />}
       </Card>
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />

@@ -70,14 +70,12 @@ const A = {
   agentMap: { label: "Agent map", glyph: "map", color: "teal", what: "The 8 departments and what each agent did today.", go: soon },
   payments: { label: "Payments", glyph: "payout", color: "forest", what: "Payments in, payout requests to approve and mark sent.", go: { page: "/admin/payments" } },
   hiring: { label: "Hiring", glyph: "people", color: "plum", what: "New applicants, interviews and check-ins due.", go: { page: "/admin/hiring" } },
-  ownerCrew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { page: "/me/full?role=account-manager#s-crew-schedule-next-2-weeks" } },
-  ownerReview: { label: "Project review", glyph: "chart", color: "slate", what: "Profit on projects and money in and out.", go: { page: "/me/full?role=account-manager#s-business" } },
-  roles: { label: "Their screens", glyph: "eye", color: "sky", what: "See any role's home the way they see it.", go: { full: "s-see-what-they-see" } },
-  viewAs: { label: "View as", glyph: "search", color: "slate", what: "Open the app as one person on the team.", go: { page: "/admin/view-as" } },
+  ownerCrew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { page: "/me/full?role=account-manager&app=s-crew-schedule-next-2-weeks" } },
+  ownerReview: { label: "Project review", glyph: "chart", color: "slate", what: "Profit on projects and money in and out.", go: { page: "/me/full?role=account-manager&app=s-business" } },
+  viewAs: { label: "View as", glyph: "eye", color: "sky", what: "See each role's screen, or open the app as one person on the team.", go: { page: "/admin/view-as" } },
   doNow: { label: "Do now", glyph: "check", color: "lime", what: "One task at a time: replies, follow-ups, new leads, proposals, payouts.", go: { full: "s-do-now" } },
   schedule: { label: "Schedule", glyph: "cal", color: "sky", what: "Your day and the next 2 weeks: paid visits, interviews, check-ins.", go: { full: "s-your-schedule" } },
-  clients: { label: "Clients", glyph: "search", color: "slate", what: "Search every client and project.", go: { full: "s-clients" } },
-  estimate: { label: "New estimate", glyph: "plus", color: "lime", what: "Name, phone, address, then the map to price the job.", go: { full: "s-clients" } },
+  clients: { label: "Clients", glyph: "search", color: "slate", what: "Search every client and project, or start a new estimate.", go: { full: "s-clients" } },
   crew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { full: "s-crew-schedule-next-2-weeks" } },
   amHiring: { label: "Hiring", glyph: "people", color: "plum", what: "New applicants, interviews and check-ins due.", go: { full: "s-hiring" } },
   business: { label: "Money", glyph: "money", color: "amber", what: "Project review, money in and out, unpaid invoices.", go: { full: "s-business" } },
@@ -90,8 +88,7 @@ const A = {
   plants: { label: "Plants", glyph: "leaf", color: "green", what: "Plant guide: photo, sun and water, spacing, when to plant and prune.", go: soon },
   weeds: { label: "Weed sheet", glyph: "sheet", color: "forest", what: "Common Harford County weeds: how to spot each one and how to remove it.", go: soon },
   reviews: { label: "Reviews", glyph: "star", color: "amber", what: "Google review requests sent and reviews that came in.", go: soon },
-  clockIn: { label: "Clock in", glyph: "clock", color: "lime", what: "Clock in and out for the day and each job.", go: { full: "s-today" } },
-  today: { label: "Today", glyph: "truck", color: "teal", what: "Today's jobs, each with its job sheet.", go: { full: "s-today" } },
+  today: { label: "Today", glyph: "clock", color: "lime", what: "Clock in and out, and today's jobs with their job sheets.", go: { full: "s-today" } },
   receipt: { label: "Receipt", glyph: "cam", color: "amber", what: "Snap a receipt and it gets tied to the job.", go: soon },
   route: { label: "Route", glyph: "pin", color: "teal", what: "Today's stops on a map with directions.", go: soon },
   materials: { label: "Materials", glyph: "box", color: "slate", what: "Mulch, stone and soil: colors, coverage per yard, what goes where.", go: soon },
@@ -101,7 +98,6 @@ const A = {
   timeOff: { label: "Time off", glyph: "off", color: "plum", what: "Ask for days off and see what's approved.", go: soon },
   ask: { label: "Ask", glyph: "ask", color: "teal", what: "Send a question to your account manager with a photo.", go: soon },
   sendLink: { label: "Send link", glyph: "link", color: "lime", what: "Send your link to someone and see who you sent it to.", go: { full: "s-send-your-link" } },
-  people: { label: "People", glyph: "people", color: "sky", what: "People you sent your link to.", go: { full: "s-send-your-link" } },
   wallet: { label: "Wallet", glyph: "wallet", color: "forest", what: "What you've earned and payouts.", go: { full: "s-wallet" } },
   stage: { label: "Stage", glyph: "stairs", color: "plum", what: "Your Stage of Success and what gets you to the next one.", go: { full: "s-stages-of-success" } },
   needsYou: { label: "Your yes", glyph: "yes", color: "coral", what: "What's waiting on you.", go: { full: "s-needs-you" } },
@@ -119,17 +115,17 @@ const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
   owner: {
     title: "Owner",
     dock: ["yes", "ownerMoney", "hlMsgs", "agentMap"],
-    apps: ["payments", "hiring", "ownerCrew", "ownerReview", "roles", "viewAs", "reviews", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
+    apps: ["payments", "hiring", "ownerCrew", "ownerReview", "viewAs", "reviews", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
   },
   "account-manager": {
     title: "Account manager",
     dock: ["doNow", "hlMsgs", "schedule", "clients"],
-    apps: ["estimate", "crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
+    apps: ["crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
   },
   technician: {
     title: "Technician",
-    dock: ["clockIn", "today", "receipt", "msgs"],
-    apps: ["huddle", "route", "plants", "weeds", "materials", "safety", "training", "hours", "wallet", "timeOff", "ask", "stage", "sendLink"],
+    dock: ["today", "wallet", "receipt", "msgs"],
+    apps: ["huddle", "route", "plants", "weeds", "materials", "safety", "training", "hours", "timeOff", "ask", "stage", "sendLink"],
   },
   partner: {
     title: "Location partner",
@@ -138,8 +134,8 @@ const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
   },
   affiliate: {
     title: "Affiliate",
-    dock: ["sendLink", "people", "wallet", "msgs"],
-    apps: ["stage", "services", "photos", "training", "ask"],
+    dock: ["sendLink", "wallet", "stage", "msgs"],
+    apps: ["services", "photos", "training", "ask"],
   },
 };
 
@@ -167,7 +163,8 @@ function Icon({ app }: { app: App }) {
 export function HomeScreen({ role, name, previewing }: { role: MeScreen; name: string; previewing: MeScreen | null }) {
   const [open, setOpen] = useState<App | null>(null);
   const layout = LAYOUT[role];
-  const full = `/me/full${previewing ? `?role=${previewing}` : ""}`;
+  // Each icon opens a screen with only its own part.
+  const only = (id: string) => `/me/full?app=${id}${previewing ? `&role=${previewing}` : ""}`;
 
   const tile = (k: Key) => {
     const app: App = A[k];
@@ -180,7 +177,7 @@ export function HomeScreen({ role, name, previewing }: { role: MeScreen; name: s
     const go = app.go;
     if ("full" in go)
       return (
-        <Link key={k} href={`${full}#${go.full}`} className="hs-app">
+        <Link key={k} href={only(go.full)} className="hs-app">
           {body}
         </Link>
       );
@@ -211,13 +208,6 @@ export function HomeScreen({ role, name, previewing }: { role: MeScreen; name: s
       </div>
       <nav className="hs-grid" aria-label="Sometimes">
         {layout.apps.map((k) => tile(k))}
-        <Link href={full} className="hs-app">
-          <span className="hs-ic hs-logo">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo-mark.png" alt="" />
-          </span>
-          <span className="hs-lbl">Full page</span>
-        </Link>
       </nav>
       <div className="hs-fill" />
       <nav className="hs-dock" aria-label="All the time">
