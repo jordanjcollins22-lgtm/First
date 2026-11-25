@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   depositCapCents,
   isHomeImprovementScope,
+  MHIC_ON_PROPOSALS,
   mhicContractClauses,
   servicesOfSnapshot,
   type ContractClause,
@@ -31,6 +32,7 @@ export async function mhicBlockForProposal(input: {
   contractCents: number;
 }): Promise<MhicBlock | null> {
   try {
+    if (!MHIC_ON_PROPOSALS) return null;
     if (!isHomeImprovementScope(servicesOfSnapshot(input.snapshot))) return null;
     const admin = createAdminClient();
     const [{ data: org }, { data: settings }, { data: job }] = await Promise.all([

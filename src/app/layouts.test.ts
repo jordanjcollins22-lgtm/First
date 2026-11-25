@@ -27,6 +27,13 @@ function layoutFiles(dir: string, found: string[] = []): string[] {
 
 const LAYOUTS = layoutFiles("src/app");
 
+/** Whether a folder renders a page anywhere under it (a route.ts alone needs no stylesheet). */
+function hasPage(dir: string): boolean {
+  return readdirSync(dir, { withFileTypes: true }).some((e) =>
+    e.isDirectory() ? hasPage(join(dir, e.name)) : e.name === "page.tsx"
+  );
+}
+
 describe("public route layouts", () => {
   it("finds the layouts at all, so this test cannot pass by looking at nothing", () => {
     expect(LAYOUTS.length).toBeGreaterThan(2);
@@ -73,6 +80,16 @@ describe("routes a customer opens", () => {
     for (const route of TOP_LEVEL) {
       expect(isPublic(route), `${route} redirects to sign-in`).toBe(true);
       expect(isPublic(`${route}/anything`), `${route}/anything redirects to sign-in`).toBe(true);
+    }
+  });
+
+  it("gives every one of them a layout with the stylesheet", () => {
+    // The crew map shipped without one and opened as bare serif HTML on a
+    // technician's phone. A route folder with no layout of its own gets no CSS.
+    const withPages = TOP_LEVEL.filter((route) => layoutFiles(`src/app${route}`, []).length > 0 || hasPage(`src/app${route}`));
+    expect(withPages).toContain("/crew");
+    for (const route of withPages) {
+      expect(LAYOUTS, `${route} has no layout.tsx, so it renders unstyled`).toContain(`src/app${route}/layout.tsx`);
     }
   });
 

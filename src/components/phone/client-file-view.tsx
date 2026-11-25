@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { Row, Screen, Sub, money } from "@/components/phone/parts";
 import { EstimateButton } from "@/components/phone/estimate-button";
+import { NewEstimate } from "@/components/phone/new-estimate";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
+import { AddonEditor } from "@/components/phone/addon-editor";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
 import { crewPath } from "@/lib/crew-link";
 
@@ -32,7 +34,7 @@ export function ClientFileView({ file, jobId }: { file: ClientFile; jobId?: stri
   const jobs = jobId ? [...file.jobs].sort((a, b) => (a.id === jobId ? -1 : b.id === jobId ? 1 : 0)) : file.jobs;
   return (
     <Screen hello="Client" role={file.doNotContact ? "Do not contact" : ""}>
-      <Link href="/me" className="vx-cl-back">
+      <Link href="/me/full" className="vx-cl-back">
         ‹ Back
       </Link>
       <div>
@@ -48,6 +50,14 @@ export function ClientFileView({ file, jobId }: { file: ClientFile; jobId?: stri
       {jobs.map((j) => (
         <JobCard key={j.id} job={j} file={file} />
       ))}
+      <NewEstimate
+        customerId={file.id}
+        name={file.name}
+        phone={file.phone ?? ""}
+        email={file.email ?? ""}
+        address={file.jobs[0]?.address ?? ""}
+        label={jobs.length ? "New estimate for this client" : "New estimate"}
+      />
     </Screen>
   );
 }
@@ -65,6 +75,16 @@ function Contact({ file }: { file: ClientFile }) {
       </a>
     </div>
   );
+}
+
+const APP = (process.env.NEXT_PUBLIC_APP_URL || "https://app.jslandscapingmd.com").replace(/\/$/, "");
+
+/** A text to the client with their estimate's link, ready to send from the phone. */
+function estimateText(file: ClientFile, token: string) {
+  const tel = (file.phone ?? "").replace(/[^\d+]/g, "");
+  const first = file.name.trim().split(/\s+/)[0] || "there";
+  const body = `Hi ${first}, here is your estimate from JS Landscaping: ${APP}/prep/${token}/estimate`;
+  return `sms:${tel}?&body=${encodeURIComponent(body)}`;
 }
 
 function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
@@ -89,6 +109,11 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
             href={est.token ? `/prep/${est.token}/estimate` : undefined}
           />
         )}
+        {est?.total != null && est.token && file.phone && !file.doNotContact && !est.paidAt && (
+          <a href={estimateText(file, est.token)} className="vx-cta vx-alt">
+            Text them this estimate
+          </a>
+        )}
         {job.status !== "completed" && job.status !== "cancelled" && !est?.paidAt && (
           <EstimateButton jobId={job.id} label={est?.total != null ? "Change it on the map" : "Price it on the map"} />
         )}
@@ -96,6 +121,9 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
+            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} />}
+            {p.status === "accepted" &&
+              p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}`} b={money(a.priceCents / 100)} />)}
           </>
         ) : (
           !est?.total && <Row a="No proposal yet" />

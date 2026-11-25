@@ -40,6 +40,9 @@ import { displayLabel } from "@/lib/zone-scope";
 import { payPath, PREVIEW_BLOCKED } from "@/lib/proposal-flow";
 import { readOptions } from "@/lib/proposal-options";
 import { OptionCards } from "@/components/proposal/option-cards";
+import { AddonPicker } from "@/components/proposal/addon-picker";
+import { addonsCents, pickAddons, readAddons } from "@/lib/proposal-addons";
+import { RenderingGallery } from "@/components/proposal/rendering-gallery";
 import { MhicContractBlock } from "@/components/proposal/mhic-contract-block";
 import type { MhicBlock } from "@/lib/data/mhic-contract";
 import { LotPicker } from "@/components/intake/lot-picker";
@@ -139,6 +142,10 @@ function ProposalBody({
   const offered = readOptions(proposal.options, proposal.scope_snapshot.length);
   const [optionKey, setOptionKey] = useState<string | null>(offered?.chosen ?? null);
   const picked = offered?.options.find((o) => o.key === optionKey) ?? null;
+  // Extras they can tick on (Christmas lights, say), each with its own price.
+  const addons = readAddons(proposal.options);
+  const [addonKeys, setAddonKeys] = useState<string[]>([]);
+  const addedCents = addonsCents(pickAddons(addons, addonKeys));
   const [status, setStatus] = useState<ProposalStatus>(proposal.status);
   const [respondedAt, setRespondedAt] = useState(proposal.responded_at);
   const [decliningNote, setDecliningNote] = useState("");
@@ -164,7 +171,7 @@ function ProposalBody({
     setError(null);
     startTransition(async () => {
       try {
-        await respondToProposal(token, response, note, optionKey);
+        await respondToProposal(token, response, note, optionKey, addonKeys);
         setStatus(response);
         setRespondedAt(new Date().toISOString());
         // Straight on to how they are paying, on its own page. Leaving them
@@ -224,6 +231,23 @@ function ProposalBody({
         <Watched section="property-map">
           <h2 className="mb-2 text-lg font-semibold">Your property</h2>
           <LotPicker lot={lot} picked={["whole"]} readOnly caption="Your property line and house from the county map." />
+        </Watched>
+      )}
+
+      {/* Drawn proposals: today beside each package, area by area. Above the
+          scope, because the pictures are what a client is buying. */}
+      {offered?.renderings && offered.renderings.length > 0 && (
+        <Watched section="renderings">
+          <RenderingGallery
+            zones={offered.renderings}
+            options={offered.options}
+            selected={optionKey}
+            onSelect={(key) => {
+              click("choose-option", key);
+              setOptionKey(key);
+            }}
+            locked={status !== "sent" && status !== "needs_approval"}
+          />
         </Watched>
       )}
 
@@ -388,6 +412,32 @@ function ProposalBody({
       </Watched>
       )}
 
+      {addons.length > 0 && (
+        <Watched section="addons">
+          <AddonPicker
+            addons={addons}
+            selected={addonKeys}
+            locked={status !== "sent" && status !== "needs_approval"}
+            onToggle={(key) => {
+              click("toggle-addon", key);
+              setAddonKeys((keys) => (keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]));
+            }}
+          />
+          {addedCents > 0 && (status === "sent" || status === "needs_approval") && (
+            <p className="mt-3 text-center text-sm font-semibold">
+              New total with what you added:{" "}
+              <span className="text-primary">
+                {offered
+                  ? picked
+                    ? formatTotal((picked.totalCents + addedCents) / 100)
+                    : `your option + ${formatTotal(addedCents / 100)}`
+                  : formatTotal(Math.max(0, (proposal.total_cost ?? 0) - proposal.discount_amount) + addedCents / 100)}
+              </span>
+            </p>
+          )}
+        </Watched>
+      )}
+
       {/* Before the terms and the buttons: a client with an unanswered worry
           does not read terms, they close the tab. Most of those worries have
           an answer we already give on the phone. */}
@@ -495,7 +545,13 @@ function ProposalBody({
                     respond("accepted");
                   }}
                 >
-                  {offered ? (picked ? `Accept ${picked.name}, ${formatTotal(picked.totalCents / 100)}` : "Choose an option above") : "Accept this proposal"}
+                  {offered
+                    ? picked
+                      ? `Accept ${picked.name}, ${formatTotal((picked.totalCents + addedCents) / 100)}`
+                      : "Choose an option above"
+                    : addedCents > 0
+                      ? `Accept, ${formatTotal(Math.max(0, (proposal.total_cost ?? 0) - proposal.discount_amount) + addedCents / 100)}`
+                      : "Accept this proposal"}
                 </Button>
                 <Button
                   type="button"

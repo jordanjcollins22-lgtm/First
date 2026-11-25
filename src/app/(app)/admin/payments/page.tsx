@@ -125,8 +125,8 @@ export default async function PaymentsPage({
     <div className="mx-auto max-w-3xl px-4 py-6 sm:py-8">
       <h1 className="mb-1 text-2xl font-bold">Money</h1>
       <p className="mb-4 text-sm text-muted-foreground sm:mb-6 sm:text-base">
-        Everything in and out, cash jobs, team pay, materials and overhead. Invoices live on
-        Proposals &amp; Invoices.
+        Everything in and out, cash jobs, team pay, materials and overhead. Each invoice lives on
+        its job.
       </p>
       <PaymentsHealthBanner
         state={health?.state ?? "ok"}

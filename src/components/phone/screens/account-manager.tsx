@@ -1,5 +1,7 @@
 import { Empty, SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { ClientSearch, OneAtATime, type OneItem } from "@/components/phone/live";
+import { NewEstimate } from "@/components/phone/new-estimate";
+import { ScheduleJob, type CrewOption } from "@/components/phone/schedule-job";
 import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
@@ -8,6 +10,9 @@ import { loadAmAccounts, loadAmFollowUps, loadAmSales, type FollowUp } from "@/l
 import { loadFinanceDashboard } from "@/lib/data/finance";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
 import { listBoardJobs } from "@/lib/data/job-board";
+import { listProfiles } from "@/lib/data/team";
+import { meScreenFor } from "@/lib/me-screen";
+import { nextWorkDay } from "@/lib/work-days";
 import { POSITIONS } from "@/lib/hiring/positions";
 import type { BoardJob } from "@/lib/job-board";
 import { createClient } from "@/lib/supabase/server";
@@ -15,11 +20,12 @@ import { dateKeyIn } from "@/lib/time-zone";
 import type { Profile } from "@/types/domain";
 
 const TZ = "America/New_York";
-/** Only search and Do now on the account manager page for now (Jordan, Nov 19). */
-const TASKS_ONLY = true;
 const DAY = 86_400_000;
 const dayLabel = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+/** "Nov 23 to Dec 5", or "Dec 1 to 12" when both days are in one month. */
+const spanLabel = (from: string, to: string) =>
+  `${shortDay(from)} to ${from.slice(0, 7) === to.slice(0, 7) ? shortDay(to).replace(/^[A-Za-z]+ /, "") : shortDay(to)}`;
 const timeOf = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ }).replace(":00", "").replace(" AM", " am").replace(" PM", " pm");
 const shortTime = (iso: string) => timeOf(iso).replace(" am", "a").replace(" pm", "p");
@@ -93,7 +99,7 @@ const STATUS: Record<string, string> = { completed: "Completed", in_progress: "I
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const now = new Date();
   const weeks = twoWeeks(now);
-  const [accounts, sales, applicants, board, visits, finance, lw, followUps] = await Promise.all([
+  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team] = await Promise.all([
     loadAmAccounts(profile, now).catch(() => null),
     loadAmSales(profile, now).catch(() => null),
     listApplicants(profile.organization_id).catch(() => [] as ApplicantRow[]),
@@ -102,6 +108,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     loadFinanceDashboard(profile.organization_id, now).catch(() => null),
     loadLinkAndWallet(profile),
     loadAmFollowUps(profile).catch(() => [] as FollowUp[]),
+    listProfiles().catch(() => [] as Profile[]),
   ]);
 
   /* Do now ------------------------------------------------------------ */
@@ -130,8 +137,37 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   for (const p of sales?.toApprove ?? []) {
     items.push({ tag: "Proposal to send", who: p.customerName, whoHref: `/jobs/${p.jobId}`, body: <Row a="Total" b={money(p.total)} />, main: { label: "Open proposal", href: `/jobs/${p.jobId}` } });
   }
-  // Do now is proposals and sales follow-ups only (Jordan, Nov 19). Replies,
-  // callbacks, unpaid invoices and leads to book stay out of it for now.
+  // Everything else the account manager has to act on (Jordan, Nov 23: the
+  // account manager sees everything again).
+  for (const m of accounts?.messages ?? []) {
+    items.push({ tag: "Reply", who: m.customerName, whoHref: `/jobs/${m.jobId}`, body: <div className="vx-q">&ldquo;{m.body}&rdquo;</div>, main: { label: "Reply", href: `/jobs/${m.jobId}` } });
+  }
+  for (const i of accounts?.issues ?? []) {
+    items.push({ tag: "Callback", who: i.customerName, whoHref: `/clients/${i.customerId}`, body: <Row a="Issue" b={i.title} />, main: { label: "Set a time", href: `/clients/${i.customerId}` } });
+  }
+  for (const inv of accounts?.invoices ?? []) {
+    items.push({
+      tag: "Not paid",
+      who: inv.customerName,
+      whoHref: `/jobs/${inv.jobId}`,
+      body: (
+        <>
+          <Row a="Invoice" b={money(inv.amount)} />
+          <Row a="Sent" b={outstandingFor(inv, now)} />
+        </>
+      ),
+      main: { label: "Open invoice", href: `/jobs/${inv.jobId}` },
+    });
+  }
+  for (const l of sales?.leads ?? []) {
+    items.push({
+      tag: l.reason === "new" ? "New lead" : "Book evaluation",
+      who: l.customerName,
+      whoHref: `/jobs/${l.jobId}`,
+      body: <Row a={l.address || "Asked"} b={l.why} />,
+      main: { label: "Book it", href: `/jobs/${l.jobId}` },
+    });
+  }
 
   /* Your schedule ----------------------------------------------------- */
   const all = [...visits, ...interviewsOf(applicants, weeks.from, weeks.to)].sort((a, b) => a.at.localeCompare(b.at));
@@ -146,6 +182,15 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     crews.set(k, [...(crews.get(k) ?? []), j]);
   }
   const waitList = board.filter((j) => !j.declined && j.status === "approved" && !j.workStartsOn).sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
+  const later = board
+    .filter((j) => !j.declined && j.workStartsOn && j.workStartsOn.slice(0, 10) > weeks.to && j.status !== "completed")
+    .sort((a, b) => (a.workStartsOn ?? "").localeCompare(b.workStartsOn ?? ""));
+  // A crew is named for its lead: the technicians, and the owner who runs a truck too.
+  const crewOptions: CrewOption[] = team
+    .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? ""))
+    .map((p) => ({ id: p.id, name: firstName(p) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const firstOpenDay = nextWorkDay(weeks.today);
 
   /* Hiring ------------------------------------------------------------ */
   const newApplicants = applicants.filter((a) => a.stage === "video_submitted");
@@ -164,13 +209,13 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   return (
     <Screen hello={`Hi ${firstName(profile)}`} role="Account manager">
       <Btn href="/huddle">Team huddle</Btn>
-      <ClientSearch clients={clients} />
+      <div id="s-clients">
+        <ClientSearch clients={clients} />
+        <NewEstimate />
+      </div>
 
       <OneAtATime title="Do now" items={items} />
 
-      {/* Jordan, Nov 19: for now the page is only his tasks. The rest comes back when it is wanted. */}
-      {!TASKS_ONLY && (
-      <>
       <Card title="Your schedule">
         {today.length ? (
           today.map((v) => (
@@ -180,7 +225,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
           <Row a="Nothing booked today" />
         )}
         {nextVisit && <Btn href={`/jobs/${nextVisit.jobId}`}>Start {timeOf(nextVisit.at)} visit</Btn>}
-        <Sub title={`Next 2 weeks · ${shortDay(weeks.from)} to ${shortDay(weeks.to).replace(/^[A-Za-z]+ /, "")}`} sum={all.length}>
+        <Sub title={`Next 2 weeks · ${spanLabel(weeks.from, weeks.to)}`} sum={all.length}>
           <div className="vx-cal">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((h) => (
               <span key={h} className="h">
@@ -209,7 +254,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         </Sub>
       </Card>
 
-      <Card title="Crew schedule · next 2 weeks" right={`${shortDay(weeks.from)} to ${shortDay(weeks.to).replace(/^[A-Za-z]+ /, "")}`}>
+      <Card title="Crew schedule · next 2 weeks" right={spanLabel(weeks.from, weeks.to)}>
         <Big>{inWindow.length} booked</Big>
         <Sm>
           projects in the next 2 weeks, {waitList.length} on the wait list
@@ -217,13 +262,35 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         {[...crews.entries()].map(([crew, jobs]) => (
           <Sub key={crew} title={crew} sum={`${jobs.length} job${jobs.length === 1 ? "" : "s"}`}>
             {jobs.map((j) => (
-              <Row key={j.id} a={`${dayLabel(j.workStartsOn!.slice(0, 10))} · ${j.customerName ?? "Client"} · ${j.name}`} b={STATUS[j.status]} href={`/jobs/${j.id}`} />
+              <div key={j.id}>
+                <Row a={`${dayLabel(j.workStartsOn!.slice(0, 10))} · ${j.customerName ?? "Client"} · ${j.name}`} b={STATUS[j.status]} href={`/jobs/${j.id}`} />
+                {j.status !== "completed" && <ScheduleJob jobId={j.id} crews={crewOptions} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />}
+              </div>
             ))}
           </Sub>
         ))}
-        <Sub title="Wait list" sum={waitList.length}>
-          {waitList.length ? waitList.map((j, i) => <Row key={j.id} a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`} b="Not scheduled" href={`/jobs/${j.id}`} />) : <Row a="Nobody waiting" />}
+        <Sub title="Wait list" sum={waitList.length} open={waitList.length > 0}>
+          {waitList.length ? (
+            waitList.map((j, i) => (
+              <div key={j.id}>
+                <Row a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`} b="Not scheduled" href={`/jobs/${j.id}`} />
+                <ScheduleJob jobId={j.id} crews={crewOptions} start={firstOpenDay} leadId={j.assignedToId} />
+              </div>
+            ))
+          ) : (
+            <Row a="Nobody waiting" />
+          )}
         </Sub>
+        {later.length > 0 && (
+          <Sub title="Later" sum={later.length}>
+            {later.map((j) => (
+              <div key={j.id}>
+                <Row a={`${shortDay(j.workStartsOn!.slice(0, 10))} · ${j.customerName ?? "Client"} · ${j.name}`} b={j.assignedToName ?? ""} href={`/jobs/${j.id}`} />
+                <ScheduleJob jobId={j.id} crews={crewOptions} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />
+              </div>
+            ))}
+          </Sub>
+        )}
       </Card>
 
       <Card title="Hiring">
@@ -277,8 +344,6 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />
       {track && <Stage done={0} total={track.stages.length + 1} next={track.stages[0]} />}
-      </>
-      )}
     </Screen>
   );
 }

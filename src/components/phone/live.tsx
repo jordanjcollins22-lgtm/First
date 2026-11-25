@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { sectionId } from "@/components/phone/section-id";
 import { FollowUpDone } from "@/components/phone/follow-up-done";
 import { ProposalCloser } from "@/components/phone/proposal-closer";
 import { searchClients, type ClientHit } from "@/lib/actions/client-search-actions";
@@ -42,7 +43,7 @@ export function OneAtATime({ title, items, children }: { title: string; items: O
   const it = items[Math.min(at, n - 1)];
 
   return (
-    <div className="vx-card vx-one">
+    <div className="vx-card vx-one" id={sectionId(title)}>
       <div className="vx-one-h">
         <span className="vx-ct">
           {title} · {n}

@@ -20,12 +20,13 @@ import { notifyJobTeam } from "@/lib/notifications";
 import { reportSaleToMeta } from "@/lib/data/meta-report";
 import { reduceScope, type ScopeLine } from "@/lib/objections";
 import { amountForPath, confirmationFor, optionById } from "@/lib/acceptance-path";
-import { startProposalCheckout } from "@/lib/proposal-checkout";
+import { OVER_TIME_METHODS, startProposalCheckout } from "@/lib/proposal-checkout";
 import { previewResult, schedulePath } from "@/lib/proposal-flow";
 import { isSameSitting } from "@/lib/proposal-views";
 import { buildSchedule, checkPlan } from "@/lib/payment-plan";
 import type { ProposalZoneSnapshot } from "@/types/domain";
 import { applyOption, readOptions } from "@/lib/proposal-options";
+import { addonsCents, markChosen, pickAddons, readAddons, withAddons } from "@/lib/proposal-addons";
 import { atSigningForSnapshot } from "@/lib/sales/mhic";
 import type { Json } from "@/lib/supabase/database.types";
 
@@ -39,7 +40,13 @@ import type { Json } from "@/lib/supabase/database.types";
 /** The client already has an invoice to pay; no checkout needs starting. */
 class AlreadyInvoiced extends Error {}
 
-export async function respondToProposal(token: string, response: "accepted" | "declined", note: string, optionKey?: string | null) {
+export async function respondToProposal(
+  token: string,
+  response: "accepted" | "declined",
+  note: string,
+  optionKey?: string | null,
+  addonKeys?: string[] | null
+) {
   if (response !== "accepted" && response !== "declined") throw new Error("Invalid response.");
 
   const admin = createAdminClient();
@@ -73,28 +80,36 @@ export async function respondToProposal(token: string, response: "accepted" | "d
     chosen = applyOption(snapshot, option);
   }
 
+  // Add-ons they ticked (Christmas lights, say): their price goes on top of
+  // the proposal's, and they are marked as chosen for the crew and the office.
+  // Only add-ons that are on the proposal count, so a tampered key adds nothing.
+  const addons = readAddons(proposal.options);
+  const ticked = response === "accepted" ? pickAddons(addons, addonKeys) : [];
+  const baseTotal = chosen ? chosen.totalCost : Number(proposal.total_cost ?? 0);
+  const newTotal = baseTotal + addonsCents(ticked) / 100;
+  let newOptions: Record<string, unknown> | null = chosen ? { ...(proposal.options as Record<string, unknown>), chosen: optionKey } : null;
+  if (response === "accepted" && addons.length) {
+    newOptions = withAddons(newOptions ?? proposal.options, markChosen(addons, ticked.map((a) => a.key)));
+  }
+
   const { error: updateError } = await admin
     .from("job_proposals")
     .update({
       status: response,
       responded_at: new Date().toISOString(),
       client_response_note: note.trim() || null,
-      ...(chosen
-        ? {
-            total_cost: chosen.totalCost,
-            scope_snapshot: chosen.snapshot as unknown as Json,
-            options: { ...(proposal.options as Record<string, unknown>), chosen: optionKey } as unknown as Json,
-          }
-        : {}),
+      ...(chosen ? { scope_snapshot: chosen.snapshot as unknown as Json } : {}),
+      ...(chosen || ticked.length ? { total_cost: newTotal } : {}),
+      ...(newOptions ? { options: newOptions as unknown as Json } : {}),
     })
     .eq("id", proposal.id);
   if (updateError) throw updateError;
-  if (chosen) proposal.total_cost = chosen.totalCost;
+  if (chosen || ticked.length) proposal.total_cost = newTotal;
 
   notifyJobTeam(
     proposal.job_id,
     "proposal_responses",
-    `A client ${response} their proposal.`,
+    `A client ${response} their proposal${ticked.length ? `, with ${ticked.map((a) => a.name).join(" and ")} added` : ""}.`,
     { dedupeKey: proposal.id }
   ).catch(() => {
     // Best-effort — the client's response is already recorded.
@@ -510,6 +525,8 @@ export async function choosePaymentPath(input: {
   pathId: string;
   /** How many payments to split it into. Ignored for paying in full. */
   instalments?: number;
+  /** Pay over time through Klarna, which pays us in full now. Paying in full only. */
+  overTime?: boolean;
   /** Set by the internal preview, which reads the client's real proposal. */
   preview?: boolean;
 }): Promise<PublicResult<{ message: string; checkoutUrl?: string; next?: string }>> {
@@ -606,7 +623,9 @@ export async function choosePaymentPath(input: {
     // Paying in full pays the invoice that already exists. Its hosted page
     // takes a card or Apple Pay just as checkout would, and a second
     // charge alongside an open invoice is how a client pays twice.
-    if (option.id === "full") {
+    // Not when paying over time: the invoice's own page takes cards, and the
+    // client asked for the lender.
+    if (option.id === "full" && !input.overTime) {
       let open = await openInvoiceFor(proposal.job_id).catch(() => null);
       // An invoice for a price the proposal no longer says (a discount taken
       // off after it went) is voided and raised again at what is owed now.
@@ -633,6 +652,7 @@ export async function choosePaymentPath(input: {
         planId,
         instalmentId,
         deposit: Boolean(signing?.isDeposit),
+        overTime: option.id === "full" && Boolean(input.overTime),
       });
       if (started) {
         checkoutUrl = started.url;
@@ -985,6 +1005,8 @@ export async function startProposalPayment(input: {
   token: string;
   pathId: string;
   instalments?: number;
+  /** Pay over time through Klarna, which pays us in full now. */
+  overTime?: boolean;
   preview?: boolean;
 }): Promise<PublicResult<{ clientSecret: string; amountCents: number }>> {
   try {
@@ -1052,8 +1074,11 @@ export async function startProposalPayment(input: {
       amount: amountCents,
       currency: "usd",
       // Lets Stripe offer the wallets and Link the browser can actually use,
-      // rather than us guessing which and hiding the rest.
-      automatic_payment_methods: { enabled: true },
+      // rather than us guessing which and hiding the rest. Paying over time
+      // is the one exception: only the lender, so that is what they get.
+      ...(input.overTime && option.id === "full"
+        ? { payment_method_types: [...OVER_TIME_METHODS] }
+        : { automatic_payment_methods: { enabled: true } }),
       ...(existing ? { customer: existing } : {}),
       ...(contact?.email ? { receipt_email: contact.email } : {}),
       metadata: {
@@ -1061,6 +1086,7 @@ export async function startProposalPayment(input: {
         organization_id: proposal.organization_id,
         job_id: proposal.job_id,
         ...(signing?.isDeposit ? { deposit: "1" } : {}),
+        ...(input.overTime ? { over_time: "1" } : {}),
       },
     });
 
