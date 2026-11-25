@@ -74,6 +74,7 @@ const A = {
   ownerReview: { label: "Project review", glyph: "chart", color: "slate", what: "Profit on projects and money in and out.", go: { page: "/me/full?role=account-manager&app=s-business" } },
   viewAs: { label: "View as", glyph: "eye", color: "sky", what: "See each role's screen, or open the app as one person on the team.", go: { page: "/admin/view-as" } },
   doNow: { label: "Do now", glyph: "check", color: "lime", what: "One task at a time: replies, follow-ups, new leads, proposals, payouts.", go: { full: "s-do-now" } },
+  evals: { label: "Evaluations", glyph: "pin", color: "teal", what: "Paid visits: book them, go, price them on the map, then approve and send the proposal.", go: { full: "s-evaluations" } },
   schedule: { label: "Schedule", glyph: "cal", color: "sky", what: "Your day and the next 2 weeks: paid visits, interviews, check-ins.", go: { full: "s-your-schedule" } },
   clients: { label: "Clients", glyph: "search", color: "slate", what: "Search every client and project, or start a new estimate.", go: { full: "s-clients" } },
   crew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { full: "s-crew-schedule-next-2-weeks" } },
@@ -120,7 +121,7 @@ const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
   "account-manager": {
     title: "Account manager",
     dock: ["doNow", "hlMsgs", "schedule", "clients"],
-    apps: ["crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
+    apps: ["evals", "crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
   },
   technician: {
     title: "Technician",
