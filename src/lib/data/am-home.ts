@@ -83,7 +83,7 @@ export interface AmSales {
 export async function loadAmSales(viewer: Profile, now: Date = new Date()): Promise<AmSales> {
   const sb = await db();
   const org = viewer.organization_id;
-  const jobCols = "id,status,created_at,evaluation_date,evaluation_status,cancelled_at,declined_at,property:properties!inner(address,customer:customers!inner(id,name,phone,account_manager_id,do_not_contact,organization_id))";
+  const jobCols = "id,name,status,created_at,property_id,evaluation_date,evaluation_status,cancelled_at,declined_at,property:properties!inner(address,customer:customers!inner(id,name,phone,email,account_manager_id,do_not_contact,organization_id))";
   const [leadRows, proposalRows, openRows] = await Promise.all([
     read(
       "leads",
@@ -113,9 +113,30 @@ export async function loadAmSales(viewer: Profile, now: Date = new Date()): Prom
     ),
   ]);
 
+  // A later job at the same address that has gone past estimating means the
+  // visit happened and the work moved on: that lead is done, not to book.
+  const propertyIds = [...new Set(leadRows.map((j) => str(j.property_id)).filter(Boolean))];
+  const laterRows = propertyIds.length
+    ? await read(
+        "moved-on jobs",
+        (sb.from("jobs").select("property_id,created_at") as Q).in("property_id", propertyIds).in("status", ["quoted", "approved", "in_progress", "completed"]).limit(500)
+      )
+    : [];
+  const movedOnSince = new Map<string, string>();
+  for (const r of laterRows) {
+    const pid = str(r.property_id);
+    const at = str(r.created_at);
+    if (!movedOnSince.has(pid) || at < movedOnSince.get(pid)!) movedOnSince.set(pid, at);
+  }
+
   const leads: LeadJob[] = leadRows.map((j) => {
     const c = customerOf(j);
+    const since = movedOnSince.get(str(j.property_id));
     return {
+      customerId: str(c.id) || null,
+      email: str(c.email) || null,
+      jobName: str(j.name) || null,
+      movedOn: since != null && since >= str(j.created_at),
       jobId: str(j.id),
       customerName: str(c.name) || "Unnamed client",
       phone: str(c.phone) || null,

@@ -1,3 +1,4 @@
+import { isTestLead } from "@/lib/am-home";
 import { groupVisits, visitStage, type VisitStage } from "@/lib/evaluation-visit";
 import { createClient } from "@/lib/supabase/server";
 import { BUSINESS_TIME_ZONE } from "@/lib/time-zone";
@@ -31,7 +32,7 @@ export async function loadAmEvaluations(profile: Profile, now: Date = new Date()
   const { data } = await sb
     .from("jobs")
     .select(
-      "id,name,status,evaluation_date,evaluation_status,evaluator_on_way_at,evaluator_arrived_at,cancelled_at,property:properties!inner(address,customer:customers!inner(name,phone,do_not_contact,account_manager_id,organization_id))"
+      "id,name,status,evaluation_date,evaluation_status,evaluator_on_way_at,evaluator_arrived_at,cancelled_at,property:properties!inner(address,customer:customers!inner(name,phone,email,do_not_contact,account_manager_id,organization_id))"
     )
     .eq("property.customer.organization_id", profile.organization_id)
     .gte("evaluation_date", from)
@@ -47,11 +48,12 @@ export async function loadAmEvaluations(profile: Profile, now: Date = new Date()
     evaluation_status: string | null;
     evaluator_on_way_at: string | null;
     evaluator_arrived_at: string | null;
-    property: { address: string | null; customer: { name: string | null; phone: string | null; do_not_contact: boolean | null; account_manager_id: string | null } | null } | null;
+    property: { address: string | null; customer: { name: string | null; phone: string | null; email?: string | null; do_not_contact: boolean | null; account_manager_id: string | null } | null } | null;
   };
   const rows: EvalVisit[] = ((data ?? []) as unknown as R[])
     .filter((j) => {
       const am = j.property?.customer?.account_manager_id;
+      if (isTestLead({ customerName: j.property?.customer?.name ?? "", email: j.property?.customer?.email, jobName: j.name })) return false;
       return !am || am === profile.id;
     })
     .map((j) => ({
