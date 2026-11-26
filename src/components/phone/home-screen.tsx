@@ -112,32 +112,13 @@ const A = {
 } satisfies Record<string, App>;
 
 type Key = keyof typeof A;
+// First version (Jordan, Nov 26): only what each role has to have. Dock = all the time.
 const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
-  owner: {
-    title: "Owner",
-    dock: ["yes", "ownerMoney", "hlMsgs", "agentMap"],
-    apps: ["payments", "hiring", "ownerCrew", "ownerReview", "viewAs", "reviews", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  "account-manager": {
-    title: "Account manager",
-    dock: ["doNow", "hlMsgs", "schedule", "clients"],
-    apps: ["evals", "crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  technician: {
-    title: "Technician",
-    dock: ["today", "wallet", "receipt", "msgs"],
-    apps: ["huddle", "route", "plants", "weeds", "materials", "safety", "training", "hours", "timeOff", "ask", "stage", "sendLink"],
-  },
-  partner: {
-    title: "Location partner",
-    dock: ["needsYou", "locMoney", "msgs", "partnerSchedule"],
-    apps: ["keep", "partnerCrew", "partnerHiring", "agentMap", "huddle", "reviews", "weather", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  affiliate: {
-    title: "Affiliate",
-    dock: ["sendLink", "wallet", "stage", "msgs"],
-    apps: ["services", "photos", "training", "ask"],
-  },
+  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["payments", "ownerCrew", "viewAs"] },
+  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "schedule", "hlMsgs"], apps: ["evals", "crew", "amHiring", "business"] },
+  technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["plants", "weeds"] },
+  partner: { title: "Location partner", dock: ["needsYou", "locMoney", "partnerSchedule", "msgs"], apps: ["partnerCrew", "partnerHiring"] },
+  affiliate: { title: "Affiliate", dock: ["sendLink", "wallet", "stage", "ask"], apps: [] },
 };
 
 function Glyph({ k }: { k: keyof typeof GLYPH }) {
