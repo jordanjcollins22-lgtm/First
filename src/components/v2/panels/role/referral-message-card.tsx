@@ -1,109 +1,95 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardPaste, Copy, ImagePlus, Loader2, Share2, X } from "lucide-react";
+import { Check, Copy, Loader2, Share2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { copyNow, writeClipboard } from "@/lib/clipboard";
 import { startReferral } from "@/lib/actions/referral-actions";
-import { createShotUpload } from "@/lib/actions/outreach-link-actions";
-import { createClient } from "@/lib/supabase/client";
-import { shrinkImage } from "@/lib/shrink-image";
 import { AFFILIATIONS, firstNameOf, type Affiliation } from "@/lib/referral-message";
 import { cn } from "@/lib/utils";
 
 /** Which screen of the card: the button, one question each, then the message. */
-export type ReferralStep = "start" | "name" | "how" | "shot" | "message";
+export type ReferralStep = "start" | "name" | "how" | "message";
 
 /**
- * The top of an affiliate's app: one button, then one question per screen.
- * Who it's for, how they know them, and a screenshot of who they're
- * answering (optional). Submit, and they get a message to copy and send with
- * their own tracked link in it. Each one is tracked, so they can see how far
- * that person got.
+ * The top of an affiliate's app: one button, then two quick questions.
+ * Who it's for, and how they know them. Picking how they know them makes the
+ * message straight away and copies it, so all that's left is going back to
+ * the post (or text) and pasting it. Each one is tracked, so they can see how
+ * far that person got.
  */
 export function ReferralMessageCard({
   sample,
 }: {
-  sample?: { step?: ReferralStep; name?: string; affiliation?: Affiliation; message?: string; shotName?: string };
+  sample?: { step?: ReferralStep; name?: string; affiliation?: Affiliation; message?: string; copied?: boolean };
 }) {
   const router = useRouter();
   const [step, setStep] = useState<ReferralStep>(sample?.step ?? (sample?.message ? "message" : "start"));
   const [name, setName] = useState(sample?.name ?? "");
   const [affiliation, setAffiliation] = useState<Affiliation | null>(sample?.affiliation ?? null);
   const [message, setMessage] = useState<string | null>(sample?.message ?? null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(sample?.copied ?? false);
+  const [autoCopied, setAutoCopied] = useState(sample?.copied ?? false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [shot, setShot] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLDivElement>(null);
-  const shotName = shot?.name ?? sample?.shotName ?? null;
   const them = firstNameOf(name) || "them";
-
-  // On the screenshot step, a pasted image (Ctrl+V, or Paste from the phone's menu) becomes the screenshot.
-  useEffect(() => {
-    if (step !== "shot") return;
-    const onPaste = (e: ClipboardEvent) => {
-      const file = imageFrom(e.clipboardData);
-      if (!file) return;
-      e.preventDefault();
-      setError(null);
-      setShot(file);
-    };
-    window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
-  }, [step]);
-
-  async function pasteShot() {
-    setError(null);
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find((t) => t.startsWith("image/"));
-        if (!type) continue;
-        const blob = await item.getType(type);
-        return setShot(new File([blob], `pasted-screenshot.${type.split("/")[1] || "png"}`, { type }));
-      }
-      setError("There's no picture copied. Copy the screenshot first, then tap Paste.");
-    } catch {
-      setError("Your phone didn't allow pasting here. Press and hold the box below, then tap Paste.");
-    }
-  }
 
   function go(next: ReferralStep) {
     setError(null);
     setStep(next);
   }
 
-  function submit() {
+  /** Picking how they know them is the last answer: make the message and copy it. */
+  function pick(a: Affiliation) {
+    setAffiliation(a);
     setError(null);
     if (!name.trim()) return go("name");
-    if (!affiliation) return go("how");
     if (busy) return;
     setBusy(true);
-    // Not inside a transition: the next one has to be startable straight away,
-    // without waiting on the page to reload its lists.
+
+    // The copy has to start inside the tap, or phones refuse it. A clipboard
+    // item can wait on the message, so it's started now and filled when it lands.
+    let resolveText: (text: string) => void = () => undefined;
+    let rejectText: () => void = () => undefined;
+    const text = new Promise<string>((res, rej) => {
+      resolveText = res;
+      rejectText = rej;
+    });
+    let copying: Promise<boolean> | null = null;
+    try {
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        const blob = text.then((t) => new Blob([t], { type: "text/plain" }));
+        copying = navigator.clipboard
+          .write([new ClipboardItem({ "text/plain": blob })])
+          .then(() => true)
+          .catch(() => false);
+      }
+    } catch {
+      copying = null;
+    }
+
     void (async () => {
       try {
-        let screenshotPath: string | null = null;
-        if (shot) {
-          const small = await shrinkImage(shot).catch(() => shot);
-          const slot = await createShotUpload({ fileType: small.type, fileSize: small.size });
-          if (!slot.ok) return setError(slot.error);
-          const sent = await createClient().storage.from("recommendation-shots").uploadToSignedUrl(slot.path, slot.token, small, { contentType: small.type });
-          if (sent.error) return setError("That screenshot wouldn't upload. Try a smaller one, or leave it off.");
-          screenshotPath = slot.path;
+        const r = await startReferral({ name, affiliation: a, screenshotPath: null });
+        if (!r.ok) {
+          rejectText();
+          return setError(r.error);
         }
-        const r = await startReferral({ name, affiliation, screenshotPath });
-        if (!r.ok) return setError(r.error);
+        resolveText(r.message);
+        let ok = copying ? await copying : false;
+        if (!ok) ok = await writeClipboard(r.message);
         setMessage(r.message);
+        setCopied(ok);
+        setAutoCopied(ok);
         setStep("message");
         router.refresh();
       } catch {
+        rejectText();
         setError("Couldn't make your link just now. Try again.");
       } finally {
         setBusy(false);
@@ -117,7 +103,6 @@ export function ReferralMessageCard({
     const ok = copyNow(message) || (await writeClipboard(message));
     if (!ok) return setError("Couldn't copy. Press and hold the message to copy it.");
     setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
   }
 
   async function share() {
@@ -138,9 +123,8 @@ export function ReferralMessageCard({
     setAffiliation(null);
     setMessage(null);
     setCopied(false);
+    setAutoCopied(false);
     setError(null);
-    setShot(null);
-    if (fileRef.current) fileRef.current.value = "";
     setBusy(false);
     // Straight to who it's for: they already said they're sending another.
     setStep("name");
@@ -158,12 +142,23 @@ export function ReferralMessageCard({
   if (step === "message" && message) {
     return (
       <div ref={topRef} className="grid gap-3">
-        <Eyebrow>Copy and paste this message</Eyebrow>
-        <Textarea rows={13} value={message} onChange={(e) => setMessage(e.target.value)} aria-label="Your message" className="text-base leading-snug" />
-        <p className="text-xs text-muted-foreground">Change anything so it sounds like you. Keep the link as it is: that&apos;s how it counts for you.</p>
-        <Button type="button" className="h-12 text-base" onClick={copy}>
-          {copied ? <Check className="mr-1 h-5 w-5" /> : <Copy className="mr-1 h-5 w-5" />}
-          {copied ? "Copied" : "Copy message"}
+        {copied ? (
+          <div className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-3">
+            <p className="flex items-center gap-1 text-base font-semibold">
+              <Check className="h-5 w-5" /> {autoCopied ? "Your message is copied" : "Copied"}
+            </p>
+            <p className="mt-1 text-sm">{pasteWhere(affiliation, them)}</p>
+          </div>
+        ) : (
+          <Eyebrow>Copy and paste this message</Eyebrow>
+        )}
+        <Textarea rows={11} value={message} onChange={(e) => { setMessage(e.target.value); setCopied(false); setAutoCopied(false); }} aria-label="Your message" className="text-base leading-snug" />
+        <p className="text-xs text-muted-foreground">
+          Change anything so it sounds like you{copied ? ", then tap Copy again" : ""}. Keep the link as it is: that&apos;s how it counts for you.
+        </p>
+        <Button type="button" variant={copied ? "outline" : "default"} className="h-12 text-base" onClick={copy}>
+          <Copy className="mr-1 h-5 w-5" />
+          {copied ? "Copy again" : "Copy message"}
         </Button>
         <Button type="button" variant="outline" className="h-12 text-base" onClick={share}>
           <Share2 className="mr-1 h-5 w-5" /> Share
@@ -180,7 +175,7 @@ export function ReferralMessageCard({
     <div ref={topRef} className="grid gap-3">
       {step === "name" && (
         <>
-          <Eyebrow>Step 1 of 3</Eyebrow>
+          <Eyebrow>Step 1 of 2</Eyebrow>
           <label className="grid gap-2 text-base font-semibold">
             Who are you sending it to?
             <Input
@@ -203,8 +198,9 @@ export function ReferralMessageCard({
 
       {step === "how" && (
         <>
-          <Eyebrow>Step 2 of 3</Eyebrow>
+          <Eyebrow>Step 2 of 2</Eyebrow>
           <p className="text-base font-semibold">How do you know {them}?</p>
+          <p className="-mt-2 text-sm text-muted-foreground">Tap one and your message is made and copied.</p>
           <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={`How do you know ${them}?`}>
             {AFFILIATIONS.map((a) => (
               <button
@@ -212,9 +208,10 @@ export function ReferralMessageCard({
                 type="button"
                 role="radio"
                 aria-checked={affiliation === a.key}
-                onClick={() => setAffiliation(a.key)}
+                disabled={busy}
+                onClick={() => pick(a.key)}
                 className={cn(
-                  "rounded-full border px-3 py-1.5 text-sm",
+                  "rounded-full border px-3 py-1.5 text-sm disabled:opacity-60",
                   affiliation === a.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:bg-muted"
                 )}
               >
@@ -222,68 +219,16 @@ export function ReferralMessageCard({
               </button>
             ))}
           </div>
-          <Button type="button" className="h-12 text-base" onClick={() => (affiliation ? go("shot") : setError("Pick how you know them."))}>
-            Next
-          </Button>
-        </>
-      )}
-
-      {step === "shot" && (
-        <>
-          <Eyebrow>Step 3 of 3</Eyebrow>
-          <p className="text-base font-semibold">Add a screenshot of who you&apos;re answering</p>
-          <p className="-mt-2 text-sm text-muted-foreground">Optional. A post or text from them, so we can see who you sent it to. Paste it or upload it.</p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => setShot(e.target.files?.[0] ?? null)}
-          />
-          {shotName ? (
-            <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
-              <span className="min-w-0 truncate">{shotName}</span>
-              <button
-                type="button"
-                aria-label="Remove the screenshot"
-                className="text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setShot(null);
-                  if (fileRef.current) fileRef.current.value = "";
-                }}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                <Button type="button" variant="outline" className="h-11" onClick={pasteShot}>
-                  <ClipboardPaste className="mr-1 h-5 w-5" /> Paste
-                </Button>
-                <Button type="button" variant="outline" className="h-11" onClick={() => fileRef.current?.click()}>
-                  <ImagePlus className="mr-1 h-5 w-5" /> Upload
-                </Button>
-              </div>
-              <textarea
-                aria-label="Paste a screenshot here"
-                rows={1}
-                value=""
-                onChange={() => undefined}
-                placeholder="Or press and hold here, then Paste"
-                className="w-full resize-none rounded-lg border border-dashed bg-background px-3 py-2 text-center text-sm text-muted-foreground"
-              />
-            </>
+          {busy && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Making your message…
+            </p>
           )}
-          <Button type="button" className="h-12 text-base" disabled={busy} onClick={submit}>
-            {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Submit
-          </Button>
         </>
       )}
 
       <div className="flex items-center justify-between">
-        <button type="button" className="text-sm text-muted-foreground underline" onClick={() => go(step === "shot" ? "how" : step === "how" ? "name" : "start")}>
+        <button type="button" className="text-sm text-muted-foreground underline" onClick={() => go(step === "how" ? "name" : "start")}>
           Back
         </button>
       </div>
@@ -292,16 +237,11 @@ export function ReferralMessageCard({
   );
 }
 
-/** The first picture in a paste, if there is one. */
-function imageFrom(data: DataTransfer | null): File | null {
-  if (!data) return null;
-  for (const item of Array.from(data.items)) {
-    if (item.kind === "file" && item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      if (file) return file.name && file.name !== "image.png" ? file : new File([file], `pasted-screenshot.${item.type.split("/")[1] || "png"}`, { type: item.type });
-    }
-  }
-  return null;
+/** Where to paste it, in their words: back to the post, their message, or a text. */
+export function pasteWhere(affiliation: Affiliation | null, them: string): string {
+  if (affiliation === "online_post") return "Now go back to the post and paste it as a comment.";
+  if (affiliation === "online_message") return `Now go back to your messages with ${them} and paste it.`;
+  return `Now go to your texts with ${them} and paste it.`;
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
