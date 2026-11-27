@@ -122,6 +122,16 @@ export const SPOT_NOW: SpotNow[] = [
       { value: "bed", label: "A bed along it", choices: ["mulch", "weeds"] },
     ],
   },
+  {
+    value: "parking",
+    label: "Parking lot",
+    wants: [
+      { value: "leaves", label: "Leaves cleared off", choices: ["leaves"] },
+      { value: "clean", label: "Weeds pulled and cleaned up", choices: ["weeds"] },
+      { value: "islands", label: "Islands mulched", choices: ["mulch", "weeds"] },
+      { value: "fix", label: "Standing water fixed", choices: ["water"] },
+    ],
+  },
   { value: "water", label: "Water sits here", wants: [{ value: "fix", label: "Fixed", choices: ["water"] }] },
   { value: "unsure", label: "Not sure", wants: [], choices: ["other"] },
 ];
