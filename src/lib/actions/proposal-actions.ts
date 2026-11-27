@@ -691,7 +691,15 @@ function zoneFacts(zone: WorkZone): string {
 export async function saveProposalAddon(
   jobId: string,
   key: string,
-  form: { name: string; price: string; decorate: string; lights: string; takedown: string; note: string } | null
+  form: {
+    name: string;
+    price: string;
+    areas?: { name: string; price: string }[];
+    decorate: string;
+    lights: string;
+    takedown: string;
+    note: string;
+  } | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
