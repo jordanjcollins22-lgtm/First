@@ -89,3 +89,8 @@
 .vx-app .vx-visit{padding:6px 0 10px;border-bottom:1px solid var(--line)}
 .vx-app .vx-visit:last-of-type{border-bottom:0}
 .vx-app .vx-sched > .vx-2b,.vx-app .vx-sched > .vx-cta,.vx-app .vx-sched > .vx-note{flex-basis:100%}
+
+/* One app opened from the home screen: no greeting, and a drop-down's title line shows just its name (the numbers are right below). */
+.vx-only .vx-app .vx-hello{display:none}
+.vx-only .vx-app .vx-screen>details.vx-drop>summary b,.vx-only .vx-app .vx-screen>details.vx-drop>summary::after{display:none}
+.vx-only .vx-app .vx-screen>details.vx-drop>summary{cursor:default;pointer-events:none}
