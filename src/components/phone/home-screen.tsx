@@ -115,7 +115,7 @@ type Key = keyof typeof A;
 // First version (Jordan, Nov 26): only what each role has to have. Dock = all the time.
 const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
   owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["payments", "ownerCrew", "viewAs"] },
-  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "schedule", "hlMsgs"], apps: ["evals", "crew", "amHiring", "business"] },
+  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "schedule", "hlMsgs"], apps: ["sendLink", "wallet", "evals", "crew", "amHiring", "business"] },
   technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["plants", "weeds"] },
   partner: { title: "Location partner", dock: ["needsYou", "locMoney", "partnerSchedule", "msgs"], apps: ["partnerCrew", "partnerHiring"] },
   affiliate: { title: "Affiliate", dock: ["sendLink", "wallet", "stage", "ask"], apps: [] },
