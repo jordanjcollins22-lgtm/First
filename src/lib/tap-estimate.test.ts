@@ -244,7 +244,7 @@ describe("the two spot questions", () => {
       expect(now.wants.length).toBeLessThanOrEqual(5);
       for (const want of now.wants) for (const c of want.choices) expect(priced.has(c)).toBe(true);
     }
-    expect(SPOT_NOW.length).toBeLessThanOrEqual(7);
+    expect(SPOT_NOW.length).toBeLessThanOrEqual(8);
   });
 
   it("can still ask for every priced choice", () => {
@@ -258,6 +258,7 @@ describe("the two spot questions", () => {
     // Leaves on the lawn are a leaf removal, priced like any other area.
     expect(choicesForSpot("grass", ["leaves"])).toEqual(["leaves"]);
     expect(choicesForSpot("unsure", [])).toEqual(["other"]);
+    expect(choicesForSpot("parking", ["islands", "leaves"])).toEqual(["mulch", "weeds", "leaves"]);
     expect(choicesForSpot("water", ["fix"])).toEqual(["water"]);
   });
 
