@@ -5,6 +5,7 @@ import { EstimateButton } from "@/components/phone/estimate-button";
 import { NewEstimate } from "@/components/phone/new-estimate";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
 import { AddonEditor } from "@/components/phone/addon-editor";
+import { chosenCents } from "@/lib/proposal-addons";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
 import { crewPath } from "@/lib/crew-link";
 
@@ -121,9 +122,9 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
-            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} />}
+            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} standard={file.lightStandard} />}
             {p.status === "accepted" &&
-              p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}`} b={money(a.priceCents / 100)} />)}
+              p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}${a.areas ? ` (${a.areas.filter((x) => x.chosen).map((x) => x.name).join(", ")})` : ""}`} b={money(chosenCents(a) / 100)} />)}
           </>
         ) : (
           !est?.total && <Row a="No proposal yet" />
