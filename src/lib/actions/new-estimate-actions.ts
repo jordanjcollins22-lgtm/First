@@ -97,6 +97,26 @@ export async function startNewEstimate(input: NewEstimateInput): Promise<NewEsti
     propertyId = prop.id;
   }
 
+  // An estimate already open at this house, with no proposal on it yet, is
+  // the one to carry on with. Pressing New estimate again used to start a
+  // fresh empty job each time, and the client's page filled up with copies.
+  const { data: open } = await admin
+    .from("jobs")
+    .select("id, job_proposals(id)")
+    .eq("property_id", propertyId)
+    .eq("status", "estimating")
+    .order("created_at", { ascending: false });
+  const unproposed = (open ?? []).filter((j) => !(j.job_proposals ?? []).length).map((j) => j.id);
+  const { data: paid } = unproposed.length
+    ? await admin.from("job_estimates").select("job_id").in("job_id", unproposed).not("paid_at", "is", null)
+    : { data: [] };
+  const paidIds = new Set((paid ?? []).map((e) => e.job_id));
+  const reuse = unproposed.find((id) => !paidIds.has(id));
+  if (reuse) {
+    const { data: intake } = await admin.from("evaluation_intakes").upsert({ organization_id: org, job_id: reuse }, { onConflict: "job_id" }).select("token").single();
+    if (intake) return { ok: true, token: intake.token, jobId: reuse };
+  }
+
   // A new job to price.
   const { data: job, error: jobError } = await admin
     .from("jobs")

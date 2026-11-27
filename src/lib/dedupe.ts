@@ -10,6 +10,8 @@
  * same way on the server actions and the public booking flow.
  */
 
+import { sameAddress } from "@/lib/address-normalize";
+
 /** Lowercase, strip punctuation, collapse runs of whitespace. */
 function squash(value: string): string {
   return value
@@ -138,7 +140,9 @@ export function findDuplicateProperty(
 ): PropertyLike | null {
   const key = normalizeAddress(address);
   if (!key) return null;
-  return existing.find((p) => normalizeAddress(p.address) === key) ?? null;
+  // The map's geocoder writes "..., Maryland 21040, United States" and people
+  // type "..., MD 21040": the stricter address key reads those as one house.
+  return existing.find((p) => normalizeAddress(p.address) === key) ?? existing.find((p) => sameAddress(p.address, address)) ?? null;
 }
 
 /**

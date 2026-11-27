@@ -78,6 +78,11 @@ describe("findDuplicateProperty", () => {
     expect(findDuplicateProperty(existing, "123 main st.")?.id).toBe("p1");
   });
 
+  it("matches the geocoder's spelling with the country on the end", () => {
+    const rows = [{ id: "p9", address: "423 Silverside Road, Edgewood, Maryland 21040, United States" }];
+    expect(findDuplicateProperty(rows, "423 Silverside Road, Edgewood, Maryland 21040")?.id).toBe("p9");
+  });
+
   it("does not invent a match for a new address", () => {
     expect(findDuplicateProperty(existing, "77 Elm Ct")).toBeNull();
   });
