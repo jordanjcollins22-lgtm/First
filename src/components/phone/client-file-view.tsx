@@ -8,6 +8,7 @@ import { AddonEditor } from "@/components/phone/addon-editor";
 import { chosenCents } from "@/lib/proposal-addons";
 import type { ClientFile, FileJob } from "@/lib/data/client-file";
 import { crewPath } from "@/lib/crew-link";
+import { nextStep, withoutEmptyCopies } from "@/lib/client-next-step";
 
 const TZ = "America/New_York";
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
@@ -32,7 +33,8 @@ const INVOICE: Record<string, string> = { open: "Not paid", paid: "Paid", void: 
  * map, each closed until tapped. With `jobId`, that job comes first and opens.
  */
 export function ClientFileView({ file, jobId }: { file: ClientFile; jobId?: string }) {
-  const jobs = jobId ? [...file.jobs].sort((a, b) => (a.id === jobId ? -1 : b.id === jobId ? 1 : 0)) : file.jobs;
+  const shown = withoutEmptyCopies(file.jobs, jobId);
+  const jobs = jobId ? [...shown].sort((a, b) => (a.id === jobId ? -1 : b.id === jobId ? 1 : 0)) : shown;
   return (
     <Screen hello="Client" role={file.doNotContact ? "Do not contact" : ""}>
       <Link href="/me/full" className="vx-cl-back">
@@ -92,10 +94,12 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
   const p = job.proposal;
   const est = job.estimate;
   const open = job.invoices.filter((i) => i.status === "open");
+  const step = nextStep(job);
   return (
     <div className="vx-card">
       <Row a={job.name} b={JOB_STATUS[job.status] ?? job.status} />
       {job.address && <div className="vx-sm">{job.address}</div>}
+      <NextStepBlock job={job} file={file} step={step} />
       <Contact file={file} />
 
       <Sub title="Messages" sum={job.messages.length}>
@@ -110,18 +114,12 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
             href={est.token ? `/prep/${est.token}/estimate` : undefined}
           />
         )}
-        {est?.total != null && est.token && file.phone && !file.doNotContact && !est.paidAt && (
-          <a href={estimateText(file, est.token)} className="vx-cta vx-alt">
-            Text them this estimate
-          </a>
-        )}
-        {job.status !== "completed" && job.status !== "cancelled" && !est?.paidAt && (
-          <EstimateButton jobId={job.id} label={est?.total != null ? "Change it on the map" : "Price it on the map"} />
+        {est?.total != null && step.kind !== "price" && job.status !== "completed" && job.status !== "cancelled" && !est.paidAt && !p && (
+          <EstimateButton jobId={job.id} label="Change it on the map" />
         )}
         {p ? (
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
-            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} standard={file.lightStandard} />}
             {p.status === "accepted" &&
               p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}${a.areas ? ` (${a.areas.filter((x) => x.chosen).map((x) => x.name).join(", ")})` : ""}`} b={money(chosenCents(a) / 100)} />)}
@@ -152,6 +150,25 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
       <Sub title="Site map" sum="">
         {job.address ? <Row a="Open in maps" b="›" href={`https://maps.apple.com/?q=${encodeURIComponent(job.address)}`} /> : <Row a="No address" />}
       </Sub>
+    </div>
+  );
+}
+
+/** The one next step on a job, with the one button that does it. */
+function NextStepBlock({ job, file, step }: { job: FileJob; file: ClientFile; step: ReturnType<typeof nextStep> }) {
+  const est = job.estimate;
+  const canText = Boolean(file.phone) && !file.doNotContact;
+  return (
+    <div className="vx-next">
+      <Row a="Next step" b={step.label} />
+      {step.kind === "price" && <EstimateButton jobId={job.id} label="Price it on the map" />}
+      {step.kind === "send_estimate" && est?.token && canText && (
+        <a href={estimateText(file, est.token)} className="vx-cta">
+          Text them the estimate
+        </a>
+      )}
+      {step.kind === "approve_proposal" && <ProposalButtons jobId={job.id} status="needs_approval" />}
+      {(step.kind === "send_proposal" || step.kind === "await_answer") && <ProposalButtons jobId={job.id} status="sent" />}
     </div>
   );
 }
