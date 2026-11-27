@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { invoicesDue, isMine, later, leadReason, leadsToBook, outstandingFor, waitingMessages, type DueInvoice, type LeadJob } from "@/lib/am-home";
+import { invoicesDue, isMine, isTestLead, later, leadReason, leadsToBook, outstandingFor, waitingMessages, type DueInvoice, type LeadJob } from "@/lib/am-home";
 
 const NOW = new Date("2026-10-13T15:00:00Z");
 const ME = "me";
@@ -108,5 +108,41 @@ describe("invoices due", () => {
     expect(outstandingFor({ sentAt: "2026-10-13T10:00:00Z", createdAt: "2026-10-13T10:00:00Z" }, NOW)).toBe("sent today");
     expect(outstandingFor({ sentAt: "2026-10-12T10:00:00Z", createdAt: "2026-10-12T10:00:00Z" }, NOW)).toBe("out 1 day");
     expect(outstandingFor({ sentAt: null, createdAt: "2026-10-03T10:00:00Z" }, NOW)).toBe("out 10 days");
+  });
+});
+
+describe("reconciled leads to book", () => {
+  it("shows one lead per client per address", () => {
+    const list = leadsToBook(
+      [
+        lead({ jobId: "a", customerId: "c1", createdAt: "2026-10-12T10:00:00Z" }),
+        lead({ jobId: "b", customerId: "c1", createdAt: "2026-10-12T12:00:00Z" }),
+        lead({ jobId: "c", customerId: "c1", address: "9 Other Rd" }),
+      ],
+      ME,
+      NOW
+    );
+    expect(list.map((l) => l.jobId).sort()).toEqual(["b", "c"]);
+  });
+  it("keeps the job with the visit history", () => {
+    const list = leadsToBook(
+      [lead({ jobId: "visit", customerId: "c1", evaluationDate: "2026-10-10T14:00:00Z", evaluationStatus: "scheduled" }), lead({ jobId: "blank", customerId: "c1", createdAt: "2026-10-13T10:00:00Z" })],
+      ME,
+      NOW
+    );
+    expect(list.map((l) => [l.jobId, l.reason])).toEqual([["visit", "missed"]]);
+  });
+  it("leaves off a lead already booked, visited or moved on under another job", () => {
+    expect(leadsToBook([lead({ jobId: "a", customerId: "c1" }), lead({ jobId: "b", customerId: "c1", evaluationDate: "2026-10-20T14:00:00Z", evaluationStatus: "scheduled" })], ME, NOW)).toEqual([]);
+    expect(leadsToBook([lead({ jobId: "a", customerId: "c1" }), lead({ jobId: "b", customerId: "c1", evaluationDate: "2026-10-10T14:00:00Z", evaluationStatus: "completed" })], ME, NOW)).toEqual([]);
+    expect(leadsToBook([lead({ jobId: "a", movedOn: true })], ME, NOW)).toEqual([]);
+  });
+  it("leaves off test bookings", () => {
+    expect(isTestLead({ customerName: "TEST Claude estimate check", jobName: null })).toBe(true);
+    expect(isTestLead({ customerName: "Claude Check", jobName: "TEST · 45 South Main Street, Estimate" })).toBe(true);
+    expect(isTestLead({ customerName: "Linda Walktest", email: "linda.walktest@example.com" })).toBe(true);
+    expect(isTestLead({ customerName: "Jace Burgess", email: "jace@jslandscapingmd.com" })).toBe(true);
+    expect(isTestLead({ customerName: "Testa Family", email: "testa@gmail.com", jobName: "12 Main St, Estimate" })).toBe(false);
+    expect(leadsToBook([lead({ jobId: "t", jobName: "TEST · 1 Main St" })], ME, NOW)).toEqual([]);
   });
 });

@@ -60,6 +60,9 @@ export interface Organization {
   salt_sidewalk_minutes?: number | null;
   salt_driveway_minutes?: number | null;
   salt_pet_surcharge_cents?: number | null;
+  salt_price_both_cents?: number | null;
+  salt_price_driveway_cents?: number | null;
+  salt_price_sidewalks_cents?: number | null;
   measurement_unit: string;
   measurement_basis: MeasurementBasis;
   /** USPS EDDM Retail postage per piece, dollars. Null until somebody enters it. */

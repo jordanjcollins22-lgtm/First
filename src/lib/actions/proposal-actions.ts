@@ -691,7 +691,15 @@ function zoneFacts(zone: WorkZone): string {
 export async function saveProposalAddon(
   jobId: string,
   key: string,
-  form: { name: string; price: string; decorate: string; lights: string; takedown: string; note: string } | null
+  form: {
+    name: string;
+    price: string;
+    areas?: { name: string; price: string }[];
+    decorate: string;
+    lights: string;
+    takedown: string;
+    note: string;
+  } | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const profile = await getCurrentProfile();
   if (!profile) return { ok: false, error: "Not signed in." };
@@ -715,7 +723,8 @@ export async function saveProposalAddon(
   if (form) {
     const made = addonFromForm({ key, ...form });
     if (typeof made === "string") return { ok: false, error: made };
-    next = made;
+    // Stamped so the newest saved prices become the standard on the next proposal.
+    next = { ...made, savedAt: new Date().toISOString() };
   }
   const options = withAddons(current.options, setAddon(readAddons(current.options), key, next));
 

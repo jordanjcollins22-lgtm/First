@@ -5,10 +5,13 @@ import {
   addonFromForm,
   addonLines,
   addonsCents,
+  areaPick,
+  chosenCents,
   markChosen,
   pickAddons,
   readAddons,
   setAddon,
+  standardAreas,
   withAddons,
   type ProposalAddon,
 } from "./proposal-addons";
@@ -97,5 +100,102 @@ describe("the account manager's form", () => {
   it("needs a price", () => {
     expect(addonFromForm({ ...form, price: "" })).toBe("Put a price on it first.");
     expect(addonFromForm({ ...form, price: "abc" })).toBe("Put a price on it first.");
+  });
+});
+
+describe("areas the client picks from", () => {
+  const byArea: ProposalAddon = {
+    ...lights,
+    decorate: "",
+    priceCents: 0,
+    areas: [
+      { key: "roofline", name: "Roofline", priceCents: 30000 },
+      { key: "bushes", name: "Bushes", priceCents: 12000 },
+      { key: "front-door", name: "Front door", priceCents: 5000 },
+    ],
+  };
+
+  it("prices the add-on as every area together and drops bad areas", () => {
+    const raw = { addons: [{ ...byArea, areas: [...byArea.areas!, { key: "x", name: "Free", priceCents: 0 }, { key: "a/b", name: "Slash", priceCents: 10 }] }] };
+    const [read] = readAddons(raw);
+    expect(read.areas?.map((a) => a.key)).toEqual(["roofline", "bushes", "front-door"]);
+    expect(read.priceCents).toBe(47000);
+  });
+
+  it("adds only the areas the client ticked", () => {
+    const [read] = readAddons({ addons: [byArea] });
+    const keys = [areaPick("christmas-lights", "roofline"), areaPick("christmas-lights", "front-door"), areaPick("christmas-lights", "made-up")];
+    const ticked = pickAddons([read], keys);
+    expect(addonsCents(ticked)).toBe(35000);
+    expect(ticked[0].areas?.map((a) => a.key)).toEqual(["roofline", "front-door"]);
+    // Ticking the add-on's own key does not buy every area.
+    expect(pickAddons([read], ["christmas-lights"])).toEqual([]);
+  });
+
+  it("marks the ticked areas chosen, and the add-on with them", () => {
+    const [read] = readAddons({ addons: [byArea] });
+    const [marked] = markChosen([read], [areaPick("christmas-lights", "bushes")]);
+    expect(marked.chosen).toBe(true);
+    expect(marked.areas?.filter((a) => a.chosen).map((a) => a.key)).toEqual(["bushes"]);
+    expect(chosenCents(marked)).toBe(12000);
+    expect(addonLines(marked)).toContain("Areas: Bushes");
+    const [none] = markChosen([marked], []);
+    expect(none.chosen).toBeUndefined();
+    expect(chosenCents(none)).toBe(0);
+  });
+
+  it("still reads a one-price add-on from before areas", () => {
+    expect(chosenCents({ ...lights, chosen: true })).toBe(45000);
+    expect(pickAddons([lights], [areaPick("christmas-lights", "roofline")])).toEqual([]);
+  });
+});
+
+describe("the account manager's area form", () => {
+  const base = { key: "christmas-lights", name: "", price: "", decorate: "", lights: "", takedown: "", note: "" };
+
+  it("keeps only the areas with a price", () => {
+    const made = addonFromForm({
+      ...base,
+      areas: [
+        { name: "Roofline", price: "$300" },
+        { name: "Front trees", price: "" },
+        { name: "", price: "" },
+        { name: "Bushes", price: "120" },
+        { name: "Bushes", price: "80" },
+      ],
+    });
+    expect(made).toMatchObject({
+      priceCents: 50000,
+      areas: [
+        { key: "roofline", name: "Roofline", priceCents: 30000 },
+        { key: "bushes", name: "Bushes", priceCents: 12000 },
+        { key: "bushes-2", name: "Bushes", priceCents: 8000 },
+      ],
+    });
+  });
+
+  it("needs at least one priced area and a real number", () => {
+    expect(addonFromForm({ ...base, areas: [{ name: "Roofline", price: "" }] })).toBe("Put a price on at least one area first.");
+    expect(addonFromForm({ ...base, areas: [{ name: "Roofline", price: "abc" }] })).toBe("Check the price for Roofline.");
+  });
+
+  it("round-trips through the options json", () => {
+    const made = addonFromForm({ ...base, areas: [{ name: "Walkway", price: "150" }] }) as ProposalAddon;
+    expect(readAddons(withAddons(null, [made]))).toEqual([made]);
+  });
+});
+
+describe("standard prices", () => {
+  const priced = (at: string | undefined, cents: number) => ({
+    addons: [{ ...lights, savedAt: at, chosen: true, areas: [{ key: "roofline-gutters", name: "Roofline / gutters", priceCents: cents, chosen: true }] }],
+  });
+
+  it("carries over the newest saved areas, without the client's ticks", () => {
+    const std = standardAreas([priced("2026-11-20T10:00:00Z", 30000), priced("2026-11-26T10:00:00Z", 35000), { addons: [lights] }, null]);
+    expect(std).toEqual([{ key: "roofline-gutters", name: "Roofline / gutters", priceCents: 35000 }]);
+  });
+
+  it("is null until some proposal priced lights by area", () => {
+    expect(standardAreas([{ addons: [lights] }, null])).toBeNull();
   });
 });

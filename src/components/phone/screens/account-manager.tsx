@@ -3,6 +3,10 @@ import Link from "next/link";
 import { Empty, SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { ClientSearch, OneAtATime, type OneItem } from "@/components/phone/live";
 import { NewEstimate } from "@/components/phone/new-estimate";
+import { EstimateButton } from "@/components/phone/estimate-button";
+import { ProposalButtons } from "@/components/phone/proposal-buttons";
+import { BookVisit, FinishVisit, VisitSteps } from "@/components/phone/visit-buttons";
+import { loadAmEvaluations, type EvalVisit } from "@/lib/data/am-evaluations";
 import { ScheduleJob, type CrewOption } from "@/components/phone/schedule-job";
 import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
@@ -18,6 +22,8 @@ import { nextWorkDay } from "@/lib/work-days";
 import { POSITIONS, positionFor } from "@/lib/hiring/positions";
 import { stageLabel } from "@/lib/hiring/screening";
 import type { BoardJob } from "@/lib/job-board";
+import { loadSaltPrices } from "@/lib/data/salt-prices";
+import { MINIMUM_TREATMENTS, type SaltPriceRow } from "@/lib/salt";
 import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
 import type { Profile } from "@/types/domain";
@@ -126,7 +132,7 @@ const STATUS: Record<string, string> = { completed: "Completed", in_progress: "I
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const now = new Date();
   const weeks = twoWeeks(now);
-  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team] = await Promise.all([
+  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team, evals, saltPrices] = await Promise.all([
     loadAmAccounts(profile, now).catch(() => null),
     loadAmSales(profile, now).catch(() => null),
     listApplicants(profile.organization_id).catch(() => [] as ApplicantRow[]),
@@ -136,6 +142,8 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     loadLinkAndWallet(profile),
     loadAmFollowUps(profile).catch(() => [] as FollowUp[]),
     listProfiles().catch(() => [] as Profile[]),
+    loadAmEvaluations(profile, now).catch(() => ({ today: [] as EvalVisit[], upcoming: [] as EvalVisit[], toWriteUp: [] as EvalVisit[] })),
+    loadSaltPrices(profile.organization_id).catch(() => [] as SaltPriceRow[]),
   ]);
 
   /* Do now ------------------------------------------------------------ */
@@ -218,6 +226,9 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     .map((p) => ({ id: p.id, name: firstName(p) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const firstOpenDay = nextWorkDay(weeks.today);
+  const toBook = sales?.leads ?? [];
+  const toApprove = sales?.toApprove ?? [];
+  const openProps = sales?.open ?? [];
 
   /* Hiring ------------------------------------------------------------ */
   // Everyone who applied and is waiting on a call: video in first, then the
@@ -316,6 +327,78 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         </Sub>
       </Card>
 
+      <Card title="Evaluations" right={`${evals.today.length} today`}>
+        {evals.today.length ? (
+          evals.today.map((v) => <TodayVisit key={v.id} v={v} />)
+        ) : (
+          <Row a="No visits today" />
+        )}
+        <Sub title="To book" sum={toBook.length} open={toBook.length > 0 && evals.today.length === 0}>
+          {toBook.length ? (
+            toBook.map((l) => (
+              <div key={l.jobId}>
+                <Row a={`${l.customerName} · ${l.why}`} b={l.address} href={`/jobs/${l.jobId}`} />
+                <BookVisit jobId={l.jobId} day={firstOpenDay} />
+              </div>
+            ))
+          ) : (
+            <Row a="Nobody waiting for a visit" />
+          )}
+        </Sub>
+        <Sub title="Next 3 weeks" sum={evals.upcoming.length}>
+          {evals.upcoming.length ? (
+            evals.upcoming.map((v) => (
+              <div key={v.id}>
+                <Row a={`${dayLabel(dateKeyIn(new Date(v.evaluationDate)))} · ${timeOf(v.evaluationDate)} · ${v.name}`} b={v.what} href={`/jobs/${v.id}`} />
+                <BookVisit jobId={v.id} day={dateKeyIn(new Date(v.evaluationDate))} time={hhmm(v.evaluationDate)} label="Move" canCancel />
+              </div>
+            ))
+          ) : (
+            <Row a="None booked" />
+          )}
+        </Sub>
+        <Sub title="Proposals to approve" sum={toApprove.length} open={toApprove.length > 0}>
+          {toApprove.length ? (
+            toApprove.map((p) => (
+              <div key={p.proposalId}>
+                <Row a={`${p.customerName} · ${p.address}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
+                <ProposalButtons jobId={p.jobId} status="needs_approval" />
+              </div>
+            ))
+          ) : (
+            <Row a="None waiting on approval" />
+          )}
+        </Sub>
+        <Sub title="Proposals sent, no answer yet" sum={openProps.length}>
+          {openProps.length ? (
+            openProps.map((p) => (
+              <div key={p.proposalId}>
+                <Row a={`${p.customerName} · ${workOf(p.jobName)}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
+                <Row a={sentAgo(p.sentAt, now)} b={p.expiresAt && new Date(p.expiresAt).getTime() < now.getTime() ? "Expired" : ""} />
+                <ProposalButtons jobId={p.jobId} status="sent" />
+              </div>
+            ))
+          ) : (
+            <Row a="Nothing out" />
+          )}
+        </Sub>
+        <Sub title="Visited, to price" sum={evals.toWriteUp.length}>
+          {evals.toWriteUp.length ? (
+            evals.toWriteUp.map((v) => (
+              <div key={v.id}>
+                <Row a={`${shortDay(dateKeyIn(new Date(v.evaluationDate)))} · ${v.name}`} b={v.what} href={`/jobs/${v.id}`} />
+                <div className="vx-2b">
+                  <EstimateButton jobId={v.id} label="Price it on the map" />
+                  <FinishVisit jobId={v.id} />
+                </div>
+              </div>
+            ))
+          ) : (
+            <Row a="Nothing waiting" />
+          )}
+        </Sub>
+      </Card>
+
       <Card title="Crew schedule · next 2 weeks" right={spanLabel(weeks.from, weeks.to)}>
         <Big>{inWindow.length} booked</Big>
         <Sm>
@@ -355,6 +438,8 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         )}
       </Card>
 
+      {saltPrices.length > 0 && <SaltPrices rows={saltPrices} />}
+
       {finance || unpaid.length ? (
         <Card title="Business">
           {finance && (
@@ -378,5 +463,45 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       <WalletBlock wallet={lw.wallet} />
       {track && <Stage done={0} total={track.stages.length + 1} next={track.stages[0]} />}
     </Screen>
+  );
+}
+
+/**
+ * Residential salting, per application, to quote a client by text or on a
+ * proposal. A price the owner hasn't set yet is worked out from cost and
+ * said so, so nobody quotes it as if it were confirmed.
+ */
+function SaltPrices({ rows }: { rows: SaltPriceRow[] }) {
+  const unset = rows.some((r) => !r.setPrice);
+  return (
+    <Card title="Salting prices" right="Residential">
+      {rows.map((r) => (
+        <Row key={r.surface} a={r.label} b={`${money(r.perApplicationCents / 100)} each`} />
+      ))}
+      <Sm>
+        Per application. {MINIMUM_TREATMENTS} applications is the minimum, paid up front (driveway and walkways: {money(rows[0].minimumCents / 100)}). Snow removal is priced
+        separately.
+      </Sm>
+      {unset && <Sm>Not confirmed yet: these are worked out from cost until the owner sets the residential price.</Sm>}
+    </Card>
+  );
+}
+
+const hhmm = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: TZ });
+
+/** A visit today: who and where, directions and a call, then the steps, then pricing once there. */
+function TodayVisit({ v }: { v: EvalVisit }) {
+  const tel = v.phone && !v.doNotContact ? v.phone.replace(/[^\d+]/g, "") : null;
+  const done = v.stage === "submitted";
+  return (
+    <div className="vx-visit">
+      <Row a={`${timeOf(v.evaluationDate)} · ${v.name}`} b={done ? "Done" : v.what} href={`/jobs/${v.id}`} />
+      {v.address && <Row a={v.address} b="Directions ›" href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(v.address)}`} />}
+      {tel && <Row a="Call or text them" b="Call ›" href={`tel:${tel}`} />}
+      {!done && <VisitSteps jobId={v.id} stage={v.stage} />}
+      {(v.stage === "arrived" || done) && v.jobStatus === "estimating" && <EstimateButton jobId={v.id} label="Price it on the map" />}
+      {v.stage === "booked" && <BookVisit jobId={v.id} day={dateKeyIn(new Date(v.evaluationDate))} time={hhmm(v.evaluationDate)} label="Move" canCancel />}
+    </div>
   );
 }

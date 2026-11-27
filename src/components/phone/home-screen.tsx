@@ -74,6 +74,7 @@ const A = {
   ownerReview: { label: "Project review", glyph: "chart", color: "slate", what: "Profit on projects and money in and out.", go: { page: "/me/full?role=account-manager&app=s-business" } },
   viewAs: { label: "View as", glyph: "eye", color: "sky", what: "See each role's screen, or open the app as one person on the team.", go: { page: "/admin/view-as" } },
   doNow: { label: "Do now", glyph: "check", color: "lime", what: "One task at a time: replies, follow-ups, new leads, proposals, payouts.", go: { full: "s-do-now" } },
+  evals: { label: "Evaluations", glyph: "pin", color: "teal", what: "Paid visits: book them, go, price them on the map, then approve and send the proposal.", go: { full: "s-evaluations" } },
   schedule: { label: "Schedule", glyph: "cal", color: "sky", what: "Your day and the next 2 weeks: paid visits, interviews, check-ins.", go: { full: "s-your-schedule" } },
   clients: { label: "Clients", glyph: "search", color: "slate", what: "Search every client and project, or start a new estimate.", go: { full: "s-clients" } },
   crew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { full: "s-crew-schedule-next-2-weeks" } },
@@ -111,32 +112,13 @@ const A = {
 } satisfies Record<string, App>;
 
 type Key = keyof typeof A;
+// First version (Jordan, Nov 26): only what each role has to have. Dock = all the time.
 const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
-  owner: {
-    title: "Owner",
-    dock: ["yes", "ownerMoney", "hlMsgs", "agentMap"],
-    apps: ["payments", "hiring", "ownerCrew", "ownerReview", "viewAs", "reviews", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  "account-manager": {
-    title: "Account manager",
-    dock: ["doNow", "hlMsgs", "schedule", "clients"],
-    apps: ["crew", "amHiring", "business", "approvals", "order", "receipts", "weather", "huddle", "prices", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  technician: {
-    title: "Technician",
-    dock: ["today", "wallet", "receipt", "msgs"],
-    apps: ["huddle", "route", "plants", "weeds", "materials", "safety", "training", "hours", "timeOff", "ask", "stage", "sendLink"],
-  },
-  partner: {
-    title: "Location partner",
-    dock: ["needsYou", "locMoney", "msgs", "partnerSchedule"],
-    apps: ["keep", "partnerCrew", "partnerHiring", "agentMap", "huddle", "reviews", "weather", "plants", "weeds", "sendLink", "wallet", "stage"],
-  },
-  affiliate: {
-    title: "Affiliate",
-    dock: ["sendLink", "wallet", "stage", "msgs"],
-    apps: ["services", "photos", "training", "ask"],
-  },
+  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["payments", "ownerCrew", "viewAs"] },
+  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "schedule", "hlMsgs"], apps: ["sendLink", "wallet", "evals", "crew", "amHiring", "business"] },
+  technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["plants", "weeds"] },
+  partner: { title: "Location partner", dock: ["needsYou", "locMoney", "partnerSchedule", "msgs"], apps: ["partnerCrew", "partnerHiring"] },
+  affiliate: { title: "Affiliate", dock: ["sendLink", "wallet", "stage", "ask"], apps: [] },
 };
 
 function Glyph({ k }: { k: keyof typeof GLYPH }) {

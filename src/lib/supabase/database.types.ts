@@ -124,6 +124,9 @@ export interface Database {
           salt_sidewalk_minutes: number;
           salt_driveway_minutes: number;
           salt_pet_surcharge_cents: number;
+          salt_price_both_cents: number | null;
+          salt_price_driveway_cents: number | null;
+          salt_price_sidewalks_cents: number | null;
           measurement_unit: string;
           measurement_basis: string;
           /** The scheduling engine is off until a business asks for it. */

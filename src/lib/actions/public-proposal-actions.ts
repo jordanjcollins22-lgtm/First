@@ -89,7 +89,7 @@ export async function respondToProposal(
   const newTotal = baseTotal + addonsCents(ticked) / 100;
   let newOptions: Record<string, unknown> | null = chosen ? { ...(proposal.options as Record<string, unknown>), chosen: optionKey } : null;
   if (response === "accepted" && addons.length) {
-    newOptions = withAddons(newOptions ?? proposal.options, markChosen(addons, ticked.map((a) => a.key)));
+    newOptions = withAddons(newOptions ?? proposal.options, markChosen(addons, addonKeys));
   }
 
   const { error: updateError } = await admin

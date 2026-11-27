@@ -12,6 +12,8 @@ import {
   quoteOrder,
   saltExpired,
   saltKeptUntil,
+  saltPriceList,
+  saltSettingsFrom,
   type SaltSettings,
 } from "@/lib/salt";
 
@@ -199,5 +201,29 @@ describe("salt kept for two years", () => {
     expect(saltExpired("2026-10-01T12:00:00Z", new Date("2028-02-01T00:00:00Z"))).toBe(false);
     expect(saltExpired("2026-10-01T12:00:00Z", new Date("2028-10-02T00:00:00Z"))).toBe(true);
     expect(saltExpired(null)).toBe(false);
+  });
+});
+
+describe("set residential prices", () => {
+  const set = saltSettingsFrom({ salt_price_both_cents: 5500, salt_price_driveway_cents: 4500, salt_price_sidewalks_cents: null });
+
+  it("reads the owner's set price per surface, and leaves an unset one worked out", () => {
+    expect(set.setPriceCents).toEqual({ both: 5500, driveway: 4500 });
+    expect(saltSettingsFrom({ salt_price_both_cents: 0 }).setPriceCents).toEqual({});
+  });
+
+  it("charges the set price as it is, with the pet surcharge on top", () => {
+    expect(priceTreatment("both", false, set)).toMatchObject({ priceCents: 5500, setPrice: true });
+    expect(priceTreatment("both", true, { ...set, petSurchargeCents: 300 }).priceCents).toBe(5800);
+    expect(priceTreatment("sidewalks", false, set)).toMatchObject({ priceCents: priceTreatment("sidewalks", false).priceCents, setPrice: false });
+  });
+
+  it("lists every surface for the account manager, driveway and walkways first", () => {
+    const list = saltPriceList(set);
+    expect(list.map((r) => [r.surface, r.perApplicationCents, r.minimumCents, r.setPrice])).toEqual([
+      ["both", 5500, 16500, true],
+      ["driveway", 4500, 13500, true],
+      ["sidewalks", priceTreatment("sidewalks", false).priceCents, priceTreatment("sidewalks", false).priceCents * 3, false],
+    ]);
   });
 });
