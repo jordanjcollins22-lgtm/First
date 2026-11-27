@@ -125,6 +125,8 @@ export interface SaltingVisits {
   totalCents: number;
   /** Raised over the salt page's price to reach the floor. */
   lifted: boolean;
+  /** Priced at the owner's set residential price, which stands as it is. */
+  setPrice?: boolean;
 }
 
 type SaltingTrip = { toSiteMinutes: number | null; fromSiteMinutes: number | null; crewCostPerHourCents: number; feePct: number; fallbackDriveMinutes?: number };
@@ -165,7 +167,9 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
     // The last area takes what rounding left, so the shares add up to the visit.
     const labourCents = index === each.length - 1 ? labourLeft : Math.round(visitLabourCents * share);
     labourLeft -= labourCents;
-    const floor = priceForTarget(labourCents, one.materialCents, trip.feePct) ?? 0;
+    // The owner's set price is the price: route salting is not lifted to a
+    // one-hour visit's floor, which would quote a driveway at a crew's hour.
+    const floor = one.setPrice ? 0 : (priceForTarget(labourCents, one.materialCents, trip.feePct) ?? 0);
     const perVisitCents = Math.max(quote.perTreatmentCents, floor);
     return {
       treatments: quote.treatments,
@@ -180,6 +184,7 @@ export function priceSaltingTogether(areas: Record<string, string | undefined>[]
       perVisitCents,
       totalCents: perVisitCents * quote.treatments,
       lifted: perVisitCents > quote.perTreatmentCents,
+      ...(one.setPrice ? { setPrice: true } : {}),
     };
   });
 }

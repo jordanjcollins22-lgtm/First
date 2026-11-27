@@ -19,6 +19,8 @@ import { meScreenFor } from "@/lib/me-screen";
 import { nextWorkDay } from "@/lib/work-days";
 import { POSITIONS } from "@/lib/hiring/positions";
 import type { BoardJob } from "@/lib/job-board";
+import { loadSaltPrices } from "@/lib/data/salt-prices";
+import { MINIMUM_TREATMENTS, type SaltPriceRow } from "@/lib/salt";
 import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
 import type { Profile } from "@/types/domain";
@@ -103,7 +105,7 @@ const STATUS: Record<string, string> = { completed: "Completed", in_progress: "I
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const now = new Date();
   const weeks = twoWeeks(now);
-  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team, evals] = await Promise.all([
+  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team, evals, saltPrices] = await Promise.all([
     loadAmAccounts(profile, now).catch(() => null),
     loadAmSales(profile, now).catch(() => null),
     listApplicants(profile.organization_id).catch(() => [] as ApplicantRow[]),
@@ -114,6 +116,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     loadAmFollowUps(profile).catch(() => [] as FollowUp[]),
     listProfiles().catch(() => [] as Profile[]),
     loadAmEvaluations(profile, now).catch(() => ({ today: [] as EvalVisit[], upcoming: [] as EvalVisit[], toWriteUp: [] as EvalVisit[] })),
+    loadSaltPrices(profile.organization_id).catch(() => [] as SaltPriceRow[]),
   ]);
 
   /* Do now ------------------------------------------------------------ */
@@ -401,6 +404,8 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
         </Sub>
       </Card>
 
+      {saltPrices.length > 0 && <SaltPrices rows={saltPrices} />}
+
       {finance || unpaid.length ? (
         <Card title="Business">
           {finance && (
@@ -424,6 +429,27 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       <WalletBlock wallet={lw.wallet} />
       {track && <Stage done={0} total={track.stages.length + 1} next={track.stages[0]} />}
     </Screen>
+  );
+}
+
+/**
+ * Residential salting, per application, to quote a client by text or on a
+ * proposal. A price the owner hasn't set yet is worked out from cost and
+ * said so, so nobody quotes it as if it were confirmed.
+ */
+function SaltPrices({ rows }: { rows: SaltPriceRow[] }) {
+  const unset = rows.some((r) => !r.setPrice);
+  return (
+    <Card title="Salting prices" right="Residential">
+      {rows.map((r) => (
+        <Row key={r.surface} a={r.label} b={`${money(r.perApplicationCents / 100)} each`} />
+      ))}
+      <Sm>
+        Per application. {MINIMUM_TREATMENTS} applications is the minimum, paid up front (driveway and walkways: {money(rows[0].minimumCents / 100)}). Snow removal is priced
+        separately.
+      </Sm>
+      {unset && <Sm>Not confirmed yet: these are worked out from cost until the owner sets the residential price.</Sm>}
+    </Card>
   );
 }
 
