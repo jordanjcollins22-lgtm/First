@@ -29,6 +29,8 @@ import { routeForBudget } from "@/lib/photo-quote";
 import { readPhotoQuotes, waitingPhotoQuoteJob } from "@/lib/data/photo-quotes";
 import { sendEvaluationConfirmationNow, sendPhotoQuoteLinkNow } from "@/lib/data/booking-notices";
 import { recordFunnelStep } from "@/lib/data/funnel-events";
+import { alertNewLead } from "@/lib/data/new-lead-alert";
+import { shortWhen } from "@/lib/time-zone";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // The photo-quote columns are newer than the generated types.
@@ -508,6 +510,32 @@ async function makePublicBooking(input: SubmitPublicBookingInput): Promise<Publi
   // The link by email as well, for a photo quote, so closing the tab
   // doesn't lose it. A visit's link is in its confirmation already.
   if (!visit && !input.leadOnly && intake?.token) await sendPhotoQuoteLinkNow(jobId, intake.token);
+
+  // Somebody on the team hears about it now, not whenever they next open the
+  // clients list. Never in the way of the booking.
+  const { data: serviceNames } = requestedServiceIds.length
+    ? await admin.from("services").select("name").eq("organization_id", input.organizationId).in("service_type_id", requestedServiceIds)
+    : { data: [] as { name: string }[] };
+  await alertNewLead(admin, {
+    organizationId: input.organizationId,
+    jobId,
+    customerId,
+    name: `${firstName} ${lastName}`,
+    phone,
+    email,
+    address,
+    source: bookingSource(adClick, referralCode),
+    referralCode,
+    referredByProfileId: input.referredByProfileId,
+    heardAbout: shared.heard_about,
+    heardAboutDetail: shared.heard_about_detail,
+    kind: visit ? "visit" : input.leadOnly ? "lead" : "photo_quote",
+    visitWhen: visit ? shortWhen(visit.iso) : null,
+    services: (serviceNames ?? []).map((s) => s.name).filter(Boolean),
+    budgetRange: budgetRange || null,
+    notes: shared.client_notes,
+    returningClient: Boolean(duplicateCustomer),
+  }).catch((err) => log.warn("lead.alert_failed", { jobId, error: err instanceof Error ? err.message : String(err) }));
 
   log.info("booking.created", {
     jobId,
