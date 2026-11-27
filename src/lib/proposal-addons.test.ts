@@ -11,6 +11,7 @@ import {
   pickAddons,
   readAddons,
   setAddon,
+  standardAreas,
   withAddons,
   type ProposalAddon,
 } from "./proposal-addons";
@@ -181,5 +182,20 @@ describe("the account manager's area form", () => {
   it("round-trips through the options json", () => {
     const made = addonFromForm({ ...base, areas: [{ name: "Walkway", price: "150" }] }) as ProposalAddon;
     expect(readAddons(withAddons(null, [made]))).toEqual([made]);
+  });
+});
+
+describe("standard prices", () => {
+  const priced = (at: string | undefined, cents: number) => ({
+    addons: [{ ...lights, savedAt: at, chosen: true, areas: [{ key: "roofline-gutters", name: "Roofline / gutters", priceCents: cents, chosen: true }] }],
+  });
+
+  it("carries over the newest saved areas, without the client's ticks", () => {
+    const std = standardAreas([priced("2026-11-20T10:00:00Z", 30000), priced("2026-11-26T10:00:00Z", 35000), { addons: [lights] }, null]);
+    expect(std).toEqual([{ key: "roofline-gutters", name: "Roofline / gutters", priceCents: 35000 }]);
+  });
+
+  it("is null until some proposal priced lights by area", () => {
+    expect(standardAreas([{ addons: [lights] }, null])).toBeNull();
   });
 });

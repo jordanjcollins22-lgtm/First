@@ -1,5 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
-import { readAddons, type ProposalAddon } from "@/lib/proposal-addons";
+import { readAddons, standardAreas, type AddonArea, type ProposalAddon } from "@/lib/proposal-addons";
 
 /**
  * Everything the fresh app shows about one client: their jobs, and for each
@@ -39,6 +41,20 @@ export interface ClientFile {
   town: string;
   doNotContact: boolean;
   jobs: FileJob[];
+  /** The standard Christmas lights areas and prices, carried over from the last proposal that priced them. */
+  lightStandard: AddonArea[] | null;
+}
+
+/** The areas and prices last saved for Christmas lights on any recent proposal. */
+async function loadLightStandard(sb: SupabaseClient): Promise<AddonArea[] | null> {
+  // Untyped: the generated types can't follow a json path select.
+  const { data } = await sb
+    .from("job_proposals")
+    .select("addons:options->addons")
+    .not("options->addons", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(300);
+  return standardAreas(((data ?? []) as Row[]).map((r) => ({ addons: r.addons })));
 }
 
 type Row = Record<string, unknown>;
@@ -105,7 +121,9 @@ export async function loadClientFile(customerId: string): Promise<ClientFile | n
   }));
 
   const firstAddress = addressOf.values().next().value ?? "";
+  const lightStandard = await loadLightStandard(sb as unknown as SupabaseClient);
   return {
+    lightStandard,
     id: str(c.id),
     name: str(c.name) || "Client",
     phone: str(c.phone) || null,

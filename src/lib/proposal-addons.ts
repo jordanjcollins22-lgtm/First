@@ -13,8 +13,10 @@
  * An add-on can be split into areas (roofline, front trees, bushes...), each
  * with its own price. The client then ticks the areas they want rather than
  * the whole thing, and only those are added to the total. The account
- * manager prices each area on each proposal and can rename, add or drop
- * areas, starting from DEFAULT_LIGHT_AREAS.
+ * manager prices the areas once and those standard prices carry over: each
+ * new proposal starts from the areas and prices last saved on any proposal
+ * (see standardAreas), or from DEFAULT_LIGHT_AREAS unpriced the first time.
+ * They can still change a price, rename, add or drop an area per proposal.
  *
  * Pure, so it is tested without a database.
  */
@@ -51,6 +53,8 @@ export interface ProposalAddon {
   takedown: AddonTakedown | null;
   /** Anything else the client should know. */
   note: string;
+  /** When the account manager last saved it; the newest one sets the standard prices. */
+  savedAt?: string;
   /** Set when the client accepted with it ticked. */
   chosen?: boolean;
 }
@@ -59,7 +63,7 @@ export const CHRISTMAS_LIGHTS_KEY = "christmas-lights";
 export const CHRISTMAS_LIGHTS_NAME = "Christmas lights";
 
 /** Where the account manager starts; they rename, add or drop areas per proposal. */
-export const DEFAULT_LIGHT_AREAS = ["Roofline", "Front trees", "Bushes", "Walkway", "Front door"] as const;
+export const DEFAULT_LIGHT_AREAS = ["Roofline / gutters", "Front trees", "Bushes / shrubs", "Walkway / driveway", "Front door / porch"] as const;
 
 /** The key the client's choice of one area travels under: "<add-on key>/<area key>". */
 export function areaPick(addonKey: string, areaKey: string): string {
@@ -118,10 +122,28 @@ export function readAddons(rawOptions: unknown): ProposalAddon[] {
       lights: r.lights === "ours" || r.lights === "theirs" ? r.lights : null,
       takedown: r.takedown === "included" || r.takedown === "not_included" ? r.takedown : null,
       note: text(r.note),
+      ...(text(r.savedAt) ? { savedAt: text(r.savedAt) } : {}),
       ...(r.chosen === true ? { chosen: true } : {}),
     });
   }
   return out;
+}
+
+/**
+ * The standard areas and prices: the Christmas lights areas most recently
+ * saved on any of these proposals' options, without anyone's ticks. Null
+ * when none has been priced by area yet. Ties and undated ones go to the
+ * earlier entry, so pass the newest proposal first.
+ */
+export function standardAreas(optionsList: readonly unknown[]): AddonArea[] | null {
+  let best: { at: string; areas: AddonArea[] } | null = null;
+  for (const options of optionsList) {
+    const lights = readAddons(options).find((a) => a.key === CHRISTMAS_LIGHTS_KEY && a.areas);
+    if (!lights?.areas) continue;
+    const at = lights.savedAt ?? "";
+    if (!best || at > best.at) best = { at, areas: lights.areas.map(({ key, name, priceCents }) => ({ key, name, priceCents })) };
+  }
+  return best?.areas ?? null;
 }
 
 /** The options json with these add-ons in place of the old ones. Packages and pictures are left alone. */

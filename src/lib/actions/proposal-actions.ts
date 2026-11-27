@@ -723,7 +723,8 @@ export async function saveProposalAddon(
   if (form) {
     const made = addonFromForm({ key, ...form });
     if (typeof made === "string") return { ok: false, error: made };
-    next = made;
+    // Stamped so the newest saved prices become the standard on the next proposal.
+    next = { ...made, savedAt: new Date().toISOString() };
   }
   const options = withAddons(current.options, setAddon(readAddons(current.options), key, next));
 

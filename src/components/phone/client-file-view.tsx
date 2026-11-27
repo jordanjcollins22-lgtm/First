@@ -122,7 +122,7 @@ function JobCard({ job, file }: { job: FileJob; file: ClientFile }) {
           <>
             <Row a={`${p.sentAt ? `${day(p.sentAt)} · ` : ""}${money(p.total)}`} b={PROPOSAL[p.status] ?? p.status} href={`/proposal/${p.token}`} />
             {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <ProposalButtons jobId={job.id} status={p.status} />}
-            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} />}
+            {(p.status === "needs_approval" || (p.status === "sent" && !p.respondedAt)) && <AddonEditor jobId={job.id} addons={p.addons} standard={file.lightStandard} />}
             {p.status === "accepted" &&
               p.addons.filter((a) => a.chosen).map((a) => <Row key={a.key} a={`Added: ${a.name}${a.areas ? ` (${a.areas.filter((x) => x.chosen).map((x) => x.name).join(", ")})` : ""}`} b={money(chosenCents(a) / 100)} />)}
           </>
