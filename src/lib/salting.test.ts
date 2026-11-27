@@ -55,6 +55,14 @@ describe("salting a visit at a time", () => {
     expect(v.totalCents).toBe(v.perVisitCents * 3);
   });
 
+  it("charges the owner's set residential price as it is, never lifted to a visit's floor", () => {
+    const set = { ...settings, setPriceCents: { driveway: 4500 } };
+    const v = priceSaltingVisits({ surface: "Driveway", treatments: "3" }, set, trip);
+    expect(v).toMatchObject({ perVisitCents: 4500, totalCents: 13500, lifted: false, setPrice: true });
+    // A surface with no set price is still held to the floor.
+    expect(priceSaltingVisits({ surface: "Sidewalks and walkways", treatments: "3" }, set, trip).setPrice).toBeUndefined();
+  });
+
   it("salts every area at the house on the one visit: one drive, one hour's minimum", () => {
     const areas = [{ surface: "Driveway", treatments: "3" }, { surface: "Sidewalks and walkways", treatments: "3" }, { surface: "Sidewalks and walkways", treatments: "3" }];
     const near = { ...trip, toSiteMinutes: 10, fromSiteMinutes: 10 };

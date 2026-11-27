@@ -91,6 +91,15 @@ export interface SaltSettings {
    * true if the blend gets dear.
    */
   petSurchargeCents: number;
+  /**
+   * The residential price of one application, set by the owner, by surface.
+   *
+   * A set price is the price: it is what the account manager quotes and what
+   * a proposal charges, rather than one worked out from the bag cost and the
+   * minutes above. A surface with no set price is still worked out. Empty by
+   * default, because the number is the owner's to confirm, not the code's.
+   */
+  setPriceCents: Partial<Record<Surface, number>>;
 }
 
 /**
@@ -113,6 +122,14 @@ export const DEFAULT_SALT_SETTINGS: SaltSettings = {
   overheadPerCrewHourCents: 1_583,
   multiplier: 2,
   petSurchargeCents: 0,
+  setPriceCents: {},
+};
+
+/** The organisation's column for each surface's set price, in cents. Null there: worked out instead. */
+export const SET_PRICE_COLUMN: Record<Surface, string> = {
+  both: "salt_price_both_cents",
+  driveway: "salt_price_driveway_cents",
+  sidewalks: "salt_price_sidewalks_cents",
 };
 
 /**
@@ -140,7 +157,19 @@ export function saltSettingsFrom(row: Record<string, unknown> | null | undefined
     // Zero is a real answer here, so it cannot go through the positive-only
     // reader above.
     petSurchargeCents: Math.max(0, Number(row.salt_pet_surcharge_cents) || 0),
+    setPriceCents: Object.fromEntries(
+      SURFACES.flatMap((surface) => {
+        const cents = Math.round(Number(row[SET_PRICE_COLUMN[surface]]));
+        return Number.isFinite(cents) && cents > 0 ? [[surface, cents]] : [];
+      })
+    ),
   };
+}
+
+/** The set price of one application on this surface, in cents, or null when there is none. */
+export function setPriceFor(surface: Surface, settings: SaltSettings): number | null {
+  const cents = settings.setPriceCents?.[surface];
+  return cents != null && Number.isFinite(cents) && cents > 0 ? Math.round(cents) : null;
 }
 
 /** Pounds of product one treatment of this surface takes. */
@@ -178,6 +207,8 @@ export interface TreatmentPrice {
   priceCents: number;
   pounds: number;
   minutes: number;
+  /** The price is the owner's set price, not one worked out from cost. */
+  setPrice: boolean;
 }
 
 /**
@@ -209,6 +240,8 @@ export function priceTreatment(
   const direct = materialCents + labourCents;
   const overheadCents = Math.round(hours * settings.overheadPerCrewHourCents);
   const raw = direct * settings.multiplier + overheadCents;
+  const set = setPriceFor(surface, settings);
+  const pet = petFriendly ? Math.max(0, settings.petSurchargeCents) : 0;
 
   return {
     surface,
@@ -219,11 +252,11 @@ export function priceTreatment(
     // Rounded first, then the surcharge, so ticking the pet safe box moves
     // the price by exactly what the box says it does rather than by whatever
     // the rounding happens to do next.
-    priceCents:
-      Math.max(ROUND_TO_CENTS, Math.round(raw / ROUND_TO_CENTS) * ROUND_TO_CENTS) +
-      (petFriendly ? Math.max(0, settings.petSurchargeCents) : 0),
+    // A set price stands as it is; the pet safe surcharge still goes on top.
+    priceCents: (set ?? Math.max(ROUND_TO_CENTS, Math.round(raw / ROUND_TO_CENTS) * ROUND_TO_CENTS)) + pet,
     pounds,
     minutes,
+    setPrice: set != null,
   };
 }
 
@@ -267,6 +300,40 @@ export function quoteOrder(
 /** Whether this is a real surface, for a value that came off a form. */
 export function isSurface(value: unknown): value is Surface {
   return typeof value === "string" && (SURFACES as string[]).includes(value);
+}
+
+/** One row of the residential salting price list the account manager quotes from. */
+export interface SaltPriceRow {
+  surface: Surface;
+  label: string;
+  perApplicationCents: number;
+  /** The fewest applications, prepaid, at that price. */
+  minimumCents: number;
+  /** The owner set it; otherwise it is worked out from cost and not yet confirmed. */
+  setPrice: boolean;
+}
+
+/** Driveway and walkways first: it is what most houses ask for. */
+const PRICE_LIST_ORDER: Surface[] = ["both", "driveway", "sidewalks"];
+
+const PRICE_LIST_LABEL: Record<Surface, string> = {
+  both: "Driveway and walkways",
+  driveway: "Driveway only",
+  sidewalks: "Sidewalks and walkways only",
+};
+
+/** The residential salting prices, a row a surface, as the account manager quotes them. */
+export function saltPriceList(settings: SaltSettings = DEFAULT_SALT_SETTINGS): SaltPriceRow[] {
+  return PRICE_LIST_ORDER.map((surface) => {
+    const price = priceTreatment(surface, false, settings);
+    return {
+      surface,
+      label: PRICE_LIST_LABEL[surface],
+      perApplicationCents: price.priceCents,
+      minimumCents: price.priceCents * MINIMUM_TREATMENTS,
+      setPrice: price.setPrice,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
