@@ -86,7 +86,7 @@ export function WalletBlock({ wallet }: { wallet: Wallet | null }) {
       <Row a="Ready to pay out" b={money(wallet.ready)} />
       {wallet.waiting > 0 && <Row a="Waiting on client to pay" b={money(wallet.waiting)} />}
       {wallet.onHold > 0 && <Row a="On hold until a job is put right" b={money(wallet.onHold)} />}
-      {(wallet.open || wallet.canRequest > 0) && <PayoutButton wallet={{ open: wallet.open, canRequest: wallet.canRequest }} />}
+      <PayoutButton wallet={{ open: wallet.open, canRequest: wallet.canRequest }} />
       {wallet.history.slice(0, 2).map((h, i) => (
         <Row key={i} a={`${h.at ? `${day(h.at)} · ` : ""}${h.label}`} b={`${h.amount >= 0 ? "+" : ""}${money(h.amount)}`} />
       ))}
