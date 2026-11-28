@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { FocusableSiteMap } from "@/components/proposal/focusable-site-map";
+import { CrewPhoto } from "@/components/crew/crew-photo";
 import { LotPicker } from "@/components/intake/lot-picker";
 import { canvasImageUrl } from "@/lib/canvas-image-url";
 import { crewZoneLabel, jobIdFromCrewToken } from "@/lib/crew-link";
@@ -135,9 +136,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
               {z.photoPaths.length > 0 && (
                 <div className="flex snap-x gap-2 overflow-x-auto pb-1">
                   {z.photoPaths.map((p) => (
-                    <a key={p} href={canvasImageUrl(p)} target="_blank" rel="noopener noreferrer" className="relative block shrink-0 snap-start">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={canvasImageUrl(p, PREVIEW)} alt={`${crewZoneLabel(z.zoneName, i + 1)} photo`} loading="lazy" className="block h-auto max-h-56 w-auto max-w-[85vw] rounded-md" />
+                    <CrewPhoto key={p} href={canvasImageUrl(p)} src={canvasImageUrl(p, PREVIEW)} alt={`${crewZoneLabel(z.zoneName, i + 1)} photo`}>
                       {(z.photoTaps[p] ?? []).map((t, k) => (
                         <span
                           key={k}
@@ -146,7 +145,7 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
                           style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%` }}
                         />
                       ))}
-                    </a>
+                    </CrewPhoto>
                   ))}
                 </div>
               )}
