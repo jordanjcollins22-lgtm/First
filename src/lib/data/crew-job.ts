@@ -48,6 +48,37 @@ type Line = { note?: string | null };
  * totals, no area prices, no invoices, no phone or email. The scope comes from
  * the signed proposal where there is one, else the latest proposal.
  */
+type ProposalRow = { status: string | null; scope_snapshot: unknown };
+const chosenOf = <T extends ProposalRow>(list: T[] | null) => (list ?? []).find((p) => p.status === "accepted") ?? (list ?? [])[0] ?? null;
+
+/**
+ * Which of these photo paths are really in storage. A path whose file is gone
+ * would show the crew a broken picture, so it is left out. Listed folder by
+ * folder (one call per job folder); a path that starts with a slash ships with
+ * the site and is kept. If storage can't be read, every path is kept and the
+ * page hides any that fail to load.
+ */
+async function storedPhotos(admin: ReturnType<typeof createAdminClient>, paths: string[]): Promise<Set<string>> {
+  const keep = new Set(paths.filter((p) => p.startsWith("/")));
+  const dirs = new Map<string, string[]>();
+  for (const p of paths) {
+    if (p.startsWith("/")) continue;
+    const cut = p.lastIndexOf("/");
+    const dir = cut < 0 ? "" : p.slice(0, cut);
+    dirs.set(dir, [...(dirs.get(dir) ?? []), p]);
+  }
+  for (const [dir, list] of dirs) {
+    const { data, error } = await admin.storage.from("canvas-images").list(dir, { limit: 1000 });
+    if (error || !data) {
+      list.forEach((p) => keep.add(p));
+      continue;
+    }
+    const names = new Set(data.map((f) => f.name));
+    for (const p of list) if (names.has(p.slice(dir.length ? dir.length + 1 : 0))) keep.add(p);
+  }
+  return keep;
+}
+
 export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
   const admin = createAdminClient();
   const { data: job } = await admin
@@ -72,6 +103,8 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
   const visit = pickVisit((visits ?? []) as { starts_on: string; ends_on: string; purpose: string | null }[], dateKeyIn(new Date()));
 
   const taps = await loadPhotoTaps(jobId);
+  const stored = await storedPhotos(admin, (Array.isArray(chosenOf(proposals)?.scope_snapshot) ? (chosenOf(proposals)!.scope_snapshot as { photoPaths?: string[] }[]) : []).flatMap((z) => z.photoPaths ?? []));
+  const real = (paths: string[] | undefined) => (paths ?? []).filter((p) => stored.has(p));
 
   const list = proposals ?? [];
   const chosen = list.find((p) => p.status === "accepted") ?? list[0] ?? null;
@@ -96,8 +129,8 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
       serviceLabel: z.serviceLabel,
       scopeText: z.scopeText,
       details: (z.lines ?? []).map((l) => (l.note ?? "").trim()).filter(Boolean),
-      photoPaths: z.photoPaths ?? [],
-      photoTaps: tapsFor(z.photoPaths ?? [], taps),
+      photoPaths: real(z.photoPaths),
+      photoTaps: tapsFor(real(z.photoPaths), taps),
       points: z.points ?? [],
       shapes: z.shapes,
       color: z.color,
