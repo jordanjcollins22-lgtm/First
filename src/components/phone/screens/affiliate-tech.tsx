@@ -70,14 +70,28 @@ function DayStop({ stop, step, prev, done }: { stop: Stop; step: number; prev: S
 }
 
 /** Every job on today, crew by crew, each in the order that crew works it. */
-export function AllJobsToday({ crews, me }: { crews: CrewToday[] | null; me?: string }) {
+export function AllJobsToday({
+  crews,
+  me,
+  title = "All jobs today",
+  top,
+  topCount = 0,
+}: {
+  crews: CrewToday[] | null;
+  me?: string;
+  title?: string;
+  /** Lines shown first in the same list (site visits and interviews on the Schedule app). */
+  top?: React.ReactNode;
+  topCount?: number;
+}) {
   const total = (crews ?? []).reduce((n, c) => n + c.stops.length, 0);
   return (
-    <Card title="All jobs today" right={crews ? `${total} job${total === 1 ? "" : "s"}` : undefined}>
+    <Card title={title} right={crews ? `${total} job${total === 1 ? "" : "s"}${topCount ? `, ${topCount} visit${topCount === 1 ? "" : "s"} or interview${topCount === 1 ? "" : "s"}` : ""}` : undefined}>
+      {top}
       {crews == null ? (
         <Row a="Today's jobs couldn't load just now. Reload the page." />
       ) : crews.length === 0 ? (
-        <Row a="No jobs on today." />
+        <Row a="No crew jobs on today." />
       ) : (
         crews.map((c) => (
           <div key={c.leadId ?? "none"} className="vx-crewday">
