@@ -119,3 +119,9 @@
 .vx-app .vx-cal-what{font-size:16px;line-height:1.4}
 .vx-app .vx-cal-note{font-size:14px;color:var(--muted)}
 .vx-app .vx-cal-empty{font-size:15px;color:var(--muted);margin:0}
+.vx-app .vx-cal-chip.is-appt{background:#fff7ed;color:#9a3412;border:1.5px solid #ea580c}
+.vx-app .vx-cal-legend i.is-appt,.vx-app .vx-cal-who i.is-appt{background:#fff7ed;border:2px solid #ea580c}
+/* The Schedule app: tabs along the bottom, like every app. */
+.vx-app .vx-tabs{position:sticky;bottom:10px;display:flex;gap:4px;margin-top:8px;padding:4px;border-radius:999px;background:var(--fg);box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.vx-app .vx-tabs a{flex:1;text-align:center;padding:9px 4px;border-radius:999px;font:700 15px var(--body);color:var(--bg)}
+.vx-app .vx-tabs a.on{background:var(--bg);color:var(--fg)}

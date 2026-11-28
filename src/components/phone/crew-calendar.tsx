@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { ScheduleJob, type CrewOption } from "@/components/phone/schedule-job";
+import type { Appointment } from "@/lib/data/schedule";
 import type { BoardJob } from "@/lib/job-board";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -12,6 +13,11 @@ const longDay = (key: string) =>
   new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) =>
   new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+const timeOf = (iso: string) =>
+  new Date(iso)
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+    .replace(":00", "");
 
 const STATUS: Record<string, string> = { completed: "Done", in_progress: "In progress", approved: "Not started" };
 
@@ -36,6 +42,7 @@ export function CrewCalendar({
   later,
   crews,
   firstOpenDay,
+  appointments = [],
 }: {
   /** Work days in the window, Monday first, Sundays left out. */
   days: string[];
@@ -45,7 +52,13 @@ export function CrewCalendar({
   later: BoardJob[];
   crews: CrewOption[];
   firstOpenDay: string;
+  /** Site visits and interviews, shown on the same calendar in their own style. */
+  appointments?: Appointment[];
 }) {
+  const apptsByDay = new Map<string, Appointment[]>();
+  for (const a of [...appointments].sort((x, y) => x.at.localeCompare(y.at))) {
+    apptsByDay.set(a.day, [...(apptsByDay.get(a.day) ?? []), a]);
+  }
   const byDay = new Map<string, BoardJob[]>();
   for (const j of booked) {
     const d = j.workStartsOn!.slice(0, 10);
@@ -66,9 +79,15 @@ export function CrewCalendar({
         ))}
         {days.map((d) => {
           const jobs = byDay.get(d) ?? [];
+          const appts = apptsByDay.get(d) ?? [];
           return (
             <a key={d} href={`#day-${d}`} className={`vx-cal-day${d === today ? " is-today" : ""}${d < today ? " is-past" : ""}`}>
               <span className="vx-cal-n">{dayNum(d)}</span>
+              {appts.map((a) => (
+                <span key={`${a.kind}-${a.id}`} className="vx-cal-chip is-appt">
+                  {a.name.split(" ")[0]}
+                </span>
+              ))}
               {jobs.map((j) => (
                 <span key={j.id} className="vx-cal-chip" style={{ background: color(j) }}>
                   {(j.customerName ?? "Client").split(" ")[0]}
@@ -78,7 +97,7 @@ export function CrewCalendar({
           );
         })}
       </div>
-      {legend.length > 0 && (
+      {(legend.length > 0 || appointments.length > 0) && (
         <div className="vx-cal-legend">
           {legend.map((j) => (
             <span key={crewKey(j)}>
@@ -86,18 +105,27 @@ export function CrewCalendar({
               {crewName(j)}
             </span>
           ))}
+          {appointments.length > 0 && (
+            <span>
+              <i className="is-appt" />
+              Site visits and interviews
+            </span>
+          )}
         </div>
       )}
 
       {days
-        .filter((d) => (byDay.get(d) ?? []).length > 0)
+        .filter((d) => (byDay.get(d) ?? []).length > 0 || (apptsByDay.get(d) ?? []).length > 0)
         .map((d) => (
           <section key={d} id={`day-${d}`} className="vx-cal-agenda">
             <h4>
               {longDay(d)}
               {d === today ? " · Today" : ""}
             </h4>
-            {byDay.get(d)!.map((j) => (
+            {(apptsByDay.get(d) ?? []).map((a) => (
+              <AppointmentLine key={`${a.kind}-${a.id}`} a={a} />
+            ))}
+            {(byDay.get(d) ?? []).map((j) => (
               <Booking key={j.id} j={j} dot={color(j)} note={`${crewName(j)} · ${STATUS[j.status] ?? j.status}`}>
                 {j.status !== "completed" && (
                   <ScheduleJob jobId={j.id} crews={crews} start={d} leadId={j.assignedToId} label="Move" />
@@ -157,6 +185,20 @@ function Booking({ j, n, dot, note, children }: { j: BoardJob; n?: number; dot?:
         <span className="vx-cal-note">{note}</span>
       </Link>
       {children}
+    </div>
+  );
+}
+
+export function AppointmentLine({ a }: { a: Appointment }) {
+  return (
+    <div className="vx-cal-job">
+      <Link href={a.href} className="vx-cal-job-link">
+        <span className="vx-cal-who">
+          <i className="is-appt" />
+          {timeOf(a.at)} · {a.name}
+        </span>
+        <span className="vx-cal-what">{a.what}</span>
+      </Link>
     </div>
   );
 }
