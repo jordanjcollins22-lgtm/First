@@ -5,9 +5,10 @@ import { affiliateStage } from "@/lib/affiliate-home";
 import { crewPath } from "@/lib/crew-link";
 import { hazardLines, milesBetween } from "@/lib/crew-route";
 import type { Stop } from "@/lib/crew-day";
+import type { CrewToday } from "@/lib/data/crew-day";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { myBookingLink } from "@/lib/data/brought-in";
-import { getCrewDay } from "@/lib/data/crew-day";
+import { getAllCrewsToday, getCrewDay } from "@/lib/data/crew-day";
 import { myOpenEntry } from "@/lib/data/time-clock";
 import { POSITIONS } from "@/lib/hiring/positions";
 import type { Profile } from "@/types/domain";
@@ -68,19 +69,45 @@ function DayStop({ stop, step, prev, done }: { stop: Stop; step: number; prev: S
   );
 }
 
+/** Every job on today, crew by crew, each in the order that crew works it. */
+export function AllJobsToday({ crews, me }: { crews: CrewToday[] | null; me?: string }) {
+  const total = (crews ?? []).reduce((n, c) => n + c.stops.length, 0);
+  return (
+    <Card title="All jobs today" right={crews ? `${total} job${total === 1 ? "" : "s"}` : undefined}>
+      {crews == null ? (
+        <Row a="Today's jobs couldn't load just now. Reload the page." />
+      ) : crews.length === 0 ? (
+        <Row a="No jobs on today." />
+      ) : (
+        crews.map((c) => (
+          <div key={c.leadId ?? "none"} className="vx-crewday">
+            <div className="vx-sm">
+              <b>{c.leadId && c.leadId === me ? "Your crew" : `${c.leadName}'s crew`}</b>
+            </div>
+            {c.stops.map((s, i) => (
+              <DayStop key={s.sessionId} stop={s} step={i + 1} prev={c.stops[i - 1] ?? null} done={false} />
+            ))}
+          </div>
+        ))
+      )}
+    </Card>
+  );
+}
+
 /** Project technician: Today (Clock in on top of today's jobs), Send your link, Wallet, Stages of Success. */
 export async function TechnicianPhone({ profile }: { profile: Profile }) {
-  const [open, day, lw] = await Promise.all([
+  const [open, day, lw, everyone] = await Promise.all([
     myOpenEntry(profile.id).catch(() => null),
     getCrewDay().catch(() => null),
     loadLinkAndWallet(profile),
+    getAllCrewsToday().catch(() => null),
   ]);
   const stops = day?.stops ?? [];
   const finished = new Set((day?.events ?? []).filter((e) => e.kind === "finished_job" && e.jobId).map((e) => e.jobId!));
   const track = POSITIONS.find((p) => p.key === "project-technician")?.growth;
   return (
     <Screen hello={`Morning, ${firstName(profile)}`} role="Project technician">
-      <Card title="Today" tour="crew-clock">
+      <Card title="Today" right="Your day" tour="crew-clock">
         <div className="vx-clock">
           <ClockControl open={open} stops={stops.map((s) => ({ jobId: s.jobId, sessionId: s.sessionId, name: s.customerName }))} />
         </div>
@@ -94,6 +121,7 @@ export async function TechnicianPhone({ profile }: { profile: Profile }) {
           ))
         )}
       </Card>
+      <AllJobsToday crews={everyone} me={profile.id} />
       <SendLink people={lw.people} />
       <WalletBlock wallet={lw.wallet} />
       {track && <Stage done={0} total={track.stages.length + 1} next={track.stages[0]} />}
