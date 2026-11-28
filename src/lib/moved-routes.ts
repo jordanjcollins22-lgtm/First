@@ -27,9 +27,8 @@ export const MOVED: Record<string, string> = {
   "/proposals": "/sales?tab=proposals",
   "/evaluations": "/operations?tab=calendar",
   "/weather": "/operations?tab=weather",
-  // The six modules became four departments. Schedule and Jobs are both
-  // Operations now, and More is Admin.
-  "/schedule": "/operations?tab=calendar",
+  // The six modules became four departments. Jobs is Operations now, and
+  // More is Admin. (/schedule is a page again: the one Schedule app, Nov 28.)
   "/jobs": "/operations?tab=jobs",
   "/more": "/admin",
   "/admin/salt": "/operations?tab=salt",
