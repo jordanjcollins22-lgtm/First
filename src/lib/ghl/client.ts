@@ -199,3 +199,24 @@ export async function getContact(id: string): Promise<GhlContact | null> {
     return null;
   }
 }
+
+/**
+ * The location's conversations, most recently active first. Read by the
+ * every-minute message sweep (api/cron/ghl-inbox-sweep).
+ */
+export async function searchRecentConversations(limit = 50): Promise<unknown[]> {
+  const query = new URLSearchParams({
+    locationId: env.ghlLocationId,
+    sortBy: "last_message_date",
+    sort: "desc",
+    limit: String(limit),
+  });
+  const result = await call<{ conversations?: unknown[] }>("GET", `/conversations/search?${query.toString()}`);
+  return result.conversations ?? [];
+}
+
+/** One conversation's latest messages, as GoHighLevel returns them. */
+export async function getConversationMessages(conversationId: string, limit = 20): Promise<unknown> {
+  const query = new URLSearchParams({ limit: String(limit) });
+  return call<unknown>("GET", `/conversations/${encodeURIComponent(conversationId)}/messages?${query.toString()}`);
+}
