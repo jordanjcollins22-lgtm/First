@@ -70,6 +70,7 @@ const A = {
   agentMap: { label: "Agent map", glyph: "map", color: "teal", what: "The 8 departments and what each agent did today.", go: soon },
   payments: { label: "Payments", glyph: "payout", color: "forest", what: "Payments in, payout requests to approve and mark sent.", go: { page: "/admin/payments" } },
   hiring: { label: "Hiring", glyph: "people", color: "plum", what: "New applicants, interviews and check-ins due.", go: { page: "/admin/hiring" } },
+  salesApp: { label: "Sales", glyph: "pin", color: "teal", what: "Evaluations to book, go and price; proposals to send and follow up; projects closed.", go: { page: "/sales" } },
   scheduleApp: { label: "Schedule", glyph: "cal", color: "sky", what: "Today, the next month on a calendar with the wait list, and history: crew jobs, site visits and interviews.", go: { page: "/schedule" } },
   ownerToday: { label: "My day", glyph: "clock", color: "lime", what: "Your jobs today in order, with crew maps.", go: { page: "/me/full?role=technician&app=s-today" } },
   ownerAllJobs: { label: "All jobs", glyph: "truck", color: "teal", what: "Every job on today, crew by crew.", go: { page: "/me/full?role=technician&app=s-all-jobs-today" } },
@@ -118,8 +119,8 @@ const A = {
 type Key = keyof typeof A;
 // First version (Jordan, Nov 26): only what each role has to have. Dock = all the time.
 const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
-  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["scheduleApp", "payments", "viewAs"] },
-  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "scheduleApp", "hlMsgs"], apps: ["sendLink", "wallet", "evals", "amHiring", "business"] },
+  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["scheduleApp", "salesApp", "payments", "viewAs"] },
+  "account-manager": { title: "Account manager", dock: ["doNow", "clients", "scheduleApp", "hlMsgs"], apps: ["sendLink", "wallet", "salesApp", "amHiring", "business"] },
   technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["scheduleApp", "plants", "weeds"] },
   partner: { title: "Location partner", dock: ["needsYou", "locMoney", "partnerSchedule", "msgs"], apps: ["partnerCrew", "partnerHiring"] },
   affiliate: { title: "Affiliate", dock: ["sendLink", "wallet", "stage", "ask"], apps: [] },
