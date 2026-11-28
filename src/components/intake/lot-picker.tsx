@@ -22,6 +22,8 @@ export function LotPicker({
   disabled,
   readOnly = false,
   caption,
+  initialTurn = 0,
+  onTurn,
 }: {
   lot: LotData;
   picked: string[];
@@ -31,8 +33,12 @@ export function LotPicker({
   readOnly?: boolean;
   /** Said under the picture instead of the usual words, for a page that isn't the pre-evaluation. */
   caption?: string;
+  /** Quarter turns to start from (a saved crew map). */
+  initialTurn?: number;
+  /** Told each time the front is turned, to save it. */
+  onTurn?: (turn: number) => void;
 }) {
-  const [turn, setTurn] = useState(0);
+  const [turn, setTurn] = useState(initialTurn);
   const clip = useId().replace(/:/g, "");
   const layout = useMemo(() => layoutLot(lot, WIDTH, HEIGHT, turn), [lot, turn]);
   if (!isMapboxConfigured) return null;
@@ -96,7 +102,11 @@ export function LotPicker({
         <span>
           Your property line from the county. Tap a part of the yard, or pick below.
         </span>
-        <button type="button" onClick={() => setTurn((t) => (t + 1) % 4)} className="flex shrink-0 items-center gap-1 font-medium text-primary">
+        <button type="button" onClick={() => {
+            const next = (turn + 1) % 4;
+            setTurn(next);
+            onTurn?.(next);
+          }} className="flex shrink-0 items-center gap-1 font-medium text-primary">
           <RotateCw className="h-3.5 w-3.5" /> Front&apos;s wrong?
         </button>
       </figcaption>

@@ -1,4 +1,5 @@
 import { hazardLines, pickVisit } from "@/lib/crew-route";
+import { readCrewMap, type CrewMap } from "@/lib/crew-map-areas";
 import { addonLines, readAddons } from "@/lib/proposal-addons";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dateKeyIn } from "@/lib/time-zone";
@@ -35,6 +36,8 @@ export interface CrewJob {
   visitDay: string | null;
   /** Warnings picked out of what's left and the project notes. */
   hazards: string[];
+  /** The parts of the lot the crew works, when no site map was drawn. */
+  crewMap: CrewMap | null;
 }
 
 
@@ -124,6 +127,7 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
     leftToDo: visit?.purpose?.trim() || null,
     visitDay: visit?.starts_on ?? null,
     hazards: hazardLines(visit?.purpose, job.client_notes),
+    crewMap: readCrewMap(chosen?.options),
     zones: [...snapshot.map((z) => ({
       zoneName: z.zoneName,
       serviceLabel: z.serviceLabel,

@@ -124,6 +124,8 @@ export type TabKey = string;
  * this, so anything added here is a decision on the record rather than a gap.
  */
 export const UNGOVERNED_ROUTES: Record<string, string> = {
+  "/jobs/[jobId]/crew-map":
+    "Redo a job's crew map. Checks for the account manager or owner itself, and its save action checks again.",
   "/admin/hiring/[id]":
     "One applicant, opened from the Hiring list. Checks the hiring tab itself, and its actions check it again " +
     "before rating, moving or emailing anyone.",

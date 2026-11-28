@@ -107,7 +107,13 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
       ) : lot ? (
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Site map</h2>
-          <LotPicker lot={lot} picked={["whole"]} readOnly caption="Property line and house from the county map." />
+          <LotPicker
+            lot={lot}
+            picked={job.crewMap?.areas ?? ["whole"]}
+            initialTurn={job.crewMap?.turn ?? 0}
+            readOnly
+            caption={job.crewMap ? "The work area, on the county property line." : "Property line and house from the county map."}
+          />
         </section>
       ) : null}
 
