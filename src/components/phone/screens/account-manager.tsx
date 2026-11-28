@@ -42,7 +42,7 @@ const timeOf = (iso: string) =>
 const shortTime = (iso: string) => timeOf(iso).replace(" am", "a").replace(" pm", "p");
 const last = (name: string) => name.trim().split(/\s+/).slice(-1)[0] || name;
 
-/** Monday of this week, and the twelve working days (Mon to Sat) of this week and next. */
+/** Monday of this week, and every day (Mon to Sun) of this week and next. */
 function twoWeeks(now: Date) {
   const today = dateKeyIn(now);
   const t = new Date(`${today}T12:00:00Z`);
@@ -50,7 +50,7 @@ function twoWeeks(now: Date) {
   const days: string[] = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(monday.getTime() + i * DAY);
-    if (d.getUTCDay() !== 0) days.push(d.toISOString().slice(0, 10));
+    days.push(d.toISOString().slice(0, 10));
   }
   return { today, days, from: days[0], to: days[days.length - 1] };
 }
