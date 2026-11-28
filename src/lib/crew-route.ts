@@ -7,12 +7,17 @@
  * picked from wherever the crew finished last, so when a job is done the rest
  * of the day re-routes from that spot. A job with no map pin can't be measured
  * and goes last, in the order it came.
+ *
+ * When the office has set a crew's order by hand (the Schedule map), the
+ * stops come back exactly as given.
  */
 
 export interface Routable {
   jobId: string;
   lat: number | null;
   lng: number | null;
+  /** Set by the office on the Schedule map: the order as given is the order. */
+  locked?: boolean;
 }
 
 type Pinned<T> = T & { lat: number; lng: number };
@@ -31,6 +36,8 @@ export function milesBetween(a: { lat: number; lng: number }, b: { lat: number; 
 
 export function routeByNearest<T extends Routable>(stops: readonly T[], finishedJobIds: readonly string[] = []): T[] {
   if (stops.length <= 1) return [...stops];
+  // The office set this crew's order by hand: keep it exactly as given.
+  if (stops.some((s) => s.locked)) return [...stops];
   const byJob = new Map(stops.map((s) => [s.jobId, s]));
   const done: T[] = [];
   for (const id of finishedJobIds) {

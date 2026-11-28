@@ -53,7 +53,7 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
     supabase
       .from("job_work_sessions")
       .select(
-        "id, job_id, starts_on, ends_on, status, purpose, stop_order, meet_on_site, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
+        "id, job_id, starts_on, ends_on, status, purpose, stop_order, meet_on_site, crew_lead_id, route_locked, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
       )
       .lte("starts_on", day)
       .gte("ends_on", day)
@@ -75,6 +75,8 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
     purpose: string | null;
     stop_order: number | null;
     meet_on_site: boolean | null;
+    crew_lead_id: string | null;
+    route_locked: boolean | null;
     jobs: {
       id: string;
       assigned_to: string | null;
@@ -89,7 +91,9 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
   const sorted: Stop[] = ((sessions ?? []) as unknown as Row[])
     // Roster first, with assignment as the fallback so a job that predates the
     // crew table — or an org that has not run 0083 — still reaches somebody.
-    .filter((r) => myJobs.has(r.job_id) || r.jobs?.assigned_to === profile.id)
+    // A visit the office gave to one crew (the Schedule map) is that crew's;
+    // otherwise roster first, with assignment as the fallback.
+    .filter((r) => (r.crew_lead_id ? r.crew_lead_id === profile.id : myJobs.has(r.job_id) || r.jobs?.assigned_to === profile.id))
     .filter((r) => r.jobs?.status !== "cancelled" && r.jobs?.status !== "completed")
     .sort((a, b) => {
       // Unordered stops sort after ordered ones rather than jumping to the
@@ -109,6 +113,7 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
       lng: r.jobs?.properties?.lng ?? null,
       purpose: r.purpose,
       meetOnSite: Boolean(r.meet_on_site),
+      locked: Boolean(r.route_locked),
     }));
   // The office's first stop starts the day; after that the crew always goes
   // to the closest job left from the one they just finished.
@@ -234,7 +239,7 @@ export async function getAllCrewsToday(day = localDayKey()): Promise<CrewToday[]
   const { data: sessions, error } = await supabase
     .from("job_work_sessions")
     .select(
-      "id, job_id, starts_on, purpose, stop_order, meet_on_site, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
+      "id, job_id, starts_on, purpose, stop_order, meet_on_site, crew_lead_id, route_locked, jobs(id, assigned_to, status, properties(address, lat, lng, customers(name)))"
     )
     .lte("starts_on", day)
     .gte("ends_on", day)
@@ -249,6 +254,8 @@ export async function getAllCrewsToday(day = localDayKey()): Promise<CrewToday[]
     purpose: string | null;
     stop_order: number | null;
     meet_on_site: boolean | null;
+    crew_lead_id: string | null;
+    route_locked: boolean | null;
     jobs: {
       assigned_to: string | null;
       status: string;
@@ -261,7 +268,7 @@ export async function getAllCrewsToday(day = localDayKey()): Promise<CrewToday[]
   const jobIds = [...new Set(rows.map((r) => r.job_id))];
   const { data: leads } = await supabase.from("job_crew").select("job_id, profile_id").eq("is_lead", true).in("job_id", jobIds);
   const leadOf = new Map(((leads ?? []) as { job_id: string; profile_id: string }[]).map((l) => [l.job_id, l.profile_id]));
-  const who = (r: Row) => leadOf.get(r.job_id) ?? r.jobs?.assigned_to ?? null;
+  const who = (r: Row) => r.crew_lead_id ?? leadOf.get(r.job_id) ?? r.jobs?.assigned_to ?? null;
 
   const people = [...new Set(rows.map(who).filter((x): x is string => !!x))];
   const { data: profiles } = people.length
@@ -297,6 +304,7 @@ export async function getAllCrewsToday(day = localDayKey()): Promise<CrewToday[]
         lng: r.jobs?.properties?.lng ?? null,
         purpose: r.purpose,
         meetOnSite: Boolean(r.meet_on_site),
+        locked: Boolean(r.route_locked),
       }));
       return {
         leadId: lead === "none" ? null : lead,

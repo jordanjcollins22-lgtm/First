@@ -40,6 +40,8 @@ export interface Stop {
    * the shop.
    */
   meetOnSite?: boolean;
+  /** The office set this crew's order by hand: keep it exactly. */
+  locked?: boolean;
 }
 
 /** A day with no shop in it: every stop is met on site. */
