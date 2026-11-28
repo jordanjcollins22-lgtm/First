@@ -99,3 +99,23 @@
 .vx-app .vx-stop{display:flex;flex-direction:column;gap:2px;padding:2px 0}.vx-app .vx-stop strong{font:700 14px var(--body)}.vx-app .vx-stop small{font-size:12px;color:var(--muted);line-height:1.35}.vx-app .vx-stop small.vx-hazard{color:var(--warn);background:var(--warn-soft);border-radius:5px;padding:2px 6px;font-weight:600}.vx-app .vx-stop .vx-tag{font-style:normal}
 .vx-app .vx-tap>span:has(.vx-stop){text-decoration:none}
 .vx-app .vx-crewday{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}.vx-app .vx-crewday:first-of-type{border-top:0;padding-top:0}
+/* Crew schedule calendar: bigger text, a real month-style grid, then the days written out. */
+.vx-app .vx-cal{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+.vx-app .vx-cal-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
+.vx-app .vx-cal-wd{font:700 12px var(--body);color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em}
+.vx-app .vx-cal-day{display:flex;flex-direction:column;gap:2px;min-height:64px;padding:3px 2px;border:1px solid var(--line);border-radius:8px;background:var(--card,transparent)}
+.vx-app .vx-cal-day.is-past{opacity:.55}
+.vx-app .vx-cal-day.is-today{border:2px solid var(--teal);opacity:1}
+.vx-app .vx-cal-n{font:800 15px var(--display)}
+.vx-app .vx-cal-chip{display:block;color:#fff;font:700 10.5px var(--body);line-height:1.2;padding:2px 3px;border-radius:4px;overflow-wrap:anywhere}
+.vx-app .vx-cal-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px}
+.vx-app .vx-cal-legend span{display:inline-flex;align-items:center;gap:5px}
+.vx-app .vx-cal-legend i,.vx-app .vx-cal-who i{display:inline-block;width:11px;height:11px;border-radius:50%}
+.vx-app .vx-cal-agenda{display:flex;flex-direction:column;gap:8px;scroll-margin-top:12px}
+.vx-app .vx-cal-agenda h4{margin:6px 0 0;font:800 17px var(--display);border-bottom:2px solid var(--line);padding-bottom:4px}
+.vx-app .vx-cal-job{display:flex;flex-direction:column;gap:4px;padding:8px 0;border-bottom:1px solid var(--line)}
+.vx-app .vx-cal-job-link{display:flex;flex-direction:column;gap:2px}
+.vx-app .vx-cal-who{display:flex;align-items:center;gap:6px;font:700 17px var(--body)}
+.vx-app .vx-cal-what{font-size:16px;line-height:1.4}
+.vx-app .vx-cal-note{font-size:14px;color:var(--muted)}
+.vx-app .vx-cal-empty{font-size:15px;color:var(--muted);margin:0}

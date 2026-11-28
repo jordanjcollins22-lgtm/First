@@ -7,8 +7,9 @@ import { EstimateButton } from "@/components/phone/estimate-button";
 import { ProposalButtons } from "@/components/phone/proposal-buttons";
 import { BookVisit, FinishVisit, VisitSteps } from "@/components/phone/visit-buttons";
 import { loadAmEvaluations, type EvalVisit } from "@/lib/data/am-evaluations";
-import { ScheduleJob, type CrewOption } from "@/components/phone/schedule-job";
-import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
+import { type CrewOption } from "@/components/phone/schedule-job";
+import { CrewCalendar } from "@/components/phone/crew-calendar";
+import { Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
 import { sentAgo, workOf } from "@/lib/proposal-outcome";
@@ -211,11 +212,6 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
 
   /* Crew schedule ----------------------------------------------------- */
   const inWindow = board.filter((j) => !j.declined && j.workStartsOn && j.workStartsOn.slice(0, 10) >= weeks.from && j.workStartsOn.slice(0, 10) <= weeks.to && STATUS[j.status]);
-  const crews = new Map<string, BoardJob[]>();
-  for (const j of inWindow.sort((a, b) => (a.workStartsOn ?? "").localeCompare(b.workStartsOn ?? ""))) {
-    const k = j.assignedToName || "Nobody assigned";
-    crews.set(k, [...(crews.get(k) ?? []), j]);
-  }
   // Sold and not finished, with no date in the window: no date yet, or a date
   // that has already gone by. A job whose day passed without being finished is
   // still waiting, so it belongs here rather than dropping off the schedule.
@@ -410,46 +406,18 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
       </Card>
 
       <Card title="Crew schedule · next 2 weeks" right={spanLabel(weeks.from, weeks.to)}>
-        <Big>{inWindow.length} booked</Big>
         <Sm>
-          projects in the next 2 weeks, {waitList.length} on the wait list
+          {inWindow.length} booked in the next 2 weeks, {waitList.length} on the wait list. Tap a day to jump to it.
         </Sm>
-        {[...crews.entries()].map(([crew, jobs]) => (
-          <Sub key={crew} title={crew} sum={`${jobs.length} job${jobs.length === 1 ? "" : "s"}`}>
-            {jobs.map((j) => (
-              <div key={j.id}>
-                <Row a={`${dayLabel(j.workStartsOn!.slice(0, 10))} · ${j.customerName ?? "Client"} · ${j.name}`} b={STATUS[j.status]} href={`/jobs/${j.id}`} />
-                {j.status !== "completed" && <ScheduleJob jobId={j.id} crews={crewOptions} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />}
-              </div>
-            ))}
-          </Sub>
-        ))}
-        <Sub title="Wait list" sum={waitList.length} open={waitList.length > 0}>
-          {waitList.length ? (
-            waitList.map((j, i) => (
-              <div key={j.id}>
-                <Row
-                  a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`}
-                  b={j.workStartsOn ? `Was set for ${shortDay(j.workStartsOn.slice(0, 10))}` : j.status === "in_progress" ? "Started, no date" : "Not scheduled"}
-                  href={`/jobs/${j.id}`}
-                />
-                <ScheduleJob jobId={j.id} crews={crewOptions} start={firstOpenDay} leadId={j.assignedToId} />
-              </div>
-            ))
-          ) : (
-            <Row a="Nobody waiting" />
-          )}
-        </Sub>
-        {later.length > 0 && (
-          <Sub title="Later" sum={later.length}>
-            {later.map((j) => (
-              <div key={j.id}>
-                <Row a={`${shortDay(j.workStartsOn!.slice(0, 10))} · ${j.customerName ?? "Client"} · ${j.name}`} b={j.assignedToName ?? ""} href={`/jobs/${j.id}`} />
-                <ScheduleJob jobId={j.id} crews={crewOptions} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />
-              </div>
-            ))}
-          </Sub>
-        )}
+        <CrewCalendar
+          days={weeks.days}
+          today={weeks.today}
+          booked={inWindow.sort((a, b) => (a.workStartsOn ?? "").localeCompare(b.workStartsOn ?? ""))}
+          waitList={waitList}
+          later={later}
+          crews={crewOptions}
+          firstOpenDay={firstOpenDay}
+        />
       </Card>
 
       {saltPrices.length > 0 && <SaltPrices rows={saltPrices} />}
