@@ -216,7 +216,17 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     const k = j.assignedToName || "Nobody assigned";
     crews.set(k, [...(crews.get(k) ?? []), j]);
   }
-  const waitList = board.filter((j) => !j.declined && j.status === "approved" && !j.workStartsOn).sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
+  // Sold and not finished, with no date in the window: no date yet, or a date
+  // that has already gone by. A job whose day passed without being finished is
+  // still waiting, so it belongs here rather than dropping off the schedule.
+  const waitList = board
+    .filter(
+      (j) =>
+        !j.declined &&
+        (j.status === "approved" || j.status === "in_progress") &&
+        (!j.workStartsOn || j.workStartsOn.slice(0, 10) < weeks.from)
+    )
+    .sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
   const later = board
     .filter((j) => !j.declined && j.workStartsOn && j.workStartsOn.slice(0, 10) > weeks.to && j.status !== "completed")
     .sort((a, b) => (a.workStartsOn ?? "").localeCompare(b.workStartsOn ?? ""));
@@ -418,7 +428,11 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
           {waitList.length ? (
             waitList.map((j, i) => (
               <div key={j.id}>
-                <Row a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`} b="Not scheduled" href={`/jobs/${j.id}`} />
+                <Row
+                  a={`${i + 1}. ${j.customerName ?? "Client"} · ${j.name}`}
+                  b={j.workStartsOn ? `Was set for ${shortDay(j.workStartsOn.slice(0, 10))}` : j.status === "in_progress" ? "Started, no date" : "Not scheduled"}
+                  href={`/jobs/${j.id}`}
+                />
                 <ScheduleJob jobId={j.id} crews={crewOptions} start={firstOpenDay} leadId={j.assignedToId} />
               </div>
             ))
