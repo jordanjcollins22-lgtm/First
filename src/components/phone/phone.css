@@ -107,7 +107,7 @@
 .vx-app .vx-cal-day.is-past{opacity:.55}
 .vx-app .vx-cal-day.is-today{border:2px solid var(--teal);opacity:1}
 .vx-app .vx-cal-n{font:800 15px var(--display)}
-.vx-app .vx-cal-chip{display:block;color:#fff;font:700 10.5px var(--body);line-height:1.2;padding:2px 3px;border-radius:4px;overflow-wrap:anywhere}
+.vx-app .vx-cal-chip{display:block;color:#fff;font:700 10px var(--body);line-height:1.25;padding:2px 2px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:clip}
 .vx-app .vx-cal-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:14px}
 .vx-app .vx-cal-legend span{display:inline-flex;align-items:center;gap:5px}
 .vx-app .vx-cal-legend i,.vx-app .vx-cal-who i{display:inline-block;width:11px;height:11px;border-radius:50%}
