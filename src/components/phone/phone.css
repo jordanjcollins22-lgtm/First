@@ -129,28 +129,35 @@
 .vx-with-tabs .vx-screen{padding-bottom:90px}
 .vx-tabs-wrap{min-height:0;background:transparent}
 
-/* Today's routes: the map and the editor under it. */
-.vx-app .vx-route-map { display: block; width: 100%; height: auto; border-radius: 14px; margin: 4px 0 8px; background: #e5e7eb; }
-.vx-app .vx-route-ed { display: grid; gap: 10px; margin-top: 10px; }
-.vx-app .vx-route-crew { border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px 10px; }
-.vx-app .vx-route-crew h5 { margin: 0 0 6px; font-size: 14px; display: flex; align-items: center; gap: 6px; }
-.vx-app .vx-route-crew h5 i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.vx-app .vx-route-empty { margin: 0; font-size: 13px; color: #6b7280; }
-.vx-app .vx-route-stop { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 8px; padding: 6px 0; border-top: 1px solid #f3f4f6; }
-.vx-app .vx-route-stop:first-of-type { border-top: 0; }
+/* Today's routes: the map and the editor under it. Theme colors only, so dark mode reads. */
+.vx-app .vx-route-map { display: block; width: 100%; height: auto; border-radius: 12px; margin: 4px 0 8px; background: var(--bg); }
+.vx-app .vx-route-ed { display: grid; gap: 10px; margin-top: 10px; color: var(--fg); }
+.vx-app .vx-route-crew { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--surface); }
+.vx-app .vx-route-crew h5 { margin: 0 0 6px; font-size: 14px; color: var(--fg); display: flex; align-items: center; gap: 6px; }
+.vx-app .vx-route-crew h5 i, .vx-app .vx-route-free i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.vx-app .vx-route-free { font-size: 13px; color: var(--fg); padding: 2px 2px; }
+.vx-app .vx-route-free b { font-weight: 600; }
+.vx-app .vx-route-stop { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.vx-app .vx-route-crew h5 + .vx-route-stop { border-top: 0; }
 .vx-app .vx-route-n { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
-.vx-app .vx-route-name { font-size: 14px; font-weight: 600; min-width: 0; }
-.vx-app .vx-route-name small { font-weight: 500; color: #c2410c; }
-.vx-app .vx-route-btns { display: flex; gap: 4px; }
-.vx-app .vx-route-btns button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid #d1d5db; background: #fff; font-size: 16px; }
-.vx-app .vx-route-btns button:disabled { opacity: 0.35; }
+.vx-app .vx-route-name { font-size: 14px; font-weight: 600; min-width: 0; color: var(--fg); }
+.vx-app .vx-route-name small { font-weight: 600; color: var(--warn); }
+.vx-app .vx-route-btns { display: flex; gap: 6px; }
+.vx-app .vx-route-btns button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--teal); background: var(--teal-soft); color: var(--teal); font-size: 17px; font-weight: 700; }
+.vx-app .vx-route-btns button:disabled { border-color: var(--line); background: transparent; color: var(--line); }
 .vx-app .vx-route-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
-.vx-app .vx-route-more select { flex: 1 1 130px; min-height: 34px; border-radius: 10px; border: 1px solid #d1d5db; background: #fff; font-size: 13px; padding: 0 8px; }
+.vx-app .vx-route-ed select { flex: 1 1 130px; min-height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 13px; font-weight: 500; padding: 0 8px; }
+.vx-app .vx-route-ed select option { background: var(--surface); color: var(--fg); }
 .vx-app .vx-route-stop > .vx-route-name:first-child { grid-column: 1 / 3; }
-.vx-app .vx-route-x { min-height: 34px; border-radius: 10px; border: 1px solid #fecaca; background: #fff1f2; color: #b91c1c; font-size: 13px; padding: 0 10px; }
+.vx-app .vx-route-x { min-height: 36px; border-radius: 10px; border: 1px solid var(--warn); background: var(--warn-soft); color: var(--warn); font-size: 13px; font-weight: 600; padding: 0 10px; }
 .vx-app .vx-route-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .vx-app .vx-route-actions .vx-cta { flex: 1 1 auto; }
-.vx-app .vx-route-actions .vx-cta:disabled { opacity: 0.5; }
-.vx-app .vx-route-reset { min-height: 40px; border-radius: 12px; border: 1px solid #d1d5db; background: #fff; font-size: 13px; padding: 0 12px; }
-.vx-app .vx-route-ok { margin: 0; font-size: 13px; color: #0f766e; }
-.vx-app .vx-route-err { margin: 0; font-size: 13px; color: #b91c1c; }
+.vx-app .vx-route-actions .vx-cta:disabled { opacity: 0.55; }
+.vx-app .vx-route-reset { min-height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 13px; padding: 0 12px; }
+.vx-app .vx-route-ok { margin: 0; font-size: 13px; color: var(--teal); }
+.vx-app .vx-route-err { margin: 0; font-size: 13px; color: var(--warn); }
+.vx-app .vx-route-job { display: grid; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); }
+.vx-app .vx-route-crew h5 + .vx-route-job { border-top: 0; }
+.vx-app .vx-route-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.vx-app .vx-route-pick button { min-height: 34px; border-radius: 99px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); font-size: 13px; font-weight: 600; padding: 0 12px; }
+.vx-app .vx-route-pick button.on { color: #fff; }

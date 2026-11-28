@@ -53,9 +53,12 @@ export async function saveCrewRoutes(input: { day: string; crews: CrewRouteInput
   if (dropped.length) return { ok: false, error: "Every job needs at least one crew. Put it back on a crew before saving." };
 
   const used = new Set<string>();
+  const named = new Set(crews.flatMap((c) => c.stops.map((s) => s.sessionId).filter((id): id is string => !!id && byId.has(id))));
+  // A visit nobody named (its crew was taken off) is handed to a crew newly put on the same job, before making a copy.
+  const spare = (jobId: string) => visits.find((v) => v.job_id === jobId && !named.has(v.id) && !used.has(v.id));
   for (const crew of crews) {
     for (const [i, stop] of crew.stops.entries()) {
-      const existing = stop.sessionId ? byId.get(stop.sessionId) : undefined;
+      const existing = (stop.sessionId && !used.has(stop.sessionId) ? byId.get(stop.sessionId) : undefined) ?? spare(stop.jobId);
       if (existing && !used.has(existing.id)) {
         used.add(existing.id);
         const { error } = await sb
