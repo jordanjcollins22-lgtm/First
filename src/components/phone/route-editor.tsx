@@ -3,7 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { resetCrewRoutes, saveCrewRoutes } from "@/lib/actions/crew-route-actions";
+import {
+  resetCrewRoutes,
+  saveCrewRoutes,
+} from "@/lib/actions/crew-route-actions";
 
 export interface EditorStop {
   sessionId: string | null;
@@ -19,18 +22,39 @@ export interface EditorCrew {
 }
 
 /**
- * Change today's routes: move a job up or down a crew's day, hand it to
- * another crew, or put it on a second crew too (both crews start there, say).
- * Nothing changes until Save; then every crew's Today follows the new order.
+ * Change today's routes the way the office thinks about it: go job by job and
+ * tap which crews go there (one crew, or both to start together), then set
+ * each crew's order. Nothing changes until Save; then every crew's Today
+ * follows it.
  */
-export function RouteEditor({ day, crews: start, unassigned }: { day: string; crews: EditorCrew[]; unassigned: EditorStop[] }) {
+export function RouteEditor({
+  day,
+  crews: start,
+  unassigned,
+}: {
+  day: string;
+  crews: EditorCrew[];
+  unassigned: EditorStop[];
+}) {
   const router = useRouter();
   const [crews, setCrews] = useState<EditorCrew[]>(start);
-  const [loose, setLoose] = useState<EditorStop[]>(unassigned);
   const [busy, run] = useTransition();
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
-  const changed = useMemo(() => JSON.stringify(crews) !== JSON.stringify(start) || loose.length !== unassigned.length, [crews, start, loose, unassigned]);
-  const onHowMany = (jobId: string) => crews.reduce((n, c) => n + c.stops.filter((s) => s.jobId === jobId).length, 0);
+
+  // Every job on today, in the order they first show up.
+  const jobs = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const s of [...start.flatMap((c) => c.stops), ...unassigned])
+      if (!seen.has(s.jobId)) seen.set(s.jobId, s.customerName);
+    return [...seen.entries()].map(([jobId, customerName]) => ({
+      jobId,
+      customerName,
+    }));
+  }, [start, unassigned]);
+  const crewsOn = (jobId: string) =>
+    crews.filter((c) => c.stops.some((s) => s.jobId === jobId));
+  const noCrew = jobs.filter((j) => crewsOn(j.jobId).length === 0);
+  const changed = JSON.stringify(crews) !== JSON.stringify(start);
 
   const edit = (fn: (draft: EditorCrew[]) => void) => {
     setNote(null);
@@ -40,142 +64,181 @@ export function RouteEditor({ day, crews: start, unassigned }: { day: string; cr
       return draft;
     });
   };
-  const moveUp = (ci: number, si: number) =>
+
+  /** Tap a crew on a job: send it there, or take it off (a job always keeps one crew). */
+  const toggle = (jobId: string, customerName: string, leadId: string) =>
     edit((d) => {
-      if (si === 0) return;
-      [d[ci].stops[si - 1], d[ci].stops[si]] = [d[ci].stops[si], d[ci].stops[si - 1]];
+      const crew = d.find((c) => c.leadId === leadId)!;
+      const at = crew.stops.findIndex((s) => s.jobId === jobId);
+      if (at >= 0) {
+        if (d.filter((c) => c.stops.some((s) => s.jobId === jobId)).length <= 1)
+          return;
+        crew.stops.splice(at, 1);
+        return;
+      }
+      const loose = unassigned.find((s) => s.jobId === jobId);
+      const taken = new Set(d.flatMap((c) => c.stops.map((s) => s.sessionId)));
+      crew.stops.push({
+        sessionId:
+          loose && !taken.has(loose.sessionId) ? loose.sessionId : null,
+        jobId,
+        customerName,
+      });
     });
-  const moveDown = (ci: number, si: number) =>
+  const move = (ci: number, si: number, by: -1 | 1) =>
     edit((d) => {
-      if (si >= d[ci].stops.length - 1) return;
-      [d[ci].stops[si + 1], d[ci].stops[si]] = [d[ci].stops[si], d[ci].stops[si + 1]];
+      const to = si + by;
+      if (to < 0 || to >= d[ci].stops.length) return;
+      [d[ci].stops[to], d[ci].stops[si]] = [d[ci].stops[si], d[ci].stops[to]];
     });
-  const handTo = (ci: number, si: number, toLead: string) =>
-    edit((d) => {
-      const to = d.find((c) => c.leadId === toLead);
-      if (!to || to === d[ci]) return;
-      const [stop] = d[ci].stops.splice(si, 1);
-      if (to.stops.some((s) => s.jobId === stop.jobId)) return; // already there
-      to.stops.push(stop);
-    });
-  const alsoTo = (ci: number, si: number, toLead: string) =>
-    edit((d) => {
-      const to = d.find((c) => c.leadId === toLead);
-      const stop = d[ci].stops[si];
-      if (!to || to.stops.some((s) => s.jobId === stop.jobId)) return;
-      to.stops.unshift({ sessionId: null, jobId: stop.jobId, customerName: stop.customerName });
-    });
-  const takeOff = (ci: number, si: number) =>
-    edit((d) => {
-      if (onHowMany(d[ci].stops[si].jobId) <= 1) return;
-      d[ci].stops.splice(si, 1);
-    });
-  const place = (stop: EditorStop, toLead: string) => {
-    setLoose((l) => l.filter((s) => s !== stop));
-    edit((d) => d.find((c) => c.leadId === toLead)?.stops.push(stop));
-  };
 
   const save = () =>
     run(async () => {
-      if (loose.length) {
-        setNote({ ok: false, text: "Put every job on a crew first." });
+      if (noCrew.length) {
+        setNote({
+          ok: false,
+          text: `Send a crew to ${noCrew.map((j) => j.customerName).join(", ")} first.`,
+        });
         return;
       }
-      const res = await saveCrewRoutes({ day, crews: crews.map((c) => ({ leadId: c.leadId, stops: c.stops.map((s) => ({ sessionId: s.sessionId, jobId: s.jobId })) })) });
-      setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
+      const res = await saveCrewRoutes({
+        day,
+        crews: crews.map((c) => ({
+          leadId: c.leadId,
+          stops: c.stops.map((s) => ({
+            sessionId: s.sessionId,
+            jobId: s.jobId,
+          })),
+        })),
+      });
+      setNote(
+        res.ok
+          ? { ok: true, text: res.message }
+          : { ok: false, text: res.error },
+      );
       if (res.ok) router.refresh();
     });
   const reset = () =>
     run(async () => {
       const res = await resetCrewRoutes({ day });
-      setNote(res.ok ? { ok: true, text: res.message } : { ok: false, text: res.error });
+      setNote(
+        res.ok
+          ? { ok: true, text: res.message }
+          : { ok: false, text: res.error },
+      );
       if (res.ok) router.refresh();
     });
 
   return (
     <div className="vx-route-ed">
-      {loose.length > 0 && (
-        <div className="vx-route-crew">
-          <h5>No crew yet</h5>
-          {loose.map((s) => (
-            <div key={s.jobId} className="vx-route-stop">
-              <span className="vx-route-name">{s.customerName}</span>
-              <select aria-label={`Give ${s.customerName} to a crew`} value="" onChange={(e) => e.target.value && place(s, e.target.value)}>
-                <option value="">Give to…</option>
-                {crews.map((c) => (
-                  <option key={c.leadId} value={c.leadId}>
-                    {c.name}&apos;s crew
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
-      )}
-      {crews.map((c, ci) => (
-        <div key={c.leadId} className="vx-route-crew">
-          <h5>
-            <i style={{ background: c.color }} />
-            {c.name}&apos;s crew
-          </h5>
-          {c.stops.length === 0 && <p className="vx-route-empty">Nothing today. Hand a job here to give this crew a day.</p>}
-          {c.stops.map((s, si) => (
-            <div key={`${s.jobId}-${s.sessionId ?? "new"}`} className="vx-route-stop">
-              <span className="vx-route-n" style={{ background: c.color }}>
-                {si + 1}
-              </span>
-              <span className="vx-route-name">
-                {s.customerName}
-                {onHowMany(s.jobId) > 1 && <small> · 2 crews</small>}
-              </span>
-              <span className="vx-route-btns">
-                <button type="button" aria-label="Earlier" onClick={() => moveUp(ci, si)} disabled={si === 0}>
-                  ↑
-                </button>
-                <button type="button" aria-label="Later" onClick={() => moveDown(ci, si)} disabled={si === c.stops.length - 1}>
-                  ↓
-                </button>
-              </span>
-              <span className="vx-route-more">
-                <select aria-label={`Hand ${s.customerName} to another crew`} value="" onChange={(e) => e.target.value && handTo(ci, si, e.target.value)}>
-                  <option value="">Move to…</option>
-                  {crews
-                    .filter((o) => o.leadId !== c.leadId)
-                    .map((o) => (
-                      <option key={o.leadId} value={o.leadId}>
-                        {o.name}&apos;s crew
-                      </option>
-                    ))}
-                </select>
-                <select aria-label={`Also put ${s.customerName} on another crew`} value="" onChange={(e) => e.target.value && alsoTo(ci, si, e.target.value)}>
-                  <option value="">Both crews…</option>
-                  {crews
-                    .filter((o) => o.leadId !== c.leadId && !o.stops.some((x) => x.jobId === s.jobId))
-                    .map((o) => (
-                      <option key={o.leadId} value={o.leadId}>
-                        + {o.name}&apos;s crew too
-                      </option>
-                    ))}
-                </select>
-                {onHowMany(s.jobId) > 1 && (
-                  <button type="button" className="vx-route-x" onClick={() => takeOff(ci, si)}>
-                    Take off this crew
+      <div className="vx-route-crew">
+        <h5>Who goes to each job</h5>
+        {jobs.map((j) => (
+          <div key={j.jobId} className="vx-route-job">
+            <span className="vx-route-name">{j.customerName}</span>
+            <span
+              className="vx-route-pick"
+              role="group"
+              aria-label={`Crews going to ${j.customerName}`}
+            >
+              {crews.map((c) => {
+                const on = c.stops.some((s) => s.jobId === j.jobId);
+                return (
+                  <button
+                    key={c.leadId}
+                    type="button"
+                    aria-pressed={on}
+                    className={on ? "on" : ""}
+                    style={
+                      on
+                        ? { background: c.color, borderColor: c.color }
+                        : { borderColor: c.color }
+                    }
+                    onClick={() => toggle(j.jobId, j.customerName, c.leadId)}
+                  >
+                    {on ? "✓ " : "+ "}
+                    {c.name}
                   </button>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
+                );
+              })}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {crews.map((c, ci) =>
+        c.stops.length === 0 ? null : (
+          <div key={c.leadId} className="vx-route-crew">
+            <h5>
+              <i style={{ background: c.color }} />
+              {c.name}&apos;s order
+            </h5>
+            {c.stops.map((s, si) => (
+              <div
+                key={`${s.jobId}-${s.sessionId ?? "new"}`}
+                className="vx-route-stop"
+              >
+                <span className="vx-route-n" style={{ background: c.color }}>
+                  {si + 1}
+                </span>
+                <span className="vx-route-name">
+                  {s.customerName}
+                  {crewsOn(s.jobId).length > 1 && (
+                    <small>
+                      {" "}
+                      · with{" "}
+                      {crewsOn(s.jobId)
+                        .filter((o) => o !== c)
+                        .map((o) => o.name)
+                        .join(", ")}
+                    </small>
+                  )}
+                </span>
+                <span className="vx-route-btns">
+                  <button
+                    type="button"
+                    aria-label="Earlier"
+                    onClick={() => move(ci, si, -1)}
+                    disabled={si === 0}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Later"
+                    onClick={() => move(ci, si, 1)}
+                    disabled={si === c.stops.length - 1}
+                  >
+                    ↓
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ),
+      )}
+
       <div className="vx-route-actions">
-        <button type="button" className="vx-cta" onClick={save} disabled={busy || !changed}>
+        <button
+          type="button"
+          className="vx-cta"
+          onClick={save}
+          disabled={busy || !changed}
+        >
           {busy ? "Saving…" : changed ? "Save routes" : "No changes"}
         </button>
-        <button type="button" className="vx-route-reset" onClick={reset} disabled={busy}>
+        <button
+          type="button"
+          className="vx-route-reset"
+          onClick={reset}
+          disabled={busy}
+        >
           Back to nearest-next
         </button>
       </div>
-      {note && <p className={note.ok ? "vx-route-ok" : "vx-route-err"}>{note.text}</p>}
+      {note && (
+        <p className={note.ok ? "vx-route-ok" : "vx-route-err"}>{note.text}</p>
+      )}
     </div>
   );
 }

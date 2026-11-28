@@ -94,6 +94,8 @@ async function appointmentsBetween(profile: Profile, from: string, to: string, e
   return [...visits, ...interviewsBetween(applicants, from, to)].sort((a, b) => a.at.localeCompare(b.at));
 }
 
+const cap = (n: string) => n.charAt(0).toUpperCase() + n.slice(1);
+
 /** One color per crew, the same order as the calendar. */
 const CREW_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#2563eb", "#be185d", "#4d7c0f"];
 
@@ -106,8 +108,8 @@ async function TodayTab({ profile, today, everyone }: { profile: Profile; today:
   const canEdit = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || isAccountManager(profile.roles);
   // Every crew lead, even one with nothing on today, so a job can be handed to them.
   const leads = team
-    .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? ""))
-    .map((p) => ({ id: p.id, name: firstName(p) }));
+    .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? "") && (p.first_name || p.full_name))
+    .map((p) => ({ id: p.id, name: cap(firstName(p)) }));
   for (const c of crews ?? []) if (c.leadId && !leads.some((l) => l.id === c.leadId)) leads.push({ id: c.leadId, name: c.leadName });
   leads.sort((a, b) => a.name.localeCompare(b.name));
   const working = (crews ?? []).filter((c) => c.leadId);
