@@ -246,13 +246,7 @@ async function TodayTab({
     name: l.name,
     color: colorOf.get(l.id)!,
     stops:
-      (crews ?? [])
-        .find((c) => c.leadId === l.id)
-        ?.stops.map((s) => ({
-          sessionId: s.sessionId,
-          jobId: s.jobId,
-          customerName: s.customerName,
-        })) ?? [],
+      (crews ?? []).find((c) => c.leadId === l.id)?.stops.map(toEditor) ?? [],
   }));
   const missingPins = (crews ?? [])
     .flatMap((c) => c.stops)
