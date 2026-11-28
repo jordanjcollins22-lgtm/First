@@ -170,7 +170,7 @@ export function HomeScreen({ role, name, previewing }: { role: MeScreen; name: s
       );
     if ("page" in go)
       return (
-        <Link key={k} href={go.page} className="hs-app">
+        <Link key={k} href={previewing && !go.page.includes("?") ? `${go.page}?role=${previewing}` : go.page} className="hs-app">
           {body}
         </Link>
       );
