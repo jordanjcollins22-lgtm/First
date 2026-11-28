@@ -135,9 +135,17 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
               {z.photoPaths.length > 0 && (
                 <div className="flex snap-x gap-2 overflow-x-auto pb-1">
                   {z.photoPaths.map((p) => (
-                    <a key={p} href={canvasImageUrl(p)} target="_blank" rel="noopener noreferrer" className="shrink-0 snap-start">
+                    <a key={p} href={canvasImageUrl(p)} target="_blank" rel="noopener noreferrer" className="relative block shrink-0 snap-start">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={canvasImageUrl(p, PREVIEW)} alt={`${crewZoneLabel(z.zoneName, i + 1)} photo`} loading="lazy" className="h-56 w-auto max-w-[85vw] rounded-md object-cover" />
+                      <img src={canvasImageUrl(p, PREVIEW)} alt={`${crewZoneLabel(z.zoneName, i + 1)} photo`} loading="lazy" className="block h-auto max-h-56 w-auto max-w-[85vw] rounded-md" />
+                      {(z.photoTaps[p] ?? []).map((t, k) => (
+                        <span
+                          key={k}
+                          aria-label="Tapped spot"
+                          className="pointer-events-none absolute h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-red-600 shadow-[0_0_0_2px_white]"
+                          style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%` }}
+                        />
+                      ))}
                     </a>
                   ))}
                 </div>
