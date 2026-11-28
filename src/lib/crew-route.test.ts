@@ -55,3 +55,9 @@ describe("pickVisit", () => {
     expect(pickVisit([], "2026-11-28")).toBeNull();
   });
 });
+
+describe("hazardLines on a plain place name", () => {
+  it("does not flag a line just for saying where the work is", () => {
+    expect(hazardLines("Remove the plant at the back slope. Gas line under a bush.")).toEqual(["Gas line under a bush."]);
+  });
+});
