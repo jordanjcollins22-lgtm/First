@@ -9,7 +9,7 @@ import { BookVisit, FinishVisit, VisitSteps } from "@/components/phone/visit-but
 import { loadAmEvaluations, type EvalVisit } from "@/lib/data/am-evaluations";
 import { type CrewOption } from "@/components/phone/schedule-job";
 import { CrewCalendar } from "@/components/phone/crew-calendar";
-import { Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
+import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { outstandingFor } from "@/lib/am-home";
 import { sentAgo, workOf } from "@/lib/proposal-outcome";
@@ -24,6 +24,7 @@ import { POSITIONS, positionFor } from "@/lib/hiring/positions";
 import { stageLabel } from "@/lib/hiring/screening";
 import type { BoardJob } from "@/lib/job-board";
 import { loadSaltPrices } from "@/lib/data/salt-prices";
+import { loadClosedProjects, type ClosedProject } from "@/lib/data/sales";
 import { MINIMUM_TREATMENTS, type SaltPriceRow } from "@/lib/salt";
 import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
@@ -133,7 +134,7 @@ const STATUS: Record<string, string> = { completed: "Completed", in_progress: "I
 export async function AccountManagerPhone({ profile }: { profile: Profile }) {
   const now = new Date();
   const weeks = twoWeeks(now);
-  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team, evals, saltPrices] = await Promise.all([
+  const [accounts, sales, applicants, board, visits, finance, lw, followUps, team, evals, saltPrices, closed] = await Promise.all([
     loadAmAccounts(profile, now).catch(() => null),
     loadAmSales(profile, now).catch(() => null),
     listApplicants(profile.organization_id).catch(() => [] as ApplicantRow[]),
@@ -145,6 +146,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
     listProfiles().catch(() => [] as Profile[]),
     loadAmEvaluations(profile, now).catch(() => ({ today: [] as EvalVisit[], upcoming: [] as EvalVisit[], toWriteUp: [] as EvalVisit[] })),
     loadSaltPrices(profile.organization_id).catch(() => [] as SaltPriceRow[]),
+    loadClosedProjects(90, now).catch(() => [] as ClosedProject[]),
   ]);
 
   /* Do now ------------------------------------------------------------ */
@@ -363,31 +365,6 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
             <Row a="None booked" />
           )}
         </Sub>
-        <Sub title="Proposals to approve" sum={toApprove.length} open={toApprove.length > 0}>
-          {toApprove.length ? (
-            toApprove.map((p) => (
-              <div key={p.proposalId}>
-                <Row a={`${p.customerName} · ${p.address}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
-                <ProposalButtons jobId={p.jobId} status="needs_approval" />
-              </div>
-            ))
-          ) : (
-            <Row a="None waiting on approval" />
-          )}
-        </Sub>
-        <Sub title="Proposals sent, no answer yet" sum={openProps.length}>
-          {openProps.length ? (
-            openProps.map((p) => (
-              <div key={p.proposalId}>
-                <Row a={`${p.customerName} · ${workOf(p.jobName)}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
-                <Row a={sentAgo(p.sentAt, now)} b={p.expiresAt && new Date(p.expiresAt).getTime() < now.getTime() ? "Expired" : ""} />
-                <ProposalButtons jobId={p.jobId} status="sent" />
-              </div>
-            ))
-          ) : (
-            <Row a="Nothing out" />
-          )}
-        </Sub>
         <Sub title="Visited, to price" sum={evals.toWriteUp.length}>
           {evals.toWriteUp.length ? (
             evals.toWriteUp.map((v) => (
@@ -404,6 +381,36 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
           )}
         </Sub>
       </Card>
+
+      <Card title="Proposals" right={`${toApprove.length + openProps.length} open`}>
+        <Sub title="To approve and send" sum={toApprove.length} open={toApprove.length > 0}>
+          {toApprove.length ? (
+            toApprove.map((p) => (
+              <div key={p.proposalId}>
+                <Row a={`${p.customerName} · ${p.address}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
+                <ProposalButtons jobId={p.jobId} status="needs_approval" />
+              </div>
+            ))
+          ) : (
+            <Row a="None waiting on approval" />
+          )}
+        </Sub>
+        <Sub title="Sent, no answer yet" sum={openProps.length} open={openProps.length > 0}>
+          {openProps.length ? (
+            openProps.map((p) => (
+              <div key={p.proposalId}>
+                <Row a={`${p.customerName} · ${workOf(p.jobName)}`} b={money(p.total)} href={`/jobs/${p.jobId}`} />
+                <Row a={sentAgo(p.sentAt, now)} b={p.expiresAt && new Date(p.expiresAt).getTime() < now.getTime() ? "Expired" : ""} />
+                <ProposalButtons jobId={p.jobId} status="sent" />
+              </div>
+            ))
+          ) : (
+            <Row a="Nothing out" />
+          )}
+        </Sub>
+      </Card>
+
+      <ClosedProjects rows={closed} />
 
       <Card title="Crew schedule · next 2 weeks" right={spanLabel(weeks.from, weeks.to)}>
         <Sm>
@@ -485,5 +492,41 @@ function TodayVisit({ v }: { v: EvalVisit }) {
       {(v.stage === "arrived" || done) && v.jobStatus === "estimating" && <EstimateButton jobId={v.id} label="Price it on the map" />}
       {v.stage === "booked" && <BookVisit jobId={v.id} day={dateKeyIn(new Date(v.evaluationDate))} time={hhmm(v.evaluationDate)} label="Move" canCancel />}
     </div>
+  );
+}
+
+const JOB_STATUS: Record<string, string> = { completed: "Done", in_progress: "In progress", approved: "Not started", scheduled: "Scheduled" };
+
+/** Sold in the last 90 days: who, what, how much, and how much is paid. */
+function ClosedProjects({ rows }: { rows: ClosedProject[] }) {
+  const sold = rows.reduce((n, r) => n + r.total, 0);
+  return (
+    <Card title="Closed projects" right={`${rows.length} in 90 days`}>
+      <Big>{money(sold)}</Big>
+      <Sm>sold in the last 90 days</Sm>
+      {rows.length ? (
+        rows.map((r) => (
+          <Row
+            key={r.jobId}
+            a={
+              <>
+                <b style={{ fontSize: 15 }}>{r.customerName}</b>
+                <br />
+                <span style={{ fontSize: 14 }}>{r.work}</span>
+                <br />
+                <small className="vx-sm">
+                  {r.closedOn ? `Sold ${shortDay(r.closedOn)} · ` : ""}
+                  {JOB_STATUS[r.status] ?? r.status} · {r.paid >= r.total - 0.5 ? "Paid in full" : `${money(r.paid)} paid`}
+                </small>
+              </>
+            }
+            b={money(r.total)}
+            href={`/jobs/${r.jobId}`}
+          />
+        ))
+      ) : (
+        <Row a="Nothing sold in the last 90 days." />
+      )}
+    </Card>
   );
 }

@@ -125,3 +125,6 @@
 .vx-app .vx-tabs{position:sticky;bottom:10px;display:flex;gap:4px;margin-top:8px;padding:4px;border-radius:999px;background:var(--fg);box-shadow:0 4px 16px rgba(0,0,0,.18)}
 .vx-app .vx-tabs a{flex:1;text-align:center;padding:9px 4px;border-radius:999px;font:700 15px var(--body);color:var(--bg)}
 .vx-app .vx-tabs a.on{background:var(--bg);color:var(--fg)}
+.vx-app .vx-tabs.is-fixed{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);width:min(416px,calc(100% - 24px));margin:0;z-index:20}
+.vx-with-tabs .vx-screen{padding-bottom:90px}
+.vx-tabs-wrap{min-height:0;background:transparent}

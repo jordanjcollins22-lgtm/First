@@ -137,6 +137,9 @@ export const UNGOVERNED_ROUTES: Record<string, string> = {
   "/me":
     "Everyone's own home in the phone layout. Each person sees only their own day, link, wallet and stage; the account manager's " +
     "and owner's cards read through the same loaders their v2 home screens use, and only the owner can open another role's layout.",
+  "/sales":
+    "The Sales app from the home screen (evaluations, proposals, closed projects). It is the account manager's own cards, " +
+    "for the account manager and the owner only; reads go through the same loaders and row-level security.",
   "/schedule":
     "The one Schedule app from the home screen (today, next month, history). Signed-in team only; reads go through row-level " +
     "security, and site visits are the owner's all or the account manager's own clients.",
