@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dateKeyIn } from "@/lib/time-zone";
 import { getCurrentProfile } from "@/lib/data/team";
 import type { CrewEvent, CrewEventKind, Stop } from "@/lib/crew-day";
+import { routeByNearest } from "@/lib/crew-route";
 import { nextUp, type EarlyStartRequest, type UpcomingVisit } from "@/lib/early-start";
 
 export interface CrewDayData {
@@ -28,11 +29,10 @@ export function localDayKey(now: Date = new Date()): string {
 /**
  * Everything the Today screen needs.
  *
- * Stops are the visits covering today on jobs assigned to this person. Ordered
- * by the office's stop_order where it has been set, then by when the visit
- * starts, then by job id — deterministic all the way down, because a crew
- * member being told a different "first house" on each refresh is worse than
- * any particular order.
+ * Stops are the visits covering today on jobs assigned to this person. The
+ * starting job is the office's stop_order (then when the visit starts, then
+ * job id, so the first house never changes on a refresh). After that each
+ * next job is the closest one left to the job just finished.
  */
 export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | null> {
   const profile = await getCurrentProfile();
@@ -83,7 +83,10 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
     } | null;
   };
 
-  const stops: Stop[] = ((sessions ?? []) as unknown as Row[])
+  const crewEvents = readEvents(events);
+  const finishedJobIds = crewEvents.filter((e) => e.kind === "finished_job" && e.jobId).map((e) => e.jobId!);
+
+  const sorted: Stop[] = ((sessions ?? []) as unknown as Row[])
     // Roster first, with assignment as the fallback so a job that predates the
     // crew table — or an org that has not run 0083 — still reaches somebody.
     .filter((r) => myJobs.has(r.job_id) || r.jobs?.assigned_to === profile.id)
@@ -107,13 +110,15 @@ export async function getCrewDay(day = localDayKey()): Promise<CrewDayData | nul
       purpose: r.purpose,
       meetOnSite: Boolean(r.meet_on_site),
     }));
+  // The office's first stop starts the day; after that the crew always goes
+  // to the closest job left from the one they just finished.
+  const stops = routeByNearest(sorted, finishedJobIds);
 
-  const crewEvents = readEvents(events);
   const upcoming = await upcomingVisits(profile.id, day, myJobs);
   const nextProject = nextUp({
     today: day,
     stops,
-    finishedJobIds: crewEvents.filter((e) => e.kind === "finished_job" && e.jobId).map((e) => e.jobId!),
+    finishedJobIds,
     upcoming,
   });
 

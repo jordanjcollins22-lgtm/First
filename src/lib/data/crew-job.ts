@@ -1,5 +1,7 @@
+import { hazardLines, pickVisit } from "@/lib/crew-route";
 import { addonLines, readAddons } from "@/lib/proposal-addons";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { dateKeyIn } from "@/lib/time-zone";
 import type { ProposalSiteImageTransform, ProposalZoneSnapshot } from "@/types/domain";
 
 export interface CrewZone {
@@ -26,7 +28,13 @@ export interface CrewJob {
   zones: CrewZone[];
   siteImagePath: string | null;
   siteImageTransform: ProposalSiteImageTransform | null;
+  /** The visit the crew is on (today's, else the next one): what's left to do there. */
+  leftToDo: string | null;
+  visitDay: string | null;
+  /** Warnings picked out of what's left and the project notes. */
+  hazards: string[];
 }
+
 
 type Line = { note?: string | null };
 
@@ -52,6 +60,15 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
     .select("status, scope_snapshot, site_image_path, site_image_transform, created_at, options")
     .eq("job_id", jobId)
     .order("created_at", { ascending: false });
+  const { data: visits } = await admin
+    .from("job_work_sessions")
+    .select("starts_on, ends_on, purpose")
+    .eq("job_id", jobId)
+    .is("subcontractor_id", null)
+    .not("status", "in", "(cancelled,done)")
+    .order("starts_on", { ascending: true });
+  const visit = pickVisit((visits ?? []) as { starts_on: string; ends_on: string; purpose: string | null }[], dateKeyIn(new Date()));
+
   const list = proposals ?? [];
   const chosen = list.find((p) => p.status === "accepted") ?? list[0] ?? null;
 
@@ -67,6 +84,9 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
     lng: place?.lng ?? null,
     status: job.status ?? "",
     notes: job.client_notes ?? null,
+    leftToDo: visit?.purpose?.trim() || null,
+    visitDay: visit?.starts_on ?? null,
+    hazards: hazardLines(visit?.purpose, job.client_notes),
     zones: [...snapshot.map((z) => ({
       zoneName: z.zoneName,
       serviceLabel: z.serviceLabel,

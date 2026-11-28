@@ -2,6 +2,9 @@ import { ClockControl } from "@/components/crew/clock-control";
 import { SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
 import { Card, Row, Screen, Stage } from "@/components/phone/parts";
 import { affiliateStage } from "@/lib/affiliate-home";
+import { crewPath } from "@/lib/crew-link";
+import { hazardLines, milesBetween } from "@/lib/crew-route";
+import type { Stop } from "@/lib/crew-day";
 import { outboundBaseUrl } from "@/lib/base-url";
 import { myBookingLink } from "@/lib/data/brought-in";
 import { getCrewDay } from "@/lib/data/crew-day";
@@ -29,6 +32,42 @@ export async function AffiliatePhone({ profile }: { profile: Profile }) {
   );
 }
 
+/**
+ * One job on the technician's day: where it falls in the order (start here,
+ * then the closest one left), what's left to do there, any hazard, and a tap
+ * through to its crew map.
+ */
+function DayStop({ stop, step, prev, done }: { stop: Stop; step: number; prev: Stop | null; done: boolean }) {
+  const miles =
+    prev && prev.lat != null && prev.lng != null && stop.lat != null && stop.lng != null
+      ? milesBetween({ lat: prev.lat, lng: prev.lng }, { lat: stop.lat, lng: stop.lng })
+      : null;
+  const when = step === 1 ? "Start here" : miles != null ? `Next · ${miles < 0.1 ? "next door" : `${miles.toFixed(1)} mi from ${prev!.customerName}`}` : "Next";
+  const hazards = hazardLines(stop.purpose);
+  return (
+    <Row
+      href={crewPath(stop.jobId)}
+      b="Crew map"
+      tag={done ? "ok" : undefined}
+      a={
+        <span className="vx-stop">
+          <i className="vx-tag">
+            {step}. {when}
+          </i>
+          <strong>{stop.customerName}</strong>
+          <small>{stop.address.replace(/, (Maryland|MD) \d{5}.*$/, "")}</small>
+          {stop.purpose && <small>Left to do: {stop.purpose}</small>}
+          {hazards.map((h) => (
+            <small key={h} className="vx-hazard">
+              Watch out: {h}
+            </small>
+          ))}
+        </span>
+      }
+    />
+  );
+}
+
 /** Project technician: Today (Clock in on top of today's jobs), Send your link, Wallet, Stages of Success. */
 export async function TechnicianPhone({ profile }: { profile: Profile }) {
   const [open, day, lw] = await Promise.all([
@@ -37,6 +76,7 @@ export async function TechnicianPhone({ profile }: { profile: Profile }) {
     loadLinkAndWallet(profile),
   ]);
   const stops = day?.stops ?? [];
+  const finished = new Set((day?.events ?? []).filter((e) => e.kind === "finished_job" && e.jobId).map((e) => e.jobId!));
   const track = POSITIONS.find((p) => p.key === "project-technician")?.growth;
   return (
     <Screen hello={`Morning, ${firstName(profile)}`} role="Project technician">
@@ -49,7 +89,9 @@ export async function TechnicianPhone({ profile }: { profile: Profile }) {
         ) : stops.length === 0 ? (
           <Row a="No jobs on your day." />
         ) : (
-          stops.map((s) => <Row key={s.sessionId} a={`${s.customerName}${s.purpose ? ` · ${s.purpose}` : ""}`} b="Job sheet" href={`/jobs/${s.jobId}`} />)
+          stops.map((s, i) => (
+            <DayStop key={s.sessionId} stop={s} step={i + 1} prev={stops[i - 1] ?? null} done={finished.has(s.jobId)} />
+          ))
         )}
       </Card>
       <SendLink people={lw.people} />
