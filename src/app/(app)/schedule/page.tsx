@@ -54,12 +54,18 @@ function monthAhead(today: string) {
  * with the wait list under it, and History. Crew work days, paid site visits
  * and interviews all in one place.
  */
-export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function SchedulePage({ searchParams }: { searchParams: Promise<{ tab?: string; role?: string }> }) {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login?next=/schedule");
-  const { tab: asked } = await searchParams;
+  const { tab: asked, role: previewing } = await searchParams;
   const tab: Tab = TABS.some((t) => t.key === asked) ? (asked as Tab) : "today";
-  const screen = meScreenFor(profile);
+  // The owner looking at a role's screen ("view as technician") sees what that role sees.
+  const screen = meScreenFor(profile, previewing);
+  const roleParam = previewing && screen === previewing ? `&role=${previewing}` : "";
+  // Only the account manager and up change the schedule.
+  const canEdit =
+    (isOwnerLevel(profile.roles) || profile.roles.includes("admin") || isAccountManager(profile.roles)) &&
+    (screen === "owner" || screen === "account-manager" || screen === "partner");
   const everyone = screen === "owner";
   const today = dateKeyIn(new Date());
 
@@ -68,15 +74,15 @@ export default async function SchedulePage({ searchParams }: { searchParams: Pro
       <OnlyApp id="schedule" home="/me" />
       <Screen hello="Schedule" role={TABS.find((t) => t.key === tab)!.label}>
         {tab === "today" ? (
-          <TodayTab profile={profile} today={today} everyone={everyone} />
+          <TodayTab profile={profile} today={today} everyone={everyone} canEdit={canEdit} />
         ) : tab === "calendar" ? (
-          <CalendarTab profile={profile} today={today} everyone={everyone} />
+          <CalendarTab profile={profile} today={today} everyone={everyone} canEdit={canEdit} />
         ) : (
           <HistoryTab today={today} />
         )}
         <nav className="vx-tabs" aria-label="Schedule">
           {TABS.map((t) => (
-            <Link key={t.key} href={`/schedule?tab=${t.key}`} className={t.key === tab ? "on" : ""} aria-current={t.key === tab ? "page" : undefined}>
+            <Link key={t.key} href={`/schedule?tab=${t.key}${roleParam}`} className={t.key === tab ? "on" : ""} aria-current={t.key === tab ? "page" : undefined}>
               {t.label}
             </Link>
           ))}
@@ -99,13 +105,12 @@ const cap = (n: string) => n.charAt(0).toUpperCase() + n.slice(1);
 /** One color per crew, the same order as the calendar. */
 const CREW_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#2563eb", "#be185d", "#4d7c0f"];
 
-async function TodayTab({ profile, today, everyone }: { profile: Profile; today: string; everyone: boolean }) {
+async function TodayTab({ profile, today, everyone, canEdit }: { profile: Profile; today: string; everyone: boolean; canEdit: boolean }) {
   const [crews, appts, team] = await Promise.all([
     getAllCrewsToday().catch(() => null),
     appointmentsBetween(profile, today, today, everyone),
     listProfiles().catch(() => [] as Profile[]),
   ]);
-  const canEdit = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || isAccountManager(profile.roles);
   // Every crew lead, even one with nothing on today, so a job can be handed to them.
   const leads = team
     .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? "") && (p.first_name || p.full_name))
@@ -173,7 +178,7 @@ async function TodayTab({ profile, today, everyone }: { profile: Profile; today:
   );
 }
 
-async function CalendarTab({ profile, today, everyone }: { profile: Profile; today: string; everyone: boolean }) {
+async function CalendarTab({ profile, today, everyone, canEdit }: { profile: Profile; today: string; everyone: boolean; canEdit: boolean }) {
   const span = monthAhead(today);
   const [board, team, appts] = await Promise.all([
     listBoardJobs().catch(() => [] as BoardJob[]),
@@ -207,6 +212,7 @@ async function CalendarTab({ profile, today, everyone }: { profile: Profile; tod
         crews={crews}
         firstOpenDay={nextWorkDay(today)}
         appointments={appts}
+        canEdit={canEdit}
       />
     </Card>
   );

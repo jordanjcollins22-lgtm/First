@@ -424,6 +424,7 @@ export async function AccountManagerPhone({ profile }: { profile: Profile }) {
           later={later}
           crews={crewOptions}
           firstOpenDay={firstOpenDay}
+          canEdit
         />
       </Card>
 

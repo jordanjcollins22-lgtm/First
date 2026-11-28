@@ -43,6 +43,7 @@ export function CrewCalendar({
   crews,
   firstOpenDay,
   appointments = [],
+  canEdit = false,
 }: {
   /** Work days in the window, Monday first, Sundays left out. */
   days: string[];
@@ -54,6 +55,8 @@ export function CrewCalendar({
   firstOpenDay: string;
   /** Site visits and interviews, shown on the same calendar in their own style. */
   appointments?: Appointment[];
+  /** Move and Schedule buttons: the account manager and up only. */
+  canEdit?: boolean;
 }) {
   const apptsByDay = new Map<string, Appointment[]>();
   for (const a of [...appointments].sort((x, y) => x.at.localeCompare(y.at))) {
@@ -127,7 +130,7 @@ export function CrewCalendar({
             ))}
             {(byDay.get(d) ?? []).map((j) => (
               <Booking key={j.id} j={j} dot={color(j)} note={`${crewName(j)} · ${STATUS[j.status] ?? j.status}`}>
-                {j.status !== "completed" && (
+                {canEdit && j.status !== "completed" && (
                   <ScheduleJob jobId={j.id} crews={crews} start={d} leadId={j.assignedToId} label="Move" />
                 )}
               </Booking>
@@ -152,7 +155,7 @@ export function CrewCalendar({
                 .filter(Boolean)
                 .join(" · ")}
             >
-              <ScheduleJob jobId={j.id} crews={crews} start={firstOpenDay} leadId={j.assignedToId} />
+              {canEdit && <ScheduleJob jobId={j.id} crews={crews} start={firstOpenDay} leadId={j.assignedToId} />}
             </Booking>
           ))
         )}
@@ -163,7 +166,7 @@ export function CrewCalendar({
           <h4>Later · {later.length}</h4>
           {later.map((j) => (
             <Booking key={j.id} j={j} note={`${shortDay(j.workStartsOn!.slice(0, 10))} · ${crewName(j)}`}>
-              <ScheduleJob jobId={j.id} crews={crews} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />
+              {canEdit && <ScheduleJob jobId={j.id} crews={crews} start={j.workStartsOn!.slice(0, 10)} leadId={j.assignedToId} label="Move" />}
             </Booking>
           ))}
         </section>
