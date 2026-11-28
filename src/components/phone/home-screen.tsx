@@ -70,6 +70,8 @@ const A = {
   agentMap: { label: "Agent map", glyph: "map", color: "teal", what: "The 8 departments and what each agent did today.", go: soon },
   payments: { label: "Payments", glyph: "payout", color: "forest", what: "Payments in, payout requests to approve and mark sent.", go: { page: "/admin/payments" } },
   hiring: { label: "Hiring", glyph: "people", color: "plum", what: "New applicants, interviews and check-ins due.", go: { page: "/admin/hiring" } },
+  ownerToday: { label: "My day", glyph: "clock", color: "lime", what: "Your jobs today in order, with crew maps.", go: { page: "/me/full?role=technician&app=s-today" } },
+  ownerAllJobs: { label: "All jobs", glyph: "truck", color: "teal", what: "Every job on today, crew by crew.", go: { page: "/me/full?role=technician&app=s-all-jobs-today" } },
   ownerCrew: { label: "Crew", glyph: "truck", color: "forest", what: "Crew schedule for the next 2 weeks and the wait list.", go: { page: "/me/full?role=account-manager&app=s-crew-schedule-next-2-weeks" } },
   ownerReview: { label: "Project review", glyph: "chart", color: "slate", what: "Profit on projects and money in and out.", go: { page: "/me/full?role=account-manager&app=s-business" } },
   viewAs: { label: "View as", glyph: "eye", color: "sky", what: "See each role's screen, or open the app as one person on the team.", go: { page: "/admin/view-as" } },
@@ -89,7 +91,8 @@ const A = {
   plants: { label: "Plants", glyph: "leaf", color: "green", what: "Plant guide: photo, sun and water, spacing, when to plant and prune.", go: soon },
   weeds: { label: "Weed sheet", glyph: "sheet", color: "forest", what: "Common Harford County weeds: how to spot each one and how to remove it.", go: soon },
   reviews: { label: "Reviews", glyph: "star", color: "amber", what: "Google review requests sent and reviews that came in.", go: soon },
-  today: { label: "Today", glyph: "clock", color: "lime", what: "Clock in and out, and today's jobs with their job sheets.", go: { full: "s-today" } },
+  today: { label: "Today", glyph: "clock", color: "lime", what: "Clock in and out, and today's jobs with their crew maps.", go: { full: "s-today" } },
+  allJobs: { label: "All jobs", glyph: "truck", color: "teal", what: "Every job on today, crew by crew.", go: { full: "s-all-jobs-today" } },
   receipt: { label: "Receipt", glyph: "cam", color: "amber", what: "Snap a receipt and it gets tied to the job.", go: soon },
   route: { label: "Route", glyph: "pin", color: "teal", what: "Today's stops on a map with directions.", go: soon },
   materials: { label: "Materials", glyph: "box", color: "slate", what: "Mulch, stone and soil: colors, coverage per yard, what goes where.", go: soon },
@@ -114,9 +117,9 @@ const A = {
 type Key = keyof typeof A;
 // First version (Jordan, Nov 26): only what each role has to have. Dock = all the time.
 const LAYOUT: Record<MeScreen, { title: string; dock: Key[]; apps: Key[] }> = {
-  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["payments", "ownerCrew", "viewAs"] },
+  owner: { title: "Owner", dock: ["yes", "ownerMoney", "hiring", "hlMsgs"], apps: ["ownerToday", "ownerAllJobs", "payments", "ownerCrew", "viewAs"] },
   "account-manager": { title: "Account manager", dock: ["doNow", "clients", "schedule", "hlMsgs"], apps: ["sendLink", "wallet", "evals", "crew", "amHiring", "business"] },
-  technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["plants", "weeds"] },
+  technician: { title: "Technician", dock: ["today", "receipt", "ask", "wallet"], apps: ["allJobs", "plants", "weeds"] },
   partner: { title: "Location partner", dock: ["needsYou", "locMoney", "partnerSchedule", "msgs"], apps: ["partnerCrew", "partnerHiring"] },
   affiliate: { title: "Affiliate", dock: ["sendLink", "wallet", "stage", "ask"], apps: [] },
 };
