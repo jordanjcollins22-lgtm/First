@@ -11,6 +11,8 @@ export interface CrewZone {
   /** What to do and what to bring, from the proposal's own lines. Never prices. */
   details: string[];
   photoPaths: string[];
+  /** Where the evaluator tapped each photo (0 to 1 across and down), keyed by photo path: which bush, which plant. */
+  photoTaps: Record<string, { x: number; y: number }[]>;
   points: { x: number; y: number }[];
   shapes?: { x: number; y: number }[][];
   color: string;
@@ -69,6 +71,8 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
     .order("starts_on", { ascending: true });
   const visit = pickVisit((visits ?? []) as { starts_on: string; ends_on: string; purpose: string | null }[], dateKeyIn(new Date()));
 
+  const taps = await loadPhotoTaps(jobId);
+
   const list = proposals ?? [];
   const chosen = list.find((p) => p.status === "accepted") ?? list[0] ?? null;
 
@@ -93,6 +97,7 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
       scopeText: z.scopeText,
       details: (z.lines ?? []).map((l) => (l.note ?? "").trim()).filter(Boolean),
       photoPaths: z.photoPaths ?? [],
+      photoTaps: tapsFor(z.photoPaths ?? [], taps),
       points: z.points ?? [],
       shapes: z.shapes,
       color: z.color,
@@ -105,6 +110,7 @@ export async function loadCrewJob(jobId: string): Promise<CrewJob | null> {
       scopeText: addonLines(a).join("\n"),
       details: [] as string[],
       photoPaths: [] as string[],
+      photoTaps: {},
       points: [] as { x: number; y: number }[],
       shapes: undefined,
       color: "#c0392b",
@@ -124,4 +130,44 @@ export function cleanTitle(name: string, address: string): string {
   }
   title = title.replace(/^[\s,—-]+/, "").trim();
   return title || "Project";
+}
+
+type Tap = { x: number; y: number };
+
+/**
+ * The taps the evaluator put on the zone photos, by photo path. They live on
+ * the site plan (canvas_designs), not the proposal snapshot, so they are read
+ * from there; a photo is the same file in both.
+ */
+async function loadPhotoTaps(jobId: string): Promise<Map<string, Tap[]>> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("canvas_designs").select("zones").eq("job_id", jobId).limit(1).maybeSingle();
+  return readPhotoTaps(data?.zones);
+}
+
+export function readPhotoTaps(zones: unknown): Map<string, Tap[]> {
+  const out = new Map<string, Tap[]>();
+  if (!Array.isArray(zones)) return out;
+  for (const zone of zones) {
+    const markers = (zone as { service?: { photoMarkers?: unknown } } | null)?.service?.photoMarkers;
+    if (!markers || typeof markers !== "object") continue;
+    for (const [path, points] of Object.entries(markers as Record<string, unknown>)) {
+      if (!Array.isArray(points)) continue;
+      const good = points.filter(
+        (p): p is Tap =>
+          !!p && typeof (p as Tap).x === "number" && typeof (p as Tap).y === "number" && (p as Tap).x >= 0 && (p as Tap).x <= 1 && (p as Tap).y >= 0 && (p as Tap).y <= 1
+      );
+      if (good.length) out.set(path, good);
+    }
+  }
+  return out;
+}
+
+export function tapsFor(paths: string[], taps: Map<string, Tap[]>): Record<string, Tap[]> {
+  const out: Record<string, Tap[]> = {};
+  for (const path of paths) {
+    const t = taps.get(path);
+    if (t) out[path] = t;
+  }
+  return out;
 }
