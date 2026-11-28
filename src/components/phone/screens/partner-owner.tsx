@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 
 import { SendLink, WalletBlock, loadLinkAndWallet } from "@/components/phone/blocks";
-import { Big, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
+import { Big, Btn, Card, Row, Screen, Sm, Stage, Sub, money } from "@/components/phone/parts";
 import { firstName } from "@/components/phone/screens/affiliate-tech";
 import { RangePicker } from "@/components/phone/range-picker";
 import { loadApprovalQueue } from "@/lib/data/approval-queue";
@@ -106,6 +106,7 @@ export async function OwnerPhone({ profile, q = {} }: { profile: Profile; q?: { 
 
   return (
     <Screen hello={firstName(profile)} role="Owner (only you)">
+      <Btn href="/huddle">Team huddle</Btn>
       <Card title="All locations">
         <RangePicker range={range} base="/me/full" keep={q.app ? { app: q.app } : undefined} />
         {/* The numbers load on their own, so the page and the picker answer straight away. */}
