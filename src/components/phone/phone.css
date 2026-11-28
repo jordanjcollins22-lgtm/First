@@ -101,7 +101,8 @@
 .vx-app .vx-crewday{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:8px}.vx-app .vx-crewday:first-of-type{border-top:0;padding-top:0}
 /* Crew schedule calendar: bigger text, a real month-style grid, then the days written out. */
 .vx-app .vx-cal{display:flex;flex-direction:column;gap:12px;margin-top:6px}
-.vx-app .vx-cal-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:3px}
+.vx-app .vx-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.vx-app .vx-cal-day.is-sun{background:var(--bg)}
 .vx-app .vx-cal-wd{font:700 12px var(--body);color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.04em}
 .vx-app .vx-cal-day{display:flex;flex-direction:column;gap:2px;min-height:64px;padding:3px 2px;border:1px solid var(--line);border-radius:8px;background:var(--card,transparent)}
 .vx-app .vx-cal-day.is-past{opacity:.55}

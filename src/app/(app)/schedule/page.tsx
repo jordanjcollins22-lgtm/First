@@ -37,16 +37,18 @@ const longDay = (key: string) =>
   new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) => new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 
-/** This week's Monday through five weeks of work days (Mon to Sat): about a month ahead. */
+/** This month and next, every day, in whole weeks (Monday first): the 1st's week through the last day's week. */
 function monthAhead(today: string) {
-  const t = new Date(`${today}T12:00:00Z`);
-  const monday = addDays(today, -((t.getUTCDay() + 6) % 7));
+  const first = `${today.slice(0, 8)}01`;
+  const f = new Date(`${first}T12:00:00Z`);
+  const start = addDays(first, -((f.getUTCDay() + 6) % 7));
+  const endOfNext = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 2, 0, 12)).toISOString().slice(0, 10);
+  const e = new Date(`${endOfNext}T12:00:00Z`);
+  const end = addDays(endOfNext, (7 - e.getUTCDay()) % 7);
   const days: string[] = [];
-  for (let i = 0; i < 35; i++) {
-    const d = addDays(monday, i);
-    if (new Date(`${d}T12:00:00Z`).getUTCDay() !== 0) days.push(d);
-  }
-  return { days, from: days[0], to: days[days.length - 1] };
+  for (let d = start; d <= end; d = addDays(d, 1)) days.push(d);
+  const month = (k: string) => new Date(`${k}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", timeZone: "UTC" });
+  return { days, from: days[0], to: days[days.length - 1], title: `${month(first)} and ${month(endOfNext)}` };
 }
 
 /**
@@ -188,17 +190,18 @@ async function CalendarTab({ profile, today, everyone, canEdit }: { profile: Pro
   const open = (j: BoardJob) => !j.declined && (j.status === "approved" || j.status === "in_progress");
   const start = (j: BoardJob) => j.workStartsOn!.slice(0, 10);
   const booked = board
-    .filter((j) => !j.declined && j.workStartsOn && start(j) >= span.from && start(j) <= span.to && (open(j) || j.status === "completed"))
+    // Past days show what was done; a sold job whose day went by unfinished is on the wait list instead.
+    .filter((j) => !j.declined && j.workStartsOn && start(j) >= span.from && start(j) <= span.to && ((open(j) && (start(j) >= today || j.status === "in_progress")) || j.status === "completed"))
     .sort((a, b) => start(a).localeCompare(start(b)));
   // Sold and not finished, with no date, or a date that went by: still waiting.
-  const waitList = board.filter((j) => open(j) && (!j.workStartsOn || start(j) < span.from)).sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
+  const waitList = board.filter((j) => open(j) && (!j.workStartsOn || (start(j) < today && (j.status !== "in_progress" || start(j) < span.from)))).sort((a, b) => (a.startsOn ?? "").localeCompare(b.startsOn ?? ""));
   const later = board.filter((j) => open(j) && j.workStartsOn && start(j) > span.to).sort((a, b) => start(a).localeCompare(start(b)));
   const crews: CrewOption[] = team
     .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? ""))
     .map((p) => ({ id: p.id, name: firstName(p) }))
     .sort((a, b) => a.name.localeCompare(b.name));
   return (
-    <Card title="Next month" right={`${shortDay(span.from)} to ${shortDay(span.to)}`}>
+    <Card title={span.title} right={`${shortDay(span.from)} to ${shortDay(span.to)}`}>
       <div className="vx-sm">
         {booked.length} crew job{booked.length === 1 ? "" : "s"}, {appts.length} visit{appts.length === 1 ? "" : "s"} and interview{appts.length === 1 ? "" : "s"},{" "}
         {waitList.length} on the wait list. Tap a day to jump to it.

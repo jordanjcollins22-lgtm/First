@@ -4,11 +4,15 @@ import { ScheduleJob, type CrewOption } from "@/components/phone/schedule-job";
 import type { Appointment } from "@/lib/data/schedule";
 import type { BoardJob } from "@/lib/job-board";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 /** One color per crew, in the order the crews are listed. */
 const CREW_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#2563eb", "#be185d", "#4d7c0f"];
 
-const dayNum = (key: string) => Number(key.slice(8, 10));
+/** The day of the month; the 1st also names its month, so a new month is easy to spot. */
+const dayNum = (key: string) =>
+  key.slice(8, 10) === "01"
+    ? new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+    : Number(key.slice(8, 10));
 const longDay = (key: string) =>
   new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
 const shortDay = (key: string) =>
@@ -45,7 +49,7 @@ export function CrewCalendar({
   appointments = [],
   canEdit = false,
 }: {
-  /** Work days in the window, Monday first, Sundays left out. */
+  /** Every day in the window, Monday first, whole weeks. */
   days: string[];
   today: string;
   booked: BoardJob[];
@@ -84,7 +88,7 @@ export function CrewCalendar({
           const jobs = byDay.get(d) ?? [];
           const appts = apptsByDay.get(d) ?? [];
           return (
-            <a key={d} href={`#day-${d}`} className={`vx-cal-day${d === today ? " is-today" : ""}${d < today ? " is-past" : ""}`}>
+            <a key={d} href={`#day-${d}`} className={`vx-cal-day${d === today ? " is-today" : ""}${d < today ? " is-past" : ""}${new Date(`${d}T12:00:00Z`).getUTCDay() === 0 ? " is-sun" : ""}`}>
               <span className="vx-cal-n">{dayNum(d)}</span>
               {appts.map((a) => (
                 <span key={`${a.kind}-${a.id}`} className="vx-cal-chip is-appt">
