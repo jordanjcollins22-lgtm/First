@@ -5,7 +5,9 @@ import { AppointmentLine, CrewCalendar } from "@/components/phone/crew-calendar"
 import { OnlyApp } from "@/components/phone/only-app";
 import { Card, Row, Screen } from "@/components/phone/parts";
 import { type CrewOption } from "@/components/phone/schedule-job";
+import { RouteEditor, type EditorCrew } from "@/components/phone/route-editor";
 import { AllJobsToday, firstName } from "@/components/phone/screens/affiliate-tech";
+import { isAccountManager } from "@/lib/affiliate-roles";
 import { getAllCrewsToday } from "@/lib/data/crew-day";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
 import { listBoardJobs } from "@/lib/data/job-board";
@@ -15,6 +17,9 @@ import type { BoardJob } from "@/lib/job-board";
 import { meScreenFor } from "@/lib/me-screen";
 import { dateKeyIn } from "@/lib/time-zone";
 import { nextWorkDay } from "@/lib/work-days";
+import { publicEnv } from "@/lib/public-env";
+import { isOwnerLevel } from "@/lib/roles";
+import { routeMapUrl } from "@/lib/route-map";
 import type { Profile } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -89,13 +94,78 @@ async function appointmentsBetween(profile: Profile, from: string, to: string, e
   return [...visits, ...interviewsBetween(applicants, from, to)].sort((a, b) => a.at.localeCompare(b.at));
 }
 
+/** One color per crew, the same order as the calendar. */
+const CREW_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#2563eb", "#be185d", "#4d7c0f"];
+
 async function TodayTab({ profile, today, everyone }: { profile: Profile; today: string; everyone: boolean }) {
-  const [crews, appts] = await Promise.all([getAllCrewsToday().catch(() => null), appointmentsBetween(profile, today, today, everyone)]);
+  const [crews, appts, team] = await Promise.all([
+    getAllCrewsToday().catch(() => null),
+    appointmentsBetween(profile, today, today, everyone),
+    listProfiles().catch(() => [] as Profile[]),
+  ]);
+  const canEdit = isOwnerLevel(profile.roles) || profile.roles.includes("admin") || isAccountManager(profile.roles);
+  // Every crew lead, even one with nothing on today, so a job can be handed to them.
+  const leads = team
+    .filter((p) => ["technician", "owner"].includes(meScreenFor(p) ?? ""))
+    .map((p) => ({ id: p.id, name: firstName(p) }));
+  for (const c of crews ?? []) if (c.leadId && !leads.some((l) => l.id === c.leadId)) leads.push({ id: c.leadId, name: c.leadName });
+  leads.sort((a, b) => a.name.localeCompare(b.name));
+  const working = (crews ?? []).filter((c) => c.leadId);
+  const colorOf = new Map<string, string>();
+  for (const c of working) colorOf.set(c.leadId!, CREW_COLORS[colorOf.size % CREW_COLORS.length]);
+  for (const l of leads) if (!colorOf.has(l.id)) colorOf.set(l.id, CREW_COLORS[colorOf.size % CREW_COLORS.length]);
+  const loose = (crews ?? []).find((c) => !c.leadId);
+  const mapUrl = routeMapUrl(
+    [...working.map((c) => ({ color: colorOf.get(c.leadId!)!, stops: c.stops })), ...(loose ? [{ color: "#6b7280", stops: loose.stops }] : [])],
+    publicEnv.mapboxToken
+  );
+  const editorCrews: EditorCrew[] = leads.map((l) => ({
+    leadId: l.id,
+    name: l.name,
+    color: colorOf.get(l.id)!,
+    stops: (crews ?? []).find((c) => c.leadId === l.id)?.stops.map((s) => ({ sessionId: s.sessionId, jobId: s.jobId, customerName: s.customerName })) ?? [],
+  }));
+  const missingPins = (crews ?? []).flatMap((c) => c.stops).filter((s) => s.lat == null || s.lng == null);
   return (
     <>
       <Card title={longDay(today)} right="Visits and interviews">
         {appts.length ? appts.map((a) => <AppointmentLine key={`${a.kind}-${a.id}`} a={a} />) : <Row a="No site visits or interviews today." />}
       </Card>
+      {crews && crews.length > 0 && (
+        <Card title="Routes" right="Each crew's path">
+          {mapUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="vx-route-map" src={mapUrl} alt="Map of today's jobs, a line for each crew in the order they go" />
+          ) : (
+            <Row a="The map can't show: no job today has a pinned address." />
+          )}
+          <div className="vx-cal-legend">
+            {working.map((c) => (
+              <span key={c.leadId}>
+                <i style={{ background: colorOf.get(c.leadId!) }} />
+                {c.leadId === profile.id ? "Your crew" : `${c.leadName}'s crew`}
+              </span>
+            ))}
+            {loose && (
+              <span>
+                <i style={{ background: "#6b7280" }} />
+                No crew yet
+              </span>
+            )}
+          </div>
+          {missingPins.length > 0 && (
+            <div className="vx-sm">Not on the map (no pinned address): {missingPins.map((s) => s.customerName).join(", ")}.</div>
+          )}
+          {canEdit && (
+            <RouteEditor
+              key={JSON.stringify(editorCrews.map((c) => c.stops.map((s) => s.sessionId)))}
+              day={today}
+              crews={editorCrews}
+              unassigned={(loose?.stops ?? []).map((s) => ({ sessionId: s.sessionId, jobId: s.jobId, customerName: s.customerName }))}
+            />
+          )}
+        </Card>
+      )}
       <AllJobsToday crews={crews} me={profile.id} />
     </>
   );

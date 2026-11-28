@@ -61,3 +61,14 @@ describe("hazardLines on a plain place name", () => {
     expect(hazardLines("Remove the plant at the back slope. Gas line under a bush.")).toEqual(["Gas line under a bush."]);
   });
 });
+
+describe("routeByNearest with an order set by hand", () => {
+  it("keeps the office's order exactly when the crew's route is locked", () => {
+    const stops = [
+      { jobId: "far", lat: 39.7, lng: -76.0, locked: true },
+      { jobId: "near-start", lat: 39.5, lng: -76.3, locked: true },
+      { jobId: "mid", lat: 39.6, lng: -76.2, locked: true },
+    ];
+    expect(routeByNearest(stops).map((s) => s.jobId)).toEqual(["far", "near-start", "mid"]);
+  });
+});
