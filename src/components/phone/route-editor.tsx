@@ -12,6 +12,10 @@ export interface EditorStop {
   sessionId: string | null;
   jobId: string;
   customerName: string;
+  /** Shown under the name, as on everyone's list. */
+  address?: string;
+  leftToDo?: string | null;
+  crewMap?: string;
 }
 
 export interface EditorCrew {
@@ -22,10 +26,10 @@ export interface EditorCrew {
 }
 
 /**
- * Change today's routes the way the office thinks about it: go job by job and
- * tap which crews go there (one crew, or both to start together), then set
- * each crew's order. Nothing changes until Save; then every crew's Today
- * follows it.
+ * Today's list, crew by crew in the order they go, for the account manager
+ * and up: the same list everyone sees, plus arrows to change the order and a
+ * crew button on each job to send a crew there (tap two to start together).
+ * Nothing changes until Save; then every crew's Today follows it.
  */
 export function RouteEditor({
   day,
@@ -129,49 +133,82 @@ export function RouteEditor({
       if (res.ok) router.refresh();
     });
 
+  const info = new Map(
+    [...start.flatMap((c) => c.stops), ...unassigned].map((s) => [s.jobId, s]),
+  );
+  const picks = (jobId: string, customerName: string) => (
+    <span
+      className="vx-route-pick"
+      role="group"
+      aria-label={`Crews going to ${customerName}`}
+    >
+      {crews.map((o) => {
+        const on = o.stops.some((x) => x.jobId === jobId);
+        return (
+          <button
+            key={o.leadId}
+            type="button"
+            aria-pressed={on}
+            className={on ? "on" : ""}
+            style={
+              on
+                ? { background: o.color, borderColor: o.color }
+                : { borderColor: o.color }
+            }
+            onClick={() => toggle(jobId, customerName, o.leadId)}
+          >
+            {on ? "✓ " : "+ "}
+            {o.name}
+          </button>
+        );
+      })}
+    </span>
+  );
+  const about = (jobId: string) => {
+    const s = info.get(jobId);
+    return (
+      <>
+        {s?.address && (
+          <small className="vx-route-sub">
+            {s.address.replace(/, (Maryland|MD) \d{5}.*$/, "")}
+          </small>
+        )}
+        {s?.leftToDo && (
+          <small className="vx-route-sub">Left to do: {s.leftToDo}</small>
+        )}
+        {s?.crewMap && (
+          <a className="vx-route-link" href={s.crewMap}>
+            Crew map
+          </a>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="vx-route-ed">
-      <div className="vx-route-crew">
-        <h5>Who goes to each job</h5>
-        {jobs.map((j) => (
-          <div key={j.jobId} className="vx-route-job">
-            <span className="vx-route-name">{j.customerName}</span>
-            <span
-              className="vx-route-pick"
-              role="group"
-              aria-label={`Crews going to ${j.customerName}`}
-            >
-              {crews.map((c) => {
-                const on = c.stops.some((s) => s.jobId === j.jobId);
-                return (
-                  <button
-                    key={c.leadId}
-                    type="button"
-                    aria-pressed={on}
-                    className={on ? "on" : ""}
-                    style={
-                      on
-                        ? { background: c.color, borderColor: c.color }
-                        : { borderColor: c.color }
-                    }
-                    onClick={() => toggle(j.jobId, j.customerName, c.leadId)}
-                  >
-                    {on ? "✓ " : "+ "}
-                    {c.name}
-                  </button>
-                );
-              })}
-            </span>
-          </div>
-        ))}
-      </div>
-
+      {noCrew.length > 0 && (
+        <div className="vx-route-crew">
+          <h5>No crew yet</h5>
+          {noCrew.map((j) => (
+            <div key={j.jobId} className="vx-route-stop">
+              <span className="vx-route-name">
+                {j.customerName}
+                {about(j.jobId)}
+              </span>
+              <span className="vx-route-more">
+                {picks(j.jobId, j.customerName)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {crews.map((c, ci) =>
         c.stops.length === 0 ? null : (
           <div key={c.leadId} className="vx-route-crew">
             <h5>
               <i style={{ background: c.color }} />
-              {c.name}&apos;s order
+              {c.name}&apos;s crew
             </h5>
             {c.stops.map((s, si) => (
               <div
@@ -183,16 +220,10 @@ export function RouteEditor({
                 </span>
                 <span className="vx-route-name">
                   {s.customerName}
-                  {crewsOn(s.jobId).length > 1 && (
-                    <small>
-                      {" "}
-                      · with{" "}
-                      {crewsOn(s.jobId)
-                        .filter((o) => o !== c)
-                        .map((o) => o.name)
-                        .join(", ")}
-                    </small>
+                  {si === 0 && (
+                    <small className="vx-route-sub"> · Start here</small>
                   )}
+                  {about(s.jobId)}
                 </span>
                 <span className="vx-route-btns">
                   <button
@@ -211,6 +242,9 @@ export function RouteEditor({
                   >
                     ↓
                   </button>
+                </span>
+                <span className="vx-route-more">
+                  {picks(s.jobId, s.customerName)}
                 </span>
               </div>
             ))}

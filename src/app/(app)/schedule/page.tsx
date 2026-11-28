@@ -14,6 +14,8 @@ import {
   firstName,
 } from "@/components/phone/screens/affiliate-tech";
 import { isAccountManager } from "@/lib/affiliate-roles";
+import { crewPath } from "@/lib/crew-link";
+import type { Stop } from "@/lib/crew-day";
 import { getAllCrewsToday } from "@/lib/data/crew-day";
 import { listApplicants, type ApplicantRow } from "@/lib/data/hiring";
 import { listBoardJobs } from "@/lib/data/job-board";
@@ -231,6 +233,14 @@ async function TodayTab({
     ],
     publicEnv.mapboxToken,
   );
+  const toEditor = (s: Stop) => ({
+    sessionId: s.sessionId,
+    jobId: s.jobId,
+    customerName: s.customerName,
+    address: s.address,
+    leftToDo: s.purpose,
+    crewMap: crewPath(s.jobId),
+  });
   const editorCrews: EditorCrew[] = leads.map((l) => ({
     leadId: l.id,
     name: l.name,
@@ -283,36 +293,40 @@ async function TodayTab({
           )}
         </Card>
       )}
-      <AllJobsToday
-        crews={crews}
-        me={profile.id}
-        title={longDay(today)}
-        topCount={appts.length}
-        top={
-          appts.length ? (
+      {canEdit && crews && crews.length > 0 ? (
+        <Card title={longDay(today)} right="Tap arrows or crews, then Save">
+          {appts.length > 0 && (
             <div className="vx-crewday">
               {appts.map((a) => (
                 <AppointmentLine key={`${a.kind}-${a.id}`} a={a} />
               ))}
             </div>
-          ) : null
-        }
-      />
-      {canEdit && crews && crews.length > 0 && (
-        <Card title="Change routes" right="Who goes where">
+          )}
           <RouteEditor
             key={JSON.stringify(
               editorCrews.map((c) => c.stops.map((s) => s.sessionId)),
             )}
             day={today}
             crews={editorCrews}
-            unassigned={(loose?.stops ?? []).map((s) => ({
-              sessionId: s.sessionId,
-              jobId: s.jobId,
-              customerName: s.customerName,
-            }))}
+            unassigned={(loose?.stops ?? []).map(toEditor)}
           />
         </Card>
+      ) : (
+        <AllJobsToday
+          crews={crews}
+          me={profile.id}
+          title={longDay(today)}
+          topCount={appts.length}
+          top={
+            appts.length ? (
+              <div className="vx-crewday">
+                {appts.map((a) => (
+                  <AppointmentLine key={`${a.kind}-${a.id}`} a={a} />
+                ))}
+              </div>
+            ) : null
+          }
+        />
       )}
     </>
   );

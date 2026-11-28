@@ -162,3 +162,6 @@
 .vx-app .vx-route-pick { display: flex; flex-wrap: wrap; gap: 6px; }
 .vx-app .vx-route-pick button { min-height: 34px; border-radius: 99px; border: 1.5px solid var(--line); background: var(--bg); color: var(--fg); font-size: 13px; font-weight: 600; padding: 0 12px; }
 .vx-app .vx-route-pick button.on { color: #fff; }
+.vx-app .vx-route-name { display: flex; flex-direction: column; gap: 1px; }
+.vx-app .vx-route-name small.vx-route-sub { font-size: 12px; font-weight: 500; color: var(--muted); }
+.vx-app .vx-route-link { font-size: 12px; font-weight: 600; color: var(--teal); }
