@@ -18,9 +18,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+/** "2026-11-28" reads as "Sat, Nov 28". */
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+}
+
 /**
  * The crew's page for one job, opened from a texted link with no login:
- * the address, the scope area by area, the site map and the photos.
+ * the address, what's left to do on this visit and any hazard, the scope area by area, the site map and the photos.
  * Nothing about price.
  */
 export default async function CrewPage({ params }: { params: Promise<{ token: string }> }) {
@@ -63,6 +69,27 @@ export default async function CrewPage({ params }: { params: Promise<{ token: st
           Directions
         </a>
       </header>
+
+      {job.hazards.length > 0 && (
+        <section className="flex flex-col gap-1 rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-amber-950">
+          <h2 className="text-sm font-bold uppercase tracking-wider">Watch out</h2>
+          <ul className="list-disc pl-5 text-sm font-medium leading-relaxed">
+            {job.hazards.map((h) => (
+              <li key={h}>{h}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {job.leftToDo && (
+        <section className="flex flex-col gap-1 rounded-lg border-2 border-primary p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Left to do{job.visitDay ? ` · ${dayLabel(job.visitDay)}` : ""}
+          </h2>
+          <p className="text-base font-medium leading-relaxed">{job.leftToDo}</p>
+          <p className="text-xs text-muted-foreground">The full scope is below for reference.</p>
+        </section>
+      )}
 
       {hasMap ? (
         <section className="flex flex-col gap-2">
