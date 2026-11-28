@@ -71,7 +71,7 @@ export function routeByNearest<T extends Routable>(stops: readonly T[], finished
  * hazard at the top of the crew page instead of mid-sentence.
  */
 const HAZARD =
-  /\b(gas|electric\w*|power ?lines?|wires?|buried|utility|utilities|septic|well head|sprinklers?|irrigation|propane|dogs?|bees?|wasps?|hornets?|yellow ?jackets?|snakes?|poison ivy|ticks?|steep|slope|drop[- ]?off|ice|icy|glass|nails?|careful|caution|hazard\w*|danger\w*|watch out|do not|don't)\b/i;
+  /\b(gas|electric\w*|power ?lines?|wires?|buried|utility|utilities|septic|well head|sprinklers?|irrigation|propane|dogs?|bees?|wasps?|hornets?|yellow ?jackets?|snakes?|poison ivy|ticks?|steep slope|drop[- ]?off|ice|icy|glass|nails?|careful|caution|hazard\w*|danger\w*|watch out|do not|don't)\b/i;
 
 export function hazardLines(...texts: (string | null | undefined)[]): string[] {
   const out: string[] = [];
